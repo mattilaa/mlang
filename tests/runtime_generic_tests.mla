@@ -1,0 +1,26 @@
+mod std::testing;
+use std::testing::verify;
+
+generic<T>
+fn identity(value: T) -> T {
+    return value;
+}
+
+generic<T>
+fn first_element(values: &list<T>) -> T {
+    return values[0];
+}
+
+#[test]
+fn test_runtime_generic_functions_specialize_by_argument_type() {
+    let numbers: list<i64> = [17, 42];
+    verify(identity(9) == 9);
+    verify(identity(identity(9)) == 9);
+    verify(first_element(numbers) == 17);
+
+    let words: list<str8> = ["modern", "mlang"];
+    let first: str8 = first_element(words);
+    verify(first == "modern");
+    let copied: str8 = identity("templates");
+    verify(copied == "templates");
+}

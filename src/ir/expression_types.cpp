@@ -141,7 +141,34 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                     continue;
                 if(!isOverloadVisible(info))
                     continue;
-                return info.node->returnType;
+                if(info.node->typeParams.empty())
+                    return cloneTypeNode(info.node->returnType);
+                if(info.node->isCexpr || !info.node->typePackParam.empty())
+                    continue;
+
+                std::map<std::string, TypeNode*> bindings;
+                if(!inferGenericFunctionTypeBindings(info.node, call->arguments,
+                                                     bindings))
+                    continue;
+                std::vector<TypeNode*> typeArgs;
+                bool complete = true;
+                for(const auto& typeParam : info.node->typeParams)
+                {
+                    auto found = bindings.find(typeParam);
+                    if(found == bindings.end())
+                    {
+                        complete = false;
+                        break;
+                    }
+                    typeArgs.push_back(found->second);
+                }
+                if(complete &&
+                   validateTypeArgumentTraitBounds(
+                       info.node->typeParams, info.node->typeParamTraitBounds,
+                       typeArgs, {}, info.node->line, "function", call->name,
+                       false))
+                    return substituteTypeParams(
+                        info.node->returnType, info.node->typeParams, typeArgs);
             }
         }
     }
@@ -527,20 +554,6 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
         if(leftType)
             return leftType;
         return rightType;
-    }
-
-    if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
-    {
-        auto overloadIt = functionOverloads.find(call->name);
-        if(overloadIt != functionOverloads.end())
-        {
-            for(const auto& info : overloadIt->second)
-            {
-                if(info.node && info.node->returnType &&
-                   isOverloadVisible(info))
-                    return cloneTypeNode(info.node->returnType);
-            }
-        }
     }
 
     if(auto* methodCall = dynamic_cast<MethodCallNode*>(expr))

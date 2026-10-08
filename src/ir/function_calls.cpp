@@ -227,6 +227,215 @@ llvm::Value* CodeGenerator::generateVariadicGenericCall(
     return generateFunctionCall(&specializedCall);
 }
 
+bool CodeGenerator::inferGenericFunctionTypeBindings(
+    FunctionDefNode* functionTemplate,
+    const std::vector<ExpressionNode*>& arguments,
+    std::map<std::string, TypeNode*>& bindings)
+{
+    if(!functionTemplate || !functionTemplate->parameters ||
+       functionTemplate->parameters->parameters.size() != arguments.size())
+        return false;
+
+    std::set<std::string> typeParamNames(functionTemplate->typeParams.begin(),
+                                         functionTemplate->typeParams.end());
+    std::function<bool(TypeNode*, TypeNode*)> bindType =
+        [&](TypeNode* pattern, TypeNode* concrete) -> bool
+    {
+        if(!pattern || !concrete)
+            return false;
+        if(auto* patternRef = dynamic_cast<ReferenceTypeNode*>(pattern))
+        {
+            if(auto* concreteRef = dynamic_cast<ReferenceTypeNode*>(concrete))
+                concrete = concreteRef->elementType;
+            return bindType(patternRef->elementType, concrete);
+        }
+        if(auto* patternName = dynamic_cast<StructTypeRefNode*>(pattern))
+        {
+            if(typeParamNames.count(patternName->structName))
+            {
+                auto found = bindings.find(patternName->structName);
+                if(found == bindings.end())
+                    bindings[patternName->structName] = cloneTypeNode(concrete);
+                else if(typeMangle(found->second) != typeMangle(concrete))
+                    return false;
+                return true;
+            }
+        }
+        if(auto* patternMulti = dynamic_cast<MultiArrayTypeNode*>(pattern))
+        {
+            auto* concreteMulti = dynamic_cast<MultiArrayTypeNode*>(concrete);
+            return concreteMulti &&
+                   patternMulti->capacity == concreteMulti->capacity &&
+                   patternMulti->elementsMutable ==
+                       concreteMulti->elementsMutable &&
+                   bindType(patternMulti->elementType,
+                            concreteMulti->elementType);
+        }
+        if(auto* patternArray = dynamic_cast<ArrayTypeNode*>(pattern))
+        {
+            auto* concreteArray = dynamic_cast<ArrayTypeNode*>(concrete);
+            return concreteArray &&
+                   patternArray->capacity == concreteArray->capacity &&
+                   bindType(patternArray->elementType,
+                            concreteArray->elementType);
+        }
+        if(auto* patternList = dynamic_cast<GenericListTypeNode*>(pattern))
+        {
+            auto* concreteList = dynamic_cast<GenericListTypeNode*>(concrete);
+            return concreteList && bindType(patternList->elementType,
+                                            concreteList->elementType);
+        }
+        if(auto* patternMap = dynamic_cast<MapTypeNode*>(pattern))
+        {
+            auto* concreteMap = dynamic_cast<MapTypeNode*>(concrete);
+            return concreteMap &&
+                   bindType(patternMap->keyType, concreteMap->keyType) &&
+                   bindType(patternMap->valueType, concreteMap->valueType);
+        }
+        if(auto* patternTuple = dynamic_cast<TupleTypeNode*>(pattern))
+        {
+            auto* concreteTuple = dynamic_cast<TupleTypeNode*>(concrete);
+            if(!concreteTuple || !patternTuple->elementTypes ||
+               !concreteTuple->elementTypes ||
+               patternTuple->elementTypes->types.size() !=
+                   concreteTuple->elementTypes->types.size())
+                return false;
+            for(size_t i = 0; i < patternTuple->elementTypes->types.size(); ++i)
+                if(!bindType(patternTuple->elementTypes->types[i],
+                             concreteTuple->elementTypes->types[i]))
+                    return false;
+            return true;
+        }
+        if(auto* patternPtr = dynamic_cast<PointerTypeNode*>(pattern))
+        {
+            auto* concretePtr = dynamic_cast<PointerTypeNode*>(concrete);
+            return concretePtr &&
+                   bindType(patternPtr->elementType, concretePtr->elementType);
+        }
+        if(auto* patternGeneric =
+               dynamic_cast<GenericStructTypeRefNode*>(pattern))
+        {
+            auto* concreteGeneric =
+                dynamic_cast<GenericStructTypeRefNode*>(concrete);
+            if(!concreteGeneric ||
+               patternGeneric->structName != concreteGeneric->structName ||
+               patternGeneric->typeArgs.size() !=
+                   concreteGeneric->typeArgs.size())
+                return false;
+            for(size_t i = 0; i < patternGeneric->typeArgs.size(); ++i)
+                if(!bindType(patternGeneric->typeArgs[i],
+                             concreteGeneric->typeArgs[i]))
+                    return false;
+            return true;
+        }
+        return typeMangle(pattern) == typeMangle(concrete);
+    };
+
+    for(size_t i = 0; i < arguments.size(); ++i)
+    {
+        TypeNode* concrete =
+            inferExpressionTypeNode(arguments[i], functionTemplate->line);
+        if(!concrete ||
+           !bindType(functionTemplate->parameters->parameters[i]->type,
+                     concrete))
+            return false;
+    }
+    return true;
+}
+
+void CodeGenerator::instantiateGenericFunctionOverloads(
+    FunctionCallNode* call, const std::string& lookupName,
+    std::vector<FunctionOverloadInfo>& overloads)
+{
+    if(!call)
+        return;
+
+    // Copy the templates before registering specializations: registration
+    // appends to the overload list and must not invalidate this iteration.
+    std::vector<FunctionDefNode*> templates;
+    for(const auto& overload : overloads)
+    {
+        FunctionDefNode* candidate = overload.node;
+        if(candidate && !overload.function && !candidate->typeParams.empty() &&
+           candidate->typePackParam.empty() && !candidate->isCexpr &&
+           candidate->parameters &&
+           candidate->parameters->parameters.size() == call->arguments.size() &&
+           isOverloadVisible(overload))
+        {
+            templates.push_back(candidate);
+        }
+    }
+
+    for(FunctionDefNode* functionTemplate : templates)
+    {
+        std::map<std::string, TypeNode*> bindings;
+        if(!inferGenericFunctionTypeBindings(functionTemplate, call->arguments,
+                                             bindings))
+            continue;
+
+        std::vector<TypeNode*> typeArgs;
+        typeArgs.reserve(functionTemplate->typeParams.size());
+        bool complete = true;
+        for(const auto& typeParam : functionTemplate->typeParams)
+        {
+            auto found = bindings.find(typeParam);
+            if(found == bindings.end())
+            {
+                complete = false;
+                break;
+            }
+            typeArgs.push_back(found->second);
+        }
+        if(!complete ||
+           !validateTypeArgumentTraitBounds(
+               functionTemplate->typeParams,
+               functionTemplate->typeParamTraitBounds, typeArgs, {},
+               functionTemplate->line, "function", lookupName, false))
+            continue;
+
+        auto* specializedParameters = new ParameterListNode();
+        for(auto* parameter : functionTemplate->parameters->parameters)
+        {
+            specializedParameters->parameters.push_back(new ParameterNode(
+                substituteTypeParams(parameter->type,
+                                     functionTemplate->typeParams, typeArgs),
+                parameter->name));
+        }
+
+        auto* specialized = new FunctionDefNode(
+            substituteTypeParams(functionTemplate->returnType,
+                                 functionTemplate->typeParams, typeArgs),
+            functionTemplate->name, specializedParameters,
+            functionTemplate->body, functionTemplate->isPublic, false);
+        specialized->line = functionTemplate->line;
+        specialized->col = functionTemplate->col;
+        specialized->sourceModule = functionTemplate->sourceModule;
+        specialized->isInline = functionTemplate->isInline;
+        specialized->isInlineAlways = functionTemplate->isInlineAlways;
+        specialized->isInlineNever = functionTemplate->isInlineNever;
+        for(const auto& binding : bindings)
+            specialized->concreteTypeBindings[binding.first] =
+                cloneTypeNode(binding.second);
+
+        const std::string signatureKey = functionSignatureKey(specialized);
+        const bool alreadySpecialized =
+            std::any_of(overloads.begin(), overloads.end(),
+                        [&](const FunctionOverloadInfo& overload)
+                        {
+                            return overload.function &&
+                                   overload.signatureKey == signatureKey;
+                        });
+        if(alreadySpecialized)
+            continue;
+
+        llvm::Function* declaration = generateFunctionDeclaration(specialized);
+        if(!declaration)
+            continue;
+        registerFunctionOverload(specialized, declaration);
+        generateFunctionDefinition(specialized);
+    }
+}
+
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
     const std::string numericLimitsMarker = "numeric_limits<";
@@ -1193,6 +1402,16 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         {
             if(!fn || fn->name.empty() || hasRegisteredOverload(fn))
                 continue;
+            if(!fn->typePackParam.empty())
+            {
+                variadicGenericFunctionTemplates[fn->name].push_back(fn);
+                continue;
+            }
+            if(!fn->typeParams.empty())
+            {
+                registerFunctionOverload(fn, nullptr);
+                continue;
+            }
             llvm::Function* decl = generateFunctionDeclaration(fn);
             registerFunctionOverload(fn, decl);
             bool alreadyQueued = false;
@@ -1237,6 +1456,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
         }
     }
+    if(overloadIt != functionOverloads.end())
+        instantiateGenericFunctionOverloads(node, node->name,
+                                            overloadIt->second);
     if(overloadIt == functionOverloads.end())
     {
         // Static struct method call syntax: Type::method(...)
