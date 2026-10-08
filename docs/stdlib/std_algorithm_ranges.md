@@ -44,6 +44,9 @@ fn example() {
 - `lexicographical_compare`, `is_sorted`, `min_element_index`, and
   `max_element_index` provide ordering queries. The min/max index functions
   return `-1` on an empty list and keep the first index on ties.
+- `min_element_value` and `max_element_value` return the selected value for a
+  nonempty input. Use the index forms to handle empty ranges; value forms keep
+  the first value on ties.
 - `is_sorted_until(data)` returns the first index that breaks nondecreasing
   order, or `data.len()` when the entire range is sorted.
 - `is_heap(data)` checks max-heap order; `is_heap_until(data)` returns the

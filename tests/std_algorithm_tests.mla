@@ -79,6 +79,8 @@ use std::algorithm::ranges::none_of;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
+use std::algorithm::ranges::min_element_value;
+use std::algorithm::ranges::max_element_value;
 use std::algorithm::ranges::remove;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::iota;
@@ -574,6 +576,7 @@ fn test_algorithm_ranges_generic_replace() {
     verify(renamed[0] == "green" && renamed[1] == "blue");
 }
 
+
 #[test]
 fn test_algorithm_ranges_predicate_queries() {
     let flags: list<bool> = [true, true, false];
@@ -596,6 +599,16 @@ fn test_algorithm_ranges_generic_element_extrema() {
     verify(max_element_index(values) == 2);
     verify(min_element_index(empty) == -1);
     verify(max_element_index(empty) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_element_values() {
+    let values: list<i32> = [8, -3, 11, 11, 4];
+    verify(min_element_value(values) == -3);
+    verify(max_element_value(values) == 11);
+    let words: list<str8> = ["pear", "apple", "plum"];
+    verify(min_element_value(words) == "apple");
+    verify(max_element_value(words) == "plum");
 }
 
 #[test]
