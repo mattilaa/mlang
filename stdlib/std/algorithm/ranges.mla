@@ -242,9 +242,10 @@ pub fn contains_subrange(data: &list<T>, pattern: &list<U>) -> bool {
 }
 
 /// @brief Return whether `suffix` matches the end of `data`.
+/// The two ranges may have different, equality-comparable element types.
 /// @ingroup algorithm_ranges
-generic<T>
-pub fn ends_with(data: &list<T>, suffix: &list<T>) -> bool {
+generic<T, U>
+pub fn ends_with(data: &list<T>, suffix: &list<U>) -> bool {
     let suffix_len: i64 = suffix.len();
     let data_len: i64 = data.len();
     if suffix_len > data_len {

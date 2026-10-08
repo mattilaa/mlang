@@ -333,6 +333,8 @@ fn test_algorithm_ranges_generic_ends_with() {
     verify(ends_with(values, mismatch) == false);
     verify(ends_with(values, too_long) == false);
     verify(ends_with(values, empty));
+    let mixed_suffix: list<i64> = [8, 13];
+    verify(ends_with(values, mixed_suffix));
 }
 
 #[test]
