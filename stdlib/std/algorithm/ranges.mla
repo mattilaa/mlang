@@ -423,6 +423,30 @@ pub fn reversed(data: &list<T>) -> list<T> {
     return out;
 }
 
+/// @brief Return a copy rotated left by `amount` positions.
+/// Negative amounts rotate right; amounts are normalized modulo list length.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn rotate_left(data: &list<T>, amount: i64) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    if n == 0 {
+        return out;
+    }
+    var start: i64 = amount % n;
+    if start < 0 {
+        start = start + n;
+    }
+    let tail_len: i64 = n - start;
+    for offset in 0..n {
+        let index: i64 = offset < tail_len
+            ? start + offset
+            : offset - tail_len;
+        out.push(data[index]);
+    }
+    return out;
+}
+
 /// @brief Copy a list while removing adjacent duplicate values.
 /// @ingroup algorithm_ranges
 generic<T>
