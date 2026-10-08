@@ -10,6 +10,7 @@ use std::bits::bit_width_u64;
 use std::bits::bit_floor_u64;
 use std::bits::rotl_u64;
 use std::bits::rotr_u64;
+use std::bits::byteswap_u64;
 use std::bitset::BitSet;
 use std::testing::verify;
 use std::testing::verify_eq;
@@ -98,6 +99,14 @@ fn test_cpp20_unsigned_bit_utilities() {
     verify(rotl_u64(one, 1) == two);
     verify(rotr_u64(two, 1) == one);
     verify(rotl_u64(two, -1) == one);
+}
+
+#[test]
+fn test_cpp23_byteswap_u64() {
+    let value: u64 = 72623859790382856;
+    let swapped: u64 = 578437695752307201;
+    verify(byteswap_u64(value) == swapped);
+    verify(byteswap_u64(swapped) == value);
 }
 
 #[test]

@@ -11,6 +11,7 @@ extern pub fn __mlang_std_bits_bit_width_u64(value: u64) -> i64;
 extern pub fn __mlang_std_bits_bit_floor_u64(value: u64) -> u64;
 extern pub fn __mlang_std_bits_rotl_u64(value: u64, shift: i64) -> u64;
 extern pub fn __mlang_std_bits_rotr_u64(value: u64, shift: i64) -> u64;
+extern pub fn __mlang_std_bits_byteswap_u64(value: u64) -> u64;
 
 /// @brief Logical on value (`1`).
 pub fn on() -> bit {
@@ -64,4 +65,10 @@ pub fn rotl_u64(value: u64, shift: i64) -> u64 {
 /// @brief Rotate bits right; negative shifts rotate left.
 pub fn rotr_u64(value: u64, shift: i64) -> u64 {
     return __mlang_std_bits_rotr_u64(value, shift);
+}
+
+/// @brief Reverse the byte order of a 64-bit integer.
+/// C++23 equivalent of `std::byteswap`.
+pub fn byteswap_u64(value: u64) -> u64 {
+    return __mlang_std_bits_byteswap_u64(value);
 }
