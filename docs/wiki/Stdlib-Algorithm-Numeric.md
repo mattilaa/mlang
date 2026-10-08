@@ -12,6 +12,9 @@ Numeric sequence helpers for integer lists, including generic list folds.
   from the first element to the last; it returns `init` for empty input.
 - `fold_right(data, init, operation)` applies `operation(element, accumulator)`
   from the last element to the first; it returns `init` for empty input.
+- `transform_reduce(data, init, reduce, project)` projects each element and
+  reduces it in one pass. Its two-range overload transforms corresponding pairs
+  and stops at the shorter input.
 - `partial_sum_i64(data: &list<i64>, init: i64) -> list<i64>`
 - `adjacent_difference_i64(data: &list<i64>, init: i64) -> list<i64>`
 - `inner_product_i64(a: &list<i64>, b: &list<i64>, init: i64) -> i64`

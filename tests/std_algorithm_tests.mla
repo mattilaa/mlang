@@ -20,6 +20,7 @@ use std::algorithm::numeric::accumulate_i64;
 use std::algorithm::numeric::accumulate;
 use std::algorithm::numeric::fold_left;
 use std::algorithm::numeric::fold_right;
+use std::algorithm::numeric::transform_reduce;
 use std::algorithm::numeric::adjacent_difference_i64;
 use std::algorithm::numeric::inner_product_i64;
 use std::algorithm::numeric::inner_product;
@@ -1094,6 +1095,23 @@ fn test_algorithm_numeric_folds() {
 
     let subtract = |acc: i32, value: i32| { return acc - value; };
     verify(fold_left(values, 20, subtract) == 14);
+}
+
+#[test]
+fn test_algorithm_numeric_transform_reduce() {
+    let values: list<i32> = [1, 2, 3];
+    let add = |acc: i32, value: i32| { return acc + value; };
+    let square = |value: i32| { return value * value; };
+    verify(transform_reduce(values, 0, add, square) == 14);
+
+    let left: list<i32> = [1, 2, 3];
+    let right: list<i32> = [4, 5];
+    let multiply = |a: i32, b: i32| { return a * b; };
+    verify(transform_reduce(left, right, 7, add, multiply) == 21);
+
+    let empty: list<i32> = [];
+    verify(transform_reduce(empty, 9, add, square) == 9);
+    verify(transform_reduce(left, empty, 13, add, multiply) == 13);
 }
 
 #[test]
