@@ -1460,6 +1460,23 @@ pub fn zip(left: &list<T>, right: &list<U>) -> list<tuple<T, U>> {
     return out;
 }
 
+/// @brief Materialize tuples for each pair of adjacent elements.
+/// Eager C++23 `views::pairwise` equivalent; fewer than two elements yield
+/// an empty list and the input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn pairwise(data: &list<T>) -> list<tuple<T, T>> {
+    var out: list<tuple<T, T>> = [];
+    let n: i64 = data.len();
+    if n < 2 {
+        return out;
+    }
+    for i in 0..(n - 1) {
+        out.push((data[i], data[i + 1]));
+    }
+    return out;
+}
+
 /// @brief Materialize every pair from two ranges in nested-loop order.
 /// The right range varies fastest; equivalent to C++23 `views::cartesian_product`.
 /// @ingroup algorithm_ranges
