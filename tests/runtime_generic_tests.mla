@@ -11,6 +11,16 @@ fn first_element(values: &list<T>) -> T {
     return values[0];
 }
 
+generic<T>
+fn copy_list(values: &list<T>) -> list<T> {
+    var copied: list<T> = [];
+    let n: i64 = values.len();
+    for i in 0..n {
+        copied.push(values[i]);
+    }
+    return copied;
+}
+
 #[test]
 fn test_runtime_generic_functions_specialize_by_argument_type() {
     let numbers: list<i64> = [17, 42];
@@ -23,4 +33,12 @@ fn test_runtime_generic_functions_specialize_by_argument_type() {
     verify(first == "modern");
     let copied: str8 = identity("templates");
     verify(copied == "templates");
+
+    let copied_numbers: list<i64> = copy_list(numbers);
+    verify(copied_numbers.len() == 2);
+    verify(copied_numbers[0] == 17 && copied_numbers[1] == 42);
+
+    let copied_words: list<str8> = copy_list(words);
+    verify(copied_words.len() == 2);
+    verify(copied_words[0] == "modern" && copied_words[1] == "mlang");
 }
