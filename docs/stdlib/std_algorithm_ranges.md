@@ -51,6 +51,8 @@ fn example() {
   produce an empty list.
 - `windows(data, size)` materializes every overlapping fixed-size sublist
   (C++23 `views::slide` style); invalid sizes produce an empty list.
+- `strided(data, step)` copies every `step`-th element from index zero
+  (C++23 `views::stride` style); non-positive steps produce an empty list.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 

@@ -491,6 +491,24 @@ pub fn windows(data: &list<T>, window_size: i64) -> list<list<T>> {
     return out;
 }
 
+/// @brief Copy every `stride`-th element, starting at index zero.
+/// Eager-list counterpart to C++23 `views::stride`; non-positive strides are empty.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn strided(data: &list<T>, stride: i64) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    if stride <= 0 {
+        return out;
+    }
+    var index: i64 = 0;
+    while index < n {
+        out.push(data[index]);
+        index = index + stride;
+    }
+    return out;
+}
+
 /// @brief Copy a list while removing adjacent duplicate values.
 /// @ingroup algorithm_ranges
 generic<T>
