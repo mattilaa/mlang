@@ -1294,6 +1294,15 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                     typeArgNodes.push_back(cloneTypeNode(bindIt->second));
                     continue;
                 }
+                auto functionBindIt =
+                    activeFunctionTypeBindings.find(typeArgStr);
+                if(functionBindIt != activeFunctionTypeBindings.end() &&
+                   functionBindIt->second)
+                {
+                    typeArgNodes.push_back(
+                        cloneTypeNode(functionBindIt->second));
+                    continue;
+                }
 
                 // Check if it's a basic type
                 if(typeArgStr == "i8")
