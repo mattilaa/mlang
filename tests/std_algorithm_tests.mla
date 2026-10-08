@@ -63,6 +63,7 @@ use std::algorithm::ranges::is_heap;
 use std::algorithm::ranges::is_heap_until;
 use std::algorithm::ranges::merged;
 use std::algorithm::ranges::union_sorted;
+use std::algorithm::ranges::intersection_sorted;
 use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::upper_bound;
 use std::algorithm::ranges::binary_search;
@@ -434,6 +435,18 @@ fn test_algorithm_ranges_generic_union_sorted() {
     verify(result.len() == 6);
     verify(result[0] == 1 && result[1] == 2 && result[2] == 2);
     verify(result[3] == 3 && result[4] == 5 && result[5] == 5);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_intersection_sorted() {
+    let left: list<i32> = [1, 2, 2, 2, 5, 7];
+    let right: list<i32> = [2, 2, 3, 5, 5];
+    let result: list<i32> = intersection_sorted(left, right);
+    verify(result.len() == 3);
+    verify(result[0] == 2 && result[1] == 2 && result[2] == 5);
+    let empty: list<i32> = [];
+    let none: list<i32> = intersection_sorted(left, empty);
+    verify(none.len() == 0);
 }
 
 #[test]
