@@ -57,6 +57,7 @@ use std::algorithm::ranges::is_sorted;
 use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::upper_bound;
 use std::algorithm::ranges::binary_search;
+use std::algorithm::ranges::sorted;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
 use std::algorithm::ranges::remove;
@@ -342,6 +343,22 @@ fn test_algorithm_ranges_generic_binary_search() {
     let words: list<str8> = ["ant", "bee", "fox"];
     verify(binary_search(words, "bee"));
     verify(binary_search(words, "cat") == false);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_sorted_copy() {
+    let values: list<i32> = [5, 1, 3, 1, 9, -2];
+    let result: list<i32> = sorted(values);
+    verify(result.len() == 6);
+    verify(result[0] == -2 && result[1] == 1 && result[2] == 1);
+    verify(result[3] == 3 && result[4] == 5 && result[5] == 9);
+    verify(values[0] == 5 && values[5] == -2);
+
+    let words: list<str8> = ["fox", "ant", "bee", "ant"];
+    let ordered: list<str8> = sorted(words);
+    verify(ordered.len() == 4);
+    verify(ordered[0] == "ant" && ordered[1] == "ant");
+    verify(ordered[2] == "bee" && ordered[3] == "fox");
 }
 
 #[test]
