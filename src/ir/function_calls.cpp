@@ -2095,9 +2095,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     size_t expectedArgs = callee->arg_size();
     bool isVarArg = callee->isVarArg();
     size_t hiddenCaptureCount = 0;
-    for(const auto& closureCaptures :
-        best->node->boundClosureCaptureAliases)
-        hiddenCaptureCount += closureCaptures.second.size();
+    if(best->node)
+        for(const auto& closureCaptures :
+            best->node->boundClosureCaptureAliases)
+            hiddenCaptureCount += closureCaptures.second.size();
     const size_t sourceParameterCount = expectedArgs - hiddenCaptureCount;
 
     if(isVarArg && argVals.size() < sourceParameterCount)
@@ -2111,23 +2112,27 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     }
 
     std::vector<llvm::Value*> callArgVals = argVals;
-    for(const auto& closureCaptures :
-        best->node->boundClosureCaptureAliases)
+    if(best->node)
     {
-        for(const auto& capture : closureCaptures.second)
+        for(const auto& closureCaptures :
+            best->node->boundClosureCaptureAliases)
         {
-            auto captured = namedValues.find(capture.first);
-            if(captured == namedValues.end())
+            for(const auto& capture : closureCaptures.second)
             {
-                reportError(node->line,
-                            "cannot pass captured variable '" + capture.first +
-                                "' to generic closure specialization");
-                return nullptr;
+                auto captured = namedValues.find(capture.first);
+                if(captured == namedValues.end())
+                {
+                    reportError(
+                        node->line,
+                        "cannot pass captured variable '" + capture.first +
+                            "' to generic closure specialization");
+                    return nullptr;
+                }
+                llvm::Value* captureValue = captured->second;
+                if(!captureValue)
+                    return nullptr;
+                callArgVals.push_back(captureValue);
             }
-            llvm::Value* captureValue = captured->second;
-            if(!captureValue)
-                return nullptr;
-            callArgVals.push_back(captureValue);
         }
     }
 
