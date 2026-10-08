@@ -120,6 +120,7 @@ use std::algorithm::ranges::drop;
 use std::algorithm::ranges::unique;
 use std::algorithm::ranges::unique_stable;
 use std::algorithm::ranges::clamp;
+use std::algorithm::ranges::clamp_by;
 use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
@@ -957,6 +958,23 @@ fn test_algorithm_ranges_clamp() {
     let single: list<i64> = [42];
     let cs: list<i64> = clamp_i64(single, 50, 100);
     verify(cs.len() == 1 && cs[0] == 50);
+}
+
+#[test]
+fn test_algorithm_ranges_clamp_by_comparator() {
+    let values: list<i32> = [4, 11, 35, 22];
+    let low: i32 = 30;
+    let high: i32 = 10;
+    let greater = |a: i32, b: i32| { return a > b; };
+    let bounded: list<i32> = clamp_by(values, low, high, greater);
+    verify(bounded.len() == 4);
+    verify(bounded[0] == 10 && bounded[1] == 11);
+    verify(bounded[2] == 30 && bounded[3] == 22);
+    verify(values[0] == 4 && values[2] == 35);
+
+    let empty: list<i32> = [];
+    let no_values: list<i32> = clamp_by(empty, low, high, greater);
+    verify(no_values.len() == 0);
 }
 
 #[test]
