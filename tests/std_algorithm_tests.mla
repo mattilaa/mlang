@@ -20,6 +20,8 @@ use std::algorithm::numeric::accumulate_i64;
 use std::algorithm::numeric::accumulate;
 use std::algorithm::numeric::fold_left;
 use std::algorithm::numeric::fold_right;
+use std::algorithm::numeric::fold_left_first;
+use std::algorithm::numeric::fold_right_last;
 use std::algorithm::numeric::transform_reduce;
 use std::algorithm::numeric::inclusive_scan;
 use std::algorithm::numeric::exclusive_scan;
@@ -1286,6 +1288,29 @@ fn test_algorithm_numeric_folds() {
 
     let subtract = |acc: i32, value: i32| { return acc - value; };
     verify(fold_left(values, 20, subtract) == 14);
+}
+
+#[test]
+fn test_algorithm_numeric_folds_without_initial_value() {
+    let values: list<i32> = [1, 2, 3];
+    let encode_left = |acc: i32, value: i32| { return acc * 10 + value; };
+    let encode_right = |value: i32, acc: i32| { return value + acc * 10; };
+    let left: option<i32> = fold_left_first(values, encode_left);
+    let right: option<i32> = fold_right_last(values, encode_right);
+    let left_value: i32 = match left {
+        Some(value) => value,
+        None => 0
+    };
+    let right_value: i32 = match right {
+        Some(value) => value,
+        None => 0
+    };
+    verify(left_value == 123 && right_value == 321);
+
+    let empty: list<i32> = [];
+    let empty_left: option<i32> = fold_left_first(empty, encode_left);
+    let empty_right: option<i32> = fold_right_last(empty, encode_right);
+    verify(empty_left.is_none() && empty_right.is_none());
 }
 
 #[test]
