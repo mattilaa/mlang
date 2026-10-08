@@ -137,6 +137,7 @@ use std::algorithm::ranges::drop;
 use std::algorithm::ranges::take_while;
 use std::algorithm::ranges::drop_while;
 use std::algorithm::ranges::transform;
+use std::algorithm::ranges::zip_transform;
 use std::algorithm::ranges::unique;
 use std::algorithm::ranges::unique_stable;
 use std::algorithm::ranges::clamp;
@@ -1087,6 +1088,18 @@ fn test_algorithm_ranges_transform_changes_element_type() {
     let incremented: list<i32> = transform(values, add_one);
     verify(incremented.len() == 3);
     verify(incremented[0] == 2 && incremented[1] == 4 && incremented[2] == 3);
+}
+
+#[test]
+fn test_algorithm_ranges_zip_transform() {
+    let counts: list<i32> = [10, 20, 30];
+    let offsets: list<f64> = [0.5, 1.5];
+    let combine = |count: i32, offset: f64| {
+        return f64(count) + offset;
+    };
+    let combined: list<f64> = zip_transform(counts, offsets, combine);
+    verify(combined.len() == 2);
+    verify(combined[0] == 10.5 && combined[1] == 21.5);
 }
 
 #[test]
