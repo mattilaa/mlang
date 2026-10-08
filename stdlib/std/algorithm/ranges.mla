@@ -341,6 +341,28 @@ pub fn is_sorted_until(data: &list<T>) -> i64 {
     return n;
 }
 
+/// @brief Return the first child index violating max-heap order, or range length.
+/// C++20 `std::ranges::is_heap_until` equivalent.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn is_heap_until(data: &list<T>) -> i64 {
+    let n: i64 = data.len();
+    for child in 1..n {
+        let parent: i64 = (child - 1) / 2;
+        if data[parent] < data[child] {
+            return child;
+        }
+    }
+    return n;
+}
+
+/// @brief Return whether a list satisfies max-heap order (C++20 ranges).
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn is_heap(data: &list<T>) -> bool {
+    return is_heap_until(data) == data.len();
+}
+
 /// @brief First index where `value` can be inserted without breaking order.
 /// Requires nondecreasing input; returns `data.len()` when value is too large.
 /// @ingroup algorithm_ranges

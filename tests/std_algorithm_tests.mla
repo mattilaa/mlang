@@ -59,6 +59,8 @@ use std::algorithm::ranges::ends_with;
 use std::algorithm::ranges::lexicographical_compare;
 use std::algorithm::ranges::is_sorted;
 use std::algorithm::ranges::is_sorted_until;
+use std::algorithm::ranges::is_heap;
+use std::algorithm::ranges::is_heap_until;
 use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::upper_bound;
 use std::algorithm::ranges::binary_search;
@@ -392,6 +394,18 @@ fn test_algorithm_ranges_generic_is_sorted_until() {
     verify(is_sorted_until(unsorted_values) == 2);
     verify(is_sorted_until(empty) == 0);
     verify(is_sorted_until(one) == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_heap_queries() {
+    let heap: list<i32> = [9, 7, 8, 2, 3, 1];
+    let invalid: list<i32> = [9, 7, 8, 10, 2];
+    let empty: list<i32> = [];
+    let one: list<i32> = [4];
+    verify(is_heap(heap) && is_heap_until(heap) == 6);
+    verify(!is_heap(invalid) && is_heap_until(invalid) == 3);
+    verify(is_heap(empty) && is_heap_until(empty) == 0);
+    verify(is_heap(one) && is_heap_until(one) == 1);
 }
 
 #[test]
