@@ -15,6 +15,39 @@ use std::bits::bit_floor_u64;
 use std::bits::bit_ceil_u64;
 use std::bits::rotl_u64;
 use std::bits::rotr_u64;
+use std::bits::popcount_u8;
+use std::bits::has_single_bit_u8;
+use std::bits::bit_width_u8;
+use std::bits::countl_zero_u8;
+use std::bits::countr_zero_u8;
+use std::bits::countl_one_u8;
+use std::bits::countr_one_u8;
+use std::bits::bit_floor_u8;
+use std::bits::bit_ceil_u8;
+use std::bits::rotl_u8;
+use std::bits::rotr_u8;
+use std::bits::popcount_u16;
+use std::bits::has_single_bit_u16;
+use std::bits::bit_width_u16;
+use std::bits::countl_zero_u16;
+use std::bits::countr_zero_u16;
+use std::bits::countl_one_u16;
+use std::bits::countr_one_u16;
+use std::bits::bit_floor_u16;
+use std::bits::bit_ceil_u16;
+use std::bits::rotl_u16;
+use std::bits::rotr_u16;
+use std::bits::popcount_u32;
+use std::bits::has_single_bit_u32;
+use std::bits::bit_width_u32;
+use std::bits::countl_zero_u32;
+use std::bits::countr_zero_u32;
+use std::bits::countl_one_u32;
+use std::bits::countr_one_u32;
+use std::bits::bit_floor_u32;
+use std::bits::bit_ceil_u32;
+use std::bits::rotl_u32;
+use std::bits::rotr_u32;
 use std::bits::byteswap_u64;
 use std::bits::byteswap_u32;
 use std::bits::byteswap_u16;
@@ -120,6 +153,39 @@ fn test_cpp20_unsigned_bit_utilities() {
     verify(rotl_u64(one, 1) == two);
     verify(rotr_u64(two, 1) == one);
     verify(rotl_u64(two, -1) == one);
+}
+
+#[test]
+fn test_cpp20_unsigned_bit_utilities_u8_u16_u32() {
+    let u8_zero: u8 = 0;
+    let u8_one: u8 = 1;
+    let u8_ones: u8 = 255;
+    let u8_value: u8 = 144;
+    verify(popcount_u8(u8_value) == 2);
+    verify(!has_single_bit_u8(u8_value) && has_single_bit_u8(u8_one));
+    verify(bit_width_u8(u8_value) == 8);
+    verify(countl_zero_u8(u8_zero) == 8 && countr_zero_u8(u8_zero) == 8);
+    verify(countl_one_u8(u8_ones) == 8 && countr_one_u8(15) == 4);
+    verify(bit_floor_u8(129) == 128 && bit_ceil_u8(129) == 0);
+    verify(rotl_u8(u8_one, 9) == 2 && rotr_u8(u8_one, -1) == 2);
+
+    let u16_value: u16 = 256;
+    verify(popcount_u16(u16_value) == 1 && has_single_bit_u16(u16_value));
+    verify(bit_width_u16(u16_value) == 9);
+    verify(countl_zero_u16(u16_value) == 7 && countr_zero_u16(u16_value) == 8);
+    verify(countl_one_u16(65535) == 16 && countr_one_u16(15) == 4);
+    verify(bit_floor_u16(513) == 512 && bit_ceil_u16(513) == 1024);
+    verify(rotl_u16(u16_value, 16) == u16_value);
+    verify(rotr_u16(1, -1) == 2);
+
+    let u32_top: u32 = 2147483648;
+    verify(popcount_u32(u32_top) == 1 && has_single_bit_u32(u32_top));
+    verify(bit_width_u32(u32_top) == 32);
+    verify(countl_zero_u32(u32_top) == 0 && countr_zero_u32(u32_top) == 31);
+    verify(countl_one_u32(u32_top) == 1 && countr_one_u32(15) == 4);
+    verify(bit_floor_u32(u32_top) == u32_top);
+    verify(bit_ceil_u32(2147483649) == 0);
+    verify(rotl_u32(1, 33) == 2 && rotr_u32(1, -1) == 2);
 }
 
 #[test]
