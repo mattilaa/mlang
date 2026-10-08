@@ -84,6 +84,8 @@ fn example() {
   maximum duplicate count for every value.
 - `intersection_sorted(left, right)` returns the sorted multiset intersection,
   keeping the minimum duplicate count for every value.
+- `difference_sorted(left, right)` removes matching right-side occurrences
+  from the left sorted range, preserving unmatched duplicate counts.
 - `replace(data, old, new)` copies a range while replacing every value equal
   to `old`; the original range is unchanged.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
