@@ -27,6 +27,31 @@ int64_t __mlang_std_bits_bit_width_u64(uint64_t value)
     return width;
 }
 
+int64_t __mlang_std_bits_countl_zero_u64(uint64_t value)
+{
+    int64_t count = 0;
+    uint64_t mask = UINT64_C(1) << 63;
+    while(mask != 0 && (value & mask) == 0)
+    {
+        ++count;
+        mask >>= 1;
+    }
+    return count;
+}
+
+int64_t __mlang_std_bits_countr_zero_u64(uint64_t value)
+{
+    if(value == 0)
+        return 64;
+    int64_t count = 0;
+    while((value & UINT64_C(1)) == 0)
+    {
+        ++count;
+        value >>= 1;
+    }
+    return count;
+}
+
 uint64_t __mlang_std_bits_bit_floor_u64(uint64_t value)
 {
     if(value == 0)

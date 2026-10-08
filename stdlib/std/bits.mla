@@ -8,6 +8,8 @@
 extern pub fn __mlang_std_bits_popcount_u64(value: u64) -> i64;
 extern pub fn __mlang_std_bits_has_single_bit_u64(value: u64) -> i32;
 extern pub fn __mlang_std_bits_bit_width_u64(value: u64) -> i64;
+extern pub fn __mlang_std_bits_countl_zero_u64(value: u64) -> i64;
+extern pub fn __mlang_std_bits_countr_zero_u64(value: u64) -> i64;
 extern pub fn __mlang_std_bits_bit_floor_u64(value: u64) -> u64;
 extern pub fn __mlang_std_bits_rotl_u64(value: u64, shift: i64) -> u64;
 extern pub fn __mlang_std_bits_rotr_u64(value: u64, shift: i64) -> u64;
@@ -49,6 +51,16 @@ pub fn has_single_bit_u64(value: u64) -> bool {
 /// C++20 equivalent of `std::bit_width`.
 pub fn bit_width_u64(value: u64) -> i64 {
     return __mlang_std_bits_bit_width_u64(value);
+}
+
+/// @brief Count the leading zero bits, returning 64 for zero.
+pub fn countl_zero_u64(value: u64) -> i64 {
+    return __mlang_std_bits_countl_zero_u64(value);
+}
+
+/// @brief Count the trailing zero bits, returning 64 for zero.
+pub fn countr_zero_u64(value: u64) -> i64 {
+    return __mlang_std_bits_countr_zero_u64(value);
 }
 
 /// @brief Return the greatest power of two not greater than `value`.
