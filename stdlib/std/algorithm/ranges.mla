@@ -8,7 +8,42 @@
 /// @brief Ranges-style sequence algorithms.
 /// @{
 
-/// @brief Return first index of value, or -1 when not found.
+/// @brief Return first index of a value, or -1 when not found.
+/// Supports any type that can be equality-compared.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn find(data: &list<T>, value: U) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if data[i] == value {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/// @brief Return count of elements equal to value.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn count(data: &list<T>, value: U) -> i64 {
+    var out: i64 = 0;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if data[i] == value {
+            out = out + 1;
+        }
+    }
+    return out;
+}
+
+/// @brief Return true when value exists in the list.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn contains(data: &list<T>, value: U) -> bool {
+    return find(data, value) >= 0;
+}
+
+/// @brief Return first index of an i64 value, or -1 when not found.
 /// @ingroup algorithm_ranges
 pub fn find_i64(data: &list<i64>, value: i64) -> i64 {
     let n: i64 = data.len();
