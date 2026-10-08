@@ -573,6 +573,23 @@ pub fn concat(left: &list<T>, right: &list<T>) -> list<T> {
     return out;
 }
 
+/// @brief Copy a list, replacing every value equal to `old_value`.
+/// C++20 ranges-style replace algorithm; the input remains unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U, V>
+pub fn replace(data: &list<T>, old_value: U, new_value: V) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if data[i] == old_value {
+            out.push(new_value);
+        } else {
+            out.push(data[i]);
+        }
+    }
+    return out;
+}
+
 /// @brief Copy a list while removing adjacent duplicate values.
 /// @ingroup algorithm_ranges
 generic<T>
