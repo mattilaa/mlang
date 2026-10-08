@@ -133,6 +133,25 @@ uint64_t __mlang_std_bits_byteswap_u64(uint64_t value)
            ((value & UINT64_C(0xFF00000000000000)) >> 56);
 }
 
+uint32_t __mlang_std_bits_byteswap_u32(uint32_t value)
+{
+    return ((value & UINT32_C(0x000000FF)) << 24) |
+           ((value & UINT32_C(0x0000FF00)) << 8) |
+           ((value & UINT32_C(0x00FF0000)) >> 8) |
+           ((value & UINT32_C(0xFF000000)) >> 24);
+}
+
+uint16_t __mlang_std_bits_byteswap_u16(uint16_t value)
+{
+    return (uint16_t)(((value & UINT16_C(0x00FF)) << 8) |
+                      ((value & UINT16_C(0xFF00)) >> 8));
+}
+
+uint8_t __mlang_std_bits_byteswap_u8(uint8_t value)
+{
+    return value;
+}
+
 uint32_t __mlang_std_bits_f32_to_u32(float value)
 {
     uint32_t bits;

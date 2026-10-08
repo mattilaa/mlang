@@ -17,6 +17,9 @@ extern pub fn __mlang_std_bits_bit_ceil_u64(value: u64) -> u64;
 extern pub fn __mlang_std_bits_rotl_u64(value: u64, shift: i64) -> u64;
 extern pub fn __mlang_std_bits_rotr_u64(value: u64, shift: i64) -> u64;
 extern pub fn __mlang_std_bits_byteswap_u64(value: u64) -> u64;
+extern pub fn __mlang_std_bits_byteswap_u32(value: u32) -> u32;
+extern pub fn __mlang_std_bits_byteswap_u16(value: u16) -> u16;
+extern pub fn __mlang_std_bits_byteswap_u8(value: u8) -> u8;
 extern pub fn __mlang_std_bits_f32_to_u32(value: f32) -> u32;
 extern pub fn __mlang_std_bits_u32_to_f32(value: u32) -> f32;
 extern pub fn __mlang_std_bits_f64_to_u64(value: f64) -> u64;
@@ -106,6 +109,21 @@ pub fn rotr_u64(value: u64, shift: i64) -> u64 {
 /// C++23 equivalent of `std::byteswap`.
 pub fn byteswap_u64(value: u64) -> u64 {
     return __mlang_std_bits_byteswap_u64(value);
+}
+
+/// @brief Reverse the byte order of a 32-bit integer (C++23 `std::byteswap`).
+pub fn byteswap_u32(value: u32) -> u32 {
+    return __mlang_std_bits_byteswap_u32(value);
+}
+
+/// @brief Reverse the byte order of a 16-bit integer (C++23 `std::byteswap`).
+pub fn byteswap_u16(value: u16) -> u16 {
+    return __mlang_std_bits_byteswap_u16(value);
+}
+
+/// @brief Reverse the byte order of an 8-bit integer (no-op byte swap).
+pub fn byteswap_u8(value: u8) -> u8 {
+    return __mlang_std_bits_byteswap_u8(value);
 }
 
 /// @brief Reinterpret an IEEE-754 `f32` representation as `u32` bits.

@@ -16,7 +16,8 @@ representations. Packed collections remain available in `std::bitset`.
 - `popcount_u64`, `has_single_bit_u64`, `bit_width_u64`
 - `countl_zero_u64`, `countl_one_u64`, `countr_zero_u64`, `countr_one_u64`
 - `bit_floor_u64`, `bit_ceil_u64`
-- `rotl_u64`, `rotr_u64`, `byteswap_u64`
+- `rotl_u64`, `rotr_u64`, `byteswap_u8`, `byteswap_u16`, `byteswap_u32`,
+  `byteswap_u64`
 
 `bit_ceil_u64` returns zero when the next power of two would overflow `u64`.
 Rotation counts are normalized modulo 64; negative counts rotate in the
