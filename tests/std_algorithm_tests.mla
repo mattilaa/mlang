@@ -20,6 +20,7 @@ use std::algorithm::numeric::accumulate_i64;
 use std::algorithm::numeric::accumulate;
 use std::algorithm::numeric::adjacent_difference_i64;
 use std::algorithm::numeric::inner_product_i64;
+use std::algorithm::numeric::inner_product;
 use std::algorithm::numeric::partial_sum_i64;
 use std::algorithm::numeric::partial_sum;
 use std::algorithm::numeric::adjacent_difference;
@@ -381,6 +382,17 @@ fn test_algorithm_numeric_generic_accumulate() {
     verify(sum == 20);
     let zero_initial: i64 = 0;
     verify(accumulate(values, zero_initial) == 10);
+}
+
+#[test]
+fn test_algorithm_numeric_generic_inner_product() {
+    let left: list<i32> = [1, 2, 3, 4];
+    let right: list<i32> = [10, 20, 30];
+    let initial: i64 = 7;
+    verify(inner_product(left, right, initial) == 147);
+
+    let empty: list<i32> = [];
+    verify(inner_product(left, empty, initial) == initial);
 }
 
 #[test]
