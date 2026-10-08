@@ -126,6 +126,8 @@ fn example() {
   shorter input (C++23 `views::zip` style).
 - `enumerate(data)` materializes `(index, value)` tuples with zero-based indices
   (C++23 `views::enumerate` style).
+- `cartesian_product(left, right)` materializes all tuple pairs, with the right
+  range varying fastest (C++23 `views::cartesian_product` style).
 - `merged(left, right)` stably merges two sorted same-typed ranges into a new
   sorted list; equal elements from the left range come first.
 - `union_sorted(left, right)` returns the sorted multiset union, keeping the

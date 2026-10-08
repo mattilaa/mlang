@@ -1366,6 +1366,23 @@ pub fn zip(left: &list<T>, right: &list<U>) -> list<tuple<T, U>> {
     return out;
 }
 
+/// @brief Materialize every pair from two ranges in nested-loop order.
+/// The right range varies fastest; equivalent to C++23 `views::cartesian_product`.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn cartesian_product(left: &list<T>, right: &list<U>)
+    -> list<tuple<T, U>> {
+    var out: list<tuple<T, U>> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    for i in 0..left_len {
+        for j in 0..right_len {
+            out.push((left[i], right[j]));
+        }
+    }
+    return out;
+}
+
 /// @brief Pair each element with its zero-based position.
 /// Eager C++23 `views::enumerate` equivalent; the input remains unchanged.
 /// @ingroup algorithm_ranges
