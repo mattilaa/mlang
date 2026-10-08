@@ -62,6 +62,9 @@ fn example() {
 - `equal` compares lists in order, including across distinct equality-comparable
   element types; `is_permutation` compares element multiplicities without
   considering order.
+- `mismatch(left, right)` returns a tuple of the first unequal indices,
+  stopping at the shorter range; an equal prefix returns its shared length for
+  both indices. `mismatch_by` accepts a binary equivalence predicate.
 - `equal_by` compares each pair with a supplied equivalence predicate, while
   `is_permutation_by` compares multiplicities under that equivalence.
 - `lexicographical_compare` supports ranges with distinct mutually

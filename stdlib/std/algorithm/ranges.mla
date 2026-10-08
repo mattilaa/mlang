@@ -505,6 +505,46 @@ pub fn equal(left: &list<T>, right: &list<U>) -> bool {
     return true;
 }
 
+/// @brief Return indices of the first unequal elements in two ranges.
+/// Comparison stops when either range ends; equal prefixes return the shared
+/// prefix length for both indices, matching C++20 `std::ranges::mismatch`.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn mismatch(left: &list<T>, right: &list<U>) -> tuple<i64, i64> {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var n: i64 = left_len;
+    if right_len < n {
+        n = right_len;
+    }
+    for i in 0..n {
+        if left[i] != right[i] {
+            return (i, i);
+        }
+    }
+    return (n, n);
+}
+
+/// @brief Find the first pair rejected by `equivalent`, stopping at either end.
+/// Equal prefixes return their shared length for both indices.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn mismatch_by(left: &list<T>, right: &list<U>, equivalent: Equivalent)
+    -> tuple<i64, i64> {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var n: i64 = left_len;
+    if right_len < n {
+        n = right_len;
+    }
+    for i in 0..n {
+        if !equivalent(left[i], right[i]) {
+            return (i, i);
+        }
+    }
+    return (n, n);
+}
+
 /// @brief Compare corresponding elements with a caller-supplied equivalence.
 /// The ranges are equal only when they have the same length and every pair
 /// satisfies `equivalent(left[i], right[i])`.

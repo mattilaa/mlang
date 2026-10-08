@@ -59,6 +59,8 @@ use std::algorithm::ranges::includes_by;
 use std::algorithm::ranges::size;
 use std::algorithm::ranges::empty;
 use std::algorithm::ranges::equal;
+use std::algorithm::ranges::mismatch;
+use std::algorithm::ranges::mismatch_by;
 use std::algorithm::ranges::equal_by;
 use std::algorithm::ranges::is_permutation;
 use std::algorithm::ranges::is_permutation_by;
@@ -362,6 +364,15 @@ fn test_algorithm_ranges_generic_size_empty_equal() {
     verify(equal(numbers, no_values) == false);
     let mixed_numbers: list<i64> = [2, 4, 6];
     verify(equal(numbers, mixed_numbers));
+
+    let equal_prefix: tuple<i64, i64> = mismatch(numbers, mixed_numbers);
+    verify(equal_prefix.0 == 3 && equal_prefix.1 == 3);
+    let differing: list<i64> = [2, 9, 6, 8];
+    let first_difference: tuple<i64, i64> = mismatch(numbers, differing);
+    verify(first_difference.0 == 1 && first_difference.1 == 1);
+    let shorter: list<i32> = [2, 4];
+    let end_of_shorter: tuple<i64, i64> = mismatch(numbers, shorter);
+    verify(end_of_shorter.0 == 2 && end_of_shorter.1 == 2);
 }
 
 #[test]
@@ -375,6 +386,11 @@ fn test_algorithm_ranges_equal_by_equivalence() {
     verify(equal_by(left, same_keys, by_tens));
     verify(!equal_by(left, different_keys, by_tens));
     verify(!equal_by(left, shorter, by_tens));
+
+    let mismatch_indices: tuple<i64, i64> = mismatch_by(left, same_keys, by_tens);
+    verify(mismatch_indices.0 == 3 && mismatch_indices.1 == 3);
+    let mismatch_at_one: tuple<i64, i64> = mismatch_by(left, different_keys, by_tens);
+    verify(mismatch_at_one.0 == 1 && mismatch_at_one.1 == 1);
 }
 
 #[test]
