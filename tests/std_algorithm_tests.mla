@@ -105,6 +105,7 @@ use std::algorithm::ranges::concat;
 use std::algorithm::ranges::zip;
 use std::algorithm::ranges::enumerate;
 use std::algorithm::ranges::cartesian_product;
+use std::algorithm::ranges::pairwise;
 use std::algorithm::ranges::replace;
 use std::algorithm::ranges::all_of;
 use std::algorithm::ranges::any_of;
@@ -965,6 +966,21 @@ fn test_algorithm_ranges_cartesian_product() {
 
     let empty: list<i32> = [];
     let no_pairs: list<tuple<i32, i32>> = cartesian_product(left, empty);
+    verify(no_pairs.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_pairwise() {
+    let values: list<i32> = [4, 6, 9];
+    let pairs: list<tuple<i32, i32>> = pairwise(values);
+    verify(pairs.len() == 2);
+    let first = pairs[0];
+    let second = pairs[1];
+    verify(first.0 == 4 && first.1 == 6);
+    verify(second.0 == 6 && second.1 == 9);
+
+    let singleton: list<i32> = [7];
+    let no_pairs: list<tuple<i32, i32>> = pairwise(singleton);
     verify(no_pairs.len() == 0);
 }
 
