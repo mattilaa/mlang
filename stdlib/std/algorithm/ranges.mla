@@ -343,18 +343,23 @@ pub fn is_partitioned(data: &list<T>, predicate: Predicate) -> bool {
     return true;
 }
 
-/// @brief Return the first index not accepted by a partitioning predicate.
-/// The input is expected to be partitioned; returns `data.len()` if all match.
+/// @brief Binary-search the first index not accepted by a partitioned predicate.
+/// Returns `data.len()` if all elements match; requires partitioned input.
+/// Performs O(log(data.len())) predicate calls.
 /// @ingroup algorithm_ranges
 generic<T, Predicate>
 pub fn partition_point(data: &list<T>, predicate: Predicate) -> i64 {
-    let n: i64 = data.len();
-    for i in 0..n {
-        if !predicate(data[i]) {
-            return i;
+    var first: i64 = 0;
+    var last: i64 = data.len();
+    while first < last {
+        let middle: i64 = first + (last - first) / 2;
+        if predicate(data[middle]) {
+            first = middle + 1;
+        } else {
+            last = middle;
         }
     }
-    return n;
+    return first;
 }
 
 /// @brief Return a stable copy with matching elements before the rest.

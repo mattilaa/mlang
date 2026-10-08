@@ -127,8 +127,9 @@ fn example() {
   one-argument `list<bool>` identity forms. Empty-range results match the
   standard algorithms: true, false, and true respectively.
 - `is_partitioned` checks whether all matching elements precede nonmatches;
-  `partition_point` returns the first nonmatch index for an already-partitioned
-  range. `stable_partition` returns a copied range with matching elements
+  `partition_point` binary-searches for the first nonmatch index in an
+  already-partitioned range using O(log N) predicate calls. `stable_partition`
+  returns a copied range with matching elements
   first, preserving order within both groups and evaluating its predicate once
   per element.
 - `partition_copy(data, predicate)` returns a tuple of stable matching and

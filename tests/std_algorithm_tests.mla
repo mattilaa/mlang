@@ -1722,6 +1722,15 @@ fn test_algorithm_ranges_partition_algorithms() {
     verify(partition_point(all_match, is_odd) == all_match.len());
     let none_match: list<i32> = [2, 4, 6];
     verify(partition_point(none_match, is_odd) == 0);
+
+    let large: list<i64> = iota(0, 1024);
+    var calls: i32 = 0;
+    let below_midpoint = |value: i64| {
+        calls = calls + 1;
+        return value < 512;
+    };
+    verify(partition_point(large, below_midpoint) == 512);
+    verify(calls <= 11);
 }
 
 #[test]
