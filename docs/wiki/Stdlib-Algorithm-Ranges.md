@@ -63,6 +63,11 @@ fn example() {
 - `find_if` and `count_if` search/count elements accepted by a bound predicate;
   `filter` eagerly copies accepted values to a new list. Predicates may capture
   local values, and captured mutations are visible to the caller.
+- `find_if_not` returns the first rejected element's index; `remove_if` returns
+  a copy without accepted elements, and `replace_if` substitutes a value for
+  every accepted element. These transforms leave their input unchanged.
+- `unique_by(data, equivalent)` removes adjacent equivalent elements while
+  keeping the first value in each run.
 - `all_of`, `any_of`, and `none_of` accept predicates as well as retaining the
   one-argument `list<bool>` identity forms. Empty-range results match the
   standard algorithms: true, false, and true respectively.

@@ -87,6 +87,10 @@ use std::algorithm::ranges::filter;
 use std::algorithm::ranges::is_partitioned;
 use std::algorithm::ranges::partition_point;
 use std::algorithm::ranges::stable_partition;
+use std::algorithm::ranges::find_if_not;
+use std::algorithm::ranges::remove_if;
+use std::algorithm::ranges::replace_if;
+use std::algorithm::ranges::unique_by;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
@@ -1045,4 +1049,39 @@ fn test_algorithm_ranges_partition_algorithms() {
     verify(partition_point(all_match, is_odd) == all_match.len());
     let none_match: list<i32> = [2, 4, 6];
     verify(partition_point(none_match, is_odd) == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_predicate_removal_and_unique() {
+    let values: list<i32> = [-3, -1, 0, 2, 4];
+    let is_nonnegative = |value: i32| { return value >= 0; };
+    let is_negative = |value: i32| { return value < 0; };
+    verify(find_if_not(values, is_nonnegative) == 0);
+    verify(find_if_not(values, is_negative) == 2);
+
+    let kept: list<i32> = remove_if(values, is_negative);
+    verify(kept.len() == 3);
+    verify(kept[0] == 0 && kept[1] == 2 && kept[2] == 4);
+    let replacement: i32 = 9;
+    let replaced: list<i32> = replace_if(values, is_negative, replacement);
+    verify(replaced.len() == 5);
+    verify(replaced[0] == 9 && replaced[1] == 9 && replaced[2] == 0);
+    verify(values[0] == -3 && values[1] == -1);
+
+    let runs: list<i32> = [11, 21, 22, 32, 33, 43];
+    let same_last_digit = |left: i32, right: i32| {
+        return left % 10 == right % 10;
+    };
+    let compacted: list<i32> = unique_by(runs, same_last_digit);
+    verify(compacted.len() == 3);
+    verify(compacted[0] == 11 && compacted[1] == 22 && compacted[2] == 33);
+
+    let empty: list<i32> = [];
+    let empty_kept: list<i32> = remove_if(empty, is_negative);
+    let empty_replaced: list<i32> =
+        replace_if(empty, is_negative, replacement);
+    let empty_unique: list<i32> = unique_by(empty, same_last_digit);
+    verify(find_if_not(empty, is_nonnegative) == -1);
+    verify(empty_kept.len() == 0 && empty_replaced.len() == 0);
+    verify(empty_unique.len() == 0);
 }
