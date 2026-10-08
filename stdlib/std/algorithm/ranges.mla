@@ -112,6 +112,14 @@ pub fn search(data: &list<T>, pattern: &list<U>) -> i64 {
     return -1;
 }
 
+/// @brief Return whether `pattern` occurs as a contiguous subsequence.
+/// C++23 ranges-style subrange membership check.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn contains_subrange(data: &list<T>, pattern: &list<U>) -> bool {
+    return search(data, pattern) >= 0;
+}
+
 /// @brief Return whether `suffix` matches the end of `data`.
 /// @ingroup algorithm_ranges
 generic<T>

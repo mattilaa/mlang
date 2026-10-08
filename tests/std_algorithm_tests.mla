@@ -49,6 +49,7 @@ use std::algorithm::ranges::empty;
 use std::algorithm::ranges::equal;
 use std::algorithm::ranges::starts_with;
 use std::algorithm::ranges::search;
+use std::algorithm::ranges::contains_subrange;
 use std::algorithm::ranges::ends_with;
 use std::algorithm::ranges::lexicographical_compare;
 use std::algorithm::ranges::is_sorted;
@@ -239,6 +240,9 @@ fn test_algorithm_ranges_generic_search_subrange() {
     verify(search(values, absent) == -1);
     verify(search(values, too_long) == -1);
     verify(search(values, empty) == 0);
+    verify(contains_subrange(values, later));
+    verify(contains_subrange(values, absent) == false);
+    verify(contains_subrange(values, empty));
 }
 
 #[test]
