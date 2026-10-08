@@ -48,6 +48,12 @@ use std::algorithm::ranges::lexicographical_compare;
 use std::algorithm::ranges::is_sorted;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
+use std::algorithm::ranges::remove;
+use std::algorithm::ranges::take;
+use std::algorithm::ranges::drop;
+use std::algorithm::ranges::unique;
+use std::algorithm::ranges::unique_stable;
+use std::algorithm::ranges::clamp;
 use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
@@ -259,6 +265,59 @@ fn test_algorithm_ranges_generic_element_extrema() {
     verify(max_element_index(values) == 2);
     verify(min_element_index(empty) == -1);
     verify(max_element_index(empty) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_sequence_transforms() {
+    let data: list<i32> = [5, 6, 6, 7, 8, 6];
+    let removed: list<i32> = remove(data, 6);
+    verify(removed.len() == 3);
+    verify(removed[0] == 5 && removed[1] == 7 && removed[2] == 8);
+
+    let prefix: list<i32> = take(data, 3);
+    verify(prefix.len() == 3 && prefix[0] == 5 && prefix[2] == 6);
+    let suffix: list<i32> = drop(data, 4);
+    verify(suffix.len() == 2 && suffix[0] == 8 && suffix[1] == 6);
+    let none_taken: list<i32> = take(data, -2);
+    let all_dropped: list<i32> = drop(data, 99);
+    verify(none_taken.len() == 0 && all_dropped.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_unique_transforms() {
+    let repeats: list<i32> = [1, 1, 2, 2, 3, 1, 1, 4];
+    let adjacent: list<i32> = unique(repeats);
+    verify(adjacent.len() == 5);
+    verify(adjacent[0] == 1 && adjacent[1] == 2 && adjacent[2] == 3);
+    verify(adjacent[3] == 1 && adjacent[4] == 4);
+    let stable: list<i32> = unique_stable(repeats);
+    verify(stable.len() == 4);
+    verify(stable[0] == 1 && stable[1] == 2 && stable[2] == 3 && stable[3] == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_clamp_transform() {
+    let low: i32 = 0;
+    let high: i32 = 10;
+    let values: list<i32> = [-5, 0, 3, 15];
+    let limited: list<i32> = clamp(values, low, high);
+    verify(limited.len() == 4);
+    verify(limited[0] == 0 && limited[1] == 0 && limited[2] == 3 && limited[3] == 10);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_string_transforms() {
+    let words: list<str8> = ["pear", "mango", "pear"];
+    let distinct_words: list<str8> = unique_stable(words);
+    verify(distinct_words.len() == 2);
+    verify(distinct_words[0] == "pear" && distinct_words[1] == "mango");
+}
+
+#[test]
+fn test_algorithm_ranges_generic_string_remove() {
+    let words: list<str8> = ["pear", "mango", "pear"];
+    let no_mango: list<str8> = remove(words, "mango");
+    verify(no_mango.len() == 2 && no_mango[0] == "pear" && no_mango[1] == "pear");
 }
 
 #[test]

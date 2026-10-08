@@ -175,6 +175,116 @@ pub fn contains(data: &list<T>, value: U) -> bool {
     return find(data, value) >= 0;
 }
 
+/// @brief Copy a list while excluding values equal to `value`.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn remove(data: &list<T>, value: U) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let item: T = data[i];
+        if item != value {
+            out.push(item);
+        }
+    }
+    return out;
+}
+
+/// @brief Copy the first `n` elements (or all elements when n is larger).
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn take(data: &list<T>, n: i64) -> list<T> {
+    var out: list<T> = [];
+    if n <= 0 {
+        return out;
+    }
+    let len: i64 = data.len();
+    let end: i64 = n < len ? n : len;
+    for i in 0..end {
+        out.push(data[i]);
+    }
+    return out;
+}
+
+/// @brief Copy all elements after skipping the first `n`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn drop(data: &list<T>, n: i64) -> list<T> {
+    var out: list<T> = [];
+    let len: i64 = data.len();
+    let start: i64 = n <= 0 ? 0 : n;
+    if start >= len {
+        return out;
+    }
+    for i in start..len {
+        out.push(data[i]);
+    }
+    return out;
+}
+
+/// @brief Copy a list while removing adjacent duplicate values.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn unique(data: &list<T>) -> list<T> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return [];
+    }
+    var out: list<T> = [];
+    var last: T = data[0];
+    out.push(last);
+    for i in 1..n {
+        let item: T = data[i];
+        if item != last {
+            out.push(item);
+            last = item;
+        }
+    }
+    return out;
+}
+
+/// @brief Copy a list while keeping only each value's first occurrence.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn unique_stable(data: &list<T>) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let item: T = data[i];
+        var found: bool = false;
+        let out_len: i64 = out.len();
+        for j in 0..out_len {
+            if out[j] == item {
+                found = true;
+                break;
+            }
+        }
+        if found == false {
+            out.push(item);
+        }
+    }
+    return out;
+}
+
+/// @brief Copy a list with each value clamped to the inclusive bounds.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn clamp(data: &list<T>, low: T, high: T) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let item: T = data[i];
+        if item < low {
+            out.push(low);
+        } else if item > high {
+            out.push(high);
+        } else {
+            out.push(item);
+        }
+    }
+    return out;
+}
+
 /// @brief Return first index of an i64 value, or -1 when not found.
 /// @ingroup algorithm_ranges
 pub fn find_i64(data: &list<i64>, value: i64) -> i64 {
