@@ -120,6 +120,40 @@ pub fn is_sorted(data: &list<T>) -> bool {
     return true;
 }
 
+/// @brief Return the index of the smallest element, or -1 for an empty list.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn min_element_index(data: &list<T>) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 {
+        return -1;
+    }
+    var best: i64 = 0;
+    for i in 1..n {
+        if data[i] < data[best] {
+            best = i;
+        }
+    }
+    return best;
+}
+
+/// @brief Return the index of the largest element, or -1 for an empty list.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn max_element_index(data: &list<T>) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 {
+        return -1;
+    }
+    var best: i64 = 0;
+    for i in 1..n {
+        if data[i] > data[best] {
+            best = i;
+        }
+    }
+    return best;
+}
+
 /// @brief Return count of elements equal to value.
 /// @ingroup algorithm_ranges
 generic<T, U>
