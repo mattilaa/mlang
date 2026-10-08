@@ -17,6 +17,7 @@ use dsp::fft::forward;
 use dsp::fft::inverse;
 use dsp::fft::is_power_of_two;
 use std::algorithm::numeric::accumulate_i64;
+use std::algorithm::numeric::accumulate;
 use std::algorithm::numeric::adjacent_difference_i64;
 use std::algorithm::numeric::inner_product_i64;
 use std::algorithm::numeric::partial_sum_i64;
@@ -370,6 +371,16 @@ fn test_algorithm_numeric_accumulate_and_inner_product() {
     verify(accumulate_i64(a, 0) == 10);
     verify(accumulate_i64(a, 5) == 15);
     verify(inner_product_i64(a, b, 7) == (7 + 10 + 40 + 90));
+}
+
+#[test]
+fn test_algorithm_numeric_generic_accumulate() {
+    let values: list<i32> = [2, 3, 5];
+    let initial: i64 = 10;
+    let sum: i64 = accumulate(values, initial);
+    verify(sum == 20);
+    let zero_initial: i64 = 0;
+    verify(accumulate(values, zero_initial) == 10);
 }
 
 #[test]

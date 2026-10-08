@@ -19,6 +19,18 @@ pub fn accumulate_i64(data: &list<i64>, init: i64) -> i64 {
     return acc;
 }
 
+/// @brief Fold a list into an accumulator, preserving the accumulator type.
+/// @ingroup algorithm_numeric
+generic<T, U>
+pub fn accumulate(data: &list<T>, init: U) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = acc + data[i];
+    }
+    return acc;
+}
+
 /// @brief Generic prefix sums with an initial value.
 /// Returns `[init + d0, init + d0 + d1, ...]`.
 /// @ingroup algorithm_numeric
