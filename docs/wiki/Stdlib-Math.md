@@ -24,6 +24,8 @@ Module file: `stdlib/std/math.mla`
 - `log(x)`
 - `exp(x)`
 - `modulo(a, b)`
+- `lerp(a, b, t)` for `f32` and `f64`, with exact endpoint results and
+  overflow-aware interpolation across opposite-sign endpoints (C++20 `std::lerp`)
 
 ### Integer-specific
 - `sum_range(start: i32, end: i32) -> i32`

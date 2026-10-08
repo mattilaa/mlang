@@ -133,7 +133,20 @@ fn test_math_f64() {
     verify(!(!approx_double(exp(0.0), 1.0, eps)));
     verify(!(!approx_double(modulo(5.5, 2.0), 1.5, eps)));
 
-    }
+}
+
+#[test]
+fn test_cpp20_lerp_interpolation() {
+    verify(approx_float(lerp(2.0f, 6.0f, 0.25f), 3.0f, 0.00001f));
+    verify(lerp(2.0f, 6.0f, 0.0f) == 2.0f);
+    verify(lerp(2.0f, 6.0f, 1.0f) == 6.0f);
+    verify(approx_float(lerp(2.0f, 6.0f, 1.5f), 8.0f, 0.00001f));
+
+    verify(approx_double(lerp(-1.0, 1.0, 0.25), -0.5, 0.000000000001));
+    verify(lerp(-1000000000000.0, 1000000000000.0, 0.5) == 0.0);
+    verify(lerp(1000000000000.0, 2000000000000.0, 0.0) == 1000000000000.0);
+    verify(lerp(1000000000000.0, 2000000000000.0, 1.0) == 2000000000000.0);
+}
 
 #[test]
 fn test_complex_i32_ops() {
