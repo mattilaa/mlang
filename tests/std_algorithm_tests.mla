@@ -61,6 +61,7 @@ use std::algorithm::ranges::sorted;
 use std::algorithm::ranges::reversed;
 use std::algorithm::ranges::rotate_left;
 use std::algorithm::ranges::chunked;
+use std::algorithm::ranges::windows;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
@@ -410,6 +411,20 @@ fn test_algorithm_ranges_generic_chunked() {
     let large_size: list<list<i32>> = chunked(data, 9);
     verify(invalid_size.len() == 0);
     verify(large_size.len() == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_windows() {
+    let data: list<i32> = [2, 4, 6, 8];
+    let result: list<list<i32>> = windows(data, 3);
+    verify(result.len() == 2);
+    let first: list<i32> = result[0];
+    let second: list<i32> = result[1];
+    verify(first.len() == 3 && first[0] == 2 && first[2] == 6);
+    verify(second.len() == 3 && second[0] == 4 && second[2] == 8);
+    let zero: list<list<i32>> = windows(data, 0);
+    let too_wide: list<list<i32>> = windows(data, 5);
+    verify(zero.len() == 0 && too_wide.len() == 0);
 }
 
 #[test]

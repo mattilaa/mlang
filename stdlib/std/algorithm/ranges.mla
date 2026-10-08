@@ -470,6 +470,27 @@ pub fn chunked(data: &list<T>, chunk_size: i64) -> list<list<T>> {
     return out;
 }
 
+/// @brief Materialize every overlapping window of `window_size` elements.
+/// Eager-list counterpart to C++23 `views::slide`; invalid sizes return empty.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn windows(data: &list<T>, window_size: i64) -> list<list<T>> {
+    var out: list<list<T>> = [];
+    let n: i64 = data.len();
+    if window_size <= 0 || window_size > n {
+        return out;
+    }
+    let last_start: i64 = n - window_size;
+    for start in 0..(last_start + 1) {
+        var window: list<T> = [];
+        for offset in 0..window_size {
+            window.push(data[start + offset]);
+        }
+        out.push(window);
+    }
+    return out;
+}
+
 /// @brief Copy a list while removing adjacent duplicate values.
 /// @ingroup algorithm_ranges
 generic<T>

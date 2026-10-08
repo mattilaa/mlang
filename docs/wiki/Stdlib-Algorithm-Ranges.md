@@ -51,6 +51,8 @@ fn example() {
 - `chunked(data, size)` materializes consecutive sublists (C++23
   `views::chunk` style); the final chunk can be shorter, and non-positive sizes
   produce an empty list.
+- `windows(data, size)` materializes every overlapping fixed-size sublist
+  (C++23 `views::slide` style); invalid sizes produce an empty list.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 
