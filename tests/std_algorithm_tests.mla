@@ -44,6 +44,7 @@ use std::algorithm::ranges::empty;
 use std::algorithm::ranges::equal;
 use std::algorithm::ranges::starts_with;
 use std::algorithm::ranges::ends_with;
+use std::algorithm::ranges::lexicographical_compare;
 use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
@@ -217,6 +218,21 @@ fn test_algorithm_ranges_generic_ends_with() {
     verify(ends_with(values, mismatch) == false);
     verify(ends_with(values, too_long) == false);
     verify(ends_with(values, empty));
+}
+
+#[test]
+fn test_algorithm_ranges_generic_lexicographical_compare() {
+    let first: list<i32> = [1, 2, 9];
+    let before: list<i32> = [1, 3];
+    let after: list<i32> = [1, 2, 9, 0];
+    let equal_values: list<i32> = [1, 2, 9];
+    let empty: list<i32> = [];
+
+    verify(lexicographical_compare(first, before));
+    verify(lexicographical_compare(first, after));
+    verify(lexicographical_compare(first, equal_values) == false);
+    verify(lexicographical_compare(empty, first));
+    verify(lexicographical_compare(first, empty) == false);
 }
 
 #[test]
