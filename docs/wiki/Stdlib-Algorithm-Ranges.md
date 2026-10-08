@@ -44,6 +44,11 @@ fn example() {
   considering order.
 - `lexicographical_compare` supports ranges with distinct mutually
   order-comparable element types.
+- `lexicographical_compare_by` performs the same range comparison with a
+  caller-supplied strict ordering; equivalent elements continue to the next
+  position and a matching prefix sorts before its extension.
+- `includes_by(range, subset, less)` checks sorted-range containment with a
+  comparator, including duplicate multiplicities.
 - `starts_with` and `ends_with` compare prefixes and suffixes, including across
   distinct equality-comparable element types.
 - `lexicographical_compare`, `is_sorted`, `min_element_index`, and
