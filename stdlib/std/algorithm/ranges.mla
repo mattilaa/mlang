@@ -235,6 +235,21 @@ pub fn filter(data: &list<T>, predicate: Predicate) -> list<T> {
     return selected;
 }
 
+/// @brief Transform every element into a new list using `operation`.
+/// The output element type is inferred from the operation's return type,
+/// so input and output ranges may have different element types.
+/// C++20 `std::ranges::transform` (unary form) equivalent.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn transform(data: &list<T>, operation: Operation) -> list<Output> {
+    var transformed: list<Output> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        transformed.push(operation(data[i]));
+    }
+    return transformed;
+}
+
 /// @brief Return whether every element is accepted by `predicate`.
 /// Empty ranges return true, matching C++20 `std::ranges::all_of`.
 /// @ingroup algorithm_ranges

@@ -13,6 +13,7 @@ use std::algorithm::ranges::find;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::unique_stable;
 use std::algorithm::ranges::filter;
+use std::algorithm::ranges::transform;
 
 fn example() {
     let data: list<i32> = [4, 2, 4, 7];
@@ -21,6 +22,8 @@ fn example() {
     let distinct: list<i32> = unique_stable(data); // [4, 2, 7]
     let positive = |value: i32| { return value > 0; };
     let positives: list<i32> = filter(data, positive); // [4, 2, 4, 7]
+    let to_double = |value: i32| { return f64(value); };
+    let converted: list<f64> = transform(data, to_double);
 }
 ```
 
@@ -83,6 +86,9 @@ fn example() {
 - `find_if` and `count_if` search/count elements accepted by a bound predicate;
   `filter` eagerly copies accepted values to a new list. Predicates may capture
   local values, and captured mutations are visible to the caller.
+- `transform(data, operation)` eagerly maps every element into a new list;
+  the output element type is inferred from the closure return type and may
+  differ from the input element type.
 - `find_if_not` returns the first rejected element's index; `remove_if` returns
   a copy without accepted elements, and `replace_if` substitutes a value for
   every accepted element. These transforms leave their input unchanged.
