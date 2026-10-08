@@ -275,6 +275,31 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                     return cloneTypeNode(genericType->typeArgs.front());
             }
         }
+        if(methodCall->methodName == "unwrap_or")
+        {
+            if(auto* genericType =
+                   dynamic_cast<GenericStructTypeRefNode*>(objectType))
+            {
+                if((genericType->structName == "option" ||
+                    genericType->structName == "result") &&
+                   !genericType->typeArgs.empty())
+                    return cloneTypeNode(genericType->typeArgs.front());
+            }
+            if(auto* concreteType =
+                   dynamic_cast<StructTypeRefNode*>(objectType))
+            {
+                auto genericName =
+                    mangledToGenericName.find(concreteType->structName);
+                auto typeArgs =
+                    monomorphizedTypeArgs.find(concreteType->structName);
+                if(genericName != mangledToGenericName.end() &&
+                   typeArgs != monomorphizedTypeArgs.end() &&
+                   (genericName->second == "option" ||
+                    genericName->second == "result") &&
+                   !typeArgs->second.empty())
+                    return cloneTypeNode(typeArgs->second.front());
+            }
+        }
         if(methodCall->methodName == "is_some" ||
            methodCall->methodName == "is_none")
             return new TypeNode(TypeNode::TYPE_BOOL);
