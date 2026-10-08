@@ -35,6 +35,9 @@ fn example() {
 - `lexicographical_compare`, `is_sorted`, `min_element_index`, and
   `max_element_index` provide ordering queries. The min/max index functions
   return `-1` on an empty list and keep the first index on ties.
+- `lower_bound`, `upper_bound`, and `binary_search` perform logarithmic-time
+  queries on a list sorted in nondecreasing order. The bounds return insertion
+  indices; binary search returns `bool`.
 - `size` and `empty` provide generic list size queries.
 
 ### Transforms and sequence creation
