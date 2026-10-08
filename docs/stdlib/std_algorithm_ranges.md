@@ -89,6 +89,8 @@ fn example() {
 - `remove`, `take`, `drop`, `unique`, `unique_stable`, and `clamp` return a
   transformed copy. `unique` removes only adjacent duplicates;
   `unique_stable` keeps the first occurrence of each value.
+- `clamp_by(data, low, high, less)` clamps each element using a custom ordering;
+  bounds must be ordered according to the comparator.
 - `sorted` returns a stable ascending copy and leaves the input unchanged.
 - `sorted_by(data, less)` returns a stable copied ordering by a strict
   comparator. Equivalent elements retain their original relative order.

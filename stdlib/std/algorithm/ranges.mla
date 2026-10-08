@@ -1538,6 +1538,26 @@ pub fn clamp(data: &list<T>, low: T, high: T) -> list<T> {
     return out;
 }
 
+/// @brief Copy a list with values clamped according to the ordering `less`.
+/// `low` must not follow `high` under the comparator.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn clamp_by(data: &list<T>, low: T, high: T, less: Less) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let item: T = data[i];
+        if less(item, low) {
+            out.push(low);
+        } else if less(high, item) {
+            out.push(high);
+        } else {
+            out.push(item);
+        }
+    }
+    return out;
+}
+
 /// @brief Return first index of an i64 value, or -1 when not found.
 /// @ingroup algorithm_ranges
 pub fn find_i64(data: &list<i64>, value: i64) -> i64 {
