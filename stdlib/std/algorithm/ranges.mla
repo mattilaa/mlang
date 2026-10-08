@@ -104,6 +104,22 @@ pub fn lexicographical_compare(left: &list<T>, right: &list<T>) -> bool {
     return left_len < right_len;
 }
 
+/// @brief Return true when elements are in nondecreasing order.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn is_sorted(data: &list<T>) -> bool {
+    let n: i64 = data.len();
+    if n < 2 {
+        return true;
+    }
+    for i in 1..n {
+        if data[i] < data[i - 1] {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// @brief Return count of elements equal to value.
 /// @ingroup algorithm_ranges
 generic<T, U>
