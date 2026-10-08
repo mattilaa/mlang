@@ -43,6 +43,7 @@ fn example() {
 - `remove`, `take`, `drop`, `unique`, `unique_stable`, and `clamp` return a
   transformed copy. `unique` removes only adjacent duplicates;
   `unique_stable` keeps the first occurrence of each value.
+- `sorted` returns a stable ascending copy and leaves the input unchanged.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 
