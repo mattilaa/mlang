@@ -61,6 +61,7 @@ fn test_try_err_context_stack() {
     if r.is_ok(): {
         verify(false);
     }
+
     let msg: str8 = r.unwrap_err();
     if contains(msg, "boom") == 0: {
         verify(false);
@@ -72,3 +73,16 @@ fn test_try_err_context_stack() {
         verify(false);
     }
     }
+
+#[test]
+fn test_expected_and_optional_value_or() {
+    let good: result<i32, str8> = Ok<i32, str8>(17);
+    let bad: result<i32, str8> = Err<i32, str8>("missing");
+    verify(good.unwrap_or(99) == 17);
+    verify(bad.unwrap_or(99) == 99);
+
+    let present: option<i32> = Some<i32>(23);
+    let absent: option<i32> = None<i32>();
+    verify(present.unwrap_or(99) == 23);
+    verify(absent.unwrap_or(99) == 99);
+}

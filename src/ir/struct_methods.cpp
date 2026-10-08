@@ -5538,8 +5538,107 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         return builder.CreateLoad(llvmFieldType, fieldPtr, fieldName);
     };
 
+    auto emitValueOr = [&](const std::string& conditionField,
+                           const std::string& payloadField,
+                           const std::string& typeLabel) -> llvm::Value*
+    {
+        if(node->arguments.size() != 1)
+        {
+            reportError(node->line, "unwrap_or() expects one fallback value");
+            return nullptr;
+        }
+        TypeNode* containerType = getLValueType(node->object, node->line);
+        TypeNode* payloadType = nullptr;
+        if(auto* genericType =
+               dynamic_cast<GenericStructTypeRefNode*>(containerType))
+        {
+            if(!genericType->typeArgs.empty())
+                payloadType = genericType->typeArgs.front();
+        }
+        else if(auto* concreteType =
+                    dynamic_cast<StructTypeRefNode*>(containerType))
+        {
+            auto typeArgs =
+                monomorphizedTypeArgs.find(concreteType->structName);
+            if(typeArgs != monomorphizedTypeArgs.end() &&
+               !typeArgs->second.empty())
+                payloadType = typeArgs->second.front();
+        }
+        if(!payloadType)
+        {
+            reportError(node->line,
+                        typeLabel + "::unwrap_or() needs a concrete payload type");
+            return nullptr;
+        }
+
+        llvm::Value* fallback = generateExpression(node->arguments.front());
+        llvm::Value* payload =
+            loadStructField(objPtr, structTypeName, payloadField);
+        llvm::Value* hasPayload =
+            loadStructField(objPtr, structTypeName, conditionField);
+        if(!fallback || !payload || !hasPayload)
+            return nullptr;
+        if(fallback->getType() != payload->getType())
+        {
+            if(fallback->getType()->isIntegerTy() &&
+               payload->getType()->isIntegerTy())
+                fallback = builder.CreateIntCast(
+                    fallback, payload->getType(),
+                    !isUnsignedType(payloadType->kind),
+                    typeLabel + ".unwrap_or.cast");
+            else if(fallback->getType()->isIntegerTy() &&
+                    payload->getType()->isFloatingPointTy())
+                fallback = builder.CreateSIToFP(
+                    fallback, payload->getType(),
+                    typeLabel + ".unwrap_or.cast");
+            else if(fallback->getType()->isFloatingPointTy() &&
+                    payload->getType()->isIntegerTy())
+                fallback = builder.CreateFPToSI(
+                    fallback, payload->getType(),
+                    typeLabel + ".unwrap_or.cast");
+            else if(fallback->getType()->isFloatingPointTy() &&
+                    payload->getType()->isFloatingPointTy())
+                fallback = builder.CreateFPCast(
+                    fallback, payload->getType(),
+                    typeLabel + ".unwrap_or.cast");
+            else
+            {
+                reportError(node->line,
+                            "unwrap_or() fallback type does not match " +
+                                typeLabel + " payload type");
+                return nullptr;
+            }
+        }
+
+        llvm::Function* function = builder.GetInsertBlock()->getParent();
+        llvm::BasicBlock* payloadBlock = llvm::BasicBlock::Create(
+            context, typeLabel + ".unwrap_or.payload", function);
+        llvm::BasicBlock* fallbackBlock = llvm::BasicBlock::Create(
+            context, typeLabel + ".unwrap_or.fallback", function);
+        llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create(
+            context, typeLabel + ".unwrap_or.merge", function);
+        builder.CreateCondBr(hasPayload, payloadBlock, fallbackBlock);
+
+        builder.SetInsertPoint(payloadBlock);
+        llvm::BasicBlock* payloadEnd = builder.GetInsertBlock();
+        builder.CreateBr(mergeBlock);
+
+        builder.SetInsertPoint(fallbackBlock);
+        llvm::BasicBlock* fallbackEnd = builder.GetInsertBlock();
+        builder.CreateBr(mergeBlock);
+
+        builder.SetInsertPoint(mergeBlock);
+        llvm::PHINode* result = builder.CreatePHI(
+            payload->getType(), 2, typeLabel + ".unwrap_or.result");
+        result->addIncoming(payload, payloadEnd);
+        result->addIncoming(fallback, fallbackEnd);
+        return result;
+    };
+
     if(isOptionType(structTypeName))
     {
+        if(node->methodName == "unwrap_or")
+            return emitValueOr("is_some", "value", "option");
         if(node->methodName == "is_some" ||
            node->methodName == "is_none")
         {
@@ -5618,6 +5717,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
     if(isResultType(structTypeName))
     {
+        if(node->methodName == "unwrap_or")
+            return emitValueOr("is_ok", "ok", "result");
         if(node->methodName == "is_ok")
         {
             if(!node->arguments.empty())
