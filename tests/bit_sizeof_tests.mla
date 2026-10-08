@@ -16,6 +16,9 @@ use std::bits::bit_ceil_u64;
 use std::bits::rotl_u64;
 use std::bits::rotr_u64;
 use std::bits::byteswap_u64;
+use std::bits::byteswap_u32;
+use std::bits::byteswap_u16;
+use std::bits::byteswap_u8;
 use std::bits::bit_cast_u32_from_f32;
 use std::bits::bit_cast_f32_from_u32;
 use std::bits::bit_cast_u64_from_f64;
@@ -125,6 +128,20 @@ fn test_cpp23_byteswap_u64() {
     let swapped: u64 = 578437695752307201;
     verify(byteswap_u64(value) == swapped);
     verify(byteswap_u64(swapped) == value);
+}
+
+#[test]
+fn test_cpp23_byteswap_unsigned_widths() {
+    let v32: u32 = 16909060;
+    let r32: u32 = 67305985;
+    let v16: u16 = 4660;
+    let r16: u16 = 13330;
+    let v8: u8 = 171;
+    verify(byteswap_u32(v32) == r32);
+    verify(byteswap_u32(r32) == v32);
+    verify(byteswap_u16(v16) == r16);
+    verify(byteswap_u16(r16) == v16);
+    verify(byteswap_u8(v8) == v8);
 }
 
 #[test]
