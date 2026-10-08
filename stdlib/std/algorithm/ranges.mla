@@ -290,6 +290,21 @@ pub fn take(data: &list<T>, n: i64) -> list<T> {
     return out;
 }
 
+/// @brief Materialize the integers in the half-open interval `[start, end)`.
+/// This is an eager list counterpart to C++20 `std::views::iota`.
+/// If `start >= end`, the result is empty.
+/// @ingroup algorithm_ranges
+pub fn iota(start: i64, end: i64) -> list<i64> {
+    var out: list<i64> = [];
+    if start >= end {
+        return out;
+    }
+    for value in start..end {
+        out.push(value);
+    }
+    return out;
+}
+
 /// @brief Copy all elements after skipping the first `n`.
 /// @ingroup algorithm_ranges
 generic<T>
