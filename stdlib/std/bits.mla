@@ -13,6 +13,7 @@ extern pub fn __mlang_std_bits_countr_zero_u64(value: u64) -> i64;
 extern pub fn __mlang_std_bits_countl_one_u64(value: u64) -> i64;
 extern pub fn __mlang_std_bits_countr_one_u64(value: u64) -> i64;
 extern pub fn __mlang_std_bits_bit_floor_u64(value: u64) -> u64;
+extern pub fn __mlang_std_bits_bit_ceil_u64(value: u64) -> u64;
 extern pub fn __mlang_std_bits_rotl_u64(value: u64, shift: i64) -> u64;
 extern pub fn __mlang_std_bits_rotr_u64(value: u64, shift: i64) -> u64;
 extern pub fn __mlang_std_bits_byteswap_u64(value: u64) -> u64;
@@ -79,6 +80,12 @@ pub fn countr_one_u64(value: u64) -> i64 {
 /// Returns zero when `value` is zero; equivalent to `std::bit_floor`.
 pub fn bit_floor_u64(value: u64) -> u64 {
     return __mlang_std_bits_bit_floor_u64(value);
+}
+
+/// @brief Return the least power of two not less than `value`.
+/// Returns zero when the result cannot be represented in `u64`.
+pub fn bit_ceil_u64(value: u64) -> u64 {
+    return __mlang_std_bits_bit_ceil_u64(value);
 }
 
 /// @brief Rotate bits left; negative shifts rotate right.
