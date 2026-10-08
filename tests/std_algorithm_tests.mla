@@ -65,6 +65,7 @@ use std::algorithm::ranges::merged;
 use std::algorithm::ranges::union_sorted;
 use std::algorithm::ranges::intersection_sorted;
 use std::algorithm::ranges::difference_sorted;
+use std::algorithm::ranges::symmetric_difference_sorted;
 use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::upper_bound;
 use std::algorithm::ranges::binary_search;
@@ -459,6 +460,18 @@ fn test_algorithm_ranges_generic_difference_sorted() {
     verify(result[0] == 1 && result[1] == 2 && result[2] == 2 && result[3] == 4);
     let empty: list<i32> = [];
     let unchanged: list<i32> = difference_sorted(left, empty);
+    verify(unchanged.len() == left.len() && unchanged[2] == 2);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_symmetric_difference_sorted() {
+    let left: list<i32> = [1, 2, 2, 2, 5];
+    let right: list<i32> = [2, 2, 3, 5, 5];
+    let result: list<i32> = symmetric_difference_sorted(left, right);
+    verify(result.len() == 4);
+    verify(result[0] == 1 && result[1] == 2 && result[2] == 3 && result[3] == 5);
+    let empty: list<i32> = [];
+    let unchanged: list<i32> = symmetric_difference_sorted(left, empty);
     verify(unchanged.len() == left.len() && unchanged[2] == 2);
 }
 
