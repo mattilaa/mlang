@@ -55,6 +55,22 @@ pub fn adjacent_find(data: &list<T>) -> i64 {
     return -1;
 }
 
+/// @brief Return the first adjacent pair accepted by `equivalent`, or -1.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent>
+pub fn adjacent_find_by(data: &list<T>, equivalent: Equivalent) -> i64 {
+    let n: i64 = data.len();
+    if n < 2 {
+        return -1;
+    }
+    for i in 0..(n - 1) {
+        if equivalent(data[i], data[i + 1]) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 /// @brief Return the first index in `data` matching any value in `candidates`.
 /// Returns -1 when the ranges have no matching values (C++20 `find_first_of`).
 /// @ingroup algorithm_ranges
