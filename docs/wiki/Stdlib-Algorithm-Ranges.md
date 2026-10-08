@@ -88,6 +88,9 @@ fn example() {
   keeping the minimum duplicate count for every value.
 - `difference_sorted(left, right)` removes matching right-side occurrences
   from the left sorted range, preserving unmatched duplicate counts.
+- `symmetric_difference_sorted(left, right)` returns values present in exactly
+  one sorted input, with each value's output count equal to the difference in
+  input multiplicities.
 - `replace(data, old, new)` copies a range while replacing every value equal
   to `old`; the original range is unchanged.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
