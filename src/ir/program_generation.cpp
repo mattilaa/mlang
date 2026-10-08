@@ -129,7 +129,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
         std::unordered_map<std::string, TypeNode::TypeKind> fnReturnKinds;
         for(auto* fn : program->functionList->functions)
         {
-            if(!fn || fn->isExtern || !fn->returnType)
+            if(!fn || fn->isExtern || !fn->returnType ||
+               !fn->typeParams.empty())
                 continue;
             auto it = fnReturnKinds.find(fn->name);
             if(it == fnReturnKinds.end())
@@ -151,9 +152,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
             progress = false;
             for(auto* fn : program->functionList->functions)
             {
-                if(!fn || fn->isExtern || fn->returnType)
-                    continue;
-                if(!fn->typeParams.empty() && fn->isCexpr)
+                if(!fn || fn->isExtern || fn->returnType ||
+                   !fn->typeParams.empty())
                     continue;
                 if(fn->name == "main")
                 {
@@ -177,9 +177,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
         for(auto* fn : program->functionList->functions)
         {
-            if(!fn || fn->isExtern || fn->returnType)
-                continue;
-            if(!fn->typeParams.empty() && fn->isCexpr)
+            if(!fn || fn->isExtern || fn->returnType ||
+               !fn->typeParams.empty())
                 continue;
             TypeNode::TypeKind inferredKind = TypeNode::TYPE_VOID;
             std::string reason;
@@ -864,7 +863,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 variadicGenericFunctionTemplates[funcDef->name].push_back(funcDef);
                 continue;
             }
-            if(!funcDef->typeParams.empty() && funcDef->isCexpr)
+            if(!funcDef->typeParams.empty())
             {
                 registerFunctionOverload(funcDef, nullptr);
                 continue;
@@ -923,7 +922,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 continue;
             if(!funcDef->typePackParam.empty())
                 continue;
-            if(!funcDef->typeParams.empty() && funcDef->isCexpr)
+            if(!funcDef->typeParams.empty())
                 continue;
             generateFunctionDefinition(funcDef);
         }

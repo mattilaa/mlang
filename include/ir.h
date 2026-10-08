@@ -524,6 +524,13 @@ private:
                                const std::vector<std::string>& typeParams,
                                const std::vector<TypeNode*>& typeArgs,
                                const std::string& mangledStructName);
+    void instantiateGenericFunctionOverloads(
+        FunctionCallNode* call, const std::string& lookupName,
+        std::vector<FunctionOverloadInfo>& overloads);
+    bool inferGenericFunctionTypeBindings(
+        FunctionDefNode* functionTemplate,
+        const std::vector<ExpressionNode*>& arguments,
+        std::map<std::string, TypeNode*>& bindings);
     std::string
     getOrCreateMonomorphizedStruct(const std::string& genericName,
                                    const std::vector<TypeNode*>& typeArgs);
