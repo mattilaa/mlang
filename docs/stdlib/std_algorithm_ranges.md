@@ -54,6 +54,9 @@ fn example() {
 - `search` returns the first index of a contiguous pattern (`0` for an empty
   pattern, `-1` if absent); `contains_subrange` returns the corresponding
   membership result.
+- `search_n(data, count, value)` locates the first run of consecutive equal
+  values; `search_n_by` uses an equivalence predicate. A non-positive count
+  matches at index zero.
 - `find_end` returns the last matching subrange start (`data.len()` for an
   empty pattern, `-1` if absent).
 - `search_by` and `find_end_by` find the first or last contiguous subrange

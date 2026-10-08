@@ -703,6 +703,64 @@ pub fn search_by(data: &list<T>, pattern: &list<T>,
     return -1;
 }
 
+/// @brief Find the first run of `count` consecutive values equal to `value`.
+/// Returns 0 for a non-positive count and -1 when no run exists.
+/// C++20 `std::ranges::search_n` equivalent.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn search_n(data: &list<T>, count: i64, value: U) -> i64 {
+    if count <= 0 {
+        return 0;
+    }
+    let n: i64 = data.len();
+    if count > n {
+        return -1;
+    }
+    let last_start: i64 = n - count;
+    for start in 0..(last_start + 1) {
+        var matches: bool = true;
+        for offset in 0..count {
+            if data[start + offset] != value {
+                matches = false;
+                break;
+            }
+        }
+        if matches {
+            return start;
+        }
+    }
+    return -1;
+}
+
+/// @brief Find a run whose elements satisfy `equivalent(element, value)`.
+/// Returns 0 for a non-positive count and -1 when no run exists.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn search_n_by(data: &list<T>, count: i64, value: U,
+                   equivalent: Equivalent) -> i64 {
+    if count <= 0 {
+        return 0;
+    }
+    let n: i64 = data.len();
+    if count > n {
+        return -1;
+    }
+    let last_start: i64 = n - count;
+    for start in 0..(last_start + 1) {
+        var matches: bool = true;
+        for offset in 0..count {
+            if !equivalent(data[start + offset], value) {
+                matches = false;
+                break;
+            }
+        }
+        if matches {
+            return start;
+        }
+    }
+    return -1;
+}
+
 /// @brief Return the start index of the last matching subrange.
 /// Returns the range length for an empty pattern and -1 when absent.
 /// C++20 `std::ranges::find_end` equivalent.
