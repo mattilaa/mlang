@@ -44,6 +44,8 @@ fn example() {
   transformed copy. `unique` removes only adjacent duplicates;
   `unique_stable` keeps the first occurrence of each value.
 - `sorted` returns a stable ascending copy and leaves the input unchanged.
+- `reversed` returns the elements in reverse order; `rotate_left` returns a
+  copy rotated by a normalized signed offset.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 
