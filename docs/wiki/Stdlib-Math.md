@@ -26,6 +26,8 @@ Module file: `stdlib/std/math.mla`
 - `modulo(a, b)`
 - `lerp(a, b, t)` for `f32` and `f64`, with exact endpoint results and
   overflow-aware interpolation across opposite-sign endpoints (C++20 `std::lerp`)
+- `midpoint(a, b)` for `i32`, `i64`, `f32`, and `f64`; integer results round
+  toward the first argument without signed overflow (C++20 `std::midpoint`)
 
 ### Integer-specific
 - `sum_range(start: i32, end: i32) -> i32`

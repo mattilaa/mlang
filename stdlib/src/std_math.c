@@ -1,6 +1,28 @@
 #include <math.h>
 #include <stdint.h>
 
+int32_t __mlang_std_math_midpoint_i32(int32_t a, int32_t b)
+{
+    if(a <= b)
+    {
+        uint32_t distance = (uint32_t)b - (uint32_t)a;
+        return a + (int32_t)(distance / UINT32_C(2));
+    }
+    uint32_t distance = (uint32_t)a - (uint32_t)b;
+    return a - (int32_t)(distance / UINT32_C(2));
+}
+
+int64_t __mlang_std_math_midpoint_i64(int64_t a, int64_t b)
+{
+    if(a <= b)
+    {
+        uint64_t distance = (uint64_t)b - (uint64_t)a;
+        return a + (int64_t)(distance / UINT64_C(2));
+    }
+    uint64_t distance = (uint64_t)a - (uint64_t)b;
+    return a - (int64_t)(distance / UINT64_C(2));
+}
+
 int32_t __mlang_std_math_add_i32(int32_t a, int32_t b)
 {
     return a + b;
