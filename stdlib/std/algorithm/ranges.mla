@@ -68,6 +68,24 @@ pub fn starts_with(data: &list<T>, prefix: &list<T>) -> bool {
     return true;
 }
 
+/// @brief Return whether `suffix` matches the end of `data`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn ends_with(data: &list<T>, suffix: &list<T>) -> bool {
+    let suffix_len: i64 = suffix.len();
+    let data_len: i64 = data.len();
+    if suffix_len > data_len {
+        return false;
+    }
+    let offset: i64 = data_len - suffix_len;
+    for i in 0..suffix_len {
+        if data[offset + i] != suffix[i] {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// @brief Return count of elements equal to value.
 /// @ingroup algorithm_ranges
 generic<T, U>
