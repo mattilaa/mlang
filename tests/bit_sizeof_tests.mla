@@ -4,6 +4,12 @@ mod std::bitset;
 
 use std::bits::OFF;
 use std::bits::ON;
+use std::bits::popcount_u64;
+use std::bits::has_single_bit_u64;
+use std::bits::bit_width_u64;
+use std::bits::bit_floor_u64;
+use std::bits::rotl_u64;
+use std::bits::rotr_u64;
 use std::bitset::BitSet;
 use std::testing::verify;
 use std::testing::verify_eq;
@@ -68,6 +74,30 @@ fn test_bit_values_and_struct_field_updates() {
     verify_eq_i32(1, i32(lamp.state));
     lamp.state = OFF();
     verify_eq_i32(0, i32(lamp.state));
+}
+
+#[test]
+fn test_cpp20_unsigned_bit_utilities() {
+    let zero: u64 = 0;
+    let one: u64 = 1;
+    let two: u64 = 2;
+    let twelve: u64 = 12;
+    let one_twenty_eight: u64 = 128;
+    let two_fifty_five: u64 = 255;
+    let two_fifty_six: u64 = 256;
+    verify_eq_i64(0, popcount_u64(zero));
+    verify_eq_i64(8, popcount_u64(two_fifty_five));
+    verify(has_single_bit_u64(one));
+    verify(has_single_bit_u64(two_fifty_six));
+    verify(!has_single_bit_u64(zero));
+    verify(!has_single_bit_u64(twelve));
+    verify_eq_i64(0, bit_width_u64(zero));
+    verify_eq_i64(8, bit_width_u64(two_fifty_five));
+    verify(bit_floor_u64(two_fifty_five) == one_twenty_eight);
+    verify(bit_floor_u64(zero) == zero);
+    verify(rotl_u64(one, 1) == two);
+    verify(rotr_u64(two, 1) == one);
+    verify(rotl_u64(two, -1) == one);
 }
 
 #[test]

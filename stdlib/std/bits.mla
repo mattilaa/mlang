@@ -5,6 +5,13 @@
 /// Standalone `bit` values still use normal ABI byte-sized storage rules for
 /// `size_of(bit)`, but packed bit storage is provided by `std::bitset::BitSet`.
 
+extern pub fn __mlang_std_bits_popcount_u64(value: u64) -> i64;
+extern pub fn __mlang_std_bits_has_single_bit_u64(value: u64) -> i32;
+extern pub fn __mlang_std_bits_bit_width_u64(value: u64) -> i64;
+extern pub fn __mlang_std_bits_bit_floor_u64(value: u64) -> u64;
+extern pub fn __mlang_std_bits_rotl_u64(value: u64, shift: i64) -> u64;
+extern pub fn __mlang_std_bits_rotr_u64(value: u64, shift: i64) -> u64;
+
 /// @brief Logical on value (`1`).
 pub fn on() -> bit {
     return bit(1);
@@ -23,4 +30,38 @@ pub fn ON() -> bit {
 /// @brief Compatibility wrapper for `off()`.
 pub fn OFF() -> bit {
     return off();
+}
+
+/// @brief Count set bits in an unsigned 64-bit value.
+/// C++20 equivalent of `std::popcount`.
+pub fn popcount_u64(value: u64) -> i64 {
+    return __mlang_std_bits_popcount_u64(value);
+}
+
+/// @brief Return whether a value is a nonzero power of two.
+/// C++20 equivalent of `std::has_single_bit`.
+pub fn has_single_bit_u64(value: u64) -> bool {
+    return __mlang_std_bits_has_single_bit_u64(value) != 0;
+}
+
+/// @brief Return the number of bits needed to represent a value.
+/// C++20 equivalent of `std::bit_width`.
+pub fn bit_width_u64(value: u64) -> i64 {
+    return __mlang_std_bits_bit_width_u64(value);
+}
+
+/// @brief Return the greatest power of two not greater than `value`.
+/// Returns zero when `value` is zero; equivalent to `std::bit_floor`.
+pub fn bit_floor_u64(value: u64) -> u64 {
+    return __mlang_std_bits_bit_floor_u64(value);
+}
+
+/// @brief Rotate bits left; negative shifts rotate right.
+pub fn rotl_u64(value: u64, shift: i64) -> u64 {
+    return __mlang_std_bits_rotl_u64(value, shift);
+}
+
+/// @brief Rotate bits right; negative shifts rotate left.
+pub fn rotr_u64(value: u64, shift: i64) -> u64 {
+    return __mlang_std_bits_rotr_u64(value, shift);
 }
