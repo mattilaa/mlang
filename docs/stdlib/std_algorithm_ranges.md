@@ -64,6 +64,11 @@ fn example() {
 - `all_of`, `any_of`, and `none_of` accept predicates as well as retaining the
   one-argument `list<bool>` identity forms. Empty-range results match the
   standard algorithms: true, false, and true respectively.
+- `is_partitioned` checks whether all matching elements precede nonmatches;
+  `partition_point` returns the first nonmatch index for an already-partitioned
+  range. `stable_partition` returns a copied range with matching elements
+  first, preserving order within both groups and evaluating its predicate once
+  per element.
 
 ### Transforms and sequence creation
 
