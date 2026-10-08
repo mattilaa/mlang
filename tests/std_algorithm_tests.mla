@@ -59,6 +59,7 @@ use std::algorithm::ranges::upper_bound;
 use std::algorithm::ranges::binary_search;
 use std::algorithm::ranges::sorted;
 use std::algorithm::ranges::reversed;
+use std::algorithm::ranges::rotate_left;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
 use std::algorithm::ranges::remove;
@@ -374,6 +375,22 @@ fn test_algorithm_ranges_generic_reversed_copy() {
     let empty: list<str8> = [];
     let empty_reversed: list<str8> = reversed(empty);
     verify(empty_reversed.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_rotate_left_copy() {
+    let values: list<i32> = [1, 2, 3, 4];
+    let left: list<i32> = rotate_left(values, 2);
+    verify(left[0] == 3 && left[1] == 4 && left[2] == 1 && left[3] == 2);
+
+    let right: list<i32> = rotate_left(values, -1);
+    verify(right[0] == 4 && right[1] == 1 && right[2] == 2 && right[3] == 3);
+
+    let unchanged: list<i32> = rotate_left(values, 8);
+    verify(unchanged[0] == 1 && unchanged[3] == 4);
+    let empty: list<i32> = [];
+    let empty_rotated: list<i32> = rotate_left(empty, 1);
+    verify(empty_rotated.len() == 0);
 }
 
 #[test]
