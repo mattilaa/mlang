@@ -109,6 +109,10 @@ use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
 use std::algorithm::ranges::min_element_value;
 use std::algorithm::ranges::max_element_value;
+use std::algorithm::ranges::min_element_index_by;
+use std::algorithm::ranges::max_element_index_by;
+use std::algorithm::ranges::min_element_value_by;
+use std::algorithm::ranges::max_element_value_by;
 use std::algorithm::ranges::remove;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::iota;
@@ -824,6 +828,29 @@ fn test_algorithm_ranges_generic_element_values() {
     let words: list<str8> = ["pear", "apple", "plum"];
     verify(min_element_value(words) == "apple");
     verify(max_element_value(words) == "plum");
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_element_extrema() {
+    let values: list<i32> = [22, 11, 21, 12, 3];
+    let empty: list<i32> = [];
+    let by_tens = |a: i32, b: i32| { return a / 10 < b / 10; };
+    verify(min_element_index_by(values, by_tens) == 4);
+    verify(max_element_index_by(values, by_tens) == 0);
+    verify(min_element_value_by(values, by_tens) == 3);
+    verify(max_element_value_by(values, by_tens) == 22);
+    verify(min_element_index_by(empty, by_tens) == -1);
+    verify(max_element_index_by(empty, by_tens) == -1);
+
+    let tied: list<i32> = [12, 11, 19];
+    verify(min_element_index_by(tied, by_tens) == 0);
+    verify(max_element_index_by(tied, by_tens) == 0);
+    verify(min_element_value_by(tied, by_tens) == 12);
+    verify(max_element_value_by(tied, by_tens) == 12);
+
+    let descending = |a: i32, b: i32| { return a > b; };
+    verify(min_element_index_by(values, descending) == 0);
+    verify(max_element_index_by(values, descending) == 4);
 }
 
 #[test]

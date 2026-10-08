@@ -790,6 +790,68 @@ pub fn max_element_value(data: &list<T>) -> T {
     return best;
 }
 
+/// @brief Return the first minimum index under `less`, or -1 if empty.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn min_element_index_by(data: &list<T>, less: Less) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 {
+        return -1;
+    }
+    var best: i64 = 0;
+    for i in 1..n {
+        if less(data[i], data[best]) {
+            best = i;
+        }
+    }
+    return best;
+}
+
+/// @brief Return the first maximum index under `less`, or -1 if empty.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn max_element_index_by(data: &list<T>, less: Less) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 {
+        return -1;
+    }
+    var best: i64 = 0;
+    for i in 1..n {
+        if less(data[best], data[i]) {
+            best = i;
+        }
+    }
+    return best;
+}
+
+/// @brief Return the first minimum value under `less`; requires nonempty input.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn min_element_value_by(data: &list<T>, less: Less) -> T {
+    var best: T = data[0];
+    let n: i64 = data.len();
+    for i in 1..n {
+        if less(data[i], best) {
+            best = data[i];
+        }
+    }
+    return best;
+}
+
+/// @brief Return the first maximum value under `less`; requires nonempty input.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn max_element_value_by(data: &list<T>, less: Less) -> T {
+    var best: T = data[0];
+    let n: i64 = data.len();
+    for i in 1..n {
+        if less(best, data[i]) {
+            best = data[i];
+        }
+    }
+    return best;
+}
+
 /// @brief Return count of elements equal to value.
 /// @ingroup algorithm_ranges
 generic<T, U>

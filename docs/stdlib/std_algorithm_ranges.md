@@ -50,6 +50,9 @@ fn example() {
 - `min_element_value` and `max_element_value` return the selected value for a
   nonempty input. Use the index forms to handle empty ranges; value forms keep
   the first value on ties.
+- The corresponding `min_element_index_by`, `max_element_index_by`,
+  `min_element_value_by`, and `max_element_value_by` forms accept a strict
+  ordering comparator and also keep the first equivalent element.
 - `is_sorted_until(data)` returns the first index that breaks nondecreasing
   order, or `data.len()` when the entire range is sorted.
 - `is_heap(data)` checks max-heap order; `is_heap_until(data)` returns the
