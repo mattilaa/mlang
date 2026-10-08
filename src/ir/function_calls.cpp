@@ -103,16 +103,32 @@ llvm::Value* CodeGenerator::generateVariadicGenericCall(
         if(auto* patternGeneric =
                dynamic_cast<GenericStructTypeRefNode*>(pattern))
         {
-            auto* concreteGeneric =
-                dynamic_cast<GenericStructTypeRefNode*>(concrete);
-            if(!concreteGeneric ||
-               patternGeneric->structName != concreteGeneric->structName ||
-               patternGeneric->typeArgs.size() != concreteGeneric->typeArgs.size())
+            const std::vector<TypeNode*>* concreteArgs = nullptr;
+            if(auto* concreteGeneric =
+                   dynamic_cast<GenericStructTypeRefNode*>(concrete))
+            {
+                if(patternGeneric->structName == concreteGeneric->structName)
+                    concreteArgs = &concreteGeneric->typeArgs;
+            }
+            else if(auto* concreteName =
+                        dynamic_cast<StructTypeRefNode*>(concrete))
+            {
+                auto genericName =
+                    mangledToGenericName.find(concreteName->structName);
+                auto typeArgs =
+                    monomorphizedTypeArgs.find(concreteName->structName);
+                if(genericName != mangledToGenericName.end() &&
+                   genericName->second == patternGeneric->structName &&
+                   typeArgs != monomorphizedTypeArgs.end())
+                    concreteArgs = &typeArgs->second;
+            }
+            if(!concreteArgs || patternGeneric->typeArgs.size() !=
+                                    concreteArgs->size())
                 return false;
             for(size_t i = 0; i < patternGeneric->typeArgs.size(); ++i)
                 if(!bindType(patternGeneric->typeArgs[i],
-                             concreteGeneric->typeArgs[i]))
-                    return false;
+                             (*concreteArgs)[i]))
+                return false;
             return true;
         }
         return typeMangle(pattern) == typeMangle(concrete);
@@ -317,17 +333,32 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         if(auto* patternGeneric =
                dynamic_cast<GenericStructTypeRefNode*>(pattern))
         {
-            auto* concreteGeneric =
-                dynamic_cast<GenericStructTypeRefNode*>(concrete);
-            if(!concreteGeneric ||
-               patternGeneric->structName != concreteGeneric->structName ||
-               patternGeneric->typeArgs.size() !=
-                   concreteGeneric->typeArgs.size())
+            const std::vector<TypeNode*>* concreteArgs = nullptr;
+            if(auto* concreteGeneric =
+                   dynamic_cast<GenericStructTypeRefNode*>(concrete))
+            {
+                if(patternGeneric->structName == concreteGeneric->structName)
+                    concreteArgs = &concreteGeneric->typeArgs;
+            }
+            else if(auto* concreteName =
+                        dynamic_cast<StructTypeRefNode*>(concrete))
+            {
+                auto genericName =
+                    mangledToGenericName.find(concreteName->structName);
+                auto typeArgs =
+                    monomorphizedTypeArgs.find(concreteName->structName);
+                if(genericName != mangledToGenericName.end() &&
+                   genericName->second == patternGeneric->structName &&
+                   typeArgs != monomorphizedTypeArgs.end())
+                    concreteArgs = &typeArgs->second;
+            }
+            if(!concreteArgs || patternGeneric->typeArgs.size() !=
+                                    concreteArgs->size())
                 return false;
             for(size_t i = 0; i < patternGeneric->typeArgs.size(); ++i)
                 if(!bindType(patternGeneric->typeArgs[i],
-                             concreteGeneric->typeArgs[i]))
-                    return false;
+                             (*concreteArgs)[i]))
+                return false;
             return true;
         }
         return typeMangle(pattern) == typeMangle(concrete);
