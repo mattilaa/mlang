@@ -556,6 +556,23 @@ pub fn joined(data: &list<list<T>>) -> list<T> {
     return out;
 }
 
+/// @brief Concatenate two ranges into a copied list.
+/// Eager-list counterpart to C++23 `views::concat` for two same-typed inputs.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn concat(left: &list<T>, right: &list<T>) -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    for i in 0..left_len {
+        out.push(left[i]);
+    }
+    for i in 0..right_len {
+        out.push(right[i]);
+    }
+    return out;
+}
+
 /// @brief Copy a list while removing adjacent duplicate values.
 /// @ingroup algorithm_ranges
 generic<T>

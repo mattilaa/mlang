@@ -64,6 +64,7 @@ use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::windows;
 use std::algorithm::ranges::strided;
 use std::algorithm::ranges::joined;
+use std::algorithm::ranges::concat;
 use std::algorithm::ranges::all_of;
 use std::algorithm::ranges::any_of;
 use std::algorithm::ranges::none_of;
@@ -455,6 +456,19 @@ fn test_algorithm_ranges_generic_joined() {
     let no_lists: list<list<i32>> = [];
     let empty_flattened: list<i32> = joined(no_lists);
     verify(empty_flattened.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_concat() {
+    let left: list<i32> = [1, 2];
+    let right: list<i32> = [3, 4, 5];
+    let result: list<i32> = concat(left, right);
+    verify(result.len() == 5);
+    verify(result[0] == 1 && result[1] == 2);
+    verify(result[2] == 3 && result[4] == 5);
+    let empty: list<i32> = [];
+    let one_side: list<i32> = concat(empty, right);
+    verify(one_side.len() == 3 && one_side[0] == 3);
 }
 
 #[test]
