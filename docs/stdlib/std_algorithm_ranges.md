@@ -113,6 +113,9 @@ fn example() {
   range. `stable_partition` returns a copied range with matching elements
   first, preserving order within both groups and evaluating its predicate once
   per element.
+- `partition_copy(data, predicate)` returns a tuple of stable matching and
+  nonmatching lists, evaluating the predicate once per element and preserving
+  the input.
 
 ### Transforms and sequence creation
 
