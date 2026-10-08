@@ -224,6 +224,67 @@ pub fn none_of(data: &list<T>, predicate: Predicate) -> bool {
     return true;
 }
 
+/// @brief Check that matching elements precede all nonmatching elements.
+/// C++20 `std::ranges::is_partitioned` semantics.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn is_partitioned(data: &list<T>, predicate: Predicate) -> bool {
+    var saw_nonmatching: bool = false;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            if saw_nonmatching {
+                return false;
+            }
+        } else {
+            saw_nonmatching = true;
+        }
+    }
+    return true;
+}
+
+/// @brief Return the first index not accepted by a partitioning predicate.
+/// The input is expected to be partitioned; returns `data.len()` if all match.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn partition_point(data: &list<T>, predicate: Predicate) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if !predicate(data[i]) {
+            return i;
+        }
+    }
+    return n;
+}
+
+/// @brief Return a stable copy with matching elements before the rest.
+/// The input remains unchanged; each predicate result is evaluated once.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn stable_partition(data: &list<T>, predicate: Predicate) -> list<T> {
+    var matches: list<i32> = [];
+    var partitioned: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            matches.push(1);
+        } else {
+            matches.push(0);
+        }
+    }
+    for i in 0..n {
+        if matches[i] == 1 {
+            partitioned.push(data[i]);
+        }
+    }
+    for i in 0..n {
+        if matches[i] == 0 {
+            partitioned.push(data[i]);
+        }
+    }
+    return partitioned;
+}
+
 
 /// @brief Return whether two lists contain the same elements in order.
 /// The ranges may have different, equality-comparable element types.
