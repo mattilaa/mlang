@@ -81,6 +81,9 @@ use std::algorithm::ranges::replace;
 use std::algorithm::ranges::all_of;
 use std::algorithm::ranges::any_of;
 use std::algorithm::ranges::none_of;
+use std::algorithm::ranges::find_if;
+use std::algorithm::ranges::count_if;
+use std::algorithm::ranges::filter;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
@@ -977,4 +980,39 @@ fn test_algorithm_genetic_population_reproduction() {
             verify(next[idx] >= 0 && next[idx] <= 9);
         }
     }
+}
+
+#[test]
+fn test_algorithm_ranges_predicate_algorithms() {
+    let values: list<i32> = [-4, -1, 0, 2, 5, 8];
+    let is_even = |value: i32| {
+        return value % 2 == 0;
+    };
+    let less_than_ten = |value: i32| { return value < 10; };
+    let is_five = |value: i32| { return value == 5; };
+    let above_ten = |value: i32| { return value > 10; };
+
+    verify(find_if(values, is_even) == 0);
+    verify(count_if(values, is_even) == 4);
+    verify(all_of(values, less_than_ten));
+    verify(any_of(values, is_five));
+    verify(none_of(values, above_ten));
+
+    let threshold: i32 = 3;
+    let above_threshold = |value: i32| {
+        return value > threshold;
+    };
+    let selected: list<i32> = filter(values, above_threshold);
+    verify(selected.len() == 2);
+    verify(selected[0] == 5 && selected[1] == 8);
+    verify(values.len() == 6);
+
+    let no_values: list<i32> = [];
+    verify(find_if(no_values, is_even) == -1);
+    verify(count_if(no_values, is_even) == 0);
+    let no_selected: list<i32> = filter(no_values, is_even);
+    verify(no_selected.len() == 0);
+    verify(all_of(no_values, is_even));
+    verify(!any_of(no_values, is_even));
+    verify(none_of(no_values, is_even));
 }

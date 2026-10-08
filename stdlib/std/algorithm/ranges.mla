@@ -139,6 +139,92 @@ pub fn none_of(data: &list<bool>) -> bool {
     return !any_of(data);
 }
 
+/// @brief Return the index of the first element accepted by `predicate`, or -1.
+/// C++20 `std::ranges::find_if` semantics.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn find_if(data: &list<T>, predicate: Predicate) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/// @brief Count elements accepted by `predicate` (C++20 `ranges::count_if`).
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn count_if(data: &list<T>, predicate: Predicate) -> i64 {
+    var matched: i64 = 0;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            matched = matched + 1;
+        }
+    }
+    return matched;
+}
+
+/// @brief Return a copied list containing elements accepted by `predicate`.
+/// This is an eager ranges-style filter/copy-if operation.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn filter(data: &list<T>, predicate: Predicate) -> list<T> {
+    var selected: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            selected.push(data[i]);
+        }
+    }
+    return selected;
+}
+
+/// @brief Return whether every element is accepted by `predicate`.
+/// Empty ranges return true, matching C++20 `std::ranges::all_of`.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn all_of(data: &list<T>, predicate: Predicate) -> bool {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if !predicate(data[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// @brief Return whether any element is accepted by `predicate`.
+/// Empty ranges return false, matching C++20 `std::ranges::any_of`.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn any_of(data: &list<T>, predicate: Predicate) -> bool {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// @brief Return whether no element is accepted by `predicate`.
+/// Empty ranges return true, matching C++20 `std::ranges::none_of`.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn none_of(data: &list<T>, predicate: Predicate) -> bool {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+
 /// @brief Return whether two lists contain the same elements in order.
 /// The ranges may have different, equality-comparable element types.
 /// @ingroup algorithm_ranges
