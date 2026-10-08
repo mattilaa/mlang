@@ -52,6 +52,16 @@ int64_t __mlang_std_bits_countr_zero_u64(uint64_t value)
     return count;
 }
 
+int64_t __mlang_std_bits_countl_one_u64(uint64_t value)
+{
+    return __mlang_std_bits_countl_zero_u64(~value);
+}
+
+int64_t __mlang_std_bits_countr_one_u64(uint64_t value)
+{
+    return __mlang_std_bits_countr_zero_u64(~value);
+}
+
 uint64_t __mlang_std_bits_bit_floor_u64(uint64_t value)
 {
     if(value == 0)
