@@ -34,6 +34,8 @@ fn example() {
 - `search` returns the first index of a contiguous pattern (`0` for an empty
   pattern, `-1` if absent); `contains_subrange` returns the corresponding
   membership result.
+- `find_end` returns the last matching subrange start (`data.len()` for an
+  empty pattern, `-1` if absent).
 - `equal` compares lists in order, including across distinct equality-comparable
   element types; `is_permutation` compares element multiplicities without
   considering order.
