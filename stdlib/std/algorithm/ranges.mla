@@ -240,6 +240,17 @@ pub fn upper_bound(data: &list<T>, value: U) -> i64 {
     return lo;
 }
 
+/// @brief Return whether a sorted list contains `value`.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn binary_search(data: &list<T>, value: U) -> bool {
+    let position: i64 = lower_bound(data, value);
+    if position >= data.len() {
+        return false;
+    }
+    return data[position] == value;
+}
+
 /// @brief Return the index of the smallest element, or -1 for an empty list.
 /// @ingroup algorithm_ranges
 generic<T>
