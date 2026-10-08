@@ -46,6 +46,8 @@ use std::algorithm::ranges::starts_with;
 use std::algorithm::ranges::ends_with;
 use std::algorithm::ranges::lexicographical_compare;
 use std::algorithm::ranges::is_sorted;
+use std::algorithm::ranges::min_element_index;
+use std::algorithm::ranges::max_element_index;
 use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
@@ -247,6 +249,16 @@ fn test_algorithm_ranges_generic_is_sorted() {
     verify(is_sorted(unsorted) == false);
     verify(is_sorted(empty));
     verify(is_sorted(one));
+}
+
+#[test]
+fn test_algorithm_ranges_generic_element_extrema() {
+    let values: list<i32> = [8, -3, 11, 11, 4];
+    let empty: list<i32> = [];
+    verify(min_element_index(values) == 1);
+    verify(max_element_index(values) == 2);
+    verify(min_element_index(empty) == -1);
+    verify(max_element_index(empty) == -1);
 }
 
 #[test]
