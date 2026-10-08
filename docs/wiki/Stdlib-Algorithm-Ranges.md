@@ -29,6 +29,8 @@ fn example() {
   value; `adjacent_find` returns the first index of equal neighbors or `-1`.
 - `find_first_of(data, candidates)` returns the first index in `data` matching
   any candidate, or `-1` when there is no match.
+- `includes(range, subset)` checks whether sorted `range` contains sorted
+  `subset`; duplicate multiplicities matter and both inputs must be sorted.
 - `search` returns the first index of a contiguous pattern (`0` for an empty
   pattern, `-1` if absent); `contains_subrange` returns the corresponding
   membership result.
