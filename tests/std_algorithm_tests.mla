@@ -96,6 +96,7 @@ use std::algorithm::ranges::windows;
 use std::algorithm::ranges::strided;
 use std::algorithm::ranges::joined;
 use std::algorithm::ranges::concat;
+use std::algorithm::ranges::zip;
 use std::algorithm::ranges::replace;
 use std::algorithm::ranges::all_of;
 use std::algorithm::ranges::any_of;
@@ -841,6 +842,29 @@ fn test_algorithm_ranges_generic_concat() {
     let empty: list<i32> = [];
     let one_side: list<i32> = concat(empty, right);
     verify(one_side.len() == 3 && one_side[0] == 3);
+}
+
+#[test]
+fn test_algorithm_ranges_zip() {
+    let numbers: list<i32> = [4, 5, 6];
+    let words: list<str8> = ["four", "five"];
+    let pairs: list<tuple<i32, str8>> = zip(numbers, words);
+    verify(pairs.len() == 2);
+
+    let first: tuple<i32, str8> = pairs[0];
+    let second: tuple<i32, str8> = pairs[1];
+    verify(first.0 == 4);
+    verify(second.0 == 5);
+    verify(numbers.len() == 3 && words.len() == 2);
+
+    let offsets: list<i32> = [40, 50];
+    let numeric_pairs: list<tuple<i32, i32>> = zip(numbers, offsets);
+    let numeric_pair = numeric_pairs[1];
+    verify(numeric_pair.0 == 5 && numeric_pair.1 == 50);
+
+    let empty: list<i32> = [];
+    let no_pairs: list<tuple<i32, str8>> = zip(empty, words);
+    verify(no_pairs.len() == 0);
 }
 
 #[test]

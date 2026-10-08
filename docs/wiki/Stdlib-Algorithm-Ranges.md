@@ -116,6 +116,8 @@ fn example() {
   `views::join` style); empty inner lists contribute no elements.
 - `concat(left, right)` copies two same-typed ranges into one list (C++23
   `views::concat` style).
+- `zip(left, right)` materializes tuple pairs from two ranges, stopping at the
+  shorter input (C++23 `views::zip` style).
 - `merged(left, right)` stably merges two sorted same-typed ranges into a new
   sorted list; equal elements from the left range come first.
 - `union_sorted(left, right)` returns the sorted multiset union, keeping the
