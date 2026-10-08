@@ -1329,6 +1329,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             loopBreakBlocks.clear();
             loopContinueBlocks.clear();
 
+            InlineClosureReturnState closureReturn;
+            closureReturn.exitBlock = llvm::BasicBlock::Create(
+                context, "lambda.exit", builder.GetInsertBlock()->getParent());
+            inlineClosureReturnStates.push_back(&closureReturn);
             enterCleanupScope();
             if(closure->body)
             {
@@ -1342,11 +1346,21 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
             exitCleanupScope();
 
+            if(builder.GetInsertBlock() &&
+               !mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
+                builder.CreateBr(closureReturn.exitBlock);
+            inlineClosureReturnStates.pop_back();
+            builder.SetInsertPoint(closureReturn.exitBlock);
+
             loopBreakBlocks = std::move(savedBreak);
             loopContinueBlocks = std::move(savedContinue);
             restoreInlineState();
             activeInlineClosures.erase(node->name);
-            return nullptr; // inline closures return void
+            if(closureReturn.resultStorage)
+                return builder.CreateLoad(
+                    closureReturn.resultStorage->getAllocatedType(),
+                    closureReturn.resultStorage, "lambda.result");
+            return nullptr; // inline closures without a value return are void
         }
     }
 

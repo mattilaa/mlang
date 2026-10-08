@@ -218,6 +218,12 @@ private:
     std::map<std::string, ClosureNode*> closureVariables;
     // Re-entrancy guard: tracks closures currently being inlined.
     std::set<std::string> activeInlineClosures;
+    struct InlineClosureReturnState
+    {
+        llvm::AllocaInst* resultStorage = nullptr;
+        llvm::BasicBlock* exitBlock = nullptr;
+    };
+    std::vector<InlineClosureReturnState*> inlineClosureReturnStates;
     std::map<std::string, std::string> pointerBorrowTarget;
     std::map<std::string, std::set<std::string>> activeBorrowers;
     // Tracks the single exclusive mutable borrower per owner variable.

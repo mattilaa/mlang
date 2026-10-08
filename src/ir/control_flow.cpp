@@ -14,6 +14,50 @@ using mlang::ir_detail::common::Helpers;
 
 void CodeGenerator::generateReturnStatement(ReturnNode* node)
 {
+    if(!inlineClosureReturnStates.empty())
+    {
+        InlineClosureReturnState* state = inlineClosureReturnStates.back();
+        llvm::BasicBlock* currentBlock = builder.GetInsertBlock();
+        llvm::Function* currentFunction = currentBlock->getParent();
+        if(node->expression)
+        {
+            llvm::Value* value = generateExpression(node->expression);
+            if(!value)
+                return;
+            if(!state->resultStorage)
+            {
+                state->resultStorage = createEntryBlockAlloca(
+                    currentFunction, value->getType(), "lambda.return");
+            }
+            else if(value->getType() !=
+                    state->resultStorage->getAllocatedType())
+            {
+                llvm::Type* expected =
+                    state->resultStorage->getAllocatedType();
+                if(value->getType()->isIntegerTy() && expected->isIntegerTy())
+                    value = builder.CreateIntCast(value, expected, true,
+                                                  "lambda.return.cast");
+                else if(value->getType()->isFloatingPointTy() &&
+                        expected->isFloatingPointTy())
+                    value = builder.CreateFPCast(value, expected,
+                                                "lambda.return.cast");
+                else if(value->getType()->isPointerTy() &&
+                        expected->isPointerTy())
+                    value = builder.CreateBitCast(value, expected,
+                                                 "lambda.return.cast");
+                else
+                {
+                    reportError(node->line,
+                                "inconsistent return types in inline closure");
+                    return;
+                }
+            }
+            builder.CreateStore(value, state->resultStorage);
+        }
+        builder.CreateBr(state->exitBlock);
+        return;
+    }
+
     llvm::Function* currentFunc = builder.GetInsertBlock()->getParent();
     llvm::Type* expectedRetType = currentFunc->getReturnType();
 

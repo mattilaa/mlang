@@ -28,6 +28,23 @@ fn invoke_generic_callback(callback: Callback) -> void {
     callback();
 }
 
+generic<Value, Predicate>
+fn invoke_generic_predicate(value: Value, predicate: Predicate) -> bool {
+    return predicate(value);
+}
+
+generic<Value, Predicate>
+fn count_matching(values: &list<Value>, predicate: Predicate) -> i32 {
+    var count: i32 = 0;
+    let length: i64 = values.len();
+    for i in 0..length {
+        if predicate(values[i]) {
+            count = count + 1;
+        }
+    }
+    return count;
+}
+
 #[test]
 fn test_runtime_generic_functions_specialize_by_argument_type() {
     let numbers: list<i64> = [17, 42];
@@ -58,4 +75,16 @@ fn test_bound_closure_can_be_passed_to_generic_function() {
     };
     invoke_generic_callback(mark_called);
     verify(generic_closure_call_count == 1);
+}
+
+#[test]
+fn test_bound_predicate_closure_can_be_passed_to_generic_function() {
+    let is_positive = |value: i32| {
+        return value > 0;
+    };
+    verify(invoke_generic_predicate(4, is_positive));
+    verify(!invoke_generic_predicate(-4, is_positive));
+
+    let values: list<i32> = [-3, -1, 0, 2, 5];
+    verify(count_matching(values, is_positive) == 2);
 }
