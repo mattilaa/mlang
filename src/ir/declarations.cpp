@@ -68,13 +68,26 @@ llvm::Value* CodeGenerator::applyBooleanBranchPrediction(
 
 void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 {
+    TypeNode* declaredType = node->type;
+    if(declaredType && !activeFunctionTypeBindings.empty())
+    {
+        std::vector<std::string> typeParams;
+        std::vector<TypeNode*> typeArgs;
+        for(const auto& binding : activeFunctionTypeBindings)
+        {
+            typeParams.push_back(binding.first);
+            typeArgs.push_back(binding.second);
+        }
+        declaredType = substituteTypeParams(declaredType, typeParams,
+                                            typeArgs);
+    }
     recordScopedPointerVariable(node->name);
     enumVariableTypes.erase(node->name);
 
-    if(!validateFixedArrayInitializer(node->type, node->expression,
+    if(!validateFixedArrayInitializer(declaredType, node->expression,
                                       node->line))
         return;
-    if(!validateBooleanBranchPrediction(node->branchPrediction, node->type,
+    if(!validateBooleanBranchPrediction(node->branchPrediction, declaredType,
                                         node->expression, node->line,
                                         node->col))
         return;
@@ -99,7 +112,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         return;
     }
 
-    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(node->type))
+    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(declaredType))
     {
         llvm::Type* traitObjType = getLLVMTypeFromNode(traitObj);
         if(!traitObjType)
@@ -158,7 +171,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     // type to the generator so integer literals (always i64) are coerced to the
     // declared size (e.g., i32), preventing stride mismatches during iteration.
     llvm::Value* initValue = nullptr;
-    if(auto* genListType = dynamic_cast<GenericListTypeNode*>(node->type))
+    if(auto* genListType = dynamic_cast<GenericListTypeNode*>(declaredType))
     {
         llvm::Type* declElem = getLLVMTypeFromNode(genListType->elementType);
         if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->expression))
@@ -168,7 +181,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             initValue = generateArrayFill(arrFill, declElem);
     }
     if(!initValue)
-        initValue = generateExpression(node->expression, node->type);
+        initValue = generateExpression(node->expression, declaredType);
     if(!initValue)
         return;
     initValue = applyBooleanBranchPrediction(
@@ -202,7 +215,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     clearPointerBorrow(node->name);
     recordVariableScopeDepth(node->name);
 
-    if(!node->type)
+    if(!declaredType)
     {
         llvm::Function* currentFunction = builder.GetInsertBlock()->getParent();
         llvm::AllocaInst* alloca =
@@ -550,7 +563,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     }
 
     // Handle generic struct type reference (e.g., Pair<i32, i64>)
-    if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(node->type))
+    if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(declaredType))
     {
         // Get or create the monomorphized struct type
         std::string mangledName = getOrCreateMonomorphizedStruct(
@@ -577,7 +590,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     }
 
     // Handle generic list type
-    if(auto* genListType = dynamic_cast<GenericListTypeNode*>(node->type))
+    if(auto* genListType = dynamic_cast<GenericListTypeNode*>(declaredType))
     {
         // Store element type for iteration
         listElementTypes[node->name] = genListType->elementType;
@@ -618,7 +631,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     }
 
     // Handle map type
-    if(auto* mapType = dynamic_cast<MapTypeNode*>(node->type))
+    if(auto* mapType = dynamic_cast<MapTypeNode*>(declaredType))
     {
         // Store key/value types
         mapKeyValueTypes[node->name] =
@@ -646,7 +659,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     }
 
     // Handle pointer type
-    if(auto* ptrType = dynamic_cast<PointerTypeNode*>(node->type))
+    if(auto* ptrType = dynamic_cast<PointerTypeNode*>(declaredType))
     {
         pointerElementTypes[node->name] = ptrType->elementType;
 
@@ -675,7 +688,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     }
 
     // Handle tuple type
-    if(auto* tupleType = dynamic_cast<TupleTypeNode*>(node->type))
+    if(auto* tupleType = dynamic_cast<TupleTypeNode*>(declaredType))
     {
         // Store element types for tuple access
         std::vector<TypeNode*> elemTypes;
@@ -784,7 +797,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     }
 
     // Handle struct type reference
-    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(node->type))
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(declaredType))
     {
         std::string resolvedEnumName =
             resolveVisibleEnumName(structRef->structName);
@@ -839,7 +852,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 }
             }
 
-            initValue = applyStructCopySemantics(initValue, node->type);
+            initValue = applyStructCopySemantics(initValue, declaredType);
             builder.CreateStore(initValue, alloca);
             namedValues[node->name] = alloca;
             variableTypes[node->name] = baseKind;
@@ -869,7 +882,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         return;
     }
 
-    llvm::Type* targetType = getLLVMType(node->type->kind);
+    llvm::Type* targetType = getLLVMType(declaredType->kind);
     llvm::AllocaInst* alloca =
         builder.CreateAlloca(targetType, nullptr, node->name);
 
@@ -889,7 +902,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             else if(initBits < targetBits)
             {
                 // Extend - use ZExt for unsigned target, SExt for signed
-                if(isUnsignedType(node->type->kind))
+                if(isUnsignedType(declaredType->kind))
                 {
                     initValue =
                         builder.CreateZExt(initValue, targetType, "zext");
@@ -918,7 +931,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
     builder.CreateStore(initValue, alloca);
     namedValues[node->name] = alloca;
-    variableTypes[node->name] = node->type->kind;
+    variableTypes[node->name] = declaredType->kind;
 
     // Mark this variable as constant (declared with 'let')
     constantVariables.insert(node->name);
@@ -982,20 +995,33 @@ void CodeGenerator::generateCexprDeclaration(CexprDeclNode* node,
 
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
+    TypeNode* declaredType = node->type;
+    if(declaredType && !activeFunctionTypeBindings.empty())
+    {
+        std::vector<std::string> typeParams;
+        std::vector<TypeNode*> typeArgs;
+        for(const auto& binding : activeFunctionTypeBindings)
+        {
+            typeParams.push_back(binding.first);
+            typeArgs.push_back(binding.second);
+        }
+        declaredType = substituteTypeParams(declaredType, typeParams,
+                                            typeArgs);
+    }
     recordScopedPointerVariable(node->name);
     enumVariableTypes.erase(node->name);
     clearPointerBorrow(node->name);
     // `var` is always mutable, including when shadowing a previous `let`.
     constantVariables.erase(node->name);
 
-    if(!validateFixedArrayInitializer(node->type, node->initExpr, node->line))
+    if(!validateFixedArrayInitializer(declaredType, node->initExpr, node->line))
         return;
-    if(!validateBooleanBranchPrediction(node->branchPrediction, node->type,
+    if(!validateBooleanBranchPrediction(node->branchPrediction, declaredType,
                                         node->initExpr, node->line,
                                         node->col))
         return;
 
-    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(node->type))
+    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(declaredType))
     {
         llvm::Type* traitObjType = getLLVMTypeFromNode(traitObj);
         if(!traitObjType)
@@ -1054,7 +1080,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     clearMovedVariable(node->name);
     if(node->isStaticStorage || node->isGlobalStorage)
     {
-        if(node->type && !node->initExpr && !node->isExplicitZeroInit &&
+        if(declaredType && !node->initExpr && !node->isExplicitZeroInit &&
            warnImplicitZeroInit)
         {
             reportWarning(node->line, node->col,
@@ -1079,17 +1105,17 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         TypeNode::TypeKind kind = TypeNode::TYPE_INT;
         llvm::Type* targetType = nullptr;
         std::string structTypeName;
-        if(node->type)
+        if(declaredType)
         {
-            kind = node->type->kind;
-            targetType = getLLVMTypeFromNode(node->type);
-            if(auto* sr = dynamic_cast<StructTypeRefNode*>(node->type))
+            kind = declaredType->kind;
+            targetType = getLLVMTypeFromNode(declaredType);
+            if(auto* sr = dynamic_cast<StructTypeRefNode*>(declaredType))
             {
                 kind = TypeNode::TYPE_STRUCT;
                 structTypeName = sr->structName;
             }
             else if(auto* gsr =
-                        dynamic_cast<GenericStructTypeRefNode*>(node->type))
+                        dynamic_cast<GenericStructTypeRefNode*>(declaredType))
             {
                 kind = TypeNode::TYPE_STRUCT;
                 structTypeName = getOrCreateMonomorphizedStruct(gsr->structName,
@@ -1298,7 +1324,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                           "'; use '{}' to make zero-init explicit");
     };
 
-    if(!node->type)
+    if(!declaredType)
     {
         if(!node->initExpr)
         {
@@ -1573,7 +1599,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     }
 
     // Handle generic struct type reference (e.g., Pair<i32, i64>)
-    if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(node->type))
+    if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(declaredType))
     {
         // Get or create the monomorphized struct type
         std::string mangledName = getOrCreateMonomorphizedStruct(
@@ -1613,7 +1639,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     }
 
     // Handle generic list type
-    if(auto* genListType = dynamic_cast<GenericListTypeNode*>(node->type))
+    if(auto* genListType = dynamic_cast<GenericListTypeNode*>(declaredType))
     {
         listElementTypes[node->name] = genListType->elementType;
         if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(genListType))
@@ -1657,7 +1683,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                         dynamic_cast<ArrayFillNode*>(node->initExpr))
                 initValue = generateArrayFill(arrFill, declElem);
             else
-                initValue = generateExpression(node->initExpr, node->type);
+                initValue = generateExpression(node->initExpr, declaredType);
             if(initValue)
             {
                 builder.CreateStore(initValue, alloca);
@@ -1675,7 +1701,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     }
 
     // Handle map type
-    if(auto* mapType = dynamic_cast<MapTypeNode*>(node->type))
+    if(auto* mapType = dynamic_cast<MapTypeNode*>(declaredType))
     {
         mapKeyValueTypes[node->name] =
             std::make_pair(mapType->keyType, mapType->valueType);
@@ -1697,7 +1723,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(node->initExpr)
         {
             llvm::Value* initValue =
-                generateExpression(node->initExpr, node->type);
+                generateExpression(node->initExpr, declaredType);
             if(initValue)
             {
                 builder.CreateStore(initValue, alloca);
@@ -1715,7 +1741,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     }
 
     // Handle pointer type
-    if(auto* ptrType = dynamic_cast<PointerTypeNode*>(node->type))
+    if(auto* ptrType = dynamic_cast<PointerTypeNode*>(declaredType))
     {
         pointerElementTypes[node->name] = ptrType->elementType;
 
@@ -1758,7 +1784,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     }
 
     // Handle tuple type
-    if(auto* tupleType = dynamic_cast<TupleTypeNode*>(node->type))
+    if(auto* tupleType = dynamic_cast<TupleTypeNode*>(declaredType))
     {
         // Store element types for tuple access
         std::vector<TypeNode*> elemTypes;
@@ -1878,7 +1904,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     }
 
     // Handle struct type reference
-    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(node->type))
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(declaredType))
     {
         std::string resolvedEnumName =
             resolveVisibleEnumName(structRef->structName);
@@ -1973,7 +1999,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         return;
     }
 
-    llvm::Type* targetType = getLLVMType(node->type->kind);
+    llvm::Type* targetType = getLLVMType(declaredType->kind);
     llvm::AllocaInst* alloca =
         builder.CreateAlloca(targetType, nullptr, node->name);
 
@@ -2000,7 +2026,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                     {
                         // Extend - use ZExt for unsigned target, SExt for
                         // signed
-                        if(isUnsignedType(node->type->kind))
+                        if(isUnsignedType(declaredType->kind))
                         {
                             initValue = builder.CreateZExt(initValue,
                                                            targetType, "zext");
@@ -2045,5 +2071,5 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     }
 
     namedValues[node->name] = alloca;
-    variableTypes[node->name] = node->type->kind;
+    variableTypes[node->name] = declaredType->kind;
 }
