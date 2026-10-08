@@ -1484,6 +1484,12 @@ public:
     // The parameter remains an opaque pointer in the ABI; calls to it are
     // lowered by inlining this closure AST into the specialization.
     std::map<std::string, ClosureNode*> boundClosureParameters;
+    std::map<std::string, std::map<std::string, std::string>>
+        boundClosureCaptureAliases;
+    std::map<std::string, std::map<std::string, TypeNode*>>
+        boundClosureCaptureTypes;
+    std::map<std::string, std::set<std::string>>
+        boundClosureConstCaptures;
     std::string closureSpecializationKey;
     std::string sourceModule; // Module this function was defined in (for
                               // visibility checks)

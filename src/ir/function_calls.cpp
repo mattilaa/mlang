@@ -1,4 +1,5 @@
 #include "ir.h"
+#include "ir/ast_analysis.h"
 #include "ir/common.h"
 #include "llvm_compat.h"
 #include "module.h"
@@ -10,6 +11,7 @@
 #include <pthread.h>
 
 using mlang::ir_detail::common::Helpers;
+using mlang::ir_detail::ast_analysis::collect_used_idents;
 
 llvm::Value* CodeGenerator::generateVariadicGenericCall(
     FunctionCallNode* node, FunctionDefNode* functionTemplate)
@@ -419,6 +421,12 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
         specialized->isInlineNever = functionTemplate->isInlineNever;
         specialized->boundClosureParameters =
             functionTemplate->boundClosureParameters;
+        specialized->boundClosureCaptureAliases =
+            functionTemplate->boundClosureCaptureAliases;
+        specialized->boundClosureCaptureTypes =
+            functionTemplate->boundClosureCaptureTypes;
+        specialized->boundClosureConstCaptures =
+            functionTemplate->boundClosureConstCaptures;
         specialized->closureSpecializationKey =
             functionTemplate->closureSpecializationKey;
         static size_t closureSpecializationSequence = 0;
@@ -438,6 +446,40 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
                 const std::string& parameterName =
                     functionTemplate->parameters->parameters[i]->name;
                 specialized->boundClosureParameters[parameterName] = closure;
+                std::set<std::string> usedNames;
+                if(closure->body)
+                    for(auto* statement : closure->body->statements)
+                        collect_used_idents(statement, usedNames);
+                if(closure->parameters)
+                    for(auto* closureParameter :
+                        closure->parameters->parameters)
+                        usedNames.erase(closureParameter->name);
+                size_t captureIndex = 0;
+                for(const auto& usedName : usedNames)
+                {
+                    if(globalNamedValues.count(usedName) ||
+                       namedValues.count(usedName) == 0 ||
+                       variableTypes.count(usedName) == 0)
+                        continue;
+                    TypeNode* capturedType = getLValueType(
+                        new IdentifierNode(usedName), call->line);
+                    if(!capturedType)
+                        continue;
+                    const std::string hiddenName =
+                        "__closure_capture_" + std::to_string(i) + "_" +
+                        std::to_string(captureIndex++);
+                    specialized->boundClosureCaptureAliases[parameterName]
+                        [usedName] = hiddenName;
+                    specialized->boundClosureCaptureTypes[parameterName]
+                        [usedName] = cloneTypeNode(capturedType);
+                    if(constantVariables.count(usedName))
+                        specialized->boundClosureConstCaptures[parameterName]
+                            .insert(usedName);
+                    specializedParameters->parameters.push_back(
+                        new ParameterNode(
+                            new PointerTypeNode(cloneTypeNode(capturedType)),
+                                          hiddenName));
+                }
                 if(!specialized->closureSpecializationKey.empty())
                     specialized->closureSpecializationKey += "_";
                 specialized->closureSpecializationKey +=
@@ -1190,7 +1232,12 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             auto savedEnumVariableTypes = enumVariableTypes;
             auto savedListElementTypes = listElementTypes;
             auto savedMapKeyValueTypes = mapKeyValueTypes;
+            auto savedTupleElementTypes = tupleElementTypes;
             auto savedPointerElementTypes = pointerElementTypes;
+            auto savedArrayCapacities = arrayCapacities;
+            auto savedMultiarrayMutability = multiarrayMutability;
+            auto savedClosureCaptureReferenceAliases =
+                closureCaptureReferenceAliases;
 
             auto restoreInlineState = [&]()
             {
@@ -1202,8 +1249,81 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 enumVariableTypes = savedEnumVariableTypes;
                 listElementTypes = savedListElementTypes;
                 mapKeyValueTypes = savedMapKeyValueTypes;
+                tupleElementTypes = savedTupleElementTypes;
                 pointerElementTypes = savedPointerElementTypes;
+                arrayCapacities = savedArrayCapacities;
+                multiarrayMutability = savedMultiarrayMutability;
+                closureCaptureReferenceAliases =
+                    savedClosureCaptureReferenceAliases;
             };
+
+            auto captureAliases = closureCaptureAliases.find(node->name);
+            if(captureAliases != closureCaptureAliases.end())
+            {
+                for(const auto& capture : captureAliases->second)
+                {
+                    const std::string& capturedName = capture.first;
+                    const std::string& hiddenName = capture.second;
+                    auto hiddenValue = namedValues.find(hiddenName);
+                    if(hiddenValue == namedValues.end())
+                        continue;
+                    llvm::Type* capturePointerType =
+                        llvm::cast<llvm::AllocaInst>(hiddenValue->second)
+                            ->getAllocatedType();
+                    llvm::Value* captureAddress = builder.CreateLoad(
+                        capturePointerType, hiddenValue->second,
+                        capturedName + ".capture");
+                    TypeNode* capturedType =
+                        closureCaptureTypes[node->name][capturedName];
+                    if(!capturedType)
+                        continue;
+                    namedValues[capturedName] = captureAddress;
+                    closureCaptureReferenceAliases.insert(capturedName);
+                    auto captureDepth = variableScopeDepth.find(hiddenName);
+                    if(captureDepth != variableScopeDepth.end())
+                        variableScopeDepth[capturedName] = captureDepth->second;
+                    if(capturedType)
+                    {
+                        variableTypes[capturedName] = capturedType->kind;
+                        if(auto* structType =
+                               dynamic_cast<StructTypeRefNode*>(capturedType))
+                            structVariableTypes[capturedName] =
+                                structType->structName;
+                        if(auto* listType =
+                               dynamic_cast<GenericListTypeNode*>(capturedType))
+                        {
+                            variableTypes[capturedName] = TypeNode::TYPE_LIST;
+                            listElementTypes[capturedName] =
+                                listType->elementType;
+                        }
+                        if(auto* mapType =
+                               dynamic_cast<MapTypeNode*>(capturedType))
+                        {
+                            variableTypes[capturedName] = TypeNode::TYPE_MAP;
+                            mapKeyValueTypes[capturedName] =
+                                {mapType->keyType, mapType->valueType};
+                        }
+                        if(auto* tupleType =
+                               dynamic_cast<TupleTypeNode*>(capturedType))
+                        {
+                            variableTypes[capturedName] = TypeNode::TYPE_TUPLE;
+                            tupleElementTypes[capturedName] =
+                                tupleType->elementTypes->types;
+                        }
+                        if(auto* pointerType =
+                               dynamic_cast<PointerTypeNode*>(capturedType))
+                        {
+                            variableTypes[capturedName] = TypeNode::TYPE_PTR;
+                            pointerElementTypes[capturedName] =
+                                pointerType->elementType;
+                        }
+                    }
+                    if(closureConstCaptures[node->name].count(capturedName))
+                        constantVariables.insert(capturedName);
+                    else
+                        constantVariables.erase(capturedName);
+                }
+            }
 
             // Bind lambda arguments to local parameter variables.
             for(size_t i = 0; i < expectedArgs; ++i)
@@ -1806,18 +1926,60 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         llvm::Function* callee = info.function;
         if(!callee)
             continue;
+        bool boundClosuresMatch = true;
+        if(info.node)
+        {
+            for(const auto& boundClosure : info.node->boundClosureParameters)
+            {
+                size_t parameterIndex = 0;
+                while(parameterIndex <
+                          info.node->parameters->parameters.size() &&
+                      info.node->parameters->parameters[parameterIndex]->name !=
+                          boundClosure.first)
+                    ++parameterIndex;
+                if(parameterIndex >= node->arguments.size())
+                {
+                    boundClosuresMatch = false;
+                    break;
+                }
+                ClosureNode* actualClosure = dynamic_cast<ClosureNode*>(
+                    node->arguments[parameterIndex]);
+                if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                       node->arguments[parameterIndex]))
+                {
+                    auto closureIt = closureVariables.find(identifier->name);
+                    if(closureIt != closureVariables.end())
+                        actualClosure = closureIt->second;
+                }
+                if(actualClosure != boundClosure.second)
+                {
+                    boundClosuresMatch = false;
+                    break;
+                }
+            }
+        }
+        if(!boundClosuresMatch)
+            continue;
         size_t expectedArgs = callee->arg_size();
         size_t actualArgs = argVals.size();
+        size_t hiddenCaptureCount = 0;
+        if(info.node)
+            for(const auto& closureCaptures :
+                info.node->boundClosureCaptureAliases)
+                hiddenCaptureCount += closureCaptures.second.size();
+        if(hiddenCaptureCount > expectedArgs)
+            continue;
+        const size_t sourceParameterCount = expectedArgs - hiddenCaptureCount;
         bool isVarArg = callee->isVarArg();
 
-        if(!isVarArg && expectedArgs != actualArgs)
+        if(!isVarArg && sourceParameterCount != actualArgs)
             continue;
-        if(isVarArg && actualArgs < expectedArgs)
+        if(isVarArg && actualArgs < sourceParameterCount)
             continue;
 
         int totalCost = 0;
         bool ok = true;
-        for(size_t i = 0; i < expectedArgs; ++i)
+        for(size_t i = 0; i < sourceParameterCount; ++i)
         {
             if(info.node && info.node->parameters &&
                i < info.node->parameters->parameters.size())
@@ -1932,19 +2094,46 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     llvm::Function* callee = best->function;
     size_t expectedArgs = callee->arg_size();
     bool isVarArg = callee->isVarArg();
+    size_t hiddenCaptureCount = 0;
+    for(const auto& closureCaptures :
+        best->node->boundClosureCaptureAliases)
+        hiddenCaptureCount += closureCaptures.second.size();
+    const size_t sourceParameterCount = expectedArgs - hiddenCaptureCount;
 
-    if(isVarArg && argVals.size() < expectedArgs)
+    if(isVarArg && argVals.size() < sourceParameterCount)
     {
         reportError(node->line,
                     "function '" + node->name + "' requires at least " +
-                        std::to_string(expectedArgs) + " argument(s), but " +
+                        std::to_string(sourceParameterCount) +
+                        " argument(s), but " +
                         std::to_string(argVals.size()) + " provided");
         return nullptr;
     }
 
+    std::vector<llvm::Value*> callArgVals = argVals;
+    for(const auto& closureCaptures :
+        best->node->boundClosureCaptureAliases)
+    {
+        for(const auto& capture : closureCaptures.second)
+        {
+            auto captured = namedValues.find(capture.first);
+            if(captured == namedValues.end())
+            {
+                reportError(node->line,
+                            "cannot pass captured variable '" + capture.first +
+                                "' to generic closure specialization");
+                return nullptr;
+            }
+            llvm::Value* captureValue = captured->second;
+            if(!captureValue)
+                return nullptr;
+            callArgVals.push_back(captureValue);
+        }
+    }
+
     std::vector<llvm::Value*> args;
     unsigned paramIdx = 0;
-    for(auto* argValIn : argVals)
+    for(auto* argValIn : callArgVals)
     {
         llvm::Value* argVal = argValIn;
         if(paramIdx < expectedArgs)
@@ -2160,6 +2349,11 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     auto savedLoopContinue = loopContinueBlocks;
     auto savedModule = currentModule;
     auto savedClosureVars = closureVariables;
+    auto savedClosureCaptureAliases = closureCaptureAliases;
+    auto savedClosureCaptureTypes = closureCaptureTypes;
+    auto savedClosureConstCaptures = closureConstCaptures;
+    auto savedClosureCaptureReferenceAliases =
+        closureCaptureReferenceAliases;
     auto savedActiveInline = activeInlineClosures;
 
     // Initialise a fresh scope for the closure body
@@ -2167,6 +2361,10 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     constantVariables.clear();
     movedVariables.clear();
     closureVariables.clear();
+    closureCaptureAliases.clear();
+    closureCaptureTypes.clear();
+    closureConstCaptures.clear();
+    closureCaptureReferenceAliases.clear();
     activeInlineClosures.clear();
     pointerBorrowTarget.clear();
     pointerKnownNull.clear();
@@ -2226,6 +2424,11 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     loopContinueBlocks = std::move(savedLoopContinue);
     currentModule = std::move(savedModule);
     closureVariables = std::move(savedClosureVars);
+    closureCaptureAliases = std::move(savedClosureCaptureAliases);
+    closureCaptureTypes = std::move(savedClosureCaptureTypes);
+    closureConstCaptures = std::move(savedClosureConstCaptures);
+    closureCaptureReferenceAliases =
+        std::move(savedClosureCaptureReferenceAliases);
     activeInlineClosures = std::move(savedActiveInline);
     builder.restoreIP(savedIP);
 
