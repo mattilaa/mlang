@@ -18,6 +18,8 @@ use dsp::fft::inverse;
 use dsp::fft::is_power_of_two;
 use std::algorithm::numeric::accumulate_i64;
 use std::algorithm::numeric::accumulate;
+use std::algorithm::numeric::fold_left;
+use std::algorithm::numeric::fold_right;
 use std::algorithm::numeric::adjacent_difference_i64;
 use std::algorithm::numeric::inner_product_i64;
 use std::algorithm::numeric::inner_product;
@@ -1027,6 +1029,22 @@ fn test_algorithm_numeric_generic_accumulate() {
 }
 
 #[test]
+fn test_algorithm_numeric_folds() {
+    let values: list<i32> = [1, 2, 3];
+    let encode_left = |acc: i32, value: i32| { return acc * 10 + value; };
+    let encode_right = |value: i32, acc: i32| { return value + acc * 10; };
+    verify(fold_left(values, 4, encode_left) == 4123);
+    verify(fold_right(values, 4, encode_right) == 4321);
+
+    let empty: list<i32> = [];
+    verify(fold_left(empty, 17, encode_left) == 17);
+    verify(fold_right(empty, 23, encode_right) == 23);
+
+    let subtract = |acc: i32, value: i32| { return acc - value; };
+    verify(fold_left(values, 20, subtract) == 14);
+}
+
+#[test]
 fn test_algorithm_numeric_generic_inner_product() {
     let left: list<i32> = [1, 2, 3, 4];
     let right: list<i32> = [10, 20, 30];
@@ -1238,6 +1256,7 @@ fn test_algorithm_ranges_predicate_algorithms() {
     verify(!any_of(no_values, is_even));
     verify(none_of(no_values, is_even));
 }
+
 
 #[test]
 fn test_algorithm_ranges_partition_algorithms() {
