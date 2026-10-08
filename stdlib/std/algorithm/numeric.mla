@@ -1,7 +1,7 @@
 /// \file numeric.mla
 /// \brief Numeric algorithms under std::algorithm.
 ///
-/// C++-style `<numeric>` inspired helpers for `list<i64>`.
+/// C++-style `<numeric>` inspired helpers for Mlang lists.
 ///
 /// @defgroup algorithm_numeric std::algorithm::numeric
 /// @ingroup algorithm
@@ -17,6 +17,38 @@ pub fn accumulate_i64(data: &list<i64>, init: i64) -> i64 {
         acc = acc + data[i];
     }
     return acc;
+}
+
+/// @brief Generic prefix sums with an initial value.
+/// Returns `[init + d0, init + d0 + d1, ...]`.
+/// @ingroup algorithm_numeric
+generic<T>
+pub fn partial_sum(data: &list<T>, init: T) -> list<T> {
+    var out: list<T> = [];
+    var acc: T = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = acc + data[i];
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Generic adjacent differences.
+/// The first value is `data[0] - init`; later values are adjacent deltas.
+/// @ingroup algorithm_numeric
+generic<T>
+pub fn adjacent_difference(data: &list<T>, init: T) -> list<T> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return [];
+    }
+    var out: list<T> = [];
+    out.push(data[0] - init);
+    for i in 1..n {
+        out.push(data[i] - data[i - 1]);
+    }
+    return out;
 }
 
 /// @brief Prefix sums with an initial value.
