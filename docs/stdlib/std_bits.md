@@ -11,17 +11,20 @@ representations. Packed collections remain available in `std::bitset`.
 - `on()` / `ON()` return `bit(1)`.
 - `off()` / `OFF()` return `bit(0)`.
 
-### Unsigned 64-bit operations
+### Unsigned integer operations
 
-- `popcount_u64`, `has_single_bit_u64`, `bit_width_u64`
-- `countl_zero_u64`, `countl_one_u64`, `countr_zero_u64`, `countr_one_u64`
-- `bit_floor_u64`, `bit_ceil_u64`
-- `rotl_u64`, `rotr_u64`, `byteswap_u8`, `byteswap_u16`, `byteswap_u32`,
-  `byteswap_u64`
+- `popcount`, `has_single_bit`, and `bit_width` are available for `u8`, `u16`,
+  `u32`, and `u64` (with width suffixes).
+- `countl_zero`, `countl_one`, `countr_zero`, and `countr_one` are available at
+  the same widths; zero-input zero counts return the type's bit width.
+- `bit_floor`, `bit_ceil`, `rotl`, and `rotr` are available at the same widths.
+  `bit_ceil_*` returns zero if the next power of two is unrepresentable;
+  rotations normalize counts by the value width and negative counts reverse
+  direction.
+- `byteswap_u8`, `byteswap_u16`, `byteswap_u32`, and `byteswap_u64` reverse
+  byte order (the 8-bit operation is a no-op).
 
-`bit_ceil_u64` returns zero when the next power of two would overflow `u64`.
-Rotation counts are normalized modulo 64; negative counts rotate in the
-opposite direction.
+The original 64-bit API names remain available for source compatibility.
 
 ### Representation-preserving float casts
 

@@ -121,6 +121,150 @@ uint64_t __mlang_std_bits_rotr_u64(uint64_t value, int64_t shift)
     return (value >> amount) | (value << (64 - amount));
 }
 
+static uint64_t width_mask(unsigned width)
+{
+    return (UINT64_C(1) << width) - UINT64_C(1);
+}
+
+static int64_t popcount_width(uint64_t value)
+{
+    int64_t count = 0;
+    while(value != 0)
+    {
+        value &= value - UINT64_C(1);
+        ++count;
+    }
+    return count;
+}
+
+static int64_t countl_zero_width(uint64_t value, unsigned width)
+{
+    uint64_t mask = UINT64_C(1) << (width - 1);
+    int64_t count = 0;
+    while(mask != 0 && (value & mask) == 0)
+    {
+        ++count;
+        mask >>= 1;
+    }
+    return count;
+}
+
+static int64_t countr_zero_width(uint64_t value, unsigned width)
+{
+    if(value == 0)
+        return (int64_t)width;
+    int64_t count = 0;
+    while((value & UINT64_C(1)) == 0)
+    {
+        ++count;
+        value >>= 1;
+    }
+    return count;
+}
+
+static uint64_t bit_floor_width(uint64_t value)
+{
+    if(value == 0)
+        return 0;
+    uint64_t floor = UINT64_C(1);
+    while(value >>= 1)
+        floor <<= 1;
+    return floor;
+}
+
+static uint64_t bit_ceil_width(uint64_t value, unsigned width)
+{
+    uint64_t mask = width_mask(width);
+    if(value <= 1)
+        return 1;
+    uint64_t ceil = UINT64_C(1);
+    while(ceil < value && ceil <= (mask >> 1))
+        ceil <<= 1;
+    return ceil < value ? 0 : ceil;
+}
+
+static uint64_t rotl_width(uint64_t value, int64_t shift, unsigned width)
+{
+    int64_t amount = shift % (int64_t)width;
+    if(amount < 0)
+        amount += (int64_t)width;
+    if(amount == 0)
+        return value & width_mask(width);
+    return ((value << amount) | (value >> (width - amount))) &
+           width_mask(width);
+}
+
+static uint64_t rotr_width(uint64_t value, int64_t shift, unsigned width)
+{
+    int64_t amount = shift % (int64_t)width;
+    if(amount < 0)
+        amount += (int64_t)width;
+    if(amount == 0)
+        return value & width_mask(width);
+    return ((value >> amount) | (value << (width - amount))) &
+           width_mask(width);
+}
+
+#define DEFINE_WIDTH_BIT_OPERATIONS(suffix, type, width)                       \
+    int64_t __mlang_std_bits_popcount_##suffix(type value)                     \
+    {                                                                           \
+        return popcount_width((uint64_t)value);                                 \
+    }                                                                           \
+    int32_t __mlang_std_bits_has_single_bit_##suffix(type value)                \
+    {                                                                           \
+        uint64_t v = (uint64_t)value;                                           \
+        return v != 0 && (v & (v - UINT64_C(1))) == 0;                          \
+    }                                                                           \
+    int64_t __mlang_std_bits_bit_width_##suffix(type value)                     \
+    {                                                                           \
+        int64_t result = 0;                                                     \
+        uint64_t v = (uint64_t)value;                                           \
+        while(v != 0)                                                           \
+        {                                                                       \
+            ++result;                                                           \
+            v >>= 1;                                                            \
+        }                                                                       \
+        return result;                                                          \
+    }                                                                           \
+    int64_t __mlang_std_bits_countl_zero_##suffix(type value)                   \
+    {                                                                           \
+        return countl_zero_width((uint64_t)value, width);                       \
+    }                                                                           \
+    int64_t __mlang_std_bits_countr_zero_##suffix(type value)                   \
+    {                                                                           \
+        return countr_zero_width((uint64_t)value, width);                       \
+    }                                                                           \
+    int64_t __mlang_std_bits_countl_one_##suffix(type value)                    \
+    {                                                                           \
+        return countl_zero_width(((uint64_t)value) ^ width_mask(width), width); \
+    }                                                                           \
+    int64_t __mlang_std_bits_countr_one_##suffix(type value)                    \
+    {                                                                           \
+        return countr_zero_width(((uint64_t)value) ^ width_mask(width), width); \
+    }                                                                           \
+    type __mlang_std_bits_bit_floor_##suffix(type value)                        \
+    {                                                                           \
+        return (type)bit_floor_width((uint64_t)value);                          \
+    }                                                                           \
+    type __mlang_std_bits_bit_ceil_##suffix(type value)                         \
+    {                                                                           \
+        return (type)bit_ceil_width((uint64_t)value, width);                    \
+    }                                                                           \
+    type __mlang_std_bits_rotl_##suffix(type value, int64_t shift)              \
+    {                                                                           \
+        return (type)rotl_width((uint64_t)value, shift, width);                 \
+    }                                                                           \
+    type __mlang_std_bits_rotr_##suffix(type value, int64_t shift)              \
+    {                                                                           \
+        return (type)rotr_width((uint64_t)value, shift, width);                 \
+    }
+
+DEFINE_WIDTH_BIT_OPERATIONS(u32, uint32_t, 32)
+DEFINE_WIDTH_BIT_OPERATIONS(u16, uint16_t, 16)
+DEFINE_WIDTH_BIT_OPERATIONS(u8, uint8_t, 8)
+
+#undef DEFINE_WIDTH_BIT_OPERATIONS
+
 uint64_t __mlang_std_bits_byteswap_u64(uint64_t value)
 {
     return ((value & UINT64_C(0x00000000000000FF)) << 56) |

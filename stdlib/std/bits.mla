@@ -16,6 +16,39 @@ extern pub fn __mlang_std_bits_bit_floor_u64(value: u64) -> u64;
 extern pub fn __mlang_std_bits_bit_ceil_u64(value: u64) -> u64;
 extern pub fn __mlang_std_bits_rotl_u64(value: u64, shift: i64) -> u64;
 extern pub fn __mlang_std_bits_rotr_u64(value: u64, shift: i64) -> u64;
+extern pub fn __mlang_std_bits_popcount_u32(value: u32) -> i64;
+extern pub fn __mlang_std_bits_has_single_bit_u32(value: u32) -> i32;
+extern pub fn __mlang_std_bits_bit_width_u32(value: u32) -> i64;
+extern pub fn __mlang_std_bits_countl_zero_u32(value: u32) -> i64;
+extern pub fn __mlang_std_bits_countr_zero_u32(value: u32) -> i64;
+extern pub fn __mlang_std_bits_countl_one_u32(value: u32) -> i64;
+extern pub fn __mlang_std_bits_countr_one_u32(value: u32) -> i64;
+extern pub fn __mlang_std_bits_bit_floor_u32(value: u32) -> u32;
+extern pub fn __mlang_std_bits_bit_ceil_u32(value: u32) -> u32;
+extern pub fn __mlang_std_bits_rotl_u32(value: u32, shift: i64) -> u32;
+extern pub fn __mlang_std_bits_rotr_u32(value: u32, shift: i64) -> u32;
+extern pub fn __mlang_std_bits_popcount_u16(value: u16) -> i64;
+extern pub fn __mlang_std_bits_has_single_bit_u16(value: u16) -> i32;
+extern pub fn __mlang_std_bits_bit_width_u16(value: u16) -> i64;
+extern pub fn __mlang_std_bits_countl_zero_u16(value: u16) -> i64;
+extern pub fn __mlang_std_bits_countr_zero_u16(value: u16) -> i64;
+extern pub fn __mlang_std_bits_countl_one_u16(value: u16) -> i64;
+extern pub fn __mlang_std_bits_countr_one_u16(value: u16) -> i64;
+extern pub fn __mlang_std_bits_bit_floor_u16(value: u16) -> u16;
+extern pub fn __mlang_std_bits_bit_ceil_u16(value: u16) -> u16;
+extern pub fn __mlang_std_bits_rotl_u16(value: u16, shift: i64) -> u16;
+extern pub fn __mlang_std_bits_rotr_u16(value: u16, shift: i64) -> u16;
+extern pub fn __mlang_std_bits_popcount_u8(value: u8) -> i64;
+extern pub fn __mlang_std_bits_has_single_bit_u8(value: u8) -> i32;
+extern pub fn __mlang_std_bits_bit_width_u8(value: u8) -> i64;
+extern pub fn __mlang_std_bits_countl_zero_u8(value: u8) -> i64;
+extern pub fn __mlang_std_bits_countr_zero_u8(value: u8) -> i64;
+extern pub fn __mlang_std_bits_countl_one_u8(value: u8) -> i64;
+extern pub fn __mlang_std_bits_countr_one_u8(value: u8) -> i64;
+extern pub fn __mlang_std_bits_bit_floor_u8(value: u8) -> u8;
+extern pub fn __mlang_std_bits_bit_ceil_u8(value: u8) -> u8;
+extern pub fn __mlang_std_bits_rotl_u8(value: u8, shift: i64) -> u8;
+extern pub fn __mlang_std_bits_rotr_u8(value: u8, shift: i64) -> u8;
 extern pub fn __mlang_std_bits_byteswap_u64(value: u64) -> u64;
 extern pub fn __mlang_std_bits_byteswap_u32(value: u32) -> u32;
 extern pub fn __mlang_std_bits_byteswap_u16(value: u16) -> u16;
@@ -104,6 +137,45 @@ pub fn rotl_u64(value: u64, shift: i64) -> u64 {
 pub fn rotr_u64(value: u64, shift: i64) -> u64 {
     return __mlang_std_bits_rotr_u64(value, shift);
 }
+
+/// @brief C++20 `<bit>` operations for a 32-bit unsigned integer.
+pub fn popcount_u32(value: u32) -> i64 { return __mlang_std_bits_popcount_u32(value); }
+pub fn has_single_bit_u32(value: u32) -> bool { return __mlang_std_bits_has_single_bit_u32(value) != 0; }
+pub fn bit_width_u32(value: u32) -> i64 { return __mlang_std_bits_bit_width_u32(value); }
+pub fn countl_zero_u32(value: u32) -> i64 { return __mlang_std_bits_countl_zero_u32(value); }
+pub fn countr_zero_u32(value: u32) -> i64 { return __mlang_std_bits_countr_zero_u32(value); }
+pub fn countl_one_u32(value: u32) -> i64 { return __mlang_std_bits_countl_one_u32(value); }
+pub fn countr_one_u32(value: u32) -> i64 { return __mlang_std_bits_countr_one_u32(value); }
+pub fn bit_floor_u32(value: u32) -> u32 { return __mlang_std_bits_bit_floor_u32(value); }
+pub fn bit_ceil_u32(value: u32) -> u32 { return __mlang_std_bits_bit_ceil_u32(value); }
+pub fn rotl_u32(value: u32, shift: i64) -> u32 { return __mlang_std_bits_rotl_u32(value, shift); }
+pub fn rotr_u32(value: u32, shift: i64) -> u32 { return __mlang_std_bits_rotr_u32(value, shift); }
+
+/// @brief C++20 `<bit>` operations for a 16-bit unsigned integer.
+pub fn popcount_u16(value: u16) -> i64 { return __mlang_std_bits_popcount_u16(value); }
+pub fn has_single_bit_u16(value: u16) -> bool { return __mlang_std_bits_has_single_bit_u16(value) != 0; }
+pub fn bit_width_u16(value: u16) -> i64 { return __mlang_std_bits_bit_width_u16(value); }
+pub fn countl_zero_u16(value: u16) -> i64 { return __mlang_std_bits_countl_zero_u16(value); }
+pub fn countr_zero_u16(value: u16) -> i64 { return __mlang_std_bits_countr_zero_u16(value); }
+pub fn countl_one_u16(value: u16) -> i64 { return __mlang_std_bits_countl_one_u16(value); }
+pub fn countr_one_u16(value: u16) -> i64 { return __mlang_std_bits_countr_one_u16(value); }
+pub fn bit_floor_u16(value: u16) -> u16 { return __mlang_std_bits_bit_floor_u16(value); }
+pub fn bit_ceil_u16(value: u16) -> u16 { return __mlang_std_bits_bit_ceil_u16(value); }
+pub fn rotl_u16(value: u16, shift: i64) -> u16 { return __mlang_std_bits_rotl_u16(value, shift); }
+pub fn rotr_u16(value: u16, shift: i64) -> u16 { return __mlang_std_bits_rotr_u16(value, shift); }
+
+/// @brief C++20 `<bit>` operations for an 8-bit unsigned integer.
+pub fn popcount_u8(value: u8) -> i64 { return __mlang_std_bits_popcount_u8(value); }
+pub fn has_single_bit_u8(value: u8) -> bool { return __mlang_std_bits_has_single_bit_u8(value) != 0; }
+pub fn bit_width_u8(value: u8) -> i64 { return __mlang_std_bits_bit_width_u8(value); }
+pub fn countl_zero_u8(value: u8) -> i64 { return __mlang_std_bits_countl_zero_u8(value); }
+pub fn countr_zero_u8(value: u8) -> i64 { return __mlang_std_bits_countr_zero_u8(value); }
+pub fn countl_one_u8(value: u8) -> i64 { return __mlang_std_bits_countl_one_u8(value); }
+pub fn countr_one_u8(value: u8) -> i64 { return __mlang_std_bits_countr_one_u8(value); }
+pub fn bit_floor_u8(value: u8) -> u8 { return __mlang_std_bits_bit_floor_u8(value); }
+pub fn bit_ceil_u8(value: u8) -> u8 { return __mlang_std_bits_bit_ceil_u8(value); }
+pub fn rotl_u8(value: u8, shift: i64) -> u8 { return __mlang_std_bits_rotl_u8(value, shift); }
+pub fn rotr_u8(value: u8, shift: i64) -> u8 { return __mlang_std_bits_rotr_u8(value, shift); }
 
 /// @brief Reverse the byte order of a 64-bit integer.
 /// C++23 equivalent of `std::byteswap`.
