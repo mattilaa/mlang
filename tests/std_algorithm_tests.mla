@@ -104,6 +104,7 @@ use std::algorithm::ranges::joined;
 use std::algorithm::ranges::concat;
 use std::algorithm::ranges::zip;
 use std::algorithm::ranges::enumerate;
+use std::algorithm::ranges::cartesian_product;
 use std::algorithm::ranges::replace;
 use std::algorithm::ranges::all_of;
 use std::algorithm::ranges::any_of;
@@ -937,6 +938,29 @@ fn test_algorithm_ranges_enumerate() {
     let empty: list<i32> = [];
     let no_items: list<tuple<i64, i32>> = enumerate(empty);
     verify(no_items.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_cartesian_product() {
+    let left: list<i32> = [2, 4];
+    let right: list<i32> = [7, 9, 11];
+    let pairs: list<tuple<i32, i32>> = cartesian_product(left, right);
+    verify(pairs.len() == 6);
+
+    let first = pairs[0];
+    let second = pairs[1];
+    let third = pairs[2];
+    let fourth = pairs[3];
+    let last = pairs[5];
+    verify(first.0 == 2 && first.1 == 7);
+    verify(second.0 == 2 && second.1 == 9);
+    verify(third.0 == 2 && third.1 == 11);
+    verify(fourth.0 == 4 && fourth.1 == 7);
+    verify(last.0 == 4 && last.1 == 11);
+
+    let empty: list<i32> = [];
+    let no_pairs: list<tuple<i32, i32>> = cartesian_product(left, empty);
+    verify(no_pairs.len() == 0);
 }
 
 #[test]
