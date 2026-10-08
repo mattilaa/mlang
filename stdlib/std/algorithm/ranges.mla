@@ -1180,6 +1180,157 @@ pub fn symmetric_difference_sorted(left: &list<T>, right: &list<T>) -> list<T> {
     return out;
 }
 
+/// @brief Stably merge two sorted ranges using `less` as their ordering.
+/// Equal elements from `left` come first; both inputs must use this ordering.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn merged_by(left: &list<T>, right: &list<T>, less: Less) -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    while i < left_len && j < right_len {
+        if less(right[j], left[i]) {
+            out.push(right[j]);
+            j = j + 1;
+        } else {
+            out.push(left[i]);
+            i = i + 1;
+        }
+    }
+    while i < left_len {
+        out.push(left[i]);
+        i = i + 1;
+    }
+    while j < right_len {
+        out.push(right[j]);
+        j = j + 1;
+    }
+    return out;
+}
+
+/// @brief Return the sorted multiset union using `less` as the ordering.
+/// Equivalent elements are those for which neither value is less than the
+/// other.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn union_sorted_by(left: &list<T>, right: &list<T>, less: Less)
+    -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    while i < left_len && j < right_len {
+        if less(left[i], right[j]) {
+            out.push(left[i]);
+            i = i + 1;
+        } else if less(right[j], left[i]) {
+            out.push(right[j]);
+            j = j + 1;
+        } else {
+            out.push(left[i]);
+            i = i + 1;
+            j = j + 1;
+        }
+    }
+    while i < left_len {
+        out.push(left[i]);
+        i = i + 1;
+    }
+    while j < right_len {
+        out.push(right[j]);
+        j = j + 1;
+    }
+    return out;
+}
+
+/// @brief Return the sorted multiset intersection using `less` as the ordering.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn intersection_sorted_by(left: &list<T>, right: &list<T>, less: Less)
+    -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    while i < left_len && j < right_len {
+        if less(left[i], right[j]) {
+            i = i + 1;
+        } else if less(right[j], left[i]) {
+            j = j + 1;
+        } else {
+            out.push(left[i]);
+            i = i + 1;
+            j = j + 1;
+        }
+    }
+    return out;
+}
+
+/// @brief Return the left multiset difference using `less` as the ordering.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn difference_sorted_by(left: &list<T>, right: &list<T>, less: Less)
+    -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    while i < left_len && j < right_len {
+        if less(left[i], right[j]) {
+            out.push(left[i]);
+            i = i + 1;
+        } else if less(right[j], left[i]) {
+            j = j + 1;
+        } else {
+            i = i + 1;
+            j = j + 1;
+        }
+    }
+    while i < left_len {
+        out.push(left[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+/// @brief Return the sorted multiset symmetric difference using `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn symmetric_difference_sorted_by(left: &list<T>, right: &list<T>, less: Less)
+    -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    while i < left_len && j < right_len {
+        if less(left[i], right[j]) {
+            out.push(left[i]);
+            i = i + 1;
+        } else if less(right[j], left[i]) {
+            out.push(right[j]);
+            j = j + 1;
+        } else {
+            i = i + 1;
+            j = j + 1;
+        }
+    }
+    while i < left_len {
+        out.push(left[i]);
+        i = i + 1;
+    }
+    while j < right_len {
+        out.push(right[j]);
+        j = j + 1;
+    }
+    return out;
+}
+
 /// @brief Copy a list, replacing every value equal to `old_value`.
 /// C++20 ranges-style replace algorithm; the input remains unchanged.
 /// @ingroup algorithm_ranges
