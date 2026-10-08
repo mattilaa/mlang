@@ -17,6 +17,7 @@ use std::algorithm::ranges::unique_stable;
 use std::algorithm::ranges::filter;
 use std::algorithm::ranges::transform;
 use std::algorithm::ranges::zip_transform;
+use std::algorithm::ranges::chunk_by;
 
 fn example() {
     let data: list<i32> = [4, 2, 4, 7];
@@ -29,6 +30,8 @@ fn example() {
     let converted: list<f64> = transform(data, to_double);
     let add = |left: i32, right: i32| { return left + right; };
     let sums: list<i32> = zip_transform(data, data, add);
+    let consecutive = |left: i32, right: i32| { return right == left + 1; };
+    let groups: list<list<i32>> = chunk_by(data, consecutive);
 }
 ```
 
@@ -129,6 +132,8 @@ fn example() {
 - `chunked(data, size)` materializes consecutive sublists (C++23
   `views::chunk` style); the final chunk can be shorter, and non-positive sizes
   produce an empty list.
+- `chunk_by(data, equivalent)` groups adjacent elements while the binary
+  predicate accepts each neighboring pair (C++23 `views::chunk_by` style).
 - `windows(data, size)` materializes every overlapping fixed-size sublist
   (C++23 `views::slide` style); invalid sizes produce an empty list.
 - `strided(data, step)` copies every `step`-th element from index zero
