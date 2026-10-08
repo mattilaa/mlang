@@ -136,6 +136,7 @@ use std::algorithm::ranges::iota;
 use std::algorithm::ranges::drop;
 use std::algorithm::ranges::take_while;
 use std::algorithm::ranges::drop_while;
+use std::algorithm::ranges::transform;
 use std::algorithm::ranges::unique;
 use std::algorithm::ranges::unique_stable;
 use std::algorithm::ranges::clamp;
@@ -1072,6 +1073,20 @@ fn test_algorithm_ranges_take_drop_while() {
     let empty_prefix2: list<i32> = take_while(empty, below_three);
     let empty_suffix2: list<i32> = drop_while(empty, below_three);
     verify(empty_prefix2.len() == 0 && empty_suffix2.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_transform_changes_element_type() {
+    let values: list<i32> = [1, 3, 2];
+    let to_double = |value: i32| { return f64(value); };
+    let converted: list<f64> = transform(values, to_double);
+    verify(converted.len() == 3);
+    verify(converted[0] == 1.0 && converted[1] == 3.0 && converted[2] == 2.0);
+
+    let add_one = |value: i32| { return value + 1; };
+    let incremented: list<i32> = transform(values, add_one);
+    verify(incremented.len() == 3);
+    verify(incremented[0] == 2 && incremented[1] == 4 && incremented[2] == 3);
 }
 
 #[test]
