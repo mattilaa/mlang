@@ -333,8 +333,12 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
 
     for(size_t i = 0; i < arguments.size(); ++i)
     {
-        TypeNode* concrete =
-            inferExpressionTypeNode(arguments[i], functionTemplate->line);
+        TypeNode* concrete = nullptr;
+        if(dynamic_cast<ClosureNode*>(arguments[i]))
+            concrete = new PointerTypeNode(new TypeNode(TypeNode::TYPE_VOID));
+        else
+            concrete = inferExpressionTypeNode(arguments[i],
+                                               functionTemplate->line);
         if(!concrete ||
            !bindType(functionTemplate->parameters->parameters[i]->type,
                      concrete))
@@ -413,6 +417,33 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
         specialized->isInline = functionTemplate->isInline;
         specialized->isInlineAlways = functionTemplate->isInlineAlways;
         specialized->isInlineNever = functionTemplate->isInlineNever;
+        specialized->boundClosureParameters =
+            functionTemplate->boundClosureParameters;
+        specialized->closureSpecializationKey =
+            functionTemplate->closureSpecializationKey;
+        static size_t closureSpecializationSequence = 0;
+        for(size_t i = 0; i < call->arguments.size(); ++i)
+        {
+            ClosureNode* closure =
+                dynamic_cast<ClosureNode*>(call->arguments[i]);
+            if(auto* identifier =
+                   dynamic_cast<IdentifierNode*>(call->arguments[i]))
+            {
+                auto closureIt = closureVariables.find(identifier->name);
+                if(closureIt != closureVariables.end())
+                    closure = closureIt->second;
+            }
+            if(closure)
+            {
+                const std::string& parameterName =
+                    functionTemplate->parameters->parameters[i]->name;
+                specialized->boundClosureParameters[parameterName] = closure;
+                if(!specialized->closureSpecializationKey.empty())
+                    specialized->closureSpecializationKey += "_";
+                specialized->closureSpecializationKey +=
+                    std::to_string(++closureSpecializationSequence);
+            }
+        }
         for(const auto& binding : bindings)
             specialized->concreteTypeBindings[binding.first] =
                 cloneTypeNode(binding.second);

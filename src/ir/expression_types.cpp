@@ -4,6 +4,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 {
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
     {
+        if(closureVariables.find(id->name) != closureVariables.end())
+            return new PointerTypeNode(new TypeNode(TypeNode::TYPE_VOID));
         if(!validateVariableAccessible(id->name, line, id->col))
             return nullptr;
         auto typeIt = variableTypes.find(id->name);
