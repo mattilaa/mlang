@@ -12,12 +12,15 @@ mod std::algorithm::ranges;
 use std::algorithm::ranges::find;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::unique_stable;
+use std::algorithm::ranges::filter;
 
 fn example() {
     let data: list<i32> = [4, 2, 4, 7];
     let first_four: i64 = find(data, 4);           // 0
     let prefix: list<i32> = take(data, 2);        // [4, 2]
     let distinct: list<i32> = unique_stable(data); // [4, 2, 7]
+    let positive = |value: i32| { return value > 0; };
+    let positives: list<i32> = filter(data, positive); // [4, 2, 4, 7]
 }
 ```
 
@@ -55,9 +58,12 @@ fn example() {
   queries on a list sorted in nondecreasing order. The bounds return insertion
   indices; binary search returns `bool`.
 - `size` and `empty` provide generic list size queries.
-- `all_of`, `any_of`, and `none_of` quantify `list<bool>` values directly. These
-  identity-predicate forms preserve the usual empty-range identities; callback
-  predicates are not supported by this API.
+- `find_if` and `count_if` search/count elements accepted by a bound predicate;
+  `filter` eagerly copies accepted values to a new list. Predicates may capture
+  local values, and captured mutations are visible to the caller.
+- `all_of`, `any_of`, and `none_of` accept predicates as well as retaining the
+  one-argument `list<bool>` identity forms. Empty-range results match the
+  standard algorithms: true, false, and true respectively.
 
 ### Transforms and sequence creation
 
