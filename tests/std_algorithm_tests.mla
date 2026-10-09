@@ -22,6 +22,10 @@ use std::algorithm::numeric::fold_left;
 use std::algorithm::numeric::fold_right;
 use std::algorithm::numeric::fold_left_first;
 use std::algorithm::numeric::fold_right_last;
+use std::algorithm::ranges::fold_left as ranges_fold_left;
+use std::algorithm::ranges::fold_right as ranges_fold_right;
+use std::algorithm::ranges::fold_left_first as ranges_fold_left_first;
+use std::algorithm::ranges::fold_right_last as ranges_fold_right_last;
 use std::algorithm::numeric::transform_reduce;
 use std::algorithm::numeric::inclusive_scan;
 use std::algorithm::numeric::exclusive_scan;
@@ -1690,6 +1694,31 @@ fn test_algorithm_numeric_folds_without_initial_value() {
     let empty_left: option<i32> = fold_left_first(empty, encode_left);
     let empty_right: option<i32> = fold_right_last(empty, encode_right);
     verify(empty_left.is_none() && empty_right.is_none());
+}
+
+#[test]
+fn test_algorithm_ranges_folds() {
+    let values: list<i32> = [1, 2, 3];
+    let encode_left = |acc: i32, value: i32| { return acc * 10 + value; };
+    let encode_right = |value: i32, acc: i32| { return value + acc * 10; };
+    verify(ranges_fold_left(values, 4, encode_left) == 4123);
+    verify(ranges_fold_right(values, 4, encode_right) == 4321);
+
+    let add_to_i64 = |acc: i64, value: i32| { return acc + value; };
+    let heterogeneous: i64 = ranges_fold_left(values, 10, add_to_i64);
+    verify(heterogeneous == 16);
+
+    let left: option<i32> = ranges_fold_left_first(values, encode_left);
+    let right: option<i32> = ranges_fold_right_last(values, encode_right);
+    let left_value: i32 = match left { Some(value) => value, None => 0 };
+    let right_value: i32 = match right { Some(value) => value, None => 0 };
+    verify(left_value == 123 && right_value == 321);
+
+    let empty: list<i32> = [];
+    verify(ranges_fold_left(empty, 17, encode_left) == 17);
+    verify(ranges_fold_right(empty, 23, encode_right) == 23);
+    verify(ranges_fold_left_first(empty, encode_left).is_none());
+    verify(ranges_fold_right_last(empty, encode_right).is_none());
 }
 
 #[test]
