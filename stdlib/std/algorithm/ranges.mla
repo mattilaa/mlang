@@ -384,6 +384,19 @@ pub fn copy_n(data: &list<T>, count: i64) -> list<T> {
     return copied;
 }
 
+/// @brief Materialize an independent list copy of the complete range.
+/// This is the eager-list analogue of C++20 `std::ranges::copy`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn copy(data: &list<T>) -> list<T> {
+    var copied: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        copied.push(data[i]);
+    }
+    return copied;
+}
+
 /// @brief Return a copied list containing elements accepted by `predicate`.
 /// This is an eager ranges-style filter/copy-if operation.
 /// @ingroup algorithm_ranges

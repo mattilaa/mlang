@@ -143,6 +143,7 @@ use std::algorithm::ranges::for_each;
 use std::algorithm::ranges::for_each_n;
 use std::algorithm::ranges::generate_n;
 use std::algorithm::ranges::copy_n;
+use std::algorithm::ranges::copy as ranges_copy;
 use std::algorithm::ranges::filter;
 use std::algorithm::ranges::is_partitioned;
 use std::algorithm::ranges::partition_point;
@@ -2082,6 +2083,11 @@ fn test_algorithm_ranges_generate_n() {
 #[test]
 fn test_algorithm_ranges_copy_n() {
     let values: list<i32> = [4, 8, 15];
+    let complete: list<i32> = ranges_copy(values);
+    verify(complete.len() == 3 && complete[0] == 4 && complete[2] == 15);
+    complete.push(16);
+    verify(complete.len() == 4 && values.len() == 3);
+
     let prefix: list<i32> = copy_n(values, 2);
     verify(prefix.len() == 2 && prefix[0] == 4 && prefix[1] == 8);
 
@@ -2089,6 +2095,9 @@ fn test_algorithm_ranges_copy_n() {
     verify(all_values.len() == 3 && all_values[2] == 15);
     let no_values: list<i32> = copy_n(values, -2);
     verify(no_values.len() == 0);
+    let empty: list<i32> = [];
+    let empty_copy: list<i32> = ranges_copy(empty);
+    verify(empty_copy.len() == 0);
 }
 
 
