@@ -1651,6 +1651,25 @@ pub fn partial_sort_by(data: &list<T>, count: i64, less: Less) -> list<T> {
     return sort_heap_by(heap, less);
 }
 
+/// @brief Sort up to `output_capacity` selected values into a new list.
+/// This is the eager-list C++20 `std::ranges::partial_sort_copy` counterpart:
+/// the capacity stands for the destination range length, and the source stays
+/// unchanged.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn partial_sort_copy(data: &list<T>, output_capacity: i64) -> list<T> {
+    return partial_sort(data, output_capacity);
+}
+
+/// @brief Comparator form of `partial_sort_copy`.
+/// Selects the first values according to `less` and returns them sorted.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn partial_sort_copy_by(data: &list<T>, output_capacity: i64,
+                            less: Less) -> list<T> {
+    return partial_sort_by(data, output_capacity, less);
+}
+
 generic<T, Less>
 fn nth_element_impl_by(data: &list<T>, nth: i64, less: Less) -> list<T> {
     let n: i64 = data.len();

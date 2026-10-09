@@ -103,6 +103,8 @@ use std::algorithm::ranges::sort_heap;
 use std::algorithm::ranges::sort_heap_by;
 use std::algorithm::ranges::partial_sort;
 use std::algorithm::ranges::partial_sort_by;
+use std::algorithm::ranges::partial_sort_copy;
+use std::algorithm::ranges::partial_sort_copy_by;
 use std::algorithm::ranges::nth_element;
 use std::algorithm::ranges::nth_element_by;
 use std::algorithm::ranges::merged;
@@ -885,6 +887,23 @@ fn test_algorithm_ranges_partial_sort() {
     let empty: list<i32> = [];
     let empty_sorted: list<i32> = partial_sort(empty, 2);
     verify(empty_sorted.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_partial_sort_copy_capacity() {
+    let input: list<i32> = [8, 2, 5, 1, 7];
+    let small_output: list<i32> = partial_sort_copy(input, 3);
+    verify(small_output.len() == 3 && small_output[0] == 1 &&
+           small_output[1] == 2 && small_output[2] == 5);
+
+    let greatest = |a: i32, b: i32| { return a > b; };
+    let largest: list<i32> = partial_sort_copy_by(input, 2, greatest);
+    verify(largest.len() == 2 && largest[0] == 8 && largest[1] == 7);
+    let no_output: list<i32> = partial_sort_copy(input, 0);
+    let empty_input: list<i32> = [];
+    let no_input: list<i32> = partial_sort_copy(empty_input, 4);
+    verify(no_output.len() == 0 && no_input.len() == 0);
+    verify(input[0] == 8 && input[3] == 1);
 }
 
 #[test]
