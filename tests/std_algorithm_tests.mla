@@ -2855,6 +2855,20 @@ fn test_algorithm_ranges_transform_changes_element_type() {
 }
 
 #[test]
+fn test_algorithm_ranges_binary_transform() {
+    let left: list<i32> = [1, 2, 3, 4];
+    let right: list<i32> = [10, 20, 30];
+    let add = |a: i32, b: i32| { return a + b; };
+    let sums: list<i32> = transform(left, right, add);
+    verify(sums.len() == 3 && sums[0] == 11 && sums[2] == 33);
+    verify(left.len() == 4 && right.len() == 3);
+
+    let empty: list<i32> = [];
+    let none: list<i32> = transform(empty, right, add);
+    verify(none.len() == 0);
+}
+
+#[test]
 fn test_algorithm_ranges_transform_projected() {
     let values: list<i32> = [11, 22, 33];
     let project_tens = |value: i32| { return value / 10; };
