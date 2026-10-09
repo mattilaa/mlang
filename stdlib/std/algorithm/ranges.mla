@@ -606,18 +606,18 @@ pub fn fold_left_first(data: &list<T>, operation: Operation) -> option<T> {
 /// consumed element count with the result. Empty input returns None. This is
 /// the eager-list analogue of C++23 `std::ranges::fold_left_first_with_iter`.
 /// @ingroup algorithm_ranges
-generic<T, Operation>
+generic<T, Output, Operation>
 pub fn fold_left_first_with_iter(data: &list<T>, operation: Operation)
-    -> option<tuple<i64, T>> {
+    -> option<tuple<i64, Output>> {
     let n: i64 = data.len();
     if n == 0 {
-        return None<tuple<i64, T>>();
+        return None<tuple<i64, Output>>();
     }
-    var acc: T = data[0];
+    var acc: Output = data[0];
     for i in 1..n {
         acc = operation(acc, data[i]);
     }
-    return Some<tuple<i64, T>>((n, acc));
+    return Some<tuple<i64, Output>>((n, acc));
 }
 
 /// @brief Fold a non-empty range from right to left without an initial value.

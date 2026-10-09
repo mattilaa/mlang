@@ -271,8 +271,8 @@ fn example() {
   eager counterparts to the C++23 `std::ranges` fold algorithms.
 - `fold_left_first_with_iter(data, operation)` returns
   `Some((consumed, accumulator))` for nonempty input and `None` for empty
-  input. As with `fold_left_first`, this eager-list equivalent currently
-  requires the accumulator to have the input element type.
+  input. The output accumulator can differ from the input element type, which
+  is useful for widening reductions.
 - `fill(data, value)` returns a new list of the same length with every item set
   to `value`; the source list is unchanged, matching the result of applying
   C++20 `std::ranges::fill` to an equal-sized destination range.

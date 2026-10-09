@@ -3561,6 +3561,12 @@ fn test_algorithm_ranges_folds() {
     verify(left_with_iter.is_some());
     let left_result: tuple<i64, i32> = left_with_iter.unwrap();
     verify(left_result.0 == 3 && left_result.1 == 123);
+    let encode_wide = |acc: i64, value: i32| { return acc * 10 + value; };
+    let wide_with_iter: option<tuple<i64, i64>> =
+        ranges_fold_left_first_with_iter(values, encode_wide);
+    verify(wide_with_iter.is_some());
+    let wide_result: tuple<i64, i64> = wide_with_iter.unwrap();
+    verify(wide_result.0 == 3 && wide_result.1 == 123);
     let left_value: i32 = match left { Some(value) => value, None => 0 };
     let right_value: i32 = match right { Some(value) => value, None => 0 };
     verify(left_value == 123 && right_value == 321);
