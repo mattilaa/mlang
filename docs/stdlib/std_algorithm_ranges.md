@@ -58,6 +58,9 @@ fn example() {
 - `find_projected`, `count_projected`, and `contains_projected` apply a unary
   projection before comparing with the search value, covering the common
   C++20 ranges projection use case without requiring a custom predicate.
+- `find_last_projected` finds the final matching key, `adjacent_find_projected`
+  finds equal neighboring keys, and `find_first_of_projected` searches for a
+  projected key from a second range.
 - `includes(range, subset)` checks whether sorted `range` contains sorted
   `subset`; duplicate multiplicities matter and both inputs must be sorted.
 - `search` returns the first index of a contiguous pattern (`0` for an empty
