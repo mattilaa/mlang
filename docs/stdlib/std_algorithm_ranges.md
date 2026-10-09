@@ -374,6 +374,9 @@ fn example() {
   neighboring pair, returning up to one fewer result than input elements and
   inferring the output element type from the operation (C++23
   `views::adjacent_transform<2>` style).
+- `adjacent_transform3` and `adjacent_transform4` apply ternary or four-argument
+  operations to each neighboring triple or group of four, inferring the output
+  type and returning an empty list when the input is too short.
 - `enumerate(data)` materializes `(index, value)` tuples with zero-based indices
   (C++23 `views::enumerate` style).
 - `keys(data)` and `values(data)` project the first or second member of each
