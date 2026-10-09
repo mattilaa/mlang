@@ -232,14 +232,32 @@ pub fn transform_reduce(left: &list<T>, right: &list<V>, init: U,
 
 /// @brief Generic inner product over the shared prefix of two lists.
 /// @ingroup algorithm_numeric
-generic<T, U>
-pub fn inner_product(left: &list<T>, right: &list<T>, init: U) -> U {
+generic<T, V, U>
+pub fn inner_product(left: &list<T>, right: &list<V>, init: U) -> U {
     let left_len: i64 = left.len();
     let right_len: i64 = right.len();
     let n: i64 = left_len < right_len ? left_len : right_len;
     var acc: U = init;
     for i in 0..n {
         acc = acc + (left[i] * right[i]);
+    }
+    return acc;
+}
+
+/// @brief Compute an inner product with caller-defined reduction operations.
+/// `product(left, right)` forms each pair's term and `reduce(acc, term)` folds
+/// it into the accumulator. Heterogeneous input lists are supported.
+/// C++ `std::inner_product` custom-operation overload equivalent.
+/// @ingroup algorithm_numeric
+generic<T, V, U, Reduce, Product>
+pub fn inner_product_by(left: &list<T>, right: &list<V>, init: U,
+                        reduce: Reduce, product: Product) -> U {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    var acc: U = init;
+    for i in 0..n {
+        acc = reduce(acc, product(left[i], right[i]));
     }
     return acc;
 }

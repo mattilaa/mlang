@@ -37,3 +37,8 @@ Numeric sequence helpers for integer lists, including generic list folds.
 - `partial_sum_i64(data: &list<i64>, init: i64) -> list<i64>`
 - `adjacent_difference_i64(data: &list<i64>, init: i64) -> list<i64>`
 - `inner_product_i64(a: &list<i64>, b: &list<i64>, init: i64) -> i64`
+- `inner_product(left, right, init)` computes the generic sum of pairwise
+  products over the shared prefix and permits distinct input element types.
+- `inner_product_by(left, right, init, reduce, product)` generalizes the
+  operation pair with caller-provided closures, supporting heterogeneous input
+  lists and accumulator types.
