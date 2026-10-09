@@ -566,6 +566,35 @@ pub fn stable_partition(data: &list<T>, predicate: Predicate) -> list<T> {
     return partitioned;
 }
 
+/// @brief Return a partitioned copy and the boundary between both groups.
+/// Matching elements precede nonmatching elements; the eager list is left
+/// unchanged and each predicate result is evaluated exactly once. The copy
+/// preserves order within each group. C++20 `std::ranges::partition` analogue.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn partition(data: &list<T>, predicate: Predicate)
+    -> tuple<list<T>, i64> {
+    var matching: list<T> = [];
+    var nonmatching: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            matching.push(data[i]);
+        } else {
+            nonmatching.push(data[i]);
+        }
+    }
+    let boundary: i64 = matching.len();
+    var output: list<T> = [];
+    for i in 0..matching.len() {
+        output.push(matching[i]);
+    }
+    for i in 0..nonmatching.len() {
+        output.push(nonmatching[i]);
+    }
+    return (output, boundary);
+}
+
 /// @brief Copy matching and nonmatching elements into separate stable lists.
 /// Each element's predicate is evaluated exactly once; the source is unchanged.
 /// C++20 `std::ranges::partition_copy` equivalent.

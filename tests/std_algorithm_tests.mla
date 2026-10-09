@@ -147,6 +147,7 @@ use std::algorithm::ranges::filter;
 use std::algorithm::ranges::is_partitioned;
 use std::algorithm::ranges::partition_point;
 use std::algorithm::ranges::stable_partition;
+use std::algorithm::ranges::partition as ranges_partition;
 use std::algorithm::ranges::partition_copy;
 use std::algorithm::ranges::find_if_not;
 use std::algorithm::ranges::find_last_if_not;
@@ -2106,6 +2107,23 @@ fn test_algorithm_ranges_partition_algorithms() {
     verify(rearranged[3] == 2 && rearranged[4] == 4 && rearranged[5] == 6);
     verify(values[0] == 1 && values[1] == 3 && values[2] == 5);
 
+    let partitioned: tuple<list<i32>, i64> = ranges_partition(values, is_odd);
+    let partitioned_values: list<i32> = partitioned.0;
+    verify(partitioned.1 == 3 && partitioned_values.len() == 6);
+    verify(partitioned_values[0] == 1 && partitioned_values[1] == 3 &&
+           partitioned_values[2] == 5 && partitioned_values[3] == 2 &&
+           partitioned_values[4] == 4 && partitioned_values[5] == 6);
+    verify(values[0] == 1 && values[1] == 3 && values[2] == 5);
+
+    var predicate_calls: i64 = 0;
+    let counted_odd = |value: i32| {
+        predicate_calls = predicate_calls + 1;
+        return value % 2 == 1;
+    };
+    let counted_partition: tuple<list<i32>, i64> =
+        ranges_partition(values, counted_odd);
+    verify(counted_partition.1 == 3 && predicate_calls == values.len());
+
     let copies: tuple<list<i32>, list<i32>> = partition_copy(values, is_odd);
     let odds: list<i32> = copies.0;
     let evens: list<i32> = copies.1;
@@ -2117,6 +2135,9 @@ fn test_algorithm_ranges_partition_algorithms() {
     verify(partition_point(no_values, is_odd) == 0);
     let empty_partition: list<i32> = stable_partition(no_values, is_odd);
     verify(empty_partition.len() == 0);
+    let empty_copy: tuple<list<i32>, i64> = ranges_partition(no_values, is_odd);
+    let empty_values: list<i32> = empty_copy.0;
+    verify(empty_values.len() == 0 && empty_copy.1 == 0);
 
     let all_match: list<i32> = [1, 3, 5];
     verify(partition_point(all_match, is_odd) == all_match.len());
