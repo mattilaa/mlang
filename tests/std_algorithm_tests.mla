@@ -267,6 +267,7 @@ use std::algorithm::ranges::for_each_n_projected;
 use std::algorithm::ranges::generate_n;
 use std::algorithm::ranges::generate;
 use std::algorithm::ranges::fill;
+use std::algorithm::ranges::fill_n;
 use std::algorithm::ranges::copy_n;
 use std::algorithm::ranges::copy as ranges_copy;
 use std::algorithm::ranges::swap_ranges;
@@ -3754,6 +3755,12 @@ fn test_algorithm_ranges_fill_copy() {
     let empty: list<i32> = [];
     let no_values: list<i32> = fill(empty, fill_value);
     verify(no_values.len() == 0);
+
+    let counted: list<i32> = fill_n(3, fill_value);
+    verify(counted.len() == 3 && counted[0] == 9 && counted[2] == 9);
+    let zero_count: list<i32> = fill_n(0, fill_value);
+    let negative_count: list<i32> = fill_n(-2, fill_value);
+    verify(zero_count.len() == 0 && negative_count.len() == 0);
 }
 
 #[test]
