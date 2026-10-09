@@ -19,7 +19,7 @@ let score: option<str8> = scores.get(20);
 
 The API includes `len`, `is_empty`, `lower_bound`, `upper_bound`, `equal_range`,
 `contains`, `get`, `insert`, `insert_range`, `remove`, `erase_if`, `clear`,
-`key_at`, and `value_at`.
+`replace`, `key_at`, and `value_at`.
 `equal_range(key)` returns the half-open index pair `(lower_bound, upper_bound)`;
 it is empty for an absent key and contains one entry for a present key because
 keys are unique. `insert` returns true
@@ -30,6 +30,9 @@ created distinct keys, and lets the last occurrence of a repeated key determine
 its value.
 `erase_if(map, predicate)` evaluates the predicate with each key and value,
 retains nonmatching entries in sorted order, and returns the number removed.
+`replace(keys, values)` atomically replaces both ordered sequences after
+checking equal lengths and strictly increasing keys; invalid input returns
+false and leaves the existing contents unchanged.
 
 Keys must support ordering (`<`) and equality (`==`). Lookup is O(log n);
 insertion and removal are O(n) due to list reconstruction. `insert_range` is
