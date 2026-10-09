@@ -166,6 +166,9 @@ fn example() {
   seed the reduction from the first or last element. They return
   `option<T>`—`None` for empty input and `Some(result)` otherwise. These are
   eager counterparts to the C++23 `std::ranges` fold algorithms.
+- `fill(data, value)` returns a new list of the same length with every item set
+  to `value`; the source list is unchanged, matching the result of applying
+  C++20 `std::ranges::fill` to an equal-sized destination range.
 - `copy_n(data, count)` copies a bounded prefix; negative counts produce an
   empty list and oversized counts clamp to the input length. This eager,
   non-mutating operation is the Mlang counterpart to the C++20 algorithm.
