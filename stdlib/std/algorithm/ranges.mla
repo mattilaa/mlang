@@ -725,6 +725,42 @@ pub fn sample(data: &list<T>, count: i64, choose_index: ChooseIndex) -> list<T> 
     return sampled;
 }
 
+/// @brief Return a shuffled copy using a bounded random-index selector.
+/// `choose_index(upper_bound)` must return an index in
+/// `[0, upper_bound)`. The eager implementation leaves the source unchanged;
+/// removing selected elements from the remaining list makes this O(N^2).
+/// @ingroup algorithm_ranges
+generic<T, ChooseIndex>
+pub fn shuffle(data: &list<T>, choose_index: ChooseIndex) -> list<T> {
+    var shuffled: list<T> = [];
+    var remaining: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        remaining.push(data[i]);
+    }
+
+    while remaining.len() > 0 {
+        let bound: i64 = remaining.len();
+        var selected_index: i64 = choose_index(bound);
+        if selected_index < 0 {
+            selected_index = 0;
+        }
+        if selected_index >= bound {
+            selected_index = bound - 1;
+        }
+        shuffled.push(remaining[selected_index]);
+
+        var next_remaining: list<T> = [];
+        for i in 0..bound {
+            if i != selected_index {
+                next_remaining.push(remaining[i]);
+            }
+        }
+        remaining = next_remaining;
+    }
+    return shuffled;
+}
+
 /// @brief Copy elements unequal to `value` into a new list.
 /// C++20 `std::ranges::remove_copy` counterpart; the input is unchanged.
 /// @ingroup algorithm_ranges
