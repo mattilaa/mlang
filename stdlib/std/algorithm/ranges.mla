@@ -2067,6 +2067,28 @@ pub fn max_element_value(data: &list<T>) -> T {
     return best;
 }
 
+/// @brief Return the minimum and maximum values in one traversal.
+/// Requires a nonempty input; use `minmax_element_index` to handle emptiness.
+/// The minimum is the first equivalent value and maximum the last, matching
+/// C++20 `std::ranges::minmax_element` tie behavior.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn minmax_element_value(data: &list<T>) -> tuple<T, T> {
+    var minimum: T = data[0];
+    var maximum: T = data[0];
+    let n: i64 = data.len();
+    for i in 1..n {
+        let value: T = data[i];
+        if value < minimum {
+            minimum = value;
+        }
+        if !(value < maximum) {
+            maximum = value;
+        }
+    }
+    return (minimum, maximum);
+}
+
 /// @brief Return the first minimum index under `less`, or -1 if empty.
 /// @ingroup algorithm_ranges
 generic<T, Less>
@@ -2149,6 +2171,28 @@ pub fn max_element_value_by(data: &list<T>, less: Less) -> T {
         }
     }
     return best;
+}
+
+/// @brief Return minimum and maximum values under `less` in one traversal.
+/// Requires a nonempty input; minimum is first-equivalent and maximum is
+/// last-equivalent, matching C++20 `std::ranges::minmax_element`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn minmax_element_value_by(data: &list<T>, less: Less)
+    -> tuple<T, T> {
+    var minimum: T = data[0];
+    var maximum: T = data[0];
+    let n: i64 = data.len();
+    for i in 1..n {
+        let value: T = data[i];
+        if less(value, minimum) {
+            minimum = value;
+        }
+        if !less(value, maximum) {
+            maximum = value;
+        }
+    }
+    return (minimum, maximum);
 }
 
 /// @brief Return count of elements equal to value.
