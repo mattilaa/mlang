@@ -208,6 +208,71 @@ pub fn erase_if(v: &mut list<T>, predicate: Predicate) -> i64 {
     return removed;
 }
 
+/// @brief Append all elements from `source` to a mutable Vec.
+/// C++23 `std::vector::append_range` counterpart. The source length is
+/// captured before appending, so appending a range derived from the same Vec
+/// does not extend the traversal.
+/// @ingroup vec_methods
+generic<T>
+pub fn append_range(destination: &mut list<T>, source: &list<T>) -> i64 {
+    let source_len: i64 = source.len();
+    for i in 0..source_len {
+        destination.push(source[i]);
+    }
+    return source_len;
+}
+
+/// @brief Replace a mutable Vec's contents with all elements from `source`.
+/// C++23 `std::vector::assign_range` counterpart; returns the assigned count.
+/// The source is copied before clearing the destination, allowing source and
+/// destination to refer to the same list.
+/// @ingroup vec_methods
+generic<T>
+pub fn assign_range(destination: &mut list<T>, source: &list<T>) -> i64 {
+    var copied: list<T> = [];
+    let source_len: i64 = source.len();
+    for i in 0..source_len {
+        copied.push(source[i]);
+    }
+    destination.clear();
+    for value in copied {
+        destination.push(value);
+    }
+    return source_len;
+}
+
+/// @brief Insert all elements from `source` into a mutable Vec.
+/// C++23 `std::vector::insert_range` counterpart. The insertion index is
+/// clamped to `[0, destination.len()]`; returns the actual insertion index.
+/// @ingroup vec_methods
+generic<T>
+pub fn insert_range(destination: &mut list<T>, index: i64,
+                    source: &list<T>) -> i64 {
+    var before: list<T> = [];
+    var copied: list<T> = [];
+    let destination_len: i64 = destination.len();
+    let source_len: i64 = source.len();
+    let insertion_index: i64 =
+        index < 0 ? 0 : (index > destination_len ? destination_len : index);
+    for i in 0..insertion_index {
+        before.push(destination[i]);
+    }
+    for i in 0..source_len {
+        copied.push(source[i]);
+    }
+    for value in copied {
+        before.push(value);
+    }
+    for i in insertion_index..destination_len {
+        before.push(destination[i]);
+    }
+    destination.clear();
+    for value in before {
+        destination.push(value);
+    }
+    return insertion_index;
+}
+
 /// @brief Replace one f32 element without changing length or allocating.
 /// @ingroup vec_methods
 ///
