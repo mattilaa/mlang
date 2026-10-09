@@ -109,9 +109,13 @@ fn example() {
 - `lower_bound`, `upper_bound`, and `binary_search` perform logarithmic-time
   queries on a list sorted in nondecreasing order. The bounds return insertion
   indices; binary search returns `bool`.
+- `equal_range(data, value)` returns `(first, last)`, the half-open index range
+  of equal values, or an empty insertion range when no value matches.
 - `is_sorted_by`, `is_sorted_until_by`, `lower_bound_by`, `upper_bound_by`, and
   `binary_search_by` accept a strict ordering comparator, enabling descending or
   custom orderings while keeping binary searches logarithmic.
+- `equal_range_by(data, value, less)` provides the same half-open matching
+  index range with a comparator-defined ordering.
 - `size` and `empty` provide generic list size queries.
 - `find_if` and `count_if` search/count elements accepted by a bound predicate;
   `filter` eagerly copies accepted values to a new list. Predicates may capture

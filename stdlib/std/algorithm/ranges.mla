@@ -1390,6 +1390,17 @@ pub fn upper_bound(data: &list<T>, value: U) -> i64 {
     return lo;
 }
 
+/// @brief Return the half-open index range containing equivalent values.
+/// Requires nondecreasing input. The result is `(lower_bound, upper_bound)`.
+/// C++20 `std::ranges::equal_range` equivalent.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn equal_range(data: &list<T>, value: U) -> tuple<i64, i64> {
+    let first: i64 = lower_bound(data, value);
+    let last: i64 = upper_bound(data, value);
+    return (first, last);
+}
+
 /// @brief Return whether a sorted list contains `value`.
 /// @ingroup algorithm_ranges
 generic<T, U>
@@ -1459,6 +1470,16 @@ pub fn upper_bound_by(data: &list<T>, value: U, less: Less) -> i64 {
         }
     }
     return lo;
+}
+
+/// @brief Return the equivalent-value index range under `less`.
+/// Requires input sorted according to the same strict ordering.
+/// @ingroup algorithm_ranges
+generic<T, U, Less>
+pub fn equal_range_by(data: &list<T>, value: U, less: Less) -> tuple<i64, i64> {
+    let first: i64 = lower_bound_by(data, value, less);
+    let last: i64 = upper_bound_by(data, value, less);
+    return (first, last);
 }
 
 /// @brief Check whether a comparator-sorted range contains `value`.
