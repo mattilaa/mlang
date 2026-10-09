@@ -1635,6 +1635,115 @@ pub fn partial_sort_by(data: &list<T>, count: i64, less: Less) -> list<T> {
     return sort_heap_by(heap, less);
 }
 
+generic<T, Less>
+fn nth_element_impl_by(data: &list<T>, nth: i64, less: Less) -> list<T> {
+    let n: i64 = data.len();
+    if nth < 0 || nth >= n { return []; }
+    if n < 2 {
+        return take(data, n);
+    }
+
+    let pivot: T = data[n / 2];
+    var lower: list<T> = [];
+    var equal: list<T> = [];
+    var upper: list<T> = [];
+    for i in 0..n {
+        let value: T = data[i];
+        if less(value, pivot) {
+            lower.push(value);
+        } else if less(pivot, value) {
+            upper.push(value);
+        } else {
+            equal.push(value);
+        }
+    }
+
+    let lower_len: i64 = lower.len();
+    let equal_len: i64 = equal.len();
+    var result: list<T> = [];
+    if nth < lower_len {
+        result = nth_element_impl_by(lower, nth, less);
+        for i in 0..equal_len { result.push(equal[i]); }
+        for i in 0..upper.len() { result.push(upper[i]); }
+        return result;
+    }
+    if nth >= lower_len + equal_len {
+        for i in 0..lower_len { result.push(lower[i]); }
+        for i in 0..equal_len { result.push(equal[i]); }
+        let selected_values: list<T> =
+            nth_element_impl_by(upper, nth - lower_len - equal_len, less);
+        for i in 0..selected_values.len() { result.push(selected_values[i]); }
+        return result;
+    }
+
+    for i in 0..lower_len { result.push(lower[i]); }
+    for i in 0..equal_len { result.push(equal[i]); }
+    for i in 0..upper.len() { result.push(upper[i]); }
+    return result;
+}
+
+generic<T>
+fn nth_element_impl(data: &list<T>, nth: i64) -> list<T> {
+    let n: i64 = data.len();
+    if nth < 0 || nth >= n { return []; }
+    if n < 2 { return take(data, n); }
+
+    let pivot: T = data[n / 2];
+    var lower: list<T> = [];
+    var equal: list<T> = [];
+    var upper: list<T> = [];
+    for i in 0..n {
+        let value: T = data[i];
+        if value < pivot {
+            lower.push(value);
+        } else if pivot < value {
+            upper.push(value);
+        } else {
+            equal.push(value);
+        }
+    }
+
+    let lower_len: i64 = lower.len();
+    let equal_len: i64 = equal.len();
+    var result: list<T> = [];
+    if nth < lower_len {
+        result = nth_element_impl(lower, nth);
+        for i in 0..equal_len { result.push(equal[i]); }
+        for i in 0..upper.len() { result.push(upper[i]); }
+        return result;
+    }
+    if nth >= lower_len + equal_len {
+        for i in 0..lower_len { result.push(lower[i]); }
+        for i in 0..equal_len { result.push(equal[i]); }
+        let selected: list<T> = nth_element_impl(upper, nth - lower_len - equal_len);
+        for i in 0..selected.len() { result.push(selected[i]); }
+        return result;
+    }
+    for i in 0..lower_len { result.push(lower[i]); }
+    for i in 0..equal_len { result.push(equal[i]); }
+    for i in 0..upper.len() { result.push(upper[i]); }
+    return result;
+}
+
+/// @brief Reorder a copied range around its `nth` element.
+/// Values before it are no greater and values after it are no smaller; neither
+/// side is otherwise sorted. Invalid indices return an empty list. This
+/// eager-list algorithm is the C++20 `std::ranges::nth_element` counterpart.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn nth_element(data: &list<T>, nth: i64) -> list<T> {
+    return nth_element_impl(data, nth);
+}
+
+/// @brief Comparator-based `nth_element`; invalid indices return an empty list.
+/// `less` defines the order and partitions the result around the selected value.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn nth_element_by(data: &list<T>, nth: i64, less: Less)
+    -> list<T> {
+    return nth_element_impl_by(data, nth, less);
+}
+
 /// @brief First index where `value` can be inserted without breaking order.
 /// Requires nondecreasing input; returns `data.len()` when value is too large.
 /// @ingroup algorithm_ranges
