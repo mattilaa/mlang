@@ -270,6 +270,11 @@ double __mlang_std_math_atan2_f64(double y, double x)
     return atan2(y, x);
 }
 
+float __mlang_std_math_sinh_f32(float x) { return sinhf(x); }
+double __mlang_std_math_sinh_f64(double x) { return sinh(x); }
+float __mlang_std_math_cosh_f32(float x) { return coshf(x); }
+double __mlang_std_math_cosh_f64(double x) { return cosh(x); }
+
 int32_t __mlang_std_math_sin_i32(int32_t x)
 {
     return (int32_t)sin((double)x);

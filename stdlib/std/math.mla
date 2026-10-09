@@ -485,6 +485,79 @@ pub fn cos(x: f64) -> f64 {
     return __mlang_std_math_cos_f64(x);
 }
 
+/// @brief Hyperbolic sine for `f32` values.
+pub fn sinh(x: f32) -> f32 { return __mlang_std_math_sinh_f32(x); }
+/// @brief Hyperbolic sine for `f64` values.
+pub fn sinh(x: f64) -> f64 { return __mlang_std_math_sinh_f64(x); }
+/// @brief Hyperbolic cosine for `f32` values.
+pub fn cosh(x: f32) -> f32 { return __mlang_std_math_cosh_f32(x); }
+/// @brief Hyperbolic cosine for `f64` values.
+pub fn cosh(x: f64) -> f64 { return __mlang_std_math_cosh_f64(x); }
+
+/// @brief Complex sine for `f32`, matching `std::sin`.
+pub fn sin(value: Complex<f32>) -> Complex<f32> {
+    return Complex<f32> {
+        re: sin(value.re) * cosh(value.im),
+        im: cos(value.re) * sinh(value.im)
+    };
+}
+
+/// @brief Complex sine for `f64`, matching `std::sin`.
+pub fn sin(value: Complex<f64>) -> Complex<f64> {
+    return Complex<f64> {
+        re: sin(value.re) * cosh(value.im),
+        im: cos(value.re) * sinh(value.im)
+    };
+}
+
+/// @brief Complex cosine for `f32`, matching `std::cos`.
+pub fn cos(value: Complex<f32>) -> Complex<f32> {
+    return Complex<f32> {
+        re: cos(value.re) * cosh(value.im),
+        im: 0.0f - sin(value.re) * sinh(value.im)
+    };
+}
+
+/// @brief Complex cosine for `f64`, matching `std::cos`.
+pub fn cos(value: Complex<f64>) -> Complex<f64> {
+    return Complex<f64> {
+        re: cos(value.re) * cosh(value.im),
+        im: 0.0 - sin(value.re) * sinh(value.im)
+    };
+}
+
+/// @brief Complex hyperbolic sine for `f32`.
+pub fn sinh(value: Complex<f32>) -> Complex<f32> {
+    return Complex<f32> {
+        re: sinh(value.re) * cos(value.im),
+        im: cosh(value.re) * sin(value.im)
+    };
+}
+
+/// @brief Complex hyperbolic sine for `f64`.
+pub fn sinh(value: Complex<f64>) -> Complex<f64> {
+    return Complex<f64> {
+        re: sinh(value.re) * cos(value.im),
+        im: cosh(value.re) * sin(value.im)
+    };
+}
+
+/// @brief Complex hyperbolic cosine for `f32`.
+pub fn cosh(value: Complex<f32>) -> Complex<f32> {
+    return Complex<f32> {
+        re: cosh(value.re) * cos(value.im),
+        im: sinh(value.re) * sin(value.im)
+    };
+}
+
+/// @brief Complex hyperbolic cosine for `f64`.
+pub fn cosh(value: Complex<f64>) -> Complex<f64> {
+    return Complex<f64> {
+        re: cosh(value.re) * cos(value.im),
+        im: sinh(value.re) * sin(value.im)
+    };
+}
+
 /// @brief Complex exponential for `f32`, matching `std::exp`.
 pub fn exp(value: Complex<f32>) -> Complex<f32> {
     let magnitude: f32 = exp(value.re);
