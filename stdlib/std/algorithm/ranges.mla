@@ -1585,6 +1585,56 @@ pub fn sort_heap_by(data: &list<T>, less: Less) -> list<T> {
     return sorted_by(data, less);
 }
 
+/// @brief Return the smallest `count` elements in ascending order.
+/// The count is clamped to `[0, data.len()]`; the input is unchanged.
+/// C++20 `std::ranges::partial_sort` eager-list counterpart.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn partial_sort(data: &list<T>, count: i64) -> list<T> {
+    var limit: i64 = count;
+    let n: i64 = data.len();
+    if limit < 0 { limit = 0; }
+    if limit > n { limit = n; }
+    if limit == 0 { return []; }
+
+    var initial: list<T> = take(data, limit);
+    var heap: list<T> = make_heap(initial);
+    for i in limit..n {
+        if data[i] < heap[0] {
+            let popped: list<T> = pop_heap(heap);
+            var prefix: list<T> = take(popped, limit - 1);
+            prefix.push(data[i]);
+            heap = push_heap(prefix);
+        }
+    }
+    return sort_heap(heap);
+}
+
+/// @brief Return the first `count` values according to the ordering `less`.
+/// The retained prefix is sorted; counts clamp to `[0, data.len()]` and the
+/// input is unchanged. Equivalent values retain heap-algorithm ordering.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn partial_sort_by(data: &list<T>, count: i64, less: Less) -> list<T> {
+    var limit: i64 = count;
+    let n: i64 = data.len();
+    if limit < 0 { limit = 0; }
+    if limit > n { limit = n; }
+    if limit == 0 { return []; }
+
+    var initial: list<T> = take(data, limit);
+    var heap: list<T> = make_heap_by(initial, less);
+    for i in limit..n {
+        if less(data[i], heap[0]) {
+            let popped: list<T> = pop_heap_by(heap, less);
+            var prefix: list<T> = take(popped, limit - 1);
+            prefix.push(data[i]);
+            heap = push_heap_by(prefix, less);
+        }
+    }
+    return sort_heap_by(heap, less);
+}
+
 /// @brief First index where `value` can be inserted without breaking order.
 /// Requires nondecreasing input; returns `data.len()` when value is too large.
 /// @ingroup algorithm_ranges
