@@ -154,6 +154,7 @@ use std::algorithm::ranges::find_if_not;
 use std::algorithm::ranges::find_last_if_not;
 use std::algorithm::ranges::remove_if;
 use std::algorithm::ranges::copy_if;
+use std::algorithm::ranges::sample as ranges_sample;
 use std::algorithm::ranges::remove_copy;
 use std::algorithm::ranges::remove_copy_if;
 use std::algorithm::ranges::replace_copy;
@@ -2132,6 +2133,29 @@ fn test_algorithm_ranges_copy_n() {
     let empty: list<i32> = [];
     let empty_copy: list<i32> = ranges_copy(empty);
     verify(empty_copy.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_sample_without_replacement() {
+    let values: list<i32> = [1, 2, 3, 4, 5, 6];
+    let choose_last = |bound: i64| { return bound - 1; };
+    let sampled: list<i32> = ranges_sample(values, 3, choose_last);
+    verify(sampled.len() == 3);
+    verify(sampled[0] == 4 && sampled[1] == 5 && sampled[2] == 6);
+    verify(values.len() == 6 && values[0] == 1 && values[5] == 6);
+
+    let all: list<i32> = ranges_sample(values, 20, choose_last);
+    verify(all.len() == values.len());
+    for i in 0..values.len() {
+        verify(all[i] == values[i]);
+    }
+
+    let empty_sample: list<i32> = ranges_sample(values, 0, choose_last);
+    let negative_sample: list<i32> = ranges_sample(values, -2, choose_last);
+    verify(empty_sample.len() == 0 && negative_sample.len() == 0);
+    let empty: list<i32> = [];
+    let sampled_empty: list<i32> = ranges_sample(empty, 3, choose_last);
+    verify(sampled_empty.len() == 0);
 }
 
 
