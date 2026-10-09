@@ -261,8 +261,8 @@ fn example() {
   input as one field.
 - `concat(left, right)` copies two same-typed ranges into one list (C++23
   `views::concat` style).
-- `zip(left, right)` and its three-range overload materialize tuple matches,
-  stopping at the shortest input (C++23 `views::zip` style).
+- `zip` overloads for two, three, and four ranges materialize heterogeneous
+  tuples, stopping at the shortest input (C++23 `views::zip` style).
 - `pairwise(data)` materializes tuples of each adjacent pair (C++23
   `views::pairwise` style); inputs shorter than two elements produce an empty
   list.
@@ -274,9 +274,10 @@ fn example() {
   (C++23 `views::enumerate` style).
 - `keys(data)` and `values(data)` project the first or second member of each
   `tuple<K, V>` (eager counterparts to C++20 `views::keys` and `views::values`).
-- `cartesian_product` materializes every pair or triple of values in nested
-  loop order; the rightmost input varies fastest (C++23
-  `views::cartesian_product` style). An empty input produces an empty result.
+- `cartesian_product` overloads for two, three, and four ranges materialize
+  every value combination in nested-loop order; the rightmost input varies
+  fastest (C++23 `views::cartesian_product` style). Any empty input produces
+  an empty result.
 - `merged(left, right)` stably merges two sorted same-typed ranges into a new
   sorted list; equal elements from the left range come first.
 - `inplace_merge(data, middle)` stably merges the two sorted halves around
