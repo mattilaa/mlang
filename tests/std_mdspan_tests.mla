@@ -17,7 +17,16 @@ fn test_mdspan_rank_extents_and_row_major_access() {
     let view: Mdspan<i32> = maybe_view.unwrap();
     verify_eq_i64(2, view.rank());
     verify_eq_i64(6, view.size());
+    verify_eq_i64(6, view.required_span_size());
     verify(!view.is_empty());
+    verify(view.is_unique() && view.is_exhaustive() && view.is_strided());
+
+    let row_stride: option<i64> = view.stride(0);
+    let column_stride: option<i64> = view.stride(1);
+    let invalid_stride: option<i64> = view.stride(2);
+    verify(row_stride.is_some() && row_stride.unwrap() == 3);
+    verify(column_stride.is_some() && column_stride.unwrap() == 1);
+    verify(invalid_stride.is_none());
 
     let rows: option<i64> = view.extent(0);
     let columns: option<i64> = view.extent(1);
@@ -85,6 +94,12 @@ fn test_mdspan_layout_left_column_major_access() {
     let maybe_left: option<Mdspan<i32>> = from_extents_left(data, shape);
     verify(maybe_left.is_some());
     let left: Mdspan<i32> = maybe_left.unwrap();
+    let row_stride: option<i64> = left.stride(0);
+    let column_stride: option<i64> = left.stride(1);
+    verify(row_stride.is_some() && row_stride.unwrap() == 1);
+    verify(column_stride.is_some() && column_stride.unwrap() == 2);
+    verify(left.required_span_size() == 6 && left.is_unique() &&
+           left.is_exhaustive() && left.is_strided());
     let first_column_second_row: list<i64> = [1, 0];
     let second_column_first_row: list<i64> = [0, 1];
     let last: list<i64> = [1, 2];
