@@ -24,6 +24,7 @@
 - [[std::audio|Stdlib-Audio]]
 - [[std::midi|Stdlib-Midi]]
 - [[std::math|Stdlib-Math]]
+- [[std::numbers|Stdlib-Numbers]]
 - [[std::matrix|Stdlib-Matrix]]
 - [[std::rand|Stdlib-Rand]]
 - [[std::simd|Stdlib-Simd]]

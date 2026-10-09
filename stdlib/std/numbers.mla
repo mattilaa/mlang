@@ -31,9 +31,29 @@ pub fn pi() -> f64 {
     return 3.14159265358979323846;
 }
 
+/// @brief Two times pi, the full-turn angle in radians.
+pub fn two_pi() -> f64 {
+    return 6.28318530717958647693;
+}
+
+/// @brief Pi divided by two.
+pub fn pi_over_2() -> f64 {
+    return 1.57079632679489661923;
+}
+
+/// @brief Pi divided by four.
+pub fn pi_over_4() -> f64 {
+    return 0.78539816339744830962;
+}
+
 /// @brief The reciprocal of pi.
 pub fn inv_pi() -> f64 {
     return 0.31830988618379067154;
+}
+
+/// @brief Two divided by pi.
+pub fn two_inv_pi() -> f64 {
+    return 0.63661977236758134308;
 }
 
 /// @brief The reciprocal of the square root of pi.
@@ -41,9 +61,19 @@ pub fn inv_sqrtpi() -> f64 {
     return 0.56418958354775628695;
 }
 
+/// @brief Two divided by the square root of pi.
+pub fn two_inv_sqrtpi() -> f64 {
+    return 1.12837916709551257390;
+}
+
 /// @brief The square root of two.
 pub fn sqrt2() -> f64 {
     return 1.41421356237309504880;
+}
+
+/// @brief The reciprocal of the square root of two.
+pub fn inv_sqrt2() -> f64 {
+    return 0.70710678118654752440;
 }
 
 /// @brief The square root of three.

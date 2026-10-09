@@ -45,6 +45,7 @@ mod std::jsonrpc;
 mod std::limits;
 mod std::log;
 mod std::math;
+mod std::numbers;
 mod std::matrix;
 mod std::multiarray;
 mod std::mutmultiarray;
@@ -137,6 +138,7 @@ The source-of-truth implementation files are:
 - [std::midi](stdlib/std_midi.md)
 - [std::algorithm::numeric](stdlib/std_algorithm_numeric.md)
 - [std::math](stdlib/std_math.md)
+- [std::numbers](stdlib/std_numbers.md)
 - [std::rand](stdlib/std_rand.md)
 - [std::ringbuffer](stdlib/std_ringbuffer.md)
 - [std::simd](stdlib/std_simd.md)
