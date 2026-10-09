@@ -889,6 +889,17 @@ pub fn contains_subrange(data: &list<T>, pattern: &list<U>) -> bool {
     return search(data, pattern) >= 0;
 }
 
+/// @brief Return whether `pattern` occurs contiguously under `equivalent`.
+/// The ranges may have different element types. An empty pattern always
+/// matches, including an empty input range.
+/// C++23 `std::ranges::contains_subrange` predicate overload.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn contains_subrange_by(data: &list<T>, pattern: &list<U>,
+                            equivalent: Equivalent) -> bool {
+    return search_by(data, pattern, equivalent) >= 0;
+}
+
 /// @brief Return whether `suffix` matches the end of `data`.
 /// The two ranges may have different, equality-comparable element types.
 /// @ingroup algorithm_ranges
