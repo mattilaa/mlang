@@ -55,4 +55,5 @@ Numeric sequence helpers for integer lists, including generic list folds.
   products over the shared prefix and permits distinct input element types.
 - `inner_product_by(left, right, init, reduce, product)` generalizes the
   operation pair with caller-provided closures, supporting heterogeneous input
-  lists and accumulator types.
+  lists and accumulator types. The C++-style overload
+  `inner_product(left, right, init, reduce, product)` is also provided.

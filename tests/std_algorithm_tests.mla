@@ -3623,6 +3623,8 @@ fn test_algorithm_numeric_generic_inner_product() {
     let decimal_fold = |acc: i64, term: i64| { return acc * 10 + term; };
     verify(inner_product_by(left, wide_right, 0, decimal_fold, pair_term) ==
            1353);
+    verify(inner_product(left, wide_right, 0, decimal_fold, pair_term) ==
+           1353);
     let empty_wide: list<i64> = [];
     verify(inner_product_by(left, empty_wide, 17, decimal_fold, pair_term) == 17);
 }
