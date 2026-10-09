@@ -355,6 +355,10 @@ fn example() {
   ordering counterparts.
 - `replace(data, old, new)` copies a range while replacing every value equal
   to `old`; the original range is unchanged.
+- `remove_projected` and `remove_copy_projected` filter out elements whose
+  projected key matches a value. `replace_projected` and
+  `replace_copy_projected` replace elements by projected-key equality; all
+  four return a new list and leave the input unchanged.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 - `iota_range(start, end)` materializes a typed half-open range, preserving

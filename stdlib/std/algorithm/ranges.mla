@@ -923,6 +923,20 @@ pub fn remove_copy(data: &list<T>, value: U) -> list<T> {
     return copied;
 }
 
+/// @brief Copy elements whose projected key differs from `value`.
+/// C++20 `std::ranges::remove_copy` projection form; the input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn remove_copy_projected(data: &list<T>, value: U,
+                             projection: Projection) -> list<T> {
+    var copied: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if projection(data[i]) != value { copied.push(data[i]); }
+    }
+    return copied;
+}
+
 /// @brief Copy elements rejected by `predicate` into a new list.
 /// C++20 `std::ranges::remove_copy_if` counterpart; the input is unchanged.
 /// @ingroup algorithm_ranges
@@ -947,6 +961,24 @@ pub fn replace_copy(data: &list<T>, old_value: U, new_value: V) -> list<T> {
     let n: i64 = data.len();
     for i in 0..n {
         if data[i] == old_value {
+            copied.push(new_value);
+        } else {
+            copied.push(data[i]);
+        }
+    }
+    return copied;
+}
+
+/// @brief Replace values whose projected key equals `old_value` in a copy.
+/// C++20 `std::ranges::replace_copy` projection form; the input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U, V, Projection>
+pub fn replace_copy_projected(data: &list<T>, old_value: U, new_value: V,
+                              projection: Projection) -> list<T> {
+    var copied: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if projection(data[i]) == old_value {
             copied.push(new_value);
         } else {
             copied.push(data[i]);
@@ -2788,6 +2820,19 @@ pub fn remove(data: &list<T>, value: U) -> list<T> {
     return out;
 }
 
+/// @brief Copy a list while excluding elements with projected key `value`.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn remove_projected(data: &list<T>, value: U,
+                        projection: Projection) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if projection(data[i]) != value { out.push(data[i]); }
+    }
+    return out;
+}
+
 /// @brief Copy the first `n` elements (or all elements when n is larger).
 /// @ingroup algorithm_ranges
 generic<T>
@@ -4248,6 +4293,24 @@ pub fn replace(data: &list<T>, old_value: U, new_value: V) -> list<T> {
     let n: i64 = data.len();
     for i in 0..n {
         if data[i] == old_value {
+            out.push(new_value);
+        } else {
+            out.push(data[i]);
+        }
+    }
+    return out;
+}
+
+/// @brief Copy a list, replacing elements whose projected key matches.
+/// The input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U, V, Projection>
+pub fn replace_projected(data: &list<T>, old_value: U, new_value: V,
+                         projection: Projection) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if projection(data[i]) == old_value {
             out.push(new_value);
         } else {
             out.push(data[i]);
