@@ -48,6 +48,9 @@ fn example() {
   value; `adjacent_find` returns the first index of equal neighbors or `-1`.
 - `find_last_if` and `find_last_if_not` return the last index accepted or
   rejected by a predicate, respectively, or `-1` when no element matches.
+- `find_last_by(data, key, equivalent)` searches backward and returns the last
+  index whose element matches a separate key under the supplied binary
+  predicate, or `-1` when none matches.
 - `adjacent_find_by(data, equivalent)` returns the first adjacent index whose
   pair satisfies a caller-provided binary equivalence predicate, or `-1`.
 - `find_first_of(data, candidates)` returns the first index in `data` matching

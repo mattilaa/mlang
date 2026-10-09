@@ -58,6 +58,7 @@ use std::algorithm::ranges::contains;
 use std::algorithm::ranges::count;
 use std::algorithm::ranges::find;
 use std::algorithm::ranges::find_last;
+use std::algorithm::ranges::find_last_by;
 use std::algorithm::ranges::adjacent_find;
 use std::algorithm::ranges::adjacent_find_by;
 use std::algorithm::ranges::find_first_of;
@@ -379,6 +380,16 @@ fn test_algorithm_ranges_generic_find_count_contains() {
     verify(count(words, "mango") == 2);
     verify(contains(words, "plum") == false);
     verify(find_last(words, "plum") == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_find_last_by_equivalence() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let same_decade = |item: i32, key: i32| { return item / 10 == key / 10; };
+    verify(find_last_by(values, 20, same_decade) == 2);
+    verify(find_last_by(values, 90, same_decade) == -1);
+    let empty: list<i32> = [];
+    verify(find_last_by(empty, 20, same_decade) == -1);
 }
 
 #[test]

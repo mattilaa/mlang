@@ -37,6 +37,22 @@ pub fn find_last(data: &list<T>, value: U) -> i64 {
     return found;
 }
 
+/// @brief Return the last index matching `value` under `equivalent`.
+/// The predicate receives an element and the lookup key; the search proceeds
+/// backwards and returns -1 when no element matches.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn find_last_by(data: &list<T>, value: U, equivalent: Equivalent) -> i64 {
+    var index: i64 = data.len();
+    while index > 0 {
+        index = index - 1;
+        if equivalent(data[index], value) {
+            return index;
+        }
+    }
+    return -1;
+}
+
 /// @brief Return the first index whose value equals its immediate successor.
 /// Returns -1 when the range has fewer than two elements or no adjacent match.
 /// C++20 ranges-style `adjacent_find`.
