@@ -459,16 +459,28 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
             // Address-of expressions infer as pointer types, but generic
             // reference parameters bind against the referenced value type.
             // Validate the explicit borrow here just as we do for variadic
-            // generic functions, then infer from its operand.
+            // generic functions, then infer from its operand. Immutable
+            // references also accept ordinary values, preserving the usual
+            // implicit shared-borrow behavior.
             auto* borrow = dynamic_cast<UnaryOpNode*>(arguments[i]);
-            const bool correctBorrow =
-                borrow && (reference->isMutable
-                               ? borrow->op == UnaryOpNode::OP_ADDR_MUT
-                               : borrow->op == UnaryOpNode::OP_ADDR);
-            if(!correctBorrow)
+            const bool correctBorrow = borrow &&
+                (reference->isMutable
+                     ? borrow->op == UnaryOpNode::OP_ADDR_MUT
+                     : borrow->op == UnaryOpNode::OP_ADDR);
+            if(correctBorrow)
+            {
+                concrete = inferExpressionTypeNode(borrow->operand,
+                                                   functionTemplate->line);
+            }
+            else if(reference->isMutable)
+            {
                 return false;
-            concrete = inferExpressionTypeNode(borrow->operand,
-                                               functionTemplate->line);
+            }
+            else
+            {
+                concrete = inferExpressionTypeNode(arguments[i],
+                                                   functionTemplate->line);
+            }
         }
         // A named inline closure is not a normal local value: it lives in
         // closureVariables and is expanded into the generic specialization.
