@@ -78,6 +78,7 @@
 - [[std::serde|Stdlib-Serde]]
 - [[std::span|Stdlib-Span]]
 - [[std::stop_token|Stdlib-Stop-Token]]
+- [[std::jthread|Stdlib-Jthread]]
 - [[std::strbuf|Stdlib-Strbuf]]
 - [[std::sync|Stdlib-Sync]]
 - [[std::term|Stdlib-Term]]

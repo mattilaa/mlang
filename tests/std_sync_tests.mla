@@ -3,6 +3,7 @@ mod std::sync;
 mod std::strbuf;
 mod std::thread;
 mod std::stop_token;
+mod std::jthread;
 
 use std::strbuf::contains;
 use std::sync::Channel;
@@ -15,6 +16,7 @@ use std::sync::LockFreeQueue;
 use std::sync::Latch;
 use std::stop_token::StopSource;
 use std::stop_token::StopToken;
+use std::jthread::jthread;
 use std::sync::mutex;
 use std::testing::verify;
 use std::thread::*;
@@ -62,13 +64,45 @@ fn semaphore_acquire_worker(raw_handle: i64) -> i32 {
 }
 
 fn stop_token_worker(raw_handle: i64) -> i32 {
-    let token: StopToken = StopToken { handle: raw_handle };
+    let token: StopToken = StopToken { raw: raw_handle };
     while true {
         let requested: result<bool, str8> = token.stop_requested();
         if requested.is_err() { return 1; }
         if requested.unwrap() { return 0; }
     }
     return 1;
+}
+
+fn jthread_token_worker(token: StopToken) -> i32 {
+    var status: i32 = 1;
+    while true {
+        let requested: result<bool, str8> = token.stop_requested();
+        if requested.is_err() { break; }
+        if requested.unwrap() {
+            status = 0;
+            break;
+        }
+    }
+    token.close();
+    return status;
+}
+
+#[test]
+fn test_jthread_cooperative_stop_and_join() {
+    let created: result<StopSource, str8> = StopSource::new();
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let source: StopSource = created.unwrap();
+    let token_result: result<StopToken, str8> = source.token();
+    verify(token_result.is_ok());
+    if token_result.is_err() {
+        source.close();
+        return;
+    }
+    let token: StopToken = token_result.unwrap();
+    let worker: std::thread::thread = thread::spawn(jthread_token_worker, token);
+    let joined: jthread = jthread::from_parts(worker, source);
+    verify(joined.close() == 0);
 }
 
 fn test_mutex_lock_unlock_impl() -> i32 {
@@ -309,7 +343,7 @@ fn test_stop_source_and_retained_tokens() {
     let clone: StopToken = clone_result.unwrap();
     let initially_requested: result<bool, str8> = token.stop_requested();
     let initially_possible: bool = token.stop_possible();
-    let worker: std::thread::thread = thread::spawn(stop_token_worker, token.handle);
+    let worker: std::thread::thread = thread::spawn(stop_token_worker, token.raw);
     let first_request: result<bool, str8> = source.request_stop();
     let repeated_request: result<bool, str8> = source_clone.request_stop();
     let source_closed: i32 = source.close();

@@ -34,9 +34,10 @@ fn main() -> i32 {
 token therefore remains valid after its source is closed. Every successful
 `new`, `token`, and `clone` call creates one owned reference; call the matching
 `close()` exactly once for each owner after its last use. Do not make untracked
-by-value copies of an owning `StopSource` or `StopToken`. When passing a token
-to a worker through `thread::spawn`, keep an owning token alive until the
-worker has joined, or explicitly clone one for the worker and close it there.
+by-value copies of an owning `StopSource` or `StopToken`. `StopToken` exposes
+its native handle as `raw` so compiler-lowered `thread::spawn` can pass it to a
+named worker. Treat the passed token as transferred to that worker and close
+it there; the source must remain alive until the worker has joined.
 `StopToken::stop_possible()` becomes false after the last source owner closes,
 even though the retained token can still read whether a stop was requested.
 
