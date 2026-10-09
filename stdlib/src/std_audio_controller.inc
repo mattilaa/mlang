@@ -286,6 +286,9 @@ typedef struct {
     /* Packed slot (6 bits), parameter index (14), step count (32).
      * Main thread arms; the single MIDI producer captures the next CC. */
     _Atomic uint64_t learn_target, learn_map[2048];
+    /* Live learned knobs are relative (endless encoders): the host steps
+     * their parameters itself, so live_control leaves them alone. */
+    _Atomic uint32_t learn_relative;
     uint64_t live_notes[2048]; /* MIDI producer owned: original destination per key. */
     uint64_t live_panic;
     /* Live MIDI timing: each render publishes the clock at its first frame,
@@ -558,7 +561,7 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     }
     for(int i = 0; i < 64; ++i) atomic_init(&c->track_volume[i], 100);
     for(int i = 0; i < 32; ++i) atomic_init(&c->instrument_volume[i], 100);
-    atomic_init(&c->learn_target, 0);
+    atomic_init(&c->learn_target, 0); atomic_init(&c->learn_relative, 0);
     for(int i = 0; i < 2048; ++i) atomic_init(&c->learn_map[i], 0);
     atomic_init(&c->processor_errors, 0);
     atomic_init(&c->dsp_load, 0); atomic_init(&c->render_threads, 1);
@@ -698,6 +701,7 @@ int32_t __mlang_std_audio_controller_live_control(int64_t handle, int64_t channe
         uint64_t learned = atomic_exchange_explicit(&c->learn_target, 0, memory_order_acq_rel);
         if(learned) atomic_store_explicit(&c->learn_map[key], learned, memory_order_release);
         uint64_t mapping = atomic_load_explicit(&c->learn_map[key], memory_order_acquire);
+        if(mapping && atomic_load_explicit(&c->learn_relative, memory_order_relaxed)) return 0;
         if(mapping) {
             double steps = (double)(mapping >> 20);
             double normalized = (double)value / 127.0;
@@ -1979,6 +1983,15 @@ int32_t __mlang_std_audio_controller_midi_learn(int64_t handle, int64_t key, int
         target = (uint64_t)slot | ((uint64_t)index << 6) | ((uint64_t)steps << 20);
     }
     atomic_store_explicit(key == -1 ? &c->learn_target : &c->learn_map[key], target, memory_order_release);
+    return 0;
+}
+/* Control thread: 1 makes live learned knobs relative. live_control then
+ * still learns, but leaves a learned key's parameter for the host to step;
+ * learned CCs played from a pattern stay absolute. */
+int32_t __mlang_std_audio_controller_midi_learn_relative(int64_t handle, int64_t relative) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || relative < 0 || relative > 1) return -1;
+    atomic_store_explicit(&c->learn_relative, (uint32_t)relative, memory_order_relaxed);
     return 0;
 }
 /* Returns slot (0), index (1), or coherent packed slot/index (2).
