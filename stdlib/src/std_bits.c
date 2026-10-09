@@ -323,3 +323,31 @@ double __mlang_std_bits_u64_to_f64(uint64_t bits)
     memcpy(&value, &bits, sizeof(value));
     return value;
 }
+
+uint32_t __mlang_std_bits_i32_to_u32(int32_t value)
+{
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+int32_t __mlang_std_bits_u32_to_i32(uint32_t bits)
+{
+    int32_t value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+uint64_t __mlang_std_bits_i64_to_u64(int64_t value)
+{
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+int64_t __mlang_std_bits_u64_to_i64(uint64_t bits)
+{
+    int64_t value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}

@@ -56,6 +56,10 @@ use std::bits::bit_cast_u32_from_f32;
 use std::bits::bit_cast_f32_from_u32;
 use std::bits::bit_cast_u64_from_f64;
 use std::bits::bit_cast_f64_from_u64;
+use std::bits::bit_cast_u32_from_i32;
+use std::bits::bit_cast_i32_from_u32;
+use std::bits::bit_cast_u64_from_i64;
+use std::bits::bit_cast_i64_from_u64;
 use std::bitset::BitSet;
 use std::testing::verify;
 use std::testing::verify_eq;
@@ -221,6 +225,20 @@ fn test_cpp20_bit_cast_float_integer_pairs() {
     verify(bit_cast_f32_from_u32(one_f32_bits) == one_f32);
     verify(bit_cast_u64_from_f64(one_f64) == one_f64_bits);
     verify(bit_cast_f64_from_u64(one_f64_bits) == one_f64);
+}
+
+#[test]
+fn test_cpp20_bit_cast_signed_unsigned_pairs() {
+    let negative_i32: i32 = -1;
+    let all_ones_u32: u32 = 4294967295;
+    let bits_i32: u32 = bit_cast_u32_from_i32(negative_i32);
+    verify(bits_i32 == all_ones_u32);
+    verify(bit_cast_i32_from_u32(bits_i32) == negative_i32);
+
+    let negative_i64: i64 = -1;
+    let bits_i64: u64 = bit_cast_u64_from_i64(negative_i64);
+    verify(bits_i64 > 9223372036854775807);
+    verify(bit_cast_i64_from_u64(bits_i64) == negative_i64);
 }
 
 #[test]
