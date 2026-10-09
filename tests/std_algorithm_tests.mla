@@ -1786,6 +1786,23 @@ fn test_algorithm_ranges_zip_transform_three_inputs() {
 }
 
 #[test]
+fn test_algorithm_ranges_zip_transform_four_inputs() {
+    let first: list<i32> = [1, 2, 3];
+    let second: list<i32> = [10, 20];
+    let third: list<i32> = [100, 200, 300];
+    let fourth: list<i32> = [1000];
+    let combine = |a: i32, b: i32, c: i32, d: i32| {
+        return a + b + c + d;
+    };
+    let combined: list<i32> = zip_transform(first, second, third, fourth, combine);
+    verify(combined.len() == 1 && combined[0] == 1111);
+
+    let empty: list<i32> = [];
+    let none: list<i32> = zip_transform(first, second, third, empty, combine);
+    verify(none.len() == 0);
+}
+
+#[test]
 fn test_algorithm_ranges_chunk_by() {
     let values: list<i32> = [1, 2, 5, 6, 7, 10];
     let consecutive = |left: i32, right: i32| { return right == left + 1; };
