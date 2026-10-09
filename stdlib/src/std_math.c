@@ -231,6 +231,16 @@ double __mlang_std_math_hypot_f64(double x, double y)
     return hypot(x, y);
 }
 
+float __mlang_std_math_fma_f32(float x, float y, float z)
+{
+    return fmaf(x, y, z);
+}
+
+double __mlang_std_math_fma_f64(double x, double y, double z)
+{
+    return fma(x, y, z);
+}
+
 int32_t __mlang_std_math_sin_i32(int32_t x)
 {
     return (int32_t)sin((double)x);

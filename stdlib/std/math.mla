@@ -282,6 +282,18 @@ pub fn hypot(x: f64, y: f64) -> f64 {
     return __mlang_std_math_hypot_f64(x, y);
 }
 
+/// @brief Compute `x * y + z` with one final rounding, matching C++
+/// `std::fma` for `f32` values.
+pub fn fma(x: f32, y: f32, z: f32) -> f32 {
+    return __mlang_std_math_fma_f32(x, y, z);
+}
+
+/// @brief Compute `x * y + z` with one final rounding, matching C++
+/// `std::fma` for `f64` values.
+pub fn fma(x: f64, y: f64, z: f64) -> f64 {
+    return __mlang_std_math_fma_f64(x, y, z);
+}
+
 /// @brief Generic complex number value (Rust-like `Complex<T>` style).
 /// @note Arithmetic methods require `T` to support the used operators.
 pub struct Complex<T> {

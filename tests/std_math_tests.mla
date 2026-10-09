@@ -168,6 +168,16 @@ fn test_cpp20_hypot_stable_norm() {
 }
 
 #[test]
+fn test_fma_fused_multiply_add() {
+    verify(fma(2.0f, 3.0f, 4.0f) == 10.0f);
+    verify(fma(2.0, 3.0, 4.0) == 10.0);
+
+    let large: f32 = 200000000000000000000000000000000000000.0f;
+    let fused: f32 = fma(large, 2.0f, 0.0f - large);
+    verify(fused == large);
+}
+
+#[test]
 fn test_cpp20_midpoint() {
     verify(midpoint(0, 1) == 0);
     verify(midpoint(1, 0) == 1);
