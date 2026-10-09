@@ -168,3 +168,23 @@ impl<K, V> FlatMap {
         return entry.1;
     }
 }
+
+/// @brief Remove entries accepted by `predicate` and return the removal count.
+/// The predicate receives a key and value as two arguments, matching C++20
+/// associative-container `erase_if`.
+generic<K, V, Predicate>
+pub fn erase_if(container: &mut FlatMap<K, V>, predicate: Predicate) -> i64 {
+    var retained: list<tuple<K, V>> = [];
+    var removed_count: i64 = 0;
+    let count: i64 = container.entries.len();
+    for i in 0..count {
+        let entry: tuple<K, V> = container.entries[i];
+        if predicate(entry.0, entry.1) {
+            removed_count = removed_count + 1;
+        } else {
+            retained.push(entry);
+        }
+    }
+    container.entries = retained;
+    return removed_count;
+}

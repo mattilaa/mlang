@@ -4,6 +4,7 @@ mod std::algorithm::ranges;
 use std::testing::verify;
 use std::testing::verify_eq_i32;
 use std::flat_map::FlatMap;
+use std::flat_map::erase_if;
 use std::algorithm::ranges::zip;
 
 #[test]
@@ -108,4 +109,23 @@ fn test_flat_map_insert_range_empty() {
     values.insert(2, 20);
     let empty: list<tuple<i32, i32>> = [];
     verify(values.insert_range(empty) == 0 && values.len() == 1);
+}
+
+#[test]
+fn test_flat_map_erase_if_preserves_sorted_order() {
+    var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    values.insert(5, 50);
+    values.insert(2, 20);
+    values.insert(4, 40);
+    values.insert(1, 10);
+    values.insert(3, 30);
+    let erase_even_keys = |key: i32, value: i32| {
+        return key % 2 == 0 && value >= 0;
+    };
+    verify(erase_if(&mut values, erase_even_keys) == 2);
+    verify(values.len() == 3);
+    verify(values.key_at(0) == 1 && values.value_at(0) == 10);
+    verify(values.key_at(1) == 3 && values.value_at(1) == 30);
+    verify(values.key_at(2) == 5 && values.value_at(2) == 50);
+    verify(erase_if(&mut values, erase_even_keys) == 0);
 }
