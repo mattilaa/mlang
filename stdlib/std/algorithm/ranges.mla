@@ -1425,6 +1425,21 @@ pub fn replace_copy(data: &list<T>, old_value: U, new_value: V) -> list<T> {
     return copied;
 }
 
+/// @brief Replace values matching `old_value` under `equivalent` in a copy.
+/// The input range is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U, V, Equivalent>
+pub fn replace_copy_by(data: &list<T>, old_value: U, new_value: V,
+                       equivalent: Equivalent) -> list<T> {
+    var copied: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if equivalent(data[i], old_value) { copied.push(new_value); }
+        else { copied.push(data[i]); }
+    }
+    return copied;
+}
+
 /// @brief Replace values whose projected key equals `old_value` in a copy.
 /// C++20 `std::ranges::replace_copy` projection form; the input is unchanged.
 /// @ingroup algorithm_ranges
@@ -1439,6 +1454,22 @@ pub fn replace_copy_projected(data: &list<T>, old_value: U, new_value: V,
         } else {
             copied.push(data[i]);
         }
+    }
+    return copied;
+}
+
+/// @brief Replace values whose projected key matches under `equivalent`.
+/// `old_key` is compared directly with each projected element key.
+/// @ingroup algorithm_ranges
+generic<T, U, V, Equivalent, Projection>
+pub fn replace_copy_by_projected(data: &list<T>, old_key: U, new_value: V,
+                                 equivalent: Equivalent,
+                                 projection: Projection) -> list<T> {
+    var copied: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if equivalent(projection(data[i]), old_key) { copied.push(new_value); }
+        else { copied.push(data[i]); }
     }
     return copied;
 }
@@ -5988,6 +6019,37 @@ pub fn replace_projected(data: &list<T>, old_value: U, new_value: V,
         } else {
             out.push(data[i]);
         }
+    }
+    return out;
+}
+
+/// @brief Copy a list, replacing elements matching `old_value` by equivalence.
+/// The input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U, V, Equivalent>
+pub fn replace_by(data: &list<T>, old_value: U, new_value: V,
+                  equivalent: Equivalent) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if equivalent(data[i], old_value) { out.push(new_value); }
+        else { out.push(data[i]); }
+    }
+    return out;
+}
+
+/// @brief Copy a list, replacing values whose projected key is equivalent.
+/// `old_key` is compared directly with each projected element key.
+/// @ingroup algorithm_ranges
+generic<T, U, V, Equivalent, Projection>
+pub fn replace_by_projected(data: &list<T>, old_key: U, new_value: V,
+                            equivalent: Equivalent,
+                            projection: Projection) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if equivalent(projection(data[i]), old_key) { out.push(new_value); }
+        else { out.push(data[i]); }
     }
     return out;
 }
