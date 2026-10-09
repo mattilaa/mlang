@@ -174,6 +174,7 @@ use std::algorithm::ranges::take;
 use std::algorithm::ranges::iota;
 use std::algorithm::ranges::iota_by;
 use std::algorithm::ranges::repeat as repeat_range;
+use std::algorithm::ranges::single as single_range;
 use std::algorithm::ranges::drop;
 use std::algorithm::ranges::take_while;
 use std::algorithm::ranges::drop_while;
@@ -1570,6 +1571,13 @@ fn test_algorithm_ranges_repeat_nonpositive_count() {
     let none: list<i32> = repeat_range(nine, 0);
     let negative: list<i32> = repeat_range(nine, -3);
     verify(none.len() == 0 && negative.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_single_view() {
+    let value: i32 = 42;
+    let one: list<i32> = single_range(value);
+    verify(one.len() == 1 && one[0] == value);
 }
 
 #[test]
