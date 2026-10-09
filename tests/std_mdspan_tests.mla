@@ -1,0 +1,78 @@
+mod std::mdspan;
+mod std::testing;
+
+use std::mdspan::Mdspan;
+use std::mdspan::from_extents;
+use std::testing::verify;
+use std::testing::verify_eq_i32;
+use std::testing::verify_eq_i64;
+
+#[test]
+fn test_mdspan_rank_extents_and_row_major_access() {
+    let data: list<i32> = [10, 20, 30, 40, 50, 60];
+    let shape: list<i64> = [2, 3];
+    let maybe_view: option<Mdspan<i32>> = from_extents(data, shape);
+    verify(maybe_view.is_some());
+    let view: Mdspan<i32> = maybe_view.unwrap();
+    verify_eq_i64(2, view.rank());
+    verify_eq_i64(6, view.size());
+    verify(!view.is_empty());
+
+    let rows: option<i64> = view.extent(0);
+    let columns: option<i64> = view.extent(1);
+    let negative_dimension: option<i64> = view.extent(-1);
+    let past_dimension: option<i64> = view.extent(2);
+    verify(rows.is_some() && rows.unwrap() == 2);
+    verify(columns.is_some() && columns.unwrap() == 3);
+    verify(negative_dimension.is_none() && past_dimension.is_none());
+
+    let first: list<i64> = [0, 0];
+    let last: list<i64> = [1, 2];
+    let wrong_rank: list<i64> = [1];
+    let before_start: list<i64> = [-1, 0];
+    let past_extent: list<i64> = [2, 0];
+    let first_value: option<i32> = view.get(first);
+    let last_value: option<i32> = view.get(last);
+    let wrong_rank_value: option<i32> = view.get(wrong_rank);
+    let before_start_value: option<i32> = view.get(before_start);
+    let past_extent_value: option<i32> = view.get(past_extent);
+    verify(first_value.is_some() && first_value.unwrap() == 10);
+    verify(last_value.is_some() && last_value.unwrap() == 60);
+    verify(wrong_rank_value.is_none());
+    verify(before_start_value.is_none());
+    verify(past_extent_value.is_none());
+}
+
+#[test]
+fn test_mdspan_rejects_mismatched_and_negative_extents() {
+    let data: list<i32> = [1, 2, 3, 4];
+    let short_shape: list<i64> = [2, 3];
+    let negative_shape: list<i64> = [2, -2];
+    let short_view: option<Mdspan<i32>> = from_extents(data, short_shape);
+    let negative_view: option<Mdspan<i32>> =
+        from_extents(data, negative_shape);
+    verify(short_view.is_none());
+    verify(negative_view.is_none());
+
+    let empty_data: list<i32> = [];
+    let zero_shape: list<i64> = [2, 0, 3];
+    let maybe_empty: option<Mdspan<i32>> = from_extents(empty_data, zero_shape);
+    verify(maybe_empty.is_some());
+    let empty_view: Mdspan<i32> = maybe_empty.unwrap();
+    verify(empty_view.is_empty() && empty_view.size() == 0);
+}
+
+#[test]
+fn test_mdspan_rank_zero_scalar() {
+    let scalar_data: list<i32> = [42];
+    let scalar_shape: list<i64> = [];
+    let maybe_scalar: option<Mdspan<i32>> =
+        from_extents(scalar_data, scalar_shape);
+    verify(maybe_scalar.is_some());
+    let scalar: Mdspan<i32> = maybe_scalar.unwrap();
+    let no_indices: list<i64> = [];
+    let value: option<i32> = scalar.get(no_indices);
+    verify(scalar.rank() == 0 && scalar.size() == 1);
+    verify(value.is_some());
+    verify_eq_i32(42, value.unwrap());
+}

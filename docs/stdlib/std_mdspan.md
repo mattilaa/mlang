@@ -1,0 +1,36 @@
+# std::mdspan
+
+Module file: `stdlib/std/mdspan.mla`
+
+`Mdspan<T>` is a checked, runtime-rank, row-major multidimensional descriptor
+inspired by C++23 `std::mdspan`. Mlang currently stores its own copy of the
+input data and extents; it is not a zero-copy view and does not implement C++
+layout or accessor policies.
+
+Use `from_extents(data, extents)` to construct a descriptor. Both arguments
+are borrowed and copied, so the caller retains its lists. It returns
+`Some(Mdspan<T>)` only when the extents are non-negative and their product
+matches the data size; malformed shapes return `None`. Rank zero represents a
+single scalar element.
+
+- `rank()`, `size()`, and `is_empty()` report descriptor properties.
+- `extent(dimension)` returns an optional extent.
+- `get(indices)` requires exactly one index per dimension and returns `None`
+  for invalid rank or out-of-bounds indices.
+- `mdspan<T>` is a lowercase type alias for `Mdspan<T>`.
+
+Example:
+
+```mla
+mod std::mdspan;
+use std::mdspan::Mdspan;
+use std::mdspan::from_extents;
+
+let data: list<i32> = [10, 20, 30, 40, 50, 60];
+let shape: list<i64> = [2, 3];
+let result: option<Mdspan<i32>> = from_extents(data, shape);
+let view: Mdspan<i32> = result.unwrap();
+let value: option<i32> = view.get([1, 2]); // Some(60), row-major
+```
+
+Run the regression suite with `build/mlang test tests/std_mdspan_tests.mla`.
