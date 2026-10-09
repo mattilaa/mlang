@@ -73,12 +73,16 @@ use std::algorithm::ranges::includes_by;
 use std::algorithm::ranges::size;
 use std::algorithm::ranges::empty;
 use std::algorithm::ranges::equal;
+use std::algorithm::ranges::equal_projected;
 use std::algorithm::ranges::mismatch;
+use std::algorithm::ranges::mismatch_projected;
 use std::algorithm::ranges::mismatch_by;
 use std::algorithm::ranges::equal_by;
 use std::algorithm::ranges::is_permutation;
+use std::algorithm::ranges::is_permutation_projected;
 use std::algorithm::ranges::is_permutation_by;
 use std::algorithm::ranges::starts_with;
+use std::algorithm::ranges::starts_with_projected;
 use std::algorithm::ranges::starts_with_by;
 use std::algorithm::ranges::search;
 use std::algorithm::ranges::search_by;
@@ -89,6 +93,7 @@ use std::algorithm::ranges::find_end_by;
 use std::algorithm::ranges::contains_subrange;
 use std::algorithm::ranges::contains_subrange_by;
 use std::algorithm::ranges::ends_with;
+use std::algorithm::ranges::ends_with_projected;
 use std::algorithm::ranges::ends_with_by;
 use std::algorithm::ranges::lexicographical_compare;
 use std::algorithm::ranges::lexicographical_compare_by;
@@ -569,6 +574,39 @@ fn test_algorithm_ranges_generic_is_permutation() {
     verify(is_permutation(values, mixed_width));
     verify(is_permutation(values, wrong_counts) == false);
     verify(is_permutation(values, different_size) == false);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_comparisons() {
+    let left: list<i32> = [11, 21, 32, 43];
+    let equal_keys: list<i32> = [19, 28, 38, 47];
+    let mismatch_keys: list<i32> = [19, 38, 47];
+    let project_left = |value: i32| { return value / 10; };
+    let project_right = |value: i32| { return value / 10; };
+
+    verify(equal_projected(left, equal_keys, project_left, project_right));
+    let no_mismatch: tuple<i64, i64> = mismatch_projected(
+        left, equal_keys, project_left, project_right);
+    verify(no_mismatch.0 == 4 && no_mismatch.1 == 4);
+    let mismatch_at_one: tuple<i64, i64> = mismatch_projected(
+        left, mismatch_keys, project_left, project_right);
+    verify(mismatch_at_one.0 == 1 && mismatch_at_one.1 == 1);
+
+    let perm_left: list<i32> = [11, 21, 32, 14];
+    let perm_right: list<i32> = [19, 13, 28, 35];
+    verify(is_permutation_projected(
+        perm_left, perm_right, project_left, project_right));
+    let wrong_counts: list<i32> = [19, 13, 28, 46];
+    verify(!is_permutation_projected(
+        perm_left, wrong_counts, project_left, project_right));
+
+    let prefix: list<i32> = [19, 28];
+    let wrong_prefix: list<i32> = [19, 39];
+    let suffix: list<i32> = [31, 44];
+    verify(starts_with_projected(left, prefix, project_left, project_right));
+    verify(!starts_with_projected(
+        left, wrong_prefix, project_left, project_right));
+    verify(ends_with_projected(left, suffix, project_left, project_right));
 }
 
 #[test]
