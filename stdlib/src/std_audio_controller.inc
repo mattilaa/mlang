@@ -590,8 +590,9 @@ int32_t __mlang_std_audio_controller_post(int64_t handle, int64_t lane,
     int64_t kind, int64_t channel, int64_t note, int64_t velocity,
     int64_t source, int64_t frame, int64_t sample, double gain) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || lane < 0 || lane >= AC_LANES || kind < 1 || kind > 11 || frame < -1 ||
+    if(!c || lane < 0 || lane >= AC_LANES || kind < 1 || kind > 12 || frame < -1 ||
        source < 0 || source > INT32_MAX || !isfinite(gain) || gain < 0 || gain > 1) return -1;
+    if(kind == 12 && (sample < 0 || sample > 32 || note < 0 || note > 255)) return -1;
     if((kind == 1 || kind == 2 || kind == 6 || kind == 7) && (channel < 0 || channel > 15 ||
         note < 0 || note > 127 || velocity < 0 || velocity > 127)) return -1;
     if(kind == 4 && (sample < 0 || sample >= AC_SAMPLES || note < 0 || velocity < 0)) return -1;
@@ -762,6 +763,11 @@ static void ac_dispatch(ac_controller *c, const ac_event *e) {
     if(e->kind == 11) {
         mlang_audio_processor *p = &c->instruments[e->sample - 1];
         if(p->context && p->text) p->text(p->context, (int32_t)e->channel, (int32_t)e->note, c->render_offset);
+        return;
+    }
+    if(e->kind == 12) {
+        mlang_audio_processor *p = e->sample > 0 ? &c->instruments[e->sample - 1] : &c->processor;
+        if(p->context && p->sysex) p->sysex(p->context, (int32_t)e->note, c->render_offset);
         return;
     }
     /* Live knobs (source >= 65536) were resolved against MIDI learn already. */
@@ -2072,6 +2078,27 @@ int32_t __mlang_std_audio_controller_instrument_text(int64_t handle, int64_t slo
     if(!p->context) { audio_set_error("Select a loaded instrument"); return -1; }
     if(!p->set_text || !p->text) { audio_set_error("This instrument does not take text"); return -1; }
     if(p->set_text(p->context, (int32_t)index, text ? text : "") != 0) { audio_set_error("Instrument rejected the text"); return -1; }
+    audio_clear_error(); return 0;
+}
+/* Control thread; audio may run. Stores system exclusive message `index` of
+ * the instrument in `slot`, or of the master processor for slot 0; an
+ * InstrumentSysEx event sends it. `bytes` is the whole message, F0 to F7. */
+int32_t __mlang_std_audio_controller_instrument_sysex(int64_t handle, int64_t slot, int64_t index, mlang_list_t bytes) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 0 || slot > 32 || index < 0 || index > 255) { audio_set_error("Invalid instrument slot or message"); return -1; }
+    if(bytes.size < 3 || bytes.size > 1024 || !bytes.data) { audio_set_error("A system exclusive message has 3-1024 bytes"); return -1; }
+    const int32_t *input = (const int32_t*)bytes.data;
+    uint8_t message[1024];
+    for(int64_t i = 0; i < bytes.size; ++i) {
+        const int32_t limit = i == 0 || i == bytes.size - 1 ? 255 : 127;
+        if(input[i] < 0 || input[i] > limit) { audio_set_error("System exclusive data bytes are 00-7F"); return -1; }
+        message[i] = (uint8_t)input[i];
+    }
+    if(message[0] != 0xF0 || message[bytes.size - 1] != 0xF7) { audio_set_error("A system exclusive message runs from F0 to F7"); return -1; }
+    mlang_audio_processor *p = slot > 0 ? &c->instruments[slot - 1] : &c->processor;
+    if(!p->context) { audio_set_error(slot > 0 ? "Select a loaded instrument" : "No master processor loaded"); return -1; }
+    if(!p->set_sysex || !p->sysex) { audio_set_error("This processor does not take system exclusive messages"); return -1; }
+    if(p->set_sysex(p->context, (int32_t)index, message, (int32_t)bytes.size) != 0) { audio_set_error("Processor rejected the system exclusive message"); return -1; }
     audio_clear_error(); return 0;
 }
 /* Control thread. Sampler layout of an instrument: key 0 root key, 1 pad

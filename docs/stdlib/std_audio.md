@@ -204,6 +204,15 @@ offset, and mlacker's VST3 host sends the phrase as a `kTextTypeID`
 note-expression text event of the note. The phrase table is a ring; reuse an
 index only after the event that used it has played.
 
+System exclusive messages travel the same way. `instrument_sysex(slot, index,
+bytes)` stores a whole message, `F0` through `F7` with data bytes `00`–`7F`
+(3–1024 bytes), as message `index` (0–255) of the instrument in `slot`, or of
+the master processor for slot 0; it fails unless the processor has the
+optional `set_sysex` and `sysex` hooks. An `InstrumentSysEx` event (slot in
+`sample`, message in `midi.note`) sends it: the native `sysex` callback runs
+with the block-relative offset, and mlacker's VST3 host passes it as a
+`DataEvent::kMidiSysEx` event. Messages are a ring like phrases.
+
 For selected-track live input, the control thread publishes
 `midi_target(track, instrument)` (`track` 0–63; instrument -1 disables new notes,
 0 routes to preview/master, 1–32 routes to a slot). The MIDI worker calls

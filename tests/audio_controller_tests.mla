@@ -102,6 +102,26 @@ fn audio_controller_scheduled_midi() {
 }
 
 #[test]
+fn audio_controller_sysex_events() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok()); if opened.is_err() { return; }
+    let controller: AudioController = opened.unwrap();
+    // System exclusive: message 0-255 for an instrument slot 1-32, or 0 for master.
+    verify(controller.post(AudioEvent { kind: AudioEventKind::InstrumentSysEx, midi: AudioMidiEvent { note: 255 }, sample: 32 }, 0) == 0);
+    verify(controller.post(AudioEvent { kind: AudioEventKind::InstrumentSysEx, midi: AudioMidiEvent { note: 3 } }, 0) == 0);
+    verify(controller.post(AudioEvent { kind: AudioEventKind::InstrumentSysEx, midi: AudioMidiEvent { note: 256 } }, 0) == -1);
+    verify(controller.post(AudioEvent { kind: AudioEventKind::InstrumentSysEx, sample: 33 }, 0) == -1);
+    let message: list<i32> = [240, 67, 16, 76, 0, 0, 126, 0, 247];
+    verify(controller.instrument_sysex(1, 0, message) == -1);
+    let unterminated: list<i32> = [240, 67, 16];
+    verify(controller.instrument_sysex(0, 0, unterminated) == -1);
+    let status_inside: list<i32> = [240, 67, 144, 247];
+    verify(controller.instrument_sysex(0, 0, status_inside) == -1);
+    verify(controller.instrument_sysex(0, 256, message) == -1);
+    controller.close();
+}
+
+#[test]
 fn audio_controller_track_fader() {
     let opened: result<AudioController, str8> = AudioController::new(48000, 128);
     verify(opened.is_ok()); if opened.is_err() { return; }

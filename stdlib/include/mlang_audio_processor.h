@@ -75,6 +75,13 @@ typedef struct mlang_audio_processor {
      * note-expression text event of that note); without one it is dropped. */
     int32_t (*set_text)(void *context, int32_t index, const char *text);
     void (*text)(void *context, int32_t channel, int32_t index, int32_t offset);
+    /* Optional, MIDI system exclusive. set_sysex (control thread, audio may
+     * run) stores the whole message, F0 through F7 (`size` 3-1024 bytes), as
+     * message `index` (0-255), replacing what was there; 0 or -1. Like the
+     * phrase table it is a ring. sysex (audio thread, like note) sends
+     * message `index` at `offset` (a VST3 host as a kMidiSysEx data event). */
+    int32_t (*set_sysex)(void *context, int32_t index, const uint8_t *bytes, int32_t size);
+    void (*sysex)(void *context, int32_t index, int32_t offset);
 } mlang_audio_processor;
 typedef int32_t (*mlang_audio_processor_factory)(const char *path, double rate,
     int32_t max_frames, mlang_audio_processor *out, char *error, int32_t error_size);
