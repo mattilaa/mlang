@@ -9,6 +9,7 @@ use std::sync::Condvar;
 use std::sync::AtomicI64;
 use std::sync::AtomicOrder;
 use std::sync::Barrier;
+use std::sync::CountingSemaphore;
 use std::sync::LockFreeQueue;
 use std::sync::Latch;
 use std::sync::mutex;
@@ -49,6 +50,12 @@ fn barrier_drop_worker(raw_handle: i64) -> i32 {
     let barrier: Barrier = Barrier { handle: raw_handle };
     let phase: result<i64, str8> = barrier.arrive_and_drop();
     return phase.is_ok() ? 0 : 1;
+}
+
+fn semaphore_acquire_worker(raw_handle: i64) -> i32 {
+    let semaphore: CountingSemaphore = CountingSemaphore { handle: raw_handle };
+    let acquired: result<i32, str8> = semaphore.acquire();
+    return acquired.is_ok() ? 0 : 1;
 }
 
 fn test_mutex_lock_unlock_impl() -> i32 {
@@ -218,6 +225,46 @@ fn test_barrier_arrive_and_drop_reduces_future_participants() {
     let dropped: i32 = join(dropper);
     barrier.close();
     verify(first.is_ok() && second.is_ok() && dropped == 0);
+}
+
+#[test]
+fn test_counting_semaphore_permits_and_bounds() {
+    let invalid: result<CountingSemaphore, str8> = CountingSemaphore::new(2, 1);
+    verify(invalid.is_err());
+    let created: result<CountingSemaphore, str8> = CountingSemaphore::new(0, 2);
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let semaphore: CountingSemaphore = created.unwrap();
+    let empty: result<bool, str8> = semaphore.try_acquire();
+    let released: result<i32, str8> = semaphore.release_by(2);
+    let first: result<bool, str8> = semaphore.try_acquire();
+    let second: result<bool, str8> = semaphore.try_acquire();
+    let still_empty: result<bool, str8> = semaphore.try_acquire();
+    let too_many: result<i32, str8> = semaphore.release_by(3);
+    let no_permits: result<i32, str8> = semaphore.release_by(0);
+    semaphore.close();
+
+    verify(empty.is_ok() && released.is_ok() && first.is_ok() && second.is_ok() && still_empty.is_ok());
+    if empty.is_ok() { verify(!empty.unwrap()); }
+    if first.is_ok() && second.is_ok() && still_empty.is_ok() {
+        verify(first.unwrap() && second.unwrap() && !still_empty.unwrap());
+    }
+    verify(too_many.is_err() && no_permits.is_err());
+}
+
+#[test]
+fn test_counting_semaphore_blocking_acquire() {
+    let created: result<CountingSemaphore, str8> = CountingSemaphore::new(0, 1);
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let semaphore: CountingSemaphore = created.unwrap();
+    let worker: std::thread::thread = thread::spawn(semaphore_acquire_worker, semaphore.handle);
+    let released: result<i32, str8> = semaphore.release();
+    let status: i32 = join(worker);
+    let available: result<bool, str8> = semaphore.try_acquire();
+    semaphore.close();
+    verify(released.is_ok() && status == 0 && available.is_ok());
+    if available.is_ok() { verify(!available.unwrap()); }
 }
 
 fn test_condvar_wait_timeout_impl() -> i32 {
