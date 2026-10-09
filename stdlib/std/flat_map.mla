@@ -134,6 +134,25 @@ impl<K, V> FlatMap {
         return inserted_count;
     }
 
+    /// @brief Replace the key and value sequences together.
+    /// The sequences must have equal lengths and keys must be strictly
+    /// increasing. Invalid input returns false and leaves the map unchanged;
+    /// valid input is copied into the map (C++23 `flat_map::replace` style).
+    pub fn replace(self: &mut FlatMap<K, V>, keys: &list<K>,
+                   values: &list<V>) -> bool {
+        let count: i64 = keys.len();
+        if values.len() != count { return false; }
+        for i in 1..count {
+            if !(keys[i - 1] < keys[i]) { return false; }
+        }
+        var updated: list<tuple<K, V>> = [];
+        for i in 0..count {
+            updated.push((keys[i], values[i]));
+        }
+        self.entries = updated;
+        return true;
+    }
+
     /// @brief Erase a key, returning whether it was present.
     pub fn remove(self: &mut FlatMap<K, V>, key: K) -> bool {
         var updated: list<tuple<K, V>> = [];
