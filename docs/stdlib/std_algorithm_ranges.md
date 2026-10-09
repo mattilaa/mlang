@@ -329,6 +329,9 @@ fn example() {
 - `symmetric_difference_sorted(left, right)` returns values present in exactly
   one sorted input, with each value's output count equal to the difference in
   input multiplicities.
+- `merged_projected` and the four `*_sorted_projected` set operations compare
+  unary projected keys. Inputs must be sorted by the same projection; they
+  retain the merge stability and multiset multiplicity rules described above.
 - `merged_by`, `union_sorted_by`, `intersection_sorted_by`,
   `difference_sorted_by`, and `symmetric_difference_sorted_by` take a strict
   ordering comparator. Both inputs must be sorted with that comparator; set

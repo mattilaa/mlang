@@ -123,10 +123,15 @@ use std::algorithm::ranges::nth_element;
 use std::algorithm::ranges::nth_element_by;
 use std::algorithm::ranges::nth_element_projected;
 use std::algorithm::ranges::merged;
+use std::algorithm::ranges::merged_projected;
 use std::algorithm::ranges::union_sorted;
+use std::algorithm::ranges::union_sorted_projected;
 use std::algorithm::ranges::intersection_sorted;
+use std::algorithm::ranges::intersection_sorted_projected;
 use std::algorithm::ranges::difference_sorted;
+use std::algorithm::ranges::difference_sorted_projected;
 use std::algorithm::ranges::symmetric_difference_sorted;
+use std::algorithm::ranges::symmetric_difference_sorted_projected;
 use std::algorithm::ranges::merged_by;
 use std::algorithm::ranges::inplace_merge;
 use std::algorithm::ranges::inplace_merge_by;
@@ -1115,6 +1120,42 @@ fn test_algorithm_ranges_generic_symmetric_difference_sorted() {
     let empty: list<i32> = [];
     let unchanged: list<i32> = symmetric_difference_sorted(left, empty);
     verify(unchanged.len() == left.len() && unchanged[2] == 2);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_merge_and_set_operations() {
+    let left: list<i32> = [11, 12, 21, 22, 41];
+    let right: list<i32> = [13, 22, 23, 31, 41, 42];
+    let project_tens = |value: i32| { return value / 10; };
+
+    let merged_values: list<i32> =
+        merged_projected(left, right, project_tens);
+    verify(merged_values.len() == 11);
+    verify(is_sorted_projected(merged_values, project_tens));
+    verify(merged_values[0] == 11 && merged_values[1] == 12 &&
+           merged_values[2] == 13);
+
+    let union_values: list<i32> =
+        union_sorted_projected(left, right, project_tens);
+    verify(union_values.len() == 7);
+    verify(is_sorted_projected(union_values, project_tens));
+    verify(union_values[0] == 11 && union_values[1] == 12);
+
+    let intersection_values: list<i32> =
+        intersection_sorted_projected(left, right, project_tens);
+    verify(intersection_values.len() == 4);
+    verify(intersection_values[0] == 11 && intersection_values[1] == 21 &&
+           intersection_values[2] == 22 && intersection_values[3] == 41);
+
+    let difference_values: list<i32> =
+        difference_sorted_projected(left, right, project_tens);
+    verify(difference_values.len() == 1 && difference_values[0] == 12);
+
+    let symmetric_values: list<i32> =
+        symmetric_difference_sorted_projected(left, right, project_tens);
+    verify(symmetric_values.len() == 3);
+    verify(symmetric_values[0] == 12 && symmetric_values[1] == 31 &&
+           symmetric_values[2] == 42);
 }
 
 #[test]
