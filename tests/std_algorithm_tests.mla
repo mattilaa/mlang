@@ -139,6 +139,11 @@ use std::algorithm::ranges::partition_copy;
 use std::algorithm::ranges::find_if_not;
 use std::algorithm::ranges::find_last_if_not;
 use std::algorithm::ranges::remove_if;
+use std::algorithm::ranges::copy_if;
+use std::algorithm::ranges::remove_copy;
+use std::algorithm::ranges::remove_copy_if;
+use std::algorithm::ranges::replace_copy;
+use std::algorithm::ranges::replace_copy_if;
 use std::algorithm::ranges::replace_if;
 use std::algorithm::ranges::unique_by;
 use std::algorithm::ranges::chunked;
@@ -1211,6 +1216,48 @@ fn test_algorithm_ranges_generic_replace() {
     let words: list<str8> = ["red", "blue", "red"];
     let renamed: list<str8> = replace(words, "red", "green");
     verify(renamed[0] == "green" && renamed[1] == "blue");
+}
+
+#[test]
+fn test_algorithm_ranges_copy_remove_replace_copy() {
+    let values: list<i32> = [1, 2, 3, 2, 4];
+    let is_even = |value: i32| { return value % 2 == 0; };
+
+    let selected: list<i32> = copy_if(values, is_even);
+    verify(selected.len() == 3);
+    verify(selected[0] == 2 && selected[1] == 2 && selected[2] == 4);
+
+    let without_two: list<i32> = remove_copy(values, 2);
+    verify(without_two.len() == 3);
+    verify(without_two[0] == 1 && without_two[1] == 3 && without_two[2] == 4);
+
+    let without_evens: list<i32> = remove_copy_if(values, is_even);
+    verify(without_evens.len() == 2);
+    verify(without_evens[0] == 1 && without_evens[1] == 3);
+
+    let replaced: list<i32> = replace_copy(values, 2, 9);
+    verify(replaced.len() == 5);
+    verify(replaced[0] == 1 && replaced[1] == 9 && replaced[2] == 3);
+    verify(replaced[3] == 9 && replaced[4] == 4);
+
+    let replaced_evens: list<i32> = replace_copy_if(values, is_even, 0);
+    verify(replaced_evens.len() == 5);
+    verify(replaced_evens[0] == 1 && replaced_evens[1] == 0);
+    verify(replaced_evens[2] == 3 && replaced_evens[3] == 0);
+    verify(replaced_evens[4] == 0);
+    verify(values[0] == 1 && values[1] == 2 && values[4] == 4);
+
+    let empty: list<i32> = [];
+    let empty_selected: list<i32> = copy_if(empty, is_even);
+    let empty_without_value: list<i32> = remove_copy(empty, 2);
+    let empty_without_predicate: list<i32> = remove_copy_if(empty, is_even);
+    let empty_replaced: list<i32> = replace_copy(empty, 2, 9);
+    let empty_replaced_if: list<i32> = replace_copy_if(empty, is_even, 0);
+    verify(empty_selected.len() == 0);
+    verify(empty_without_value.len() == 0);
+    verify(empty_without_predicate.len() == 0);
+    verify(empty_replaced.len() == 0);
+    verify(empty_replaced_if.len() == 0);
 }
 
 
