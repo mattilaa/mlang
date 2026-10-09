@@ -459,7 +459,7 @@ fn example() {
   caller-selected starting index, including negative offsets.
 - `keys(data)` and `values(data)` project the first or second member of each
   `tuple<K, V>` (eager counterparts to C++20 `views::keys` and `views::values`).
-- `cartesian_product` overloads for two, three, and four ranges materialize
+- `cartesian_product` overloads for two through five ranges materialize
   every value combination in nested-loop order; the rightmost input varies
   fastest (C++23 `views::cartesian_product` style). Any empty input produces
   an empty result.
