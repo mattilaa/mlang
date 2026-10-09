@@ -17,8 +17,11 @@ let first_value: str8 = scores.value_at(0);  // "ten"
 let score: option<str8> = scores.get(20);
 ```
 
-The API includes `len`, `is_empty`, `lower_bound`, `contains`, `get`,
-`insert`, `remove`, `clear`, `key_at`, and `value_at`. `insert` returns true
+The API includes `len`, `is_empty`, `lower_bound`, `upper_bound`, `equal_range`,
+`contains`, `get`, `insert`, `remove`, `clear`, `key_at`, and `value_at`.
+`equal_range(key)` returns the half-open index pair `(lower_bound, upper_bound)`;
+it is empty for an absent key and contains one entry for a present key because
+keys are unique. `insert` returns true
 for a new key and false when replacing an existing key's value. `remove`
 returns whether the key existed. Index access requires `0 <= index < len()`.
 
