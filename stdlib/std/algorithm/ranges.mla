@@ -951,6 +951,14 @@ pub fn unique_by(data: &list<T>, equivalent: Equivalent) -> list<T> {
     return unique_values;
 }
 
+/// @brief Copy one value from each adjacent equivalence class.
+/// C++20 `std::ranges::unique_copy` counterpart; the source is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent>
+pub fn unique_copy_by(data: &list<T>, equivalent: Equivalent) -> list<T> {
+    return unique_by(data, equivalent);
+}
+
 
 /// @brief Return whether two lists contain the same elements in order.
 /// The ranges may have different, equality-comparable element types.
@@ -3448,6 +3456,14 @@ pub fn unique(data: &list<T>) -> list<T> {
         }
     }
     return out;
+}
+
+/// @brief Copy a range while removing adjacent duplicate values.
+/// C++20 `std::ranges::unique_copy` counterpart; the source is unchanged.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn unique_copy(data: &list<T>) -> list<T> {
+    return unique(data);
 }
 
 /// @brief Copy a list while keeping only each value's first occurrence.

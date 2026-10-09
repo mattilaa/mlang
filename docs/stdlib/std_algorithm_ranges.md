@@ -204,6 +204,9 @@ fn example() {
   mutation, this implementation is O(N²) and leaves the input unchanged.
 - `unique_by(data, equivalent)` removes adjacent equivalent elements while
   keeping the first value in each run.
+- `unique_copy(data)` and `unique_copy_by(data, equivalent)` provide C++20
+  `std::ranges::unique_copy` counterparts; they retain the first item of each
+  adjacent run in a new list and leave the source unchanged.
 - `all_of`, `any_of`, and `none_of` accept predicates as well as retaining the
   one-argument `list<bool>` identity forms. Empty-range results match the
   standard algorithms: true, false, and true respectively.
