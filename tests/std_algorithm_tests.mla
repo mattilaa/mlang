@@ -59,6 +59,9 @@ use std::algorithm::ranges::clamp_i64;
 use std::algorithm::ranges::contains;
 use std::algorithm::ranges::count;
 use std::algorithm::ranges::find;
+use std::algorithm::ranges::find_projected;
+use std::algorithm::ranges::count_projected;
+use std::algorithm::ranges::contains_projected;
 use std::algorithm::ranges::find_last;
 use std::algorithm::ranges::find_last_by;
 use std::algorithm::ranges::adjacent_find;
@@ -1965,6 +1968,17 @@ fn test_algorithm_ranges_find_count_contains_remove_take_drop() {
 
     let drop4: list<i64> = drop_i64(data, 4);
     verify(drop4.len() == 2 && drop4[0] == 8 && drop4[1] == 6);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_lookup() {
+    let values: list<i32> = [13, 14, 27, 31, 19];
+    let project_tens = |value: i32| { return value / 10; };
+    verify(find_projected(values, 2, project_tens) == 2);
+    verify(find_projected(values, 9, project_tens) == -1);
+    verify(count_projected(values, 1, project_tens) == 3);
+    verify(contains_projected(values, 3, project_tens));
+    verify(!contains_projected(values, 4, project_tens));
 }
 
 #[test]

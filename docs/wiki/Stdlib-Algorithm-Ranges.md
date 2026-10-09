@@ -57,6 +57,9 @@ fn example() {
 - `find_first_of(data, candidates)` returns the first index in `data` matching
   any candidate, or `-1` when there is no match; `find_first_of_by` accepts a
   binary equivalence predicate and supports different element types.
+- `find_projected`, `count_projected`, and `contains_projected` apply a unary
+  projection before comparing with the search value, covering the common
+  C++20 ranges projection use case without requiring a custom predicate.
 - `includes(range, subset)` checks whether sorted `range` contains sorted
   `subset`; duplicate multiplicities matter and both inputs must be sorted.
 - `search` returns the first index of a contiguous pattern (`0` for an empty
