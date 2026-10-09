@@ -53,6 +53,8 @@ typedef struct
 typedef struct
 {
     _Atomic int64_t value;
+    pthread_mutex_t wait_mu;
+    pthread_cond_t wait_cv;
 } mlang_sync_atomic_i64_t;
 
 typedef struct
@@ -373,6 +375,23 @@ int64_t __mlang_std_sync_atomic_i64_new(int64_t initial)
         return 0;
     }
     atomic_init(&value->value, initial);
+    int rc = pthread_mutex_init(&value->wait_mu, NULL);
+    if(rc != 0)
+    {
+        free(value);
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: mutex init: %s", strerror(rc));
+        return 0;
+    }
+    rc = pthread_cond_init(&value->wait_cv, NULL);
+    if(rc != 0)
+    {
+        (void)pthread_mutex_destroy(&value->wait_mu);
+        free(value);
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: condition init: %s", strerror(rc));
+        return 0;
+    }
     clear_error();
     return (int64_t)(intptr_t)value;
 }
@@ -408,6 +427,83 @@ int __mlang_std_sync_atomic_i64_store(int64_t handle, int64_t value, int order)
     atomic_store_explicit(&atomic_i64_from_handle(handle)->value, value, mo);
     clear_error();
     return 0;
+}
+
+int __mlang_std_sync_atomic_i64_wait(int64_t handle, int64_t old_value,
+                                      int order)
+{
+    memory_order mo;
+    if(!atomic_i64_validate(handle, order, &mo)) return -1;
+    if(mo == memory_order_release || mo == memory_order_acq_rel)
+    {
+        set_error("std::sync AtomicI64: invalid wait memory order");
+        return -1;
+    }
+
+    mlang_sync_atomic_i64_t* value = atomic_i64_from_handle(handle);
+    int rc = pthread_mutex_lock(&value->wait_mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: wait mutex lock: %s", strerror(rc));
+        return -1;
+    }
+    while(atomic_load_explicit(&value->value, mo) == old_value)
+    {
+        rc = pthread_cond_wait(&value->wait_cv, &value->wait_mu);
+        if(rc != 0)
+        {
+            (void)pthread_mutex_unlock(&value->wait_mu);
+            (void)snprintf(g_last_error, sizeof(g_last_error),
+                           "std::sync AtomicI64: wait: %s", strerror(rc));
+            return -1;
+        }
+    }
+    rc = pthread_mutex_unlock(&value->wait_mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: wait mutex unlock: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+static int atomic_i64_notify(int64_t handle, int all)
+{
+    memory_order ignored;
+    if(!atomic_i64_validate(handle, 5, &ignored)) return -1;
+    mlang_sync_atomic_i64_t* value = atomic_i64_from_handle(handle);
+    int rc = pthread_mutex_lock(&value->wait_mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: notify mutex lock: %s", strerror(rc));
+        return -1;
+    }
+    rc = all ? pthread_cond_broadcast(&value->wait_cv) :
+               pthread_cond_signal(&value->wait_cv);
+    int unlock_rc = pthread_mutex_unlock(&value->wait_mu);
+    if(rc != 0 || unlock_rc != 0)
+    {
+        int error = rc != 0 ? rc : unlock_rc;
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: notify: %s", strerror(error));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_atomic_i64_notify_one(int64_t handle)
+{
+    return atomic_i64_notify(handle, 0);
+}
+
+int __mlang_std_sync_atomic_i64_notify_all(int64_t handle)
+{
+    return atomic_i64_notify(handle, 1);
 }
 
 #define DEFINE_ATOMIC_I64_RMW(name, expression) \
@@ -456,6 +552,15 @@ int __mlang_std_sync_atomic_i64_free(int64_t handle)
     if(!value)
     {
         set_error("std::sync AtomicI64: invalid handle");
+        return -1;
+    }
+    int cond_rc = pthread_cond_destroy(&value->wait_cv);
+    int mutex_rc = pthread_mutex_destroy(&value->wait_mu);
+    if(cond_rc != 0 || mutex_rc != 0)
+    {
+        int error = cond_rc != 0 ? cond_rc : mutex_rc;
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: destroy: %s", strerror(error));
         return -1;
     }
     free(value);

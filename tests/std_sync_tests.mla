@@ -32,6 +32,24 @@ fn atomic_i64_increment_worker(raw_handle: i64, iterations: i64) -> i32 {
     return 0;
 }
 
+fn atomic_i64_wait_worker(raw_handle: i64) -> i32 {
+    let counter: AtomicI64 = AtomicI64 { handle: raw_handle };
+    let waited: result<i32, str8> = counter.wait(0);
+    if waited.is_err() { return 1; }
+    let current: result<i64, str8> = counter.load();
+    if current.is_err() { return 2; }
+    return current.unwrap() == 1 ? 0 : 3;
+}
+
+fn atomic_i64_wait_for_one_worker(raw_handle: i64) -> i32 {
+    let counter: AtomicI64 = AtomicI64 { handle: raw_handle };
+    let waited: result<i32, str8> = counter.wait(1);
+    if waited.is_err() { return 1; }
+    let current: result<i64, str8> = counter.load();
+    if current.is_err() { return 2; }
+    return current.unwrap() == 2 ? 0 : 3;
+}
+
 fn latch_arrive_worker(raw_handle: i64) -> i32 {
     let latch: Latch = Latch { handle: raw_handle };
     let waited: result<i32, str8> = latch.arrive_and_wait();
@@ -170,6 +188,35 @@ fn test_atomic_i64_operations_impl() -> i32 {
 #[test]
 fn test_atomic_i64_operations() {
     verify(test_atomic_i64_operations_impl() == 0);
+}
+
+#[test]
+fn test_atomic_i64_wait_notify() {
+    let created: result<AtomicI64, str8> = AtomicI64::new(0);
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let counter: AtomicI64 = created.unwrap();
+    let worker: std::thread::thread =
+        thread::spawn(atomic_i64_wait_worker, counter.handle);
+    let worker2: std::thread::thread =
+        thread::spawn(atomic_i64_wait_worker, counter.handle);
+    let stored: result<i32, str8> = counter.store(1);
+    let notified: result<i32, str8> = counter.notify_all();
+    let worker_status: i32 = join(worker);
+    let worker2_status: i32 = join(worker2);
+
+    let one_worker: std::thread::thread =
+        thread::spawn(atomic_i64_wait_for_one_worker, counter.handle);
+    let stored_again: result<i32, str8> = counter.store(2);
+    let notify_one: result<i32, str8> = counter.notify_one();
+    let one_worker_status: i32 = join(one_worker);
+    let invalid_order: result<i32, str8> =
+        counter.wait_with_order(2, AtomicOrder::Release);
+    let closed: i32 = counter.close();
+    verify(stored.is_ok() && notified.is_ok() && worker_status == 0 &&
+           worker2_status == 0);
+    verify(stored_again.is_ok() && notify_one.is_ok() && one_worker_status == 0);
+    verify(invalid_order.is_err() && closed == 0);
 }
 
 #[test]

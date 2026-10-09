@@ -112,7 +112,12 @@ allocation failures. It offers `load`, `store`, `exchange`, `fetch_add`,
 `compare_exchange`. Operations without an explicit order use sequentially
 consistent ordering. The `_with_order` variants accept
 `AtomicOrder::{Relaxed, Consume, Acquire, Release, AcqRel, SeqCst}`; invalid
-load/store orderings are rejected and returned as errors.
+load/store/wait orderings are rejected and returned as errors. `wait(old)`
+blocks while the value remains equal to `old`, while `notify_one()` and
+`notify_all()` wake waiters. A notification is not itself a condition: waiters
+must recheck the value, and stores/RMW operations must be followed by an
+explicit notification when a waiter should wake. Do not close the atomic while
+any thread is waiting on it.
 
 ```rust
 mod std::sync;
