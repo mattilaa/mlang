@@ -121,6 +121,7 @@ use std::algorithm::ranges::partial_sort_copy;
 use std::algorithm::ranges::partial_sort_copy_by;
 use std::algorithm::ranges::nth_element;
 use std::algorithm::ranges::nth_element_by;
+use std::algorithm::ranges::nth_element_projected;
 use std::algorithm::ranges::merged;
 use std::algorithm::ranges::union_sorted;
 use std::algorithm::ranges::intersection_sorted;
@@ -1006,6 +1007,26 @@ fn test_algorithm_ranges_nth_element() {
     verify(repeated_partition[3] == 5);
     for i in 0..3 { verify(repeated_partition[i] <= 5); }
     verify(repeated_partition[4] >= 5);
+}
+
+#[test]
+fn test_algorithm_ranges_nth_element_by_projection() {
+    let values: list<i32> = [42, 11, 23, 31, 19, 5];
+    let project_tens = |value: i32| { return value / 10; };
+    let partitioned: list<i32> =
+        nth_element_projected(values, 2, project_tens);
+    let selected_key: i32 = project_tens(partitioned[2]);
+    verify(partitioned.len() == values.len());
+    for i in 0..2 {
+        verify(project_tens(partitioned[i]) <= selected_key);
+    }
+    for i in 3..partitioned.len() {
+        verify(project_tens(partitioned[i]) >= selected_key);
+    }
+    verify(values[0] == 42 && values[5] == 5);
+
+    let invalid: list<i32> = nth_element_projected(values, 6, project_tens);
+    verify(invalid.len() == 0);
 }
 
 #[test]

@@ -1968,6 +1968,51 @@ fn nth_element_impl(data: &list<T>, nth: i64) -> list<T> {
     return result;
 }
 
+generic<T, Projection>
+fn nth_element_impl_projected(data: &list<T>, nth: i64,
+                              projection: Projection) -> list<T> {
+    let n: i64 = data.len();
+    if nth < 0 || nth >= n { return []; }
+    if n < 2 { return take(data, n); }
+
+    let pivot: T = data[n / 2];
+    var lower: list<T> = [];
+    var equal: list<T> = [];
+    var upper: list<T> = [];
+    for i in 0..n {
+        let value: T = data[i];
+        if projection(value) < projection(pivot) {
+            lower.push(value);
+        } else if projection(pivot) < projection(value) {
+            upper.push(value);
+        } else {
+            equal.push(value);
+        }
+    }
+
+    let lower_len: i64 = lower.len();
+    let equal_len: i64 = equal.len();
+    var result: list<T> = [];
+    if nth < lower_len {
+        result = nth_element_impl_projected(lower, nth, projection);
+        for i in 0..equal_len { result.push(equal[i]); }
+        for i in 0..upper.len() { result.push(upper[i]); }
+        return result;
+    }
+    if nth >= lower_len + equal_len {
+        for i in 0..lower_len { result.push(lower[i]); }
+        for i in 0..equal_len { result.push(equal[i]); }
+        let selected: list<T> = nth_element_impl_projected(
+            upper, nth - lower_len - equal_len, projection);
+        for i in 0..selected.len() { result.push(selected[i]); }
+        return result;
+    }
+    for i in 0..lower_len { result.push(lower[i]); }
+    for i in 0..equal_len { result.push(equal[i]); }
+    for i in 0..upper.len() { result.push(upper[i]); }
+    return result;
+}
+
 /// @brief Reorder a copied range around its `nth` element.
 /// Values before it are no greater and values after it are no smaller; neither
 /// side is otherwise sorted. Invalid indices return an empty list. This
@@ -1985,6 +2030,16 @@ generic<T, Less>
 pub fn nth_element_by(data: &list<T>, nth: i64, less: Less)
     -> list<T> {
     return nth_element_impl_by(data, nth, less);
+}
+
+/// @brief Partition a copied range around the `nth` projected key.
+/// Items before it have no greater key and items after it have no smaller key;
+/// neither side is otherwise sorted. Invalid indices return an empty list.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn nth_element_projected(data: &list<T>, nth: i64,
+                             projection: Projection) -> list<T> {
+    return nth_element_impl_projected(data, nth, projection);
 }
 
 /// @brief First index where `value` can be inserted without breaking order.

@@ -148,7 +148,8 @@ fn example() {
   value at `nth`; under ascending order, preceding values are no greater and
   following values are no smaller. The two partitions are not otherwise
   sorted. `nth_element_by` applies the same partition guarantee under `less`;
-  an invalid index returns an empty list.
+  `nth_element_projected` partitions by a unary projected key. An invalid
+  index returns an empty list.
 - `lower_bound`, `upper_bound`, and `binary_search` perform logarithmic-time
   queries on a list sorted in nondecreasing order. The bounds return insertion
   indices; binary search returns `bool`.
