@@ -2,6 +2,8 @@ mod std_compiler_tests;
 use std_compiler_tests::*;
 mod runtime_generic_tests;
 use runtime_generic_tests::*;
+mod runtime_optional_tests;
+use runtime_optional_tests::*;
 mod std_ascii_tests;
 use std_ascii_tests::*;
 mod enum_tests;

@@ -1,0 +1,65 @@
+mod std::testing;
+mod std::optional;
+use std::testing::verify;
+use std::optional::transform;
+use std::optional::and_then;
+use std::optional::or_else;
+use std::optional::value_or;
+use std::optional::value_or_else;
+
+#[test]
+fn test_optional_transform_and_then() {
+    let to_double = |value: i32| { return f64(value) * 2.0; };
+    let present: option<i32> = Some<i32>(21);
+    let converted: option<f64> = transform(present, to_double);
+    verify(converted.is_some());
+    verify(converted.unwrap() == 42.0);
+
+    let absent: option<i32> = None<i32>();
+    var calls: i32 = 0;
+    let counted = |value: i32| {
+        calls = calls + 1;
+        let widened: i64 = value;
+        return Some<i64>(widened * 3);
+    };
+    let chained_present: option<i64> = and_then(present, counted);
+    verify(chained_present.is_some() && chained_present.unwrap() == 63);
+    verify(calls == 1);
+
+    let chained_absent: option<i64> = and_then(absent, counted);
+    verify(chained_absent.is_none());
+    verify(calls == 1);
+    let transformed_absent: option<f64> = transform(absent, to_double);
+    verify(transformed_absent.is_none());
+}
+
+#[test]
+fn test_optional_or_else_and_value_fallbacks() {
+    var option_calls: i32 = 0;
+    let make_option = || {
+        option_calls = option_calls + 1;
+        return Some<i32>(7);
+    };
+    let present: option<i32> = Some<i32>(12);
+    let absent: option<i32> = None<i32>();
+    let preserved: option<i32> = or_else(present, make_option);
+    verify(preserved.is_some() && preserved.unwrap() == 12);
+    verify(option_calls == 0);
+    let supplied: option<i32> = or_else(absent, make_option);
+    verify(supplied.is_some() && supplied.unwrap() == 7);
+    verify(option_calls == 1);
+
+    let fallback_value: i32 = 19;
+    verify(value_or(present, fallback_value) == 12);
+    verify(value_or(absent, fallback_value) == 19);
+
+    var value_calls: i32 = 0;
+    let make_value = || {
+        value_calls = value_calls + 1;
+        return 23;
+    };
+    verify(value_or_else(present, make_value) == 12);
+    verify(value_calls == 0);
+    verify(value_or_else(absent, make_value) == 23);
+    verify(value_calls == 1);
+}

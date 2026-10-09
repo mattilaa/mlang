@@ -55,6 +55,7 @@
 - [[std::event_loop|Stdlib-Event-Loop]]
 - [[std::exceptions|Stdlib-Exceptions]]
 - [[std::expected|Stdlib-Expected]]
+- [[std::optional|Stdlib-Optional]]
 - [[std::fs|Stdlib-Fs]]
 - [[std::gps|Stdlib-Gps]]
 - [[std::hash|Stdlib-Hash]]
