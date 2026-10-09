@@ -1,0 +1,108 @@
+/// ile mdspan.mla
+/// \brief Checked list-backed multidimensional views (C++23 mdspan style).
+///
+/// Mlang's `Mdspan<T>` stores a copied list and runtime extents. It provides
+/// checked row-major access, but does not claim the non-owning lifetime or
+/// layout-policy guarantees of C++ `std::mdspan`.
+
+/// @brief Runtime-rank row-major descriptor over a list of elements.
+pub struct Mdspan<T> {
+    var data: list<T>;
+    var extents: list<i64>;
+};
+
+/// @brief Lowercase C++-style alias for `Mdspan<T>`.
+use type mdspan<T> = Mdspan<T>;
+
+/// @brief Build a row-major shape descriptor when extents match data size.
+/// Negative extents and shape/data size mismatches return `None`. The list
+/// elements and extents are copied, so the object is self-contained.
+generic<T>
+pub fn from_extents(data: &list<T>, extents: &list<i64>) -> option<Mdspan<T>> {
+    let rank: i64 = extents.len();
+    let data_size: i64 = data.len();
+    var has_zero_extent: bool = false;
+    for dimension in 0..rank {
+        let extent_value: i64 = extents[dimension];
+        if extent_value < 0 {
+            return None<Mdspan<T>>();
+        }
+        if extent_value == 0 {
+            has_zero_extent = true;
+        }
+    }
+
+    var expected_size: i64 = 1;
+    if has_zero_extent {
+        expected_size = 0;
+    } else {
+        for dimension in 0..rank {
+            let extent_value: i64 = extents[dimension];
+            // Bound multiplication by the available data length so malformed
+            // shapes cannot overflow the product.
+            if expected_size > data_size / extent_value {
+                return None<Mdspan<T>>();
+            }
+            expected_size = expected_size * extent_value;
+        }
+    }
+
+    if expected_size != data_size {
+        return None<Mdspan<T>>();
+    }
+    var copied_data: list<T> = [];
+    for i in 0..data_size { copied_data.push(data[i]); }
+    var copied_extents: list<i64> = [];
+    for i in 0..rank { copied_extents.push(extents[i]); }
+    return Some<Mdspan<T>>(Mdspan<T> {
+        data: copied_data,
+        extents: copied_extents
+    });
+}
+
+impl<T> Mdspan {
+    /// @brief Return the number of dimensions.
+    pub fn rank(self: Mdspan<T>) -> i64 {
+        return self.extents.len();
+    }
+
+    /// @brief Return the total number of elements.
+    pub fn size(self: Mdspan<T>) -> i64 {
+        return self.data.len();
+    }
+
+    /// @brief Return whether the descriptor contains zero elements.
+    pub fn is_empty(self: Mdspan<T>) -> bool {
+        return self.data.len() == 0;
+    }
+
+    /// @brief Read an extent, returning `None` for an invalid dimension.
+    pub fn extent(self: Mdspan<T>, dimension: i64) -> option<i64> {
+        if dimension < 0 || dimension >= self.extents.len() {
+            return None<i64>();
+        }
+        return Some<i64>(self.extents[dimension]);
+    }
+
+    /// @brief Read an element at a full-rank row-major index.
+    /// Wrong-rank or out-of-bounds indices return `None`.
+    pub fn get(self: Mdspan<T>, indices: &list<i64>) -> option<T> {
+        let rank: i64 = self.extents.len();
+        if indices.len() != rank {
+            return None<T>();
+        }
+        var flat_index: i64 = 0;
+        for dimension in 0..rank {
+            let index: i64 = indices[dimension];
+            let extent_value: i64 = self.extents[dimension];
+            if index < 0 || index >= extent_value {
+                return None<T>();
+            }
+            flat_index = flat_index * extent_value + index;
+        }
+        if flat_index < 0 || flat_index >= self.data.len() {
+            return None<T>();
+        }
+        return Some<T>(self.data[flat_index]);
+    }
+}

@@ -1285,58 +1285,40 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             std::vector<TypeNode*> typeArgNodes;
             for(const auto& typeArgStr : node->typeArgs)
             {
-                // Try to create a TypeNode from the type argument string
-                TypeNode* typeArg = nullptr;
-
-                auto bindIt = activeTypeParamBindings.find(typeArgStr);
-                if(bindIt != activeTypeParamBindings.end() && bindIt->second)
+                // Parse nested generic arguments (e.g. `Mdspan<T>`) before
+                // substituting the active bindings. Treating the whole string
+                // as a StructTypeRefNode leaves nested parameters unresolved,
+                // producing types such as option_Mdspan_T in a monomorphized
+                // generic function.
+                TypeNode* typeArg = Helpers::type_from_text(typeArgStr);
+                if(!typeArg)
                 {
-                    typeArgNodes.push_back(cloneTypeNode(bindIt->second));
-                    continue;
-                }
-                auto functionBindIt =
-                    activeFunctionTypeBindings.find(typeArgStr);
-                if(functionBindIt != activeFunctionTypeBindings.end() &&
-                   functionBindIt->second)
-                {
-                    typeArgNodes.push_back(
-                        cloneTypeNode(functionBindIt->second));
-                    continue;
+                    reportError(node->line,
+                                "invalid generic type argument: " + typeArgStr);
+                    return nullptr;
                 }
 
-                // Check if it's a basic type
-                if(typeArgStr == "i8")
-                    typeArg = new TypeNode(TypeNode::TYPE_I8);
-                else if(typeArgStr == "i16")
-                    typeArg = new TypeNode(TypeNode::TYPE_I16);
-                else if(typeArgStr == "i32")
-                    typeArg = new TypeNode(TypeNode::TYPE_I32);
-                else if(typeArgStr == "i64")
-                    typeArg = new TypeNode(TypeNode::TYPE_I64);
-                else if(typeArgStr == "u8")
-                    typeArg = new TypeNode(TypeNode::TYPE_U8);
-                else if(typeArgStr == "u16")
-                    typeArg = new TypeNode(TypeNode::TYPE_U16);
-                else if(typeArgStr == "u32")
-                    typeArg = new TypeNode(TypeNode::TYPE_U32);
-                else if(typeArgStr == "u64")
-                    typeArg = new TypeNode(TypeNode::TYPE_U64);
-                else if(typeArgStr == "f32")
-                    typeArg = new TypeNode(TypeNode::TYPE_FLOAT);
-                else if(typeArgStr == "f64")
-                    typeArg = new TypeNode(TypeNode::TYPE_DOUBLE);
-                else if(typeArgStr == "bool")
-                    typeArg = new TypeNode(TypeNode::TYPE_BOOL);
-                else if(typeArgStr == "str8")
-                    typeArg = new TypeNode(TypeNode::TYPE_STR8);
-                else if(typeArgStr == "str16")
-                    typeArg = new TypeNode(TypeNode::TYPE_STR16);
-                else
+                std::vector<std::string> typeParamNames;
+                std::vector<TypeNode*> typeParamTypes;
+                for(const auto& binding : activeTypeParamBindings)
                 {
-                    // Assume it's a struct type reference
-                    typeArg = new StructTypeRefNode(typeArgStr);
+                    if(binding.second)
+                    {
+                        typeParamNames.push_back(binding.first);
+                        typeParamTypes.push_back(binding.second);
+                    }
                 }
-
+                for(const auto& binding : activeFunctionTypeBindings)
+                {
+                    if(!binding.second ||
+                       activeTypeParamBindings.count(binding.first) != 0)
+                        continue;
+                    typeParamNames.push_back(binding.first);
+                    typeParamTypes.push_back(binding.second);
+                }
+                if(!typeParamNames.empty())
+                    typeArg = substituteTypeParams(
+                        typeArg, typeParamNames, typeParamTypes);
                 typeArgNodes.push_back(typeArg);
             }
 

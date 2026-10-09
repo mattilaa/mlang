@@ -63,6 +63,7 @@ mod std::sed;
 mod std::serde;
 mod std::simd;
 mod std::span;
+mod std::mdspan;
 mod std::strbuf;
 mod std::sync;
 mod std::term;
@@ -121,6 +122,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/serde.mla`
 - `stdlib/std/simd.mla`
 - `stdlib/std/span.mla`
+- `stdlib/std/mdspan.mla`
 - `stdlib/std/strbuf.mla`
 - `stdlib/std/sync.mla`
 - `stdlib/std/term.mla`
@@ -158,6 +160,7 @@ The source-of-truth implementation files are:
 - [std::bytes](Stdlib-Bytes)
 - [std::serde](Stdlib-Serde)
 - [std::span](Stdlib-Span)
+- [std::mdspan](Stdlib-Mdspan)
 - [std::strbuf](Stdlib-Strbuf)
 - [std::unordered](Stdlib-Unordered)
 - [std::vec](Stdlib-Vec)
