@@ -115,6 +115,7 @@ use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::windows;
 use std::algorithm::ranges::strided;
 use std::algorithm::ranges::joined;
+use std::algorithm::ranges::joined_with;
 use std::algorithm::ranges::concat;
 use std::algorithm::ranges::zip;
 use std::algorithm::ranges::enumerate;
@@ -1073,6 +1074,31 @@ fn test_algorithm_ranges_generic_joined() {
     let no_lists: list<list<i32>> = [];
     let empty_flattened: list<i32> = joined(no_lists);
     verify(empty_flattened.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_joined_with() {
+    let nested: list<list<i32>> = [[1, 2], [], [3], [4, 5]];
+    let separator: list<i32> = [0, 0];
+    let flattened: list<i32> = joined_with(nested, separator);
+    verify(flattened.len() == 11);
+    verify(flattened[0] == 1 && flattened[1] == 2);
+    verify(flattened[2] == 0 && flattened[3] == 0);
+    verify(flattened[4] == 0 && flattened[5] == 0);
+    verify(flattened[6] == 3 && flattened[7] == 0);
+    verify(flattened[8] == 0 && flattened[9] == 4 && flattened[10] == 5);
+    verify(nested[0][0] == 1 && nested[3][1] == 5);
+
+    let no_lists: list<list<i32>> = [];
+    let no_flattened: list<i32> = joined_with(no_lists, separator);
+    verify(no_flattened.len() == 0);
+    let one_list: list<list<i32>> = [[7]];
+    let single: list<i32> = joined_with(one_list, separator);
+    verify(single.len() == 1 && single[0] == 7);
+    let empty_separator: list<i32> = [];
+    let without_separator: list<i32> = joined_with(nested, empty_separator);
+    verify(without_separator.len() == 5);
+    verify(without_separator[2] == 3 && without_separator[4] == 5);
 }
 
 #[test]
