@@ -4382,6 +4382,21 @@ pub fn drop(data: &list<T>, n: i64) -> list<T> {
     return out;
 }
 
+/// @brief Copy the half-open element interval `[first, last)`.
+/// Eager-list counterpart to C++20 `std::ranges::subrange`; bounds are clamped
+/// to `[0, len]`, and empty or reversed intervals yield an empty list.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn subrange(data: &list<T>, first: i64, last: i64) -> list<T> {
+    var out: list<T> = [];
+    let len: i64 = data.len();
+    let start: i64 = first < 0 ? 0 : (first > len ? len : first);
+    let end: i64 = last < 0 ? 0 : (last > len ? len : last);
+    if end <= start { return out; }
+    for i in start..end { out.push(data[i]); }
+    return out;
+}
+
 /// @brief Copy the final `count` elements of a list.
 /// C++23 `views::take_last` eager-list counterpart; non-positive counts are
 /// empty and counts at least the size copy the entire input.

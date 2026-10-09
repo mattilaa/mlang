@@ -358,6 +358,7 @@ use std::algorithm::ranges::remove_by_projected;
 use std::algorithm::ranges::remove_projected;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::take_last;
+use std::algorithm::ranges::subrange;
 use std::algorithm::ranges::iota;
 use std::algorithm::ranges::iota_by;
 use std::algorithm::ranges::iota_range;
@@ -3251,6 +3252,14 @@ fn test_algorithm_ranges_find_count_contains_remove_take_drop() {
     let all_kept: list<i64> = drop_last(data, -2);
     verify(all_tail.len() == 6 && none_left.len() == 0 && no_tail.len() == 0);
     verify(all_kept.len() == 6 && all_kept[5] == 6);
+
+    let middle: list<i64> = subrange(data, 1, 4);
+    verify(middle.len() == 3 && middle[0] == 6 && middle[2] == 7);
+    let clamped: list<i64> = subrange(data, -3, 99);
+    verify(clamped.len() == 6 && clamped[0] == 5 && clamped[5] == 6);
+    let reversed_bounds: list<i64> = subrange(data, 5, 2);
+    let after_end: list<i64> = subrange(data, 99, 120);
+    verify(reversed_bounds.len() == 0 && after_end.len() == 0);
 }
 
 #[test]
