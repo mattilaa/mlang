@@ -433,6 +433,8 @@ fn example() {
   keys while preserving the original source values.
 - `enumerate(data)` materializes `(index, value)` tuples with zero-based indices
   (C++23 `views::enumerate` style).
+- `enumerate_from(data, first_index)` provides the same eager pairing with a
+  caller-selected starting index, including negative offsets.
 - `keys(data)` and `values(data)` project the first or second member of each
   `tuple<K, V>` (eager counterparts to C++20 `views::keys` and `views::values`).
 - `cartesian_product` overloads for two, three, and four ranges materialize
