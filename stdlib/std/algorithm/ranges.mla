@@ -251,6 +251,25 @@ pub fn for_each(data: &list<T>, operation: Operation) -> void {
     }
 }
 
+/// @brief Invoke `operation` on the first `count` elements in order.
+/// Negative counts perform no calls; counts larger than the range length are
+/// clamped to its length. C++20 `std::ranges::for_each_n` counterpart.
+/// @ingroup algorithm_ranges
+generic<T, Operation>
+pub fn for_each_n(data: &list<T>, count: i64, operation: Operation) -> void {
+    let data_len: i64 = data.len();
+    var n: i64 = count;
+    if n < 0 {
+        n = 0;
+    }
+    if n > data_len {
+        n = data_len;
+    }
+    for i in 0..n {
+        operation(data[i]);
+    }
+}
+
 /// @brief Materialize `count` values from a zero-argument generator closure.
 /// Non-positive counts return an empty list without invoking the generator.
 /// Mlang's eager-list form of C++ `std::generate_n`.
