@@ -279,6 +279,43 @@ fn test_complex_polar_construction() {
 }
 
 #[test]
+fn test_complex_exp() {
+    let zero: Complex<f64> = Complex<f64> { re: 0.0, im: 0.0 };
+    let exp_zero: Complex<f64> = exp(zero);
+    verify(exp_zero.re == 1.0 && exp_zero.im == 0.0);
+    let zero32: Complex<f32> = Complex<f32> { re: 0.0f, im: 0.0f };
+    let exp_zero32: Complex<f32> = exp(zero32);
+    verify(exp_zero32.re == 1.0f && exp_zero32.im == 0.0f);
+}
+
+#[test]
+fn test_complex_log() {
+    let z: Complex<f64> = Complex<f64> { re: 3.0, im: 4.0 };
+    let logarithm: Complex<f64> = log(z);
+    verify(approx_double(logarithm.re, log(5.0), 0.000001));
+    verify(logarithm.im > 0.92729 && logarithm.im < 0.92730);
+}
+
+#[test]
+fn test_complex_sqrt() {
+    let zero: Complex<f64> = Complex<f64> { re: 0.0, im: 0.0 };
+    let zero_root: Complex<f64> = sqrt(zero);
+    verify(zero_root.re == 0.0 && zero_root.im == 0.0);
+
+    let negative: Complex<f64> = Complex<f64> { re: -1.0, im: 0.0 };
+    let root: Complex<f64> = sqrt(negative);
+    verify(approx_double(root.re, 0.0, 0.000001));
+    verify(approx_double(root.im, 1.0, 0.000001));
+}
+
+#[test]
+fn test_complex_sqrt_negative_imaginary_zero() {
+    let negative_lower: Complex<f64> = Complex<f64> { re: -1.0, im: -0.0 };
+    let lower_root: Complex<f64> = sqrt(negative_lower);
+    verify(lower_root.im <= 0.0);
+}
+
+#[test]
 fn test_complex_f32_abs() {
     let eps: f32 = 0.0001f;
     let z: Complex<f32> = Complex<f32> { re: 3.0f, im: 4.0f };
