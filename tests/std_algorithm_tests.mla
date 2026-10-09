@@ -131,6 +131,7 @@ use std::algorithm::ranges::find_last_if;
 use std::algorithm::ranges::count_if;
 use std::algorithm::ranges::for_each;
 use std::algorithm::ranges::generate_n;
+use std::algorithm::ranges::copy_n;
 use std::algorithm::ranges::filter;
 use std::algorithm::ranges::is_partitioned;
 use std::algorithm::ranges::partition_point;
@@ -1879,6 +1880,18 @@ fn test_algorithm_ranges_generate_n() {
     let negative: list<i32> = generate_n(-3, next);
     verify(empty.len() == 0 && negative.len() == 0);
     verify(next_value == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_copy_n() {
+    let values: list<i32> = [4, 8, 15];
+    let prefix: list<i32> = copy_n(values, 2);
+    verify(prefix.len() == 2 && prefix[0] == 4 && prefix[1] == 8);
+
+    let all_values: list<i32> = copy_n(values, 10);
+    verify(all_values.len() == 3 && all_values[2] == 15);
+    let no_values: list<i32> = copy_n(values, -2);
+    verify(no_values.len() == 0);
 }
 
 
