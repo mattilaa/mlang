@@ -52,6 +52,9 @@ fn example() {
 - `find_last_by(data, key, equivalent)` searches backward and returns the last
   index whose element matches a separate key under the supplied binary
   predicate, or `-1` when none matches.
+- `find_last_by_projected(data, key, equivalent, projection)` applies a
+  projection before matching each element against the lookup key while
+  searching backward.
 - `find_by`, `count_by`, and `contains_by` apply the same element/key
   equivalence predicate for first-match lookup, counting, and membership.
 - `find_by_projected`, `count_by_projected`, and `contains_by_projected` apply

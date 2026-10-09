@@ -52,6 +52,9 @@ fn example() {
   predicate, or `-1` when none matches.
 - `find_by`, `count_by`, and `contains_by` apply the same element/key
   equivalence predicate for first-match lookup, counting, and membership.
+- `find_last_by_projected(data, key, equivalent, projection)` searches
+  backward, applying the projection to each element before matching it against
+  a possibly heterogeneous lookup key with the supplied predicate.
 - `find_by_projected`, `count_by_projected`, and `contains_by_projected` apply
   the equivalence predicate to a projected element key and the lookup key.
 - `adjacent_find_by(data, equivalent)` returns the first adjacent index whose

@@ -81,6 +81,7 @@ use std::algorithm::ranges::count_projected;
 use std::algorithm::ranges::contains_projected;
 use std::algorithm::ranges::find_last;
 use std::algorithm::ranges::find_last_by;
+use std::algorithm::ranges::find_last_by_projected;
 use std::algorithm::ranges::adjacent_find;
 use std::algorithm::ranges::adjacent_find_by;
 use std::algorithm::ranges::adjacent_find_by_projected;
@@ -563,6 +564,17 @@ fn test_algorithm_ranges_find_last_by_equivalence() {
     verify(find_last_by(values, 90, same_decade) == -1);
     let empty: list<i32> = [];
     verify(find_last_by(empty, 20, same_decade) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_find_last_by_projected_heterogeneous_key() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let same_decade = |item: i32, key: i32| { return item == key; };
+    let project_tens = |item: i32| { return item / 10; };
+    verify(find_last_by_projected(values, 2, same_decade, project_tens) == 2);
+    verify(find_last_by_projected(values, 9, same_decade, project_tens) == -1);
+    let empty: list<i32> = [];
+    verify(find_last_by_projected(empty, 2, same_decade, project_tens) == -1);
 }
 
 #[test]
