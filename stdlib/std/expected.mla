@@ -2,7 +2,7 @@
 /// \brief Monadic transformations for the built-in result<T, E> type.
 ///
 /// Mlang's `result<T, E>` is the native counterpart of C++23 `std::expected`.
-/// Mapping functions preserve the inactive alternative and invoke their
+/// Monadic transformations preserve the inactive alternative and invoke their
 /// callback only for the active value. Fallback helpers extract the value
 /// without changing the input result.
 
@@ -28,6 +28,32 @@ pub fn transform_error(input: result<T, E>, operation: Operation)
     -> result<T, NewError> {
     if input.is_err() {
         return Err<T, NewError>(operation(input.unwrap_err()));
+    }
+    return Ok<T, NewError>(input.unwrap());
+}
+
+/// @brief Chain a result-producing operation on the successful value.
+/// Errors bypass the operation and propagate unchanged.
+/// C++23 `std::expected::and_then` equivalent.
+/// @ingroup expected
+generic<T, E, Output, Operation>
+pub fn and_then(input: result<T, E>, operation: Operation)
+    -> result<Output, E> {
+    if input.is_ok() {
+        return operation(input.unwrap());
+    }
+    return Err<Output, E>(input.unwrap_err());
+}
+
+/// @brief Chain a result-producing recovery operation on the error value.
+/// Successful values bypass the operation and propagate unchanged.
+/// C++23 `std::expected::or_else` equivalent.
+/// @ingroup expected
+generic<T, E, NewError, Recovery>
+pub fn or_else(input: result<T, E>, recovery: Recovery)
+    -> result<T, NewError> {
+    if input.is_err() {
+        return recovery(input.unwrap_err());
     }
     return Ok<T, NewError>(input.unwrap());
 }

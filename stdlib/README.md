@@ -32,8 +32,8 @@ Currently provided:
   Use `expect_*` when a test should continue after a failed check (non-fatal),
   and `verify_*` when a failed check should abort the test immediately (fatal).
 - `std/expected.mla`: C++23 `std::expected`-style `transform`,
-  `transform_error`, and `value_or` operations for the built-in
-  `result<T, E>` type, plus lazy `value_or_else`.
+  `transform_error`, `and_then`, `or_else`, and `value_or` operations for the
+  built-in `result<T, E>` type, plus lazy `value_or_else`.
 - `std/thread.mla`: thread/concurrency helpers (join/mutex/atomic wrappers).
 - `std/concurrent.mla`: higher-level concurrency coordination helpers
   (`WaitGroup` for cross-thread joining and `OrderedGate` for deterministic

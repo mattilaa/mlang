@@ -3,6 +3,8 @@ mod std::expected;
 use std::testing::verify;
 use std::expected::transform;
 use std::expected::transform_error;
+use std::expected::and_then;
+use std::expected::or_else;
 use std::expected::value_or;
 use std::expected::value_or_else;
 
@@ -210,4 +212,67 @@ fn test_expected_value_or_fallbacks() {
     verify(calls == 0);
     verify(value_or_else(failure, fallback) == 31);
     verify(calls == 1);
+}
+
+#[test]
+fn test_expected_and_then_chains_success_and_propagates_error() {
+    var calls: i32 = 0;
+    let parse_label = |value: i32| {
+        calls = calls + 1;
+        if value > 0 {
+            let widened: i64 = value;
+            return Ok<i64, str8>(widened * 10);
+        }
+        return Err<i64, str8>("not positive");
+    };
+
+    let success: result<i32, str8> = Ok<i32, str8>(7);
+    let chained_success: result<i64, str8> = and_then(success, parse_label);
+    verify(chained_success.is_ok());
+    verify(chained_success.unwrap() == 70);
+    verify(calls == 1);
+
+    let failure: result<i32, str8> = Err<i32, str8>("upstream");
+    let chained_failure: result<i64, str8> = and_then(failure, parse_label);
+    verify(chained_failure.is_err());
+    let propagated_error: str8 = chained_failure.unwrap_err();
+    verify(propagated_error == "upstream");
+    verify(calls == 1);
+
+    let negative: result<i32, str8> = Ok<i32, str8>(0 - 1);
+    let operation_failure: result<i64, str8> = and_then(negative, parse_label);
+    verify(operation_failure.is_err());
+    let operation_error: str8 = operation_failure.unwrap_err();
+    verify(operation_error == "not positive");
+    verify(calls == 2);
+}
+
+#[test]
+fn test_expected_or_else_recovers_or_preserves_error() {
+    var calls: i32 = 0;
+    let recover_missing = |message: str8| {
+        calls = calls + 1;
+        if message == "missing" {
+            return Ok<i32, bool>(0);
+        }
+        return Err<i32, bool>(true);
+    };
+
+    let failure: result<i32, str8> = Err<i32, str8>("missing");
+    let recovered: result<i32, bool> = or_else(failure, recover_missing);
+    verify(recovered.is_ok());
+    verify(recovered.unwrap() == 0);
+    verify(calls == 1);
+
+    let other_failure: result<i32, str8> = Err<i32, str8>("invalid");
+    let mapped_error: result<i32, bool> = or_else(other_failure, recover_missing);
+    verify(mapped_error.is_err());
+    verify(mapped_error.unwrap_err());
+    verify(calls == 2);
+
+    let success: result<i32, str8> = Ok<i32, str8>(42);
+    let preserved: result<i32, bool> = or_else(success, recover_missing);
+    verify(preserved.is_ok());
+    verify(preserved.unwrap() == 42);
+    verify(calls == 2);
 }

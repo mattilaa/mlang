@@ -1,4 +1,5 @@
 #include "ir.h"
+#include "ir/common.h"
 
 TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 {
@@ -458,6 +459,22 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
         }
     }
 
+    // Keep generic arguments from an explicit generic struct literal intact
+    // while inferring callback return types. Resolving it as an lvalue first
+    // may turn it into a monomorphized struct name, which can be unavailable
+    // during overload probing (notably for Ok<T, E>/Err<T, E> in and_then).
+    if(auto* structLit = dynamic_cast<StructLiteralNode*>(expr))
+    {
+        if(!structLit->typeArgs.empty())
+        {
+            auto* generic = new GenericStructTypeRefNode(structLit->structName);
+            for(const auto& arg : structLit->typeArgs)
+                generic->typeArgs.push_back(
+                    mlang::ir_detail::common::Helpers::type_from_text(arg));
+            return generic;
+        }
+    }
+
     if(TypeNode* lvalueType = getLValueType(expr, line))
         return cloneTypeNode(lvalueType);
 
@@ -480,7 +497,8 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
 
         auto* generic = new GenericStructTypeRefNode(structLit->structName);
         for(const auto& arg : structLit->typeArgs)
-            generic->typeArgs.push_back(new StructTypeRefNode(arg));
+            generic->typeArgs.push_back(
+                mlang::ir_detail::common::Helpers::type_from_text(arg));
         return generic;
     }
 

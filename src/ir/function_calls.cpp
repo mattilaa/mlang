@@ -473,6 +473,17 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
 
     auto bindUnboundReturnType = [&](TypeNode* pattern,
                                      TypeNode* concrete) -> bool {
+        // Prefer structural matching when the callback result has the same
+        // shape as the generic function's return type (for example
+        // result<Output, E> in expected::and_then). Only fall back to binding
+        // the first unbound parameter for APIs such as ranges::transform,
+        // where the callback returns an element but the function returns a
+        // container of that element.
+        auto savedBindings = bindings;
+        if(bindType(pattern, concrete))
+            return true;
+        bindings = std::move(savedBindings);
+
         std::function<bool(TypeNode*)> bindFirst = [&](TypeNode* current) {
             if(!current)
                 return false;
