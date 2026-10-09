@@ -22,3 +22,5 @@ Module file: `stdlib/std/thread.mla`
 - `atomic_free_handle(handle: atomic64) -> void`
 
 Mutexes are provided by [`std::sync`](Stdlib-Sync) as `mutex`.
+
+Stop-aware thread ownership helpers are documented in [`std::jthread`](Stdlib-Jthread).

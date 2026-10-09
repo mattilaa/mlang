@@ -17,7 +17,9 @@ pub struct StopSource {
 
 /// @brief Retained, read-only view of a cancellation state.
 pub struct StopToken {
-    var handle: i64;
+    // Keep this field named `raw` so compiler-lowered thread spawning can
+    // pass the token as a native handle argument to worker functions.
+    var raw: i64;
 };
 
 /// @brief Return the most recent native synchronization error.
@@ -44,7 +46,7 @@ impl StopSource {
     pub fn token(self: StopSource) -> result<StopToken, str8> {
         let rc: i32 = __mlang_std_sync_stop_retain(self.handle);
         if rc != 0 { return Err<StopToken, str8>(stop_error()); }
-        return Ok<StopToken, str8>(StopToken { handle: self.handle });
+        return Ok<StopToken, str8>(StopToken { raw: self.handle });
     }
 
     /// @brief Request cancellation. True only for the call that first requests it.
@@ -75,25 +77,25 @@ impl StopSource {
 impl StopToken {
     /// @brief Clone this token and retain the shared cancellation state.
     pub fn clone(self: StopToken) -> result<StopToken, str8> {
-        let rc: i32 = __mlang_std_sync_stop_retain(self.handle);
+        let rc: i32 = __mlang_std_sync_stop_retain(self.raw);
         if rc != 0 { return Err<StopToken, str8>(stop_error()); }
-        return Ok<StopToken, str8>(StopToken { handle: self.handle });
+        return Ok<StopToken, str8>(StopToken { raw: self.raw });
     }
 
     /// @brief Poll the cancellation flag with acquire ordering.
     pub fn stop_requested(self: StopToken) -> result<bool, str8> {
-        let rc: i32 = __mlang_std_sync_stop_requested(self.handle);
+        let rc: i32 = __mlang_std_sync_stop_requested(self.raw);
         if rc < 0 { return Err<bool, str8>(stop_error()); }
         return Ok<bool, str8>(rc == 1);
     }
 
     /// @brief Whether this token refers to a valid cancellation state.
     pub fn stop_possible(self: StopToken) -> bool {
-        return __mlang_std_sync_stop_possible(self.handle) == 1;
+        return __mlang_std_sync_stop_possible(self.raw) == 1;
     }
 
     /// @brief Release this token's retained reference.
     pub fn close(self: StopToken) -> i32 {
-        return __mlang_std_sync_stop_release(self.handle);
+        return __mlang_std_sync_stop_release(self.raw);
     }
 }
