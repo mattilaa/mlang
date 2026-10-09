@@ -379,6 +379,19 @@ pub fn generate_n(count: i64, generator: Generator) -> list<T> {
     return generated;
 }
 
+/// @brief Return a copy of `data` filled with `value` at every position.
+/// The input length acts as the output range size; the source is unchanged.
+/// Eager-list counterpart to C++20 `std::ranges::fill`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn fill(data: &list<T>, value: T) -> list<T> {
+    var filled: list<T> = [];
+    for i in 0..data.len() {
+        filled.push(value);
+    }
+    return filled;
+}
+
 /// @brief Copy at most `count` values from the beginning of `data`.
 /// Negative counts return an empty list and counts larger than the range length
 /// are clamped to its length. C++20 `std::ranges::copy_n` counterpart.
