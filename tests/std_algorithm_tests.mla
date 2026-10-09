@@ -372,6 +372,7 @@ use std::algorithm::ranges::subrange;
 use std::algorithm::ranges::iota;
 use std::algorithm::ranges::iota_by;
 use std::algorithm::ranges::iota_range;
+use std::algorithm::ranges::iota_range_by;
 use std::algorithm::ranges::repeat as repeat_range;
 use std::algorithm::ranges::single as single_range;
 use std::algorithm::ranges::drop;
@@ -3159,6 +3160,25 @@ fn test_algorithm_ranges_iota() {
     let last: i32 = 6;
     let typed: list<i32> = iota_range(first, last);
     verify(typed.len() == 4 && typed[0] == 2 && typed[3] == 5);
+
+    let step: i32 = 3;
+    let stepped_end: i32 = 11;
+    let typed_stepped: list<i32> =
+        iota_range_by(first, stepped_end, step);
+    verify(typed_stepped.len() == 3 && typed_stepped[0] == 2 &&
+           typed_stepped[1] == 5 && typed_stepped[2] == 8);
+    let down_from: i32 = 9;
+    let down_to: i32 = 0;
+    let down_step: i32 = -2;
+    let typed_descending: list<i32> =
+        iota_range_by(down_from, down_to, down_step);
+    verify(typed_descending.len() == 5 && typed_descending[0] == 9 &&
+           typed_descending[4] == 1);
+    let zero_step_i32: i32 = 0;
+    let negative_step_i32: i32 = -1;
+    let no_step: list<i32> = iota_range_by(first, last, zero_step_i32);
+    let away: list<i32> = iota_range_by(first, last, negative_step_i32);
+    verify(no_step.is_empty() && away.is_empty());
 
 }
 
