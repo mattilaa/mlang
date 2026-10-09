@@ -28,6 +28,9 @@ Numeric sequence helpers for integer lists, including generic list folds.
   with the first input value. `exclusive_scan(data, init, operation)` emits the
   accumulator before incorporating each element; its accumulator/output type
   may differ from the input element type. Empty inputs yield empty lists.
+- `inclusive_scan(data, init, operation)` is the seeded inclusive form; it
+  combines the initial accumulator with each input before emitting that prefix.
+  Its accumulator/output type may differ from the input element type.
 - `transform_inclusive_scan` projects each input before accumulation, with
   overloads that initialize from the first projected element or from an
   explicit initial value. `transform_exclusive_scan` emits the accumulator
