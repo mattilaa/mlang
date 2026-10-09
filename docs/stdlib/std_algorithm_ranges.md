@@ -104,6 +104,9 @@ fn example() {
   pass, or `(-1, -1)` for empty input. The comparator form
   `minmax_element_index_by(data, less)` applies the same tie rules under a
   strict ordering.
+- `minmax_element_value(data)` and `minmax_element_value_by(data, less)` return
+  both selected values in one traversal; like the individual value forms, they
+  require nonempty input.
 - The corresponding `min_element_index_by`, `max_element_index_by`,
   `min_element_value_by`, and `max_element_value_by` forms accept a strict
   ordering comparator and also keep the first equivalent element.

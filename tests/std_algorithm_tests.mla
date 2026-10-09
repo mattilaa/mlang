@@ -198,11 +198,13 @@ use std::algorithm::ranges::max_element_index;
 use std::algorithm::ranges::minmax_element_index;
 use std::algorithm::ranges::min_element_value;
 use std::algorithm::ranges::max_element_value;
+use std::algorithm::ranges::minmax_element_value;
 use std::algorithm::ranges::min_element_index_by;
 use std::algorithm::ranges::max_element_index_by;
 use std::algorithm::ranges::minmax_element_index_by;
 use std::algorithm::ranges::min_element_value_by;
 use std::algorithm::ranges::max_element_value_by;
+use std::algorithm::ranges::minmax_element_value_by;
 use std::algorithm::ranges::remove;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::iota;
@@ -1688,6 +1690,8 @@ fn test_algorithm_ranges_generic_element_values() {
     let values: list<i32> = [8, -3, 11, 11, 4];
     verify(min_element_value(values) == -3);
     verify(max_element_value(values) == 11);
+    let values_extrema: tuple<i32, i32> = minmax_element_value(values);
+    verify(values_extrema.0 == -3 && values_extrema.1 == 11);
     let words: list<str8> = ["pear", "apple", "plum"];
     verify(min_element_value(words) == "apple");
     verify(max_element_value(words) == "plum");
@@ -1702,6 +1706,9 @@ fn test_algorithm_ranges_comparator_element_extrema() {
     verify(max_element_index_by(values, by_tens) == 0);
     verify(min_element_value_by(values, by_tens) == 3);
     verify(max_element_value_by(values, by_tens) == 22);
+    let values_extrema: tuple<i32, i32> =
+        minmax_element_value_by(values, by_tens);
+    verify(values_extrema.0 == 3 && values_extrema.1 == 21);
     verify(min_element_index_by(empty, by_tens) == -1);
     verify(max_element_index_by(empty, by_tens) == -1);
     let by_tens_extrema: tuple<i64, i64> =
