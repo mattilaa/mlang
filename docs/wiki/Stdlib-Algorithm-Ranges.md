@@ -84,6 +84,10 @@ fn example() {
 - `contains_subrange_by(data, pattern, equivalent)` returns whether a
   contiguous pattern exists under a binary equivalence predicate, including
   for different element types. An empty pattern matches every range.
+- `search_by_projected`, `find_end_by_projected`, and
+  `contains_subrange_by_projected` apply independent projections before their
+  binary equivalence predicate, with the same empty-pattern and absent-pattern
+  behavior as the corresponding non-projected functions.
 - `equal` compares lists in order, including across distinct equality-comparable
   element types; `is_permutation` compares element multiplicities without
   considering order.
