@@ -191,6 +191,7 @@ use std::algorithm::ranges::replace_copy;
 use std::algorithm::ranges::replace_copy_if;
 use std::algorithm::ranges::replace_if;
 use std::algorithm::ranges::unique_by;
+use std::algorithm::ranges::unique_copy_by;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
@@ -215,6 +216,7 @@ use std::algorithm::ranges::transform;
 use std::algorithm::ranges::zip_transform;
 use std::algorithm::ranges::chunk_by;
 use std::algorithm::ranges::unique;
+use std::algorithm::ranges::unique_copy;
 use std::algorithm::ranges::unique_stable;
 use std::algorithm::ranges::clamp;
 use std::algorithm::ranges::clamp_by;
@@ -1901,6 +1903,8 @@ fn test_algorithm_ranges_generic_unique_transforms() {
     verify(adjacent.len() == 5);
     verify(adjacent[0] == 1 && adjacent[1] == 2 && adjacent[2] == 3);
     verify(adjacent[3] == 1 && adjacent[4] == 4);
+    let copied: list<i32> = unique_copy(repeats);
+    verify(copied.len() == 5 && copied[0] == 1 && copied[4] == 4);
     let stable: list<i32> = unique_stable(repeats);
     verify(stable.len() == 4);
     verify(stable[0] == 1 && stable[1] == 2 && stable[2] == 3 && stable[3] == 4);
@@ -2652,6 +2656,9 @@ fn test_algorithm_ranges_predicate_removal_and_unique() {
     let compacted: list<i32> = unique_by(runs, same_last_digit);
     verify(compacted.len() == 3);
     verify(compacted[0] == 11 && compacted[1] == 22 && compacted[2] == 33);
+    let copied_runs: list<i32> = unique_copy_by(runs, same_last_digit);
+    verify(copied_runs.len() == 3 && copied_runs[0] == 11 &&
+           copied_runs[1] == 22 && copied_runs[2] == 33);
 
     let empty: list<i32> = [];
     let empty_kept: list<i32> = remove_if(empty, is_negative);
