@@ -243,10 +243,15 @@ use std::algorithm::ranges::rotate_copy;
 use std::algorithm::ranges::shift_left;
 use std::algorithm::ranges::shift_right;
 use std::algorithm::ranges::chunked;
+use std::algorithm::ranges::chunk;
 use std::algorithm::ranges::windows;
+use std::algorithm::ranges::slide;
 use std::algorithm::ranges::strided;
+use std::algorithm::ranges::stride;
 use std::algorithm::ranges::joined;
+use std::algorithm::ranges::join;
 use std::algorithm::ranges::joined_with;
+use std::algorithm::ranges::join_with;
 use std::algorithm::ranges::split;
 use std::algorithm::ranges::concat;
 use std::algorithm::ranges::zip;
@@ -2306,6 +2311,32 @@ fn test_algorithm_ranges_generic_joined_with() {
     let without_separator: list<i32> = joined_with(nested, empty_separator);
     verify(without_separator.len() == 5);
     verify(without_separator[2] == 3 && without_separator[4] == 5);
+}
+
+#[test]
+fn test_algorithm_ranges_standard_view_names() {
+    let values: list<i32> = [1, 2, 3, 4, 5];
+    let groups: list<list<i32>> = chunk(values, 2);
+    let final_group: list<i32> = groups[2];
+    verify(groups.len() == 3 && final_group.len() == 1 &&
+           final_group[0] == 5);
+    let windows_by_slide: list<list<i32>> = slide(values, 3);
+    let middle_window: list<i32> = windows_by_slide[1];
+    verify(windows_by_slide.len() == 3 && middle_window[0] == 2 &&
+           middle_window[2] == 4);
+    let every_other: list<i32> = stride(values, 2);
+    verify(every_other.len() == 3 && every_other[0] == 1 &&
+           every_other[2] == 5);
+
+    let nested: list<list<i32>> = [[1, 2], [], [3]];
+    let flattened: list<i32> = join(nested);
+    verify(flattened.len() == 3 && flattened[0] == 1 &&
+           flattened[2] == 3);
+    let separator: list<i32> = [0];
+    let flattened_with: list<i32> = join_with(nested, separator);
+    verify(flattened_with.len() == 5 && flattened_with[2] == 0 &&
+           flattened_with[4] == 3);
+    verify(values[0] == 1 && nested[2][0] == 3);
 }
 
 #[test]
