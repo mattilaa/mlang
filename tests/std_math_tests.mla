@@ -316,6 +316,24 @@ fn test_complex_sqrt_negative_imaginary_zero() {
 }
 
 #[test]
+fn test_complex_trigonometric_and_hyperbolic_functions() {
+    let imaginary: Complex<f64> = Complex<f64> { re: 0.0, im: 1.0 };
+    let sine: Complex<f64> = sin(imaginary);
+    let cosine: Complex<f64> = cos(imaginary);
+    verify(approx_double(sine.re, 0.0, 0.000001));
+    verify(approx_double(sine.im, sinh(1.0), 0.000001));
+    verify(approx_double(cosine.re, cosh(1.0), 0.000001));
+    verify(approx_double(cosine.im, 0.0, 0.000001));
+
+    let hyper_sine: Complex<f64> = sinh(imaginary);
+    let hyper_cosine: Complex<f64> = cosh(imaginary);
+    verify(approx_double(hyper_sine.re, 0.0, 0.000001));
+    verify(approx_double(hyper_sine.im, sin(1.0), 0.000001));
+    verify(approx_double(hyper_cosine.re, cos(1.0), 0.000001));
+    verify(approx_double(hyper_cosine.im, 0.0, 0.000001));
+}
+
+#[test]
 fn test_complex_f32_abs() {
     let eps: f32 = 0.0001f;
     let z: Complex<f32> = Complex<f32> { re: 3.0f, im: 4.0f };
