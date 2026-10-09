@@ -346,6 +346,7 @@ use std::algorithm::ranges::unique_stable;
 use std::algorithm::ranges::clamp;
 use std::algorithm::ranges::clamp_projected;
 use std::algorithm::ranges::clamp_by;
+use std::algorithm::ranges::clamp_by_projected;
 use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
@@ -3049,6 +3050,26 @@ fn test_algorithm_ranges_clamp_projected() {
     let empty: list<i32> = [];
     let empty_bounded: list<i32> = clamp_projected(
         empty, low, high, project_tens);
+    verify(empty_bounded.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_clamp_by_projected() {
+    let values: list<i32> = [11, 20, 29, 40, 51];
+    let low: i32 = 40;
+    let high: i32 = 20;
+    let greater = |a: i32, b: i32| { return a > b; };
+    let project_tens = |value: i32| { return value / 10; };
+    let bounded: list<i32> = clamp_by_projected(
+        values, low, high, greater, project_tens);
+    verify(bounded.len() == 5 && bounded[0] == 20 &&
+           bounded[1] == 20 && bounded[2] == 29 &&
+           bounded[3] == 40 && bounded[4] == 40);
+    verify(values[0] == 11 && values[4] == 51);
+
+    let empty: list<i32> = [];
+    let empty_bounded: list<i32> = clamp_by_projected(
+        empty, low, high, greater, project_tens);
     verify(empty_bounded.len() == 0);
 }
 

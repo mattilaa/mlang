@@ -354,6 +354,9 @@ fn example() {
 - `clamp_projected(data, low, high, projection)` compares projected keys for
   both elements and bounds, but emits the original value or the corresponding
   bound value into its copied list.
+- `clamp_by_projected(data, low, high, less, projection)` combines projected
+  keys with a custom strict ordering; bounds must be ordered by that combined
+  ordering.
 - `sorted` returns a stable ascending copy and leaves the input unchanged.
 - `sorted_by(data, less)` returns a stable copied ordering by a strict
   comparator. Equivalent elements retain their original relative order.
