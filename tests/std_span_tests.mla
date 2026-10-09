@@ -6,7 +6,9 @@ use std::testing::verify;
 use std::testing::verify_eq_i32;
 use std::testing::verify_eq_i64;
 use std::span::size;
+use std::span::size_bytes;
 use std::span::empty;
+use std::span::get;
 use std::span::first;
 use std::span::last;
 use std::span::subspan;
@@ -105,4 +107,21 @@ fn test_span_size_and_copied_slices() {
     verify(empty_suffix.len() == 0);
     verify(empty_rest.len() == 0);
     verify(values[0] == 10 && values[3] == 40);
+}
+
+#[test]
+fn test_span_size_bytes_and_safe_get() {
+    let integers: Span<i32> = [8, 13, 21];
+    verify_eq_i64(12, size_bytes(integers));
+    let byte_values: span<u8> = [1, 2, 3, 4];
+    verify_eq_i64(4, size_bytes(byte_values));
+
+    let found: option<i32> = get(integers, 1);
+    verify(found.is_some() && found.unwrap() == 13);
+    let negative: option<i32> = get(integers, -1);
+    let past_end: option<i32> = get(integers, 3);
+    verify(negative.is_none() && past_end.is_none());
+    let empty_values: Span<i32> = [];
+    let absent: option<i32> = get(empty_values, 0);
+    verify(absent.is_none());
 }

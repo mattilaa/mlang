@@ -43,10 +43,27 @@ pub fn size(data: &Span<T>) -> i64 {
     return data.len();
 }
 
+/// @brief Return the number of bytes occupied by the elements.
+/// C++20 `std::span::size_bytes` counterpart.
+generic<T>
+pub fn size_bytes(data: &Span<T>) -> i64 {
+    return data.len() * size_of(T);
+}
+
 /// @brief Return whether a span alias contains no elements.
 generic<T>
 pub fn empty(data: &Span<T>) -> bool {
     return data.len() == 0;
+}
+
+/// @brief Return an element when `index` is in bounds, otherwise `None`.
+/// This safe extension complements checked list indexing.
+generic<T>
+pub fn get(data: &Span<T>, index: i64) -> option<T> {
+    if index < 0 || index >= data.len() {
+        return None<T>();
+    }
+    return Some<T>(data[index]);
 }
 
 /// @brief Return a copied prefix of at most `count` elements.
