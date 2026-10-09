@@ -268,6 +268,17 @@ fn test_complex_argument() {
 }
 
 #[test]
+fn test_complex_polar_construction() {
+    let phase: f64 = atan2(4.0, 3.0);
+    let z: Complex<f64> = polar(5.0, phase);
+    verify(approx_double(z.re, 3.0, 0.000001));
+    verify(approx_double(z.im, 4.0, 0.000001));
+
+    let unit: Complex<f32> = polar(1.0f, 0.0f);
+    verify(unit.re == 1.0f && unit.im == 0.0f);
+}
+
+#[test]
 fn test_complex_f32_abs() {
     let eps: f32 = 0.0001f;
     let z: Complex<f32> = Complex<f32> { re: 3.0f, im: 4.0f };

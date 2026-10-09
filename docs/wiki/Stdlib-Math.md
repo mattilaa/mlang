@@ -43,3 +43,5 @@ conjugate formula and is intended for numeric component types; division by a
 zero complex value follows the component type's normal division behavior.
 `norm()` aliases the squared-magnitude `norm_sqr()` method, and `arg()` returns
 the phase angle as `f64` using the `atan2(y, x)` helpers.
+`polar(magnitude, phase)` constructs a floating-point complex value from its
+magnitude and phase in radians.
