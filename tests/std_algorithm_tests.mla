@@ -100,16 +100,23 @@ use std::algorithm::ranges::is_heap;
 use std::algorithm::ranges::is_heap_until;
 use std::algorithm::ranges::is_heap_by;
 use std::algorithm::ranges::is_heap_until_by;
+use std::algorithm::ranges::is_heap_projected;
+use std::algorithm::ranges::is_heap_until_projected;
 use std::algorithm::ranges::make_heap;
 use std::algorithm::ranges::make_heap_by;
+use std::algorithm::ranges::make_heap_projected;
 use std::algorithm::ranges::push_heap;
 use std::algorithm::ranges::push_heap_by;
+use std::algorithm::ranges::push_heap_projected;
 use std::algorithm::ranges::pop_heap;
 use std::algorithm::ranges::pop_heap_by;
+use std::algorithm::ranges::pop_heap_projected;
 use std::algorithm::ranges::sort_heap;
 use std::algorithm::ranges::sort_heap_by;
+use std::algorithm::ranges::sort_heap_projected;
 use std::algorithm::ranges::partial_sort;
 use std::algorithm::ranges::partial_sort_by;
+use std::algorithm::ranges::partial_sort_projected;
 use std::algorithm::ranges::partial_sort_copy;
 use std::algorithm::ranges::partial_sort_copy_by;
 use std::algorithm::ranges::nth_element;
@@ -914,6 +921,45 @@ fn test_algorithm_ranges_partial_sort() {
     let empty: list<i32> = [];
     let empty_sorted: list<i32> = partial_sort(empty, 2);
     verify(empty_sorted.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_partial_sort_by_projection() {
+    let values: list<i32> = [42, 11, 23, 31, 19, 5];
+    let project_tens = |value: i32| { return value / 10; };
+    let first_three: list<i32> =
+        partial_sort_projected(values, 3, project_tens);
+    verify(first_three.len() == 3);
+    verify(first_three[0] == 5 &&
+           ((first_three[1] == 11 && first_three[2] == 19) ||
+            (first_three[1] == 19 && first_three[2] == 11)));
+
+    let none: list<i32> = partial_sort_projected(values, -2, project_tens);
+    let all: list<i32> = partial_sort_projected(values, 99, project_tens);
+    verify(none.len() == 0 && all.len() == values.len());
+    verify(is_sorted_projected(all, project_tens));
+    verify(values[0] == 42 && values[5] == 5);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_heap_operations() {
+    let values: list<i32> = [41, 12, 35, 24, 58, 17];
+    let project_tens = |value: i32| { return value / 10; };
+    let heap: list<i32> = make_heap_projected(values, project_tens);
+    verify(is_heap_projected(heap, project_tens));
+    verify(heap[0] == 58);
+
+    let appended: list<i32> = [heap[0], heap[1], heap[2], heap[3], heap[4],
+                               heap[5], 99];
+    let pushed: list<i32> = push_heap_projected(appended, project_tens);
+    verify(is_heap_projected(pushed, project_tens) && pushed[0] == 99);
+    let popped: list<i32> = pop_heap_projected(pushed, project_tens);
+    verify(popped[popped.len() - 1] == 99);
+    verify(is_heap_until_projected(popped, project_tens) == popped.len() - 1);
+
+    let ordered: list<i32> = sort_heap_projected(heap, project_tens);
+    verify(is_sorted_projected(ordered, project_tens));
+    verify(ordered[0] == 12 && ordered[5] == 58);
 }
 
 #[test]
