@@ -245,6 +245,9 @@ fn example() {
   copy rotated by a normalized signed offset. `rotate(data, middle)` places
   the suffix beginning at the split before the prefix (C++20 `ranges::rotate`
   style), clamping the split index and leaving the input unchanged.
+- `reverse_copy(data)` and `rotate_copy(data, middle)` provide the C++20
+  ranges algorithm names for those eager copying operations; both preserve the
+  input, and `rotate_copy` clamps the split index.
 - `shift_left(data, count)` returns the retained suffix after a left shift;
   `shift_right(data, count)` returns the retained prefix moved right. These
   eager C++20 `ranges::shift_left`/`shift_right` counterparts leave the input

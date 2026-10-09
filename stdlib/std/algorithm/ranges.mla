@@ -2586,6 +2586,14 @@ pub fn reversed(data: &list<T>) -> list<T> {
     return out;
 }
 
+/// @brief Copy a range in reverse order.
+/// Eager-list counterpart to C++20 `std::ranges::reverse_copy`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn reverse_copy(data: &list<T>) -> list<T> {
+    return reversed(data);
+}
+
 /// @brief Return a copy rotated left by `amount` positions.
 /// Negative amounts rotate right; amounts are normalized modulo list length.
 /// @ingroup algorithm_ranges
@@ -2628,6 +2636,15 @@ pub fn rotate(data: &list<T>, middle: i64) -> list<T> {
         out.push(data[i]);
     }
     return out;
+}
+
+/// @brief Copy a range with the element at `middle` moved to the front.
+/// The split index is clamped to `[0, data.len()]`; eager-list counterpart to
+/// C++20 `std::ranges::rotate_copy`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn rotate_copy(data: &list<T>, middle: i64) -> list<T> {
+    return rotate(data, middle);
 }
 
 /// @brief Return the retained range after a left shift by `count` positions.

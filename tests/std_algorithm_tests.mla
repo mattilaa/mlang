@@ -138,8 +138,10 @@ use std::algorithm::ranges::next_permutation_by;
 use std::algorithm::ranges::prev_permutation;
 use std::algorithm::ranges::prev_permutation_by;
 use std::algorithm::ranges::reversed;
+use std::algorithm::ranges::reverse_copy;
 use std::algorithm::ranges::rotate_left;
 use std::algorithm::ranges::rotate;
+use std::algorithm::ranges::rotate_copy;
 use std::algorithm::ranges::shift_left;
 use std::algorithm::ranges::shift_right;
 use std::algorithm::ranges::chunked;
@@ -350,6 +352,12 @@ fn test_algorithm_ranges_rotate_at_middle() {
     let empty: list<i32> = [];
     let empty_rotated: list<i32> = rotate(empty, 3);
     verify(empty_rotated.len() == 0);
+
+    let copied: list<i32> = rotate_copy(values, 2);
+    verify(copied.len() == 5 && copied[0] == 3 && copied[1] == 4 &&
+           copied[2] == 5 && copied[3] == 1 && copied[4] == 2);
+    let copied_end: list<i32> = rotate_copy(values, 5);
+    verify(copied_end[0] == 1 && copied_end[4] == 5);
 }
 
 #[test]
@@ -1246,6 +1254,8 @@ fn test_algorithm_ranges_generic_reversed_copy() {
     verify(backwards.len() == 4);
     verify(backwards[0] == 4 && backwards[1] == 3);
     verify(backwards[2] == 2 && backwards[3] == 1);
+    let standard_named: list<i32> = reverse_copy(values);
+    verify(standard_named[0] == 4 && standard_named[3] == 1);
     verify(values[0] == 1 && values[3] == 4);
 
     let empty: list<str8> = [];
