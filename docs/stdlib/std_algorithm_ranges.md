@@ -284,6 +284,9 @@ fn example() {
 - `transform(data, operation)` eagerly maps every element into a new list;
   the output element type is inferred from the closure return type and may
   differ from the input element type.
+- The binary `transform(left, right, operation)` overload transforms paired
+  elements into a new list and stops at the shorter input, matching the bounded
+  two-range form of C++20 `std::ranges::transform`.
 - `transform_projected` applies a projection before its unary operation;
   `zip_transform_projected` applies independent projections to paired inputs
   before the binary operation, stopping at the shorter range.
