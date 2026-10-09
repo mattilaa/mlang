@@ -5109,6 +5109,32 @@ pub fn merged_by(left: &list<T>, right: &list<T>, less: Less) -> list<T> {
     return out;
 }
 
+/// @brief Stably merge ranges ordered by a comparator over projected keys.
+/// Equivalent keys from the left range appear first; both inputs must be
+/// sorted with the combined ordering.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn merged_by_projected(left: &list<T>, right: &list<T>, less: Less,
+                           projection: Projection) -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    while i < left_len && j < right_len {
+        if less(projection(right[j]), projection(left[i])) {
+            out.push(right[j]);
+            j = j + 1;
+        } else {
+            out.push(left[i]);
+            i = i + 1;
+        }
+    }
+    while i < left_len { out.push(left[i]); i = i + 1; }
+    while j < right_len { out.push(right[j]); j = j + 1; }
+    return out;
+}
+
 /// @brief Stably merge two sorted halves of one range into a copied range.
 /// `middle` is clamped to the valid index interval; both halves must already
 /// be sorted in ascending order. C++20 `std::ranges::inplace_merge` analogue.
@@ -5166,6 +5192,33 @@ pub fn inplace_merge_projected(data: &list<T>, middle: i64,
     var right: i64 = split;
     while left < split && right < n {
         if projection(data[right]) < projection(data[left]) {
+            out.push(data[right]);
+            right = right + 1;
+        } else {
+            out.push(data[left]);
+            left = left + 1;
+        }
+    }
+    while left < split { out.push(data[left]); left = left + 1; }
+    while right < n { out.push(data[right]); right = right + 1; }
+    return out;
+}
+
+/// @brief Merge sorted halves by comparator-projected ordering into a copy.
+/// Equivalent values from the left half remain first; `middle` is clamped.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn inplace_merge_by_projected(data: &list<T>, middle: i64, less: Less,
+                                  projection: Projection) -> list<T> {
+    var split: i64 = middle;
+    let n: i64 = data.len();
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    var out: list<T> = [];
+    var left: i64 = 0;
+    var right: i64 = split;
+    while left < split && right < n {
+        if less(projection(data[right]), projection(data[left])) {
             out.push(data[right]);
             right = right + 1;
         } else {
