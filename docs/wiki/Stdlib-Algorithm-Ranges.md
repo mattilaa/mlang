@@ -258,6 +258,8 @@ fn example() {
 - `sorted` returns a stable ascending copy and leaves the input unchanged.
 - `sorted_by(data, less)` returns a stable copied ordering by a strict
   comparator. Equivalent elements retain their original relative order.
+- `sorted_projected(data, projection)` returns a stable copy ordered by the
+  projected key, preserving input order among equivalent keys.
 - `reversed` returns the elements in reverse order; `rotate_left` returns a
   copy rotated by a normalized signed offset. `rotate(data, middle)` places
   the suffix beginning at the split before the prefix (C++20 `ranges::rotate`
