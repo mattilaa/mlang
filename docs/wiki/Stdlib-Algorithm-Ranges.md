@@ -134,9 +134,14 @@ fn example() {
   result. All operations preserve the input; push/pop follow the usual heap
   preconditions, and the comparator variants use the same strict ordering as
   the query helpers.
+- The `_projected` heap forms (`is_heap_until_projected`,
+  `is_heap_projected`, `make_heap_projected`, `push_heap_projected`,
+  `pop_heap_projected`, and `sort_heap_projected`) apply a unary key projection
+  while preserving the same copied-list behavior and heap preconditions.
 - `partial_sort(data, count)` uses a bounded heap to return the `count`
   smallest values in ascending order. `partial_sort_by(data, count, less)`
   applies a caller-provided order (for example, to select the largest values).
+  `partial_sort_projected(data, count, projection)` orders by projected keys.
   Counts clamp to the available range and the source is unchanged.
 - `partial_sort_copy(data, output_capacity)` and its `_by` comparator form
   use the destination capacity to select and sort a prefix into a new list;
