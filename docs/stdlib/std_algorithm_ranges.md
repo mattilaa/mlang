@@ -49,7 +49,8 @@ fn example() {
 - `adjacent_find_by(data, equivalent)` returns the first adjacent index whose
   pair satisfies a caller-provided binary equivalence predicate, or `-1`.
 - `find_first_of(data, candidates)` returns the first index in `data` matching
-  any candidate, or `-1` when there is no match.
+  any candidate, or `-1` when there is no match; `find_first_of_by` accepts a
+  binary equivalence predicate and supports different element types.
 - `includes(range, subset)` checks whether sorted `range` contains sorted
   `subset`; duplicate multiplicities matter and both inputs must be sorted.
 - `search` returns the first index of a contiguous pattern (`0` for an empty

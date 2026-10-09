@@ -54,6 +54,7 @@ use std::algorithm::ranges::find_last;
 use std::algorithm::ranges::adjacent_find;
 use std::algorithm::ranges::adjacent_find_by;
 use std::algorithm::ranges::find_first_of;
+use std::algorithm::ranges::find_first_of_by;
 use std::algorithm::ranges::includes;
 use std::algorithm::ranges::includes_by;
 use std::algorithm::ranges::size;
@@ -331,6 +332,21 @@ fn test_algorithm_ranges_generic_find_first_of() {
     let empty: list<i32> = [];
     verify(find_first_of(values, none) == -1);
     verify(find_first_of(empty, candidates) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_find_first_of_by_heterogeneous_predicate() {
+    let values: list<i32> = [11, 22, 23, 34];
+    let candidates: list<i64> = [19, 20];
+    let absent: list<i64> = [49, 58];
+    let empty: list<i64> = [];
+    let same_decade = |value: i32, candidate: i64| {
+        return value / 10 == candidate / 10;
+    };
+
+    verify(find_first_of_by(values, candidates, same_decade) == 0);
+    verify(find_first_of_by(values, absent, same_decade) == -1);
+    verify(find_first_of_by(values, empty, same_decade) == -1);
 }
 
 #[test]
