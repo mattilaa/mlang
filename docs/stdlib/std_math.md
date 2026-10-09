@@ -17,6 +17,9 @@ Module file: `stdlib/std/math.mla`
   squaring large or tiny arguments directly (C++20 `std::hypot`)
 - `fma(x, y, z)` for `f32` and `f64`, computing `x*y+z` with one final
   rounding (C++ `std::fma`)
+- `nextafter(x, y)`, `isfinite(x)`, `isinf(x)`, `isnan(x)`, and `signbit(x)`
+  for both floating types, exposing representable-neighbor and IEEE-754
+  classification operations from `<cmath>`
 - `sin(x)`
 - `cos(x)`
 - `tan(x)`

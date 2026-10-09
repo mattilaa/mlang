@@ -294,6 +294,56 @@ pub fn fma(x: f64, y: f64, z: f64) -> f64 {
     return __mlang_std_math_fma_f64(x, y, z);
 }
 
+/// @brief Return the next representable `f32` from `x` toward `y`.
+pub fn nextafter(x: f32, y: f32) -> f32 {
+    return __mlang_std_math_nextafter_f32(x, y);
+}
+
+/// @brief Return the next representable `f64` from `x` toward `y`.
+pub fn nextafter(x: f64, y: f64) -> f64 {
+    return __mlang_std_math_nextafter_f64(x, y);
+}
+
+/// @brief Return whether an `f32` is finite.
+pub fn isfinite(x: f32) -> bool {
+    return __mlang_std_math_isfinite_f32(x) != 0;
+}
+
+/// @brief Return whether an `f64` is finite.
+pub fn isfinite(x: f64) -> bool {
+    return __mlang_std_math_isfinite_f64(x) != 0;
+}
+
+/// @brief Return whether an `f32` is infinite.
+pub fn isinf(x: f32) -> bool {
+    return __mlang_std_math_isinf_f32(x) != 0;
+}
+
+/// @brief Return whether an `f64` is infinite.
+pub fn isinf(x: f64) -> bool {
+    return __mlang_std_math_isinf_f64(x) != 0;
+}
+
+/// @brief Return whether an `f32` is NaN.
+pub fn isnan(x: f32) -> bool {
+    return __mlang_std_math_isnan_f32(x) != 0;
+}
+
+/// @brief Return whether an `f64` is NaN.
+pub fn isnan(x: f64) -> bool {
+    return __mlang_std_math_isnan_f64(x) != 0;
+}
+
+/// @brief Return the sign bit of an `f32`, including for signed zero and NaN.
+pub fn signbit(x: f32) -> bool {
+    return __mlang_std_math_signbit_f32(x) != 0;
+}
+
+/// @brief Return the sign bit of an `f64`, including for signed zero and NaN.
+pub fn signbit(x: f64) -> bool {
+    return __mlang_std_math_signbit_f64(x) != 0;
+}
+
 /// @brief Generic complex number value (Rust-like `Complex<T>` style).
 /// @note Arithmetic methods require `T` to support the used operators.
 pub struct Complex<T> {
