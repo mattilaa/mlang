@@ -96,6 +96,7 @@ use std::algorithm::ranges::ends_with;
 use std::algorithm::ranges::ends_with_projected;
 use std::algorithm::ranges::ends_with_by;
 use std::algorithm::ranges::lexicographical_compare;
+use std::algorithm::ranges::lexicographical_compare_projected;
 use std::algorithm::ranges::lexicographical_compare_by;
 use std::algorithm::ranges::is_sorted;
 use std::algorithm::ranges::is_sorted_until;
@@ -836,6 +837,24 @@ fn test_algorithm_ranges_generic_lexicographical_compare() {
     let mixed: list<i64> = [1, 2, 10];
     verify(lexicographical_compare(first, mixed));
     verify(lexicographical_compare(mixed, first) == false);
+}
+
+#[test]
+fn test_algorithm_ranges_lexicographical_compare_projected() {
+    let left: list<i32> = [21, 39, 52];
+    let before: list<i32> = [29, 40, 50];
+    let same_keys: list<i32> = [28, 31, 59];
+    let extended: list<i32> = [29, 40, 50, 60];
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(lexicographical_compare_projected(
+        left, before, project_tens, project_tens));
+    verify(!lexicographical_compare_projected(
+        before, left, project_tens, project_tens));
+    verify(!lexicographical_compare_projected(
+        left, same_keys, project_tens, project_tens));
+    verify(lexicographical_compare_projected(
+        left, extended, project_tens, project_tens));
 }
 
 #[test]
