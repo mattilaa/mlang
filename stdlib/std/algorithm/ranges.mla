@@ -366,6 +366,17 @@ pub fn for_each(data: &list<T>, operation: Operation) -> void {
     }
 }
 
+/// @brief Invoke `operation` on each element's projected value in order.
+/// @ingroup algorithm_ranges
+generic<T, Operation, Projection>
+pub fn for_each_projected(data: &list<T>, operation: Operation,
+                          projection: Projection) -> void {
+    let n: i64 = data.len();
+    for i in 0..n {
+        operation(projection(data[i]));
+    }
+}
+
 /// @brief Invoke `operation` on the first `count` elements in order.
 /// Negative counts perform no calls; counts larger than the range length are
 /// clamped to its length. C++20 `std::ranges::for_each_n` counterpart.
@@ -382,6 +393,22 @@ pub fn for_each_n(data: &list<T>, count: i64, operation: Operation) -> void {
     }
     for i in 0..n {
         operation(data[i]);
+    }
+}
+
+/// @brief Invoke `operation` on projected values from a bounded prefix.
+/// Counts clamp to the range length; non-positive counts perform no calls.
+/// @ingroup algorithm_ranges
+generic<T, Operation, Projection>
+pub fn for_each_n_projected(data: &list<T>, count: i64,
+                            operation: Operation, projection: Projection)
+    -> void {
+    let data_len: i64 = data.len();
+    var n: i64 = count;
+    if n < 0 { n = 0; }
+    if n > data_len { n = data_len; }
+    for i in 0..n {
+        operation(projection(data[i]));
     }
 }
 

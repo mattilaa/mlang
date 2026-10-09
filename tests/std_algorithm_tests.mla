@@ -209,7 +209,9 @@ use std::algorithm::ranges::find_last_if_projected;
 use std::algorithm::ranges::count_if;
 use std::algorithm::ranges::count_if_projected;
 use std::algorithm::ranges::for_each;
+use std::algorithm::ranges::for_each_projected;
 use std::algorithm::ranges::for_each_n;
+use std::algorithm::ranges::for_each_n_projected;
 use std::algorithm::ranges::generate_n;
 use std::algorithm::ranges::generate;
 use std::algorithm::ranges::fill;
@@ -2861,6 +2863,27 @@ fn test_algorithm_ranges_for_each_n() {
     for_each_n(values, -2, collect);
     verify(sum == 34 && calls == 6);
     verify(values[0] == 3 && values[3] == 11);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_for_each() {
+    let values: list<i32> = [11, 21, 32];
+    let project_tens = |value: i32| { return value / 10; };
+    var total: i32 = 0;
+    let add_key = |key: i32| { total = total + key; };
+
+    for_each_projected(values, add_key, project_tens);
+    verify(total == 6);
+    total = 0;
+    for_each_n_projected(values, 2, add_key, project_tens);
+    verify(total == 3);
+    total = 0;
+    for_each_n_projected(values, 8, add_key, project_tens);
+    verify(total == 6);
+    total = 0;
+    for_each_n_projected(values, -1, add_key, project_tens);
+    verify(total == 0);
+    verify(values[0] == 11 && values[2] == 32);
 }
 
 #[test]
