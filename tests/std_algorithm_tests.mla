@@ -243,6 +243,8 @@ use std::algorithm::ranges::adjacent_transform3;
 use std::algorithm::ranges::adjacent_transform4;
 use std::algorithm::ranges::replace;
 use std::algorithm::ranges::replace_projected;
+use std::algorithm::ranges::replace_by;
+use std::algorithm::ranges::replace_by_projected;
 use std::algorithm::ranges::all_of;
 use std::algorithm::ranges::all_of_projected;
 use std::algorithm::ranges::any_of;
@@ -293,6 +295,8 @@ use std::algorithm::ranges::remove_copy_if;
 use std::algorithm::ranges::remove_copy_if_projected;
 use std::algorithm::ranges::replace_copy;
 use std::algorithm::ranges::replace_copy_projected;
+use std::algorithm::ranges::replace_copy_by;
+use std::algorithm::ranges::replace_copy_by_projected;
 use std::algorithm::ranges::replace_copy_if;
 use std::algorithm::ranges::replace_copy_if_projected;
 use std::algorithm::ranges::replace_if;
@@ -2567,6 +2571,36 @@ fn test_algorithm_ranges_projected_remove_replace() {
     verify(replaced_copy.len() == 5 && replaced_copy[1] == 99 &&
            replaced_copy[2] == 99);
     verify(values[1] == 22 && values[2] == 29);
+}
+
+#[test]
+fn test_algorithm_ranges_equivalence_replace() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let same_decade = |item: i32, key: i32| { return item / 10 == key / 10; };
+    let replaced: list<i32> = replace_by(values, 20, 99, same_decade);
+    let copied: list<i32> = replace_copy_by(values, 20, 99, same_decade);
+    verify(replaced.len() == 5 && replaced[0] == 11 &&
+           replaced[1] == 99 && replaced[2] == 99 &&
+           replaced[3] == 31 && replaced[4] == 42);
+    verify(copied.len() == 5 && copied[1] == 99 && copied[2] == 99);
+
+    let project_tens = |value: i32| { return value / 10; };
+    let same_parity = |left: i32, right: i32| {
+        return left % 2 == right % 2;
+    };
+    let replaced_projected: list<i32> = replace_by_projected(
+        values, 2, 99, same_parity, project_tens);
+    let copied_projected: list<i32> = replace_copy_by_projected(
+        values, 2, 99, same_parity, project_tens);
+    verify(replaced_projected.len() == 5 &&
+           replaced_projected[0] == 11 &&
+           replaced_projected[1] == 99 &&
+           replaced_projected[2] == 99 &&
+           replaced_projected[3] == 31 &&
+           replaced_projected[4] == 99);
+    verify(copied_projected.len() == 5 &&
+           copied_projected[1] == 99 && copied_projected[4] == 99);
+    verify(values[0] == 11 && values[1] == 22 && values[4] == 42);
 }
 
 #[test]
