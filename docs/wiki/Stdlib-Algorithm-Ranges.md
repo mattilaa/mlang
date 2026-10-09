@@ -117,6 +117,11 @@ fn example() {
   ordering comparator and also keep the first equivalent element.
 - `is_sorted_until(data)` returns the first index that breaks nondecreasing
   order, or `data.len()` when the entire range is sorted.
+- `is_sorted_projected`, `is_sorted_until_projected`, `lower_bound_projected`,
+  `upper_bound_projected`, `equal_range_projected`, and
+  `binary_search_projected` perform the corresponding ordering query on a
+  unary projection of each element. Binary-search forms require projected
+  values sorted in nondecreasing order.
 - `is_heap(data)` checks max-heap order; `is_heap_until(data)` returns the
   first violating child index, or `data.len()` when the range is a heap.
 - `is_heap_by(data, less)` and `is_heap_until_by(data, less)` check heap order

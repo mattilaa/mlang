@@ -1455,6 +1455,27 @@ pub fn is_sorted_until(data: &list<T>) -> i64 {
     return n;
 }
 
+/// @brief Find the first inversion after applying `projection`.
+/// The result is the range length when projected values are sorted.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn is_sorted_until_projected(data: &list<T>, projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    for i in 1..n {
+        if projection(data[i]) < projection(data[i - 1]) {
+            return i;
+        }
+    }
+    return n;
+}
+
+/// @brief Check nondecreasing order after applying `projection`.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn is_sorted_projected(data: &list<T>, projection: Projection) -> bool {
+    return is_sorted_until_projected(data, projection) == data.len();
+}
+
 /// @brief Return the first child index violating max-heap order, or range length.
 /// C++20 `std::ranges::is_heap_until` equivalent.
 /// @ingroup algorithm_ranges
@@ -1864,6 +1885,23 @@ pub fn lower_bound(data: &list<T>, value: U) -> i64 {
     return lo;
 }
 
+/// @brief Projected lower bound for a range sorted by projected values.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn lower_bound_projected(data: &list<T>, value: U, projection: Projection) -> i64 {
+    var lo: i64 = 0;
+    var hi: i64 = data.len();
+    while lo < hi {
+        let mid: i64 = lo + (hi - lo) / 2;
+        if projection(data[mid]) < value {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
 /// @brief First index where `value` would be inserted after equal elements.
 /// Requires nondecreasing input; returns `data.len()` when value is too large.
 /// @ingroup algorithm_ranges
@@ -1874,6 +1912,23 @@ pub fn upper_bound(data: &list<T>, value: U) -> i64 {
     while lo < hi {
         let mid: i64 = lo + (hi - lo) / 2;
         if value < data[mid] {
+            hi = mid;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    return lo;
+}
+
+/// @brief Projected upper bound for a range sorted by projected values.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn upper_bound_projected(data: &list<T>, value: U, projection: Projection) -> i64 {
+    var lo: i64 = 0;
+    var hi: i64 = data.len();
+    while lo < hi {
+        let mid: i64 = lo + (hi - lo) / 2;
+        if value < projection(data[mid]) {
             hi = mid;
         } else {
             lo = mid + 1;
@@ -1893,6 +1948,17 @@ pub fn equal_range(data: &list<T>, value: U) -> tuple<i64, i64> {
     return (first, last);
 }
 
+/// @brief Return the projected half-open matching index range.
+/// Requires projected values sorted in nondecreasing order.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn equal_range_projected(data: &list<T>, value: U, projection: Projection)
+    -> tuple<i64, i64> {
+    let first: i64 = lower_bound_projected(data, value, projection);
+    let last: i64 = upper_bound_projected(data, value, projection);
+    return (first, last);
+}
+
 /// @brief Return whether a sorted list contains `value`.
 /// @ingroup algorithm_ranges
 generic<T, U>
@@ -1902,6 +1968,19 @@ pub fn binary_search(data: &list<T>, value: U) -> bool {
         return false;
     }
     return data[position] == value;
+}
+
+/// @brief Check whether a projected value occurs in a sorted range.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn binary_search_projected(data: &list<T>, value: U, projection: Projection)
+    -> bool {
+    let position: i64 = lower_bound_projected(data, value, projection);
+    if position >= data.len() {
+        return false;
+    }
+    let projected: U = projection(data[position]);
+    return projected == value;
 }
 
 /// @brief Check sorted order using `less` as the strict ordering comparator.
