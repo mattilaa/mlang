@@ -207,6 +207,7 @@ use std::algorithm::ranges::remove;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::iota;
 use std::algorithm::ranges::iota_by;
+use std::algorithm::ranges::iota_range;
 use std::algorithm::ranges::repeat as repeat_range;
 use std::algorithm::ranges::single as single_range;
 use std::algorithm::ranges::drop;
@@ -1864,6 +1865,10 @@ fn test_algorithm_ranges_iota() {
                                       9223372036854775807, 4);
     verify(near_max.len() == 1 && near_max[0] == 9223372036854775806);
 
+    let first: i32 = 2;
+    let last: i32 = 6;
+    let typed: list<i32> = iota_range(first, last);
+    verify(typed.len() == 4 && typed[0] == 2 && typed[3] == 5);
 }
 
 #[test]

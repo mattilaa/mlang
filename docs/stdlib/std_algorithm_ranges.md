@@ -233,7 +233,8 @@ fn example() {
   eager behavior of C++20 `views::take_while` and `views::drop_while`.
 - `iota(start, end)` materializes `[start, end)`; `iota_by(start, end, step)`
   supports positive and negative strides. A zero step or a step pointing away
-  from the bound returns an empty list.
+  from the bound returns an empty list. `iota_range(start, end)` is the generic
+  typed counterpart for comparable, incrementable element types.
 - `repeat(value, count)` eagerly materializes `count` copies of a value, the
   list counterpart to the C++23 `std::views::repeat`; non-positive counts are
   empty.
@@ -319,5 +320,7 @@ fn example() {
   to `old`; the original range is unchanged.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
+- `iota_range(start, end)` materializes a typed half-open range, preserving
+  the input element type instead of widening it to `i64`.
 
 The module retains the original `_i64` functions for source compatibility.
