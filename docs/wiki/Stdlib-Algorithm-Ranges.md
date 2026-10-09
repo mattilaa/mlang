@@ -399,6 +399,8 @@ fn example() {
   produce an empty list.
 - `chunk_by(data, equivalent)` groups adjacent elements while the binary
   predicate accepts each neighboring pair (C++23 `views::chunk_by` style).
+- `chunk_by_projected(data, equivalent, projection)` groups adjacent values
+  by their projected keys while retaining original elements in each chunk.
 - `windows(data, size)` materializes every overlapping fixed-size sublist
   (C++23 `views::slide` style); invalid sizes produce an empty list.
 - `strided(data, step)` copies every `step`-th element from index zero
