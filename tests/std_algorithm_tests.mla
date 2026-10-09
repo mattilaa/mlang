@@ -297,6 +297,8 @@ use std::algorithm::ranges::unique_by;
 use std::algorithm::ranges::unique_copy_by;
 use std::algorithm::ranges::unique_projected;
 use std::algorithm::ranges::unique_copy_projected;
+use std::algorithm::ranges::unique_by_projected;
+use std::algorithm::ranges::unique_copy_by_projected;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
@@ -2938,6 +2940,31 @@ fn test_algorithm_ranges_generic_unique_transforms() {
     let stable: list<i32> = unique_stable(repeats);
     verify(stable.len() == 4);
     verify(stable[0] == 1 && stable[1] == 2 && stable[2] == 3 && stable[3] == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_unique_by_projected() {
+    let values: list<i32> = [11, 31, 22, 42, 51, 71];
+    let project_tens = |value: i32| { return value / 10; };
+    let same_parity = |left: i32, right: i32| {
+        return left % 2 == right % 2;
+    };
+    let distinct_runs: list<i32> = unique_by_projected(
+        values, same_parity, project_tens);
+    verify(distinct_runs.len() == 3);
+    verify(distinct_runs[0] == 11 && distinct_runs[1] == 22 &&
+           distinct_runs[2] == 51);
+
+    let copied_runs: list<i32> = unique_copy_by_projected(
+        values, same_parity, project_tens);
+    verify(copied_runs.len() == 3 && copied_runs[0] == 11 &&
+           copied_runs[1] == 22 && copied_runs[2] == 51);
+    verify(values.len() == 6 && values[0] == 11 && values[5] == 71);
+
+    let empty: list<i32> = [];
+    let empty_runs: list<i32> = unique_by_projected(
+        empty, same_parity, project_tens);
+    verify(empty_runs.len() == 0);
 }
 
 #[test]
