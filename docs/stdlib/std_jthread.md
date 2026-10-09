@@ -3,8 +3,9 @@
 Module file: `stdlib/std/jthread.mla`
 
 `jthread` combines a native worker handle with a cooperative `StopSource`. As
-Mlang does not currently run implicit destructors, call `close()` to request
-stop, join the worker, and release the source.
+Mlang does not currently run implicit destructors, explicitly call `close()`
+to request stop, join the worker, and release the source. `join()` waits without
+requesting stop and releases the source after the worker exits.
 
 ```mlang
 mod std::thread;
@@ -39,7 +40,7 @@ fn main() -> i32 {
 
 `thread::spawn` is compiler-lowered for named workers and accepts `StopToken`
 as a handle argument. Treat that token as transferred to the worker and close
-it there; the `jthread` keeps the source alive. `join()` waits without
-requesting stop. `request_stop()` is cooperative and does not interrupt a
+it there; the `jthread` keeps the source alive until `join()` or `close()`.
+`request_stop()` is cooperative and does not interrupt a
 blocked operation, so use an appropriate wakeup for workers waiting on I/O or
 synchronization.

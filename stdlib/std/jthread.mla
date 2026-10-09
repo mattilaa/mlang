@@ -39,7 +39,10 @@ impl jthread {
 
     /// @brief Join without requesting stop.
     pub fn join(self: jthread) -> i32 {
-        return join(self.worker);
+        let status: i32 = join(self.worker);
+        let released: i32 = self.source.close();
+        if released != 0 { return released; }
+        return status;
     }
 
     /// @brief Request stop, join the worker, then release the source.
