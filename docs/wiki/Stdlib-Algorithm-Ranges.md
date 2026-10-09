@@ -438,8 +438,8 @@ fn example() {
 - `pairwise(data)` materializes tuples of each adjacent pair (C++23
   `views::pairwise` style); inputs shorter than two elements produce an empty
   list.
-- `adjacent3(data)` and `adjacent4(data)` materialize typed triples and
-  quadruples for each overlapping fixed-width window, analogous to C++23
+- `adjacent3(data)`, `adjacent4(data)`, and `adjacent5(data)` materialize typed
+  tuples for each overlapping fixed-width window, analogous to C++23
   `views::adjacent<N>`; short inputs produce empty lists.
 - `adjacent_transform(data, operation)` applies a binary operation to each
   neighboring pair, returning up to one fewer result than input elements and
@@ -448,6 +448,9 @@ fn example() {
 - `adjacent_transform3` and `adjacent_transform4` apply ternary or four-argument
   operations to each neighboring triple or group of four, inferring the output
   type and returning an empty list when the input is too short.
+- `adjacent_transform5` applies a five-argument operation to each neighboring
+  group of five. The `_projected` forms apply these operations to projected
+  keys while preserving the original source values.
 - The `_projected` adjacent-transform forms apply those operations to projected
   keys while preserving the original source values.
 - `enumerate(data)` materializes `(index, value)` tuples with zero-based indices

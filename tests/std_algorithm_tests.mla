@@ -267,6 +267,9 @@ use std::algorithm::ranges::adjacent4;
 use std::algorithm::ranges::adjacent_transform;
 use std::algorithm::ranges::adjacent_transform3;
 use std::algorithm::ranges::adjacent_transform4;
+use std::algorithm::ranges::adjacent5;
+use std::algorithm::ranges::adjacent_transform5;
+use std::algorithm::ranges::adjacent_transform5_projected;
 use std::algorithm::ranges::adjacent_transform_projected;
 use std::algorithm::ranges::adjacent_transform3_projected;
 use std::algorithm::ranges::adjacent_transform4_projected;
@@ -2652,6 +2655,36 @@ fn test_algorithm_ranges_adjacent_transform_wider_windows() {
     let no_quadruples: list<i32> = adjacent_transform4(short, sum_four);
     verify(no_triples.len() == 0 && no_quadruples.len() == 0);
     verify(values[0] == 2 && values[4] == 10);
+}
+
+#[test]
+fn test_algorithm_ranges_adjacent_five_element_windows() {
+    let values: list<i32> = [2, 4, 6, 8, 10, 12];
+    let windows: list<tuple<i32, i32, i32, i32, i32>> = adjacent5(values);
+    verify(windows.len() == 2);
+    let first: tuple<i32, i32, i32, i32, i32> = windows[0];
+    verify(first.0 == 2 && first.1 == 4 && first.2 == 6 && first.3 == 8 &&
+           first.4 == 10);
+
+    let sum_five = |a: i32, b: i32, c: i32, d: i32, e: i32| {
+        return a + b + c + d + e;
+    };
+    let sums: list<i32> = adjacent_transform5(values, sum_five);
+    verify(sums.len() == 2 && sums[0] == 30 && sums[1] == 40);
+
+    let double = |value: i32| { return value * 2; };
+    let projected: list<i32> =
+        adjacent_transform5_projected(values, sum_five, double);
+    verify(projected.len() == 2 && projected[0] == 60 && projected[1] == 80);
+
+    let short: list<i32> = [1, 2, 3, 4];
+    let no_windows: list<tuple<i32, i32, i32, i32, i32>> = adjacent5(short);
+    let no_sums: list<i32> = adjacent_transform5(short, sum_five);
+    let no_projected: list<i32> =
+        adjacent_transform5_projected(short, sum_five, double);
+    verify(no_windows.len() == 0 && no_sums.len() == 0 &&
+           no_projected.len() == 0);
+    verify(values[0] == 2 && values[5] == 12);
 }
 
 #[test]

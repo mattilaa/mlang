@@ -5470,6 +5470,21 @@ pub fn adjacent4(data: &list<T>) -> list<tuple<T, T, T, T>> {
     return out;
 }
 
+/// @brief Materialize a tuple for every adjacent group of five.
+/// Eager counterpart to C++23 `views::adjacent<5>`; short inputs are empty.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent5(data: &list<T>) -> list<tuple<T, T, T, T, T>> {
+    var out: list<tuple<T, T, T, T, T>> = [];
+    let n: i64 = data.len();
+    if n < 5 { return out; }
+    for i in 0..(n - 4) {
+        out.push((data[i], data[i + 1], data[i + 2], data[i + 3],
+                  data[i + 4]));
+    }
+    return out;
+}
+
 /// @brief Apply a binary operation to every adjacent pair of elements.
 /// Eager C++23 `views::adjacent_transform<2>` equivalent; output length is
 /// max(data.len() - 1, 0), and output type follows the operation's result.
@@ -5559,6 +5574,38 @@ pub fn adjacent_transform4_projected(data: &list<T>, operation: Operation,
     for i in 0..(n - 3) {
         out.push(operation(projection(data[i]), projection(data[i + 1]),
                            projection(data[i + 2]), projection(data[i + 3])));
+    }
+    return out;
+}
+
+/// @brief Apply a five-argument operation to each adjacent group of five.
+/// Eager C++23 `views::adjacent_transform<5>` counterpart.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform5(data: &list<T>, operation: Operation)
+    -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 5 { return out; }
+    for i in 0..(n - 4) {
+        out.push(operation(data[i], data[i + 1], data[i + 2], data[i + 3],
+                           data[i + 4]));
+    }
+    return out;
+}
+
+/// @brief Apply a five-argument operation to each group of projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform5_projected(data: &list<T>, operation: Operation,
+                                     projection: Projection) -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 5 { return out; }
+    for i in 0..(n - 4) {
+        out.push(operation(projection(data[i]), projection(data[i + 1]),
+                           projection(data[i + 2]), projection(data[i + 3]),
+                           projection(data[i + 4])));
     }
     return out;
 }
