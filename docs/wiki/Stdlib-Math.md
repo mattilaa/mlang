@@ -16,6 +16,7 @@ Module file: `stdlib/std/math.mla`
 - `pow(a, b)`
 - `sqrt(x)`
 - `hypot(x, y)` for [`f32`](Quick-Guide#types) and [`f64`](Quick-Guide#types), computing a stable Euclidean norm without squaring large or tiny arguments directly (C++20 [`std::hypot`](Stdlib-Module-API))
+- `fma(x, y, z)` for [`f32`](Quick-Guide#types) and [`f64`](Quick-Guide#types), computing `x*y+z` with one final rounding (C++ [`std::fma`](Stdlib-Module-API))
 - `sin(x)`
 - `cos(x)`
 - `tan(x)`
