@@ -128,6 +128,22 @@ pub fn adjacent_find_by(data: &list<T>, equivalent: Equivalent) -> i64 {
     return -1;
 }
 
+/// @brief Find adjacent values matching after projection and equivalence.
+/// Returns the first pair's left index, or -1 when no pair matches.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent, Projection>
+pub fn adjacent_find_by_projected(data: &list<T>, equivalent: Equivalent,
+                                  projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n < 2 { return -1; }
+    for i in 0..(n - 1) {
+        if equivalent(projection(data[i]), projection(data[i + 1])) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 /// @brief Return the first index in `data` matching any value in `candidates`.
 /// Returns -1 when the ranges have no matching values (C++20 `find_first_of`).
 /// @ingroup algorithm_ranges
@@ -176,6 +192,27 @@ pub fn find_first_of_by(data: &list<T>, candidates: &list<U>,
     for i in 0..n {
         for j in 0..candidate_count {
             if equivalent(data[i], candidates[j]) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+/// @brief Find the first candidate match after independent projections.
+/// Returns -1 if no data element matches any candidate under `equivalent`.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, DataProjection, CandidateProjection>
+pub fn find_first_of_by_projected(
+    data: &list<T>, candidates: &list<U>, equivalent: Equivalent,
+    data_projection: DataProjection, candidate_projection: CandidateProjection)
+    -> i64 {
+    let n: i64 = data.len();
+    let candidate_count: i64 = candidates.len();
+    for i in 0..n {
+        let data_key = data_projection(data[i]);
+        for j in 0..candidate_count {
+            if equivalent(data_key, candidate_projection(candidates[j])) {
                 return i;
             }
         }
@@ -1846,6 +1883,25 @@ pub fn starts_with_by(data: &list<T>, prefix: &list<U>,
     return true;
 }
 
+/// @brief Check a prefix using an equivalence predicate over projected values.
+/// The two ranges may have different element types.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, DataProjection, PrefixProjection>
+pub fn starts_with_by_projected(
+    data: &list<T>, prefix: &list<U>, equivalent: Equivalent,
+    data_projection: DataProjection, prefix_projection: PrefixProjection)
+    -> bool {
+    let prefix_len: i64 = prefix.len();
+    if prefix_len > data.len() { return false; }
+    for i in 0..prefix_len {
+        if !equivalent(data_projection(data[i]),
+                       prefix_projection(prefix[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// @brief Find the first occurrence of a subsequence, returning its start index.
 /// Returns 0 for an empty pattern and -1 when no match exists.
 /// @ingroup algorithm_ranges
@@ -2276,6 +2332,27 @@ pub fn ends_with_by(data: &list<T>, suffix: &list<U>,
     let offset: i64 = data_len - suffix_len;
     for i in 0..suffix_len {
         if !equivalent(data[offset + i], suffix[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// @brief Check a suffix using equivalence over independent projected values.
+/// Empty suffixes match; ranges may have different element types.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, DataProjection, SuffixProjection>
+pub fn ends_with_by_projected(
+    data: &list<T>, suffix: &list<U>, equivalent: Equivalent,
+    data_projection: DataProjection, suffix_projection: SuffixProjection)
+    -> bool {
+    let suffix_len: i64 = suffix.len();
+    let data_len: i64 = data.len();
+    if suffix_len > data_len { return false; }
+    let offset: i64 = data_len - suffix_len;
+    for i in 0..suffix_len {
+        if !equivalent(data_projection(data[offset + i]),
+                       suffix_projection(suffix[i])) {
             return false;
         }
     }

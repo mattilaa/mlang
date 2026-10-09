@@ -52,9 +52,13 @@ fn example() {
   predicate, or `-1` when none matches.
 - `adjacent_find_by(data, equivalent)` returns the first adjacent index whose
   pair satisfies a caller-provided binary equivalence predicate, or `-1`.
+- `adjacent_find_by_projected` applies that equivalence predicate to adjacent
+  projected keys.
 - `find_first_of(data, candidates)` returns the first index in `data` matching
   any candidate, or `-1` when there is no match; `find_first_of_by` accepts a
   binary equivalence predicate and supports different element types.
+- `find_first_of_by_projected` adds independent projections for the data and
+  candidate ranges before applying the binary equivalence predicate.
 - `find_projected`, `count_projected`, and `contains_projected` apply a unary
   projection before comparing with the search value, covering the common
   C++20 ranges projection use case without requiring a custom predicate.
@@ -124,6 +128,9 @@ fn example() {
   `ends_with_by` accept a binary equivalence predicate for custom matching.
 - `starts_with_projected` and `ends_with_projected` apply separate projections
   to the data and prefix/suffix before comparing their keys.
+- `starts_with_by_projected` and `ends_with_by_projected` apply a binary
+  equivalence predicate after the independent projections, including for
+  different input element types.
 - `unique_projected` and `unique_copy_projected` remove adjacent values with
   equal projected keys while preserving the first original value in each run.
 - `lexicographical_compare`, `is_sorted`, `min_element_index`, and
