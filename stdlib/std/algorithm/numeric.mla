@@ -404,6 +404,42 @@ pub fn adjacent_difference(data: &list<T>, init: T) -> list<T> {
     return out;
 }
 
+/// @brief Compute inclusive prefixes with a custom binary operation.
+/// The first output is the first input value; subsequent outputs are
+/// `operation(previous_prefix, current_value)`, matching `std::partial_sum`.
+/// @ingroup algorithm_numeric
+generic<T, Operation>
+pub fn partial_sum_by(data: &list<T>, operation: Operation) -> list<T> {
+    let n: i64 = data.len();
+    if n == 0 { return []; }
+    var out: list<T> = [];
+    var acc: T = data[0];
+    out.push(acc);
+    for i in 1..n {
+        acc = operation(acc, data[i]);
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Compute adjacent differences with a custom binary operation.
+/// The first output is the first input value; later outputs are
+/// `operation(current_value, previous_value)`, preserving standard
+/// `std::adjacent_difference` operand order.
+/// @ingroup algorithm_numeric
+generic<T, Operation>
+pub fn adjacent_difference_by(data: &list<T>, operation: Operation)
+    -> list<T> {
+    let n: i64 = data.len();
+    if n == 0 { return []; }
+    var out: list<T> = [];
+    out.push(data[0]);
+    for i in 1..n {
+        out.push(operation(data[i], data[i - 1]));
+    }
+    return out;
+}
+
 /// @brief Prefix sums with an initial value.
 /// Returns `[init + d0, init + d0 + d1, ...]`.
 /// @ingroup algorithm_numeric
