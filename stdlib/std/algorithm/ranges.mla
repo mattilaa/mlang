@@ -3498,6 +3498,38 @@ pub fn merged(left: &list<T>, right: &list<T>) -> list<T> {
     return out;
 }
 
+/// @brief Stably merge sorted ranges according to projected keys.
+/// Equivalent keys from the left range appear first; inputs must be sorted by
+/// the same projection.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn merged_projected(left: &list<T>, right: &list<T>,
+                        projection: Projection) -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    while i < left_len && j < right_len {
+        if projection(right[j]) < projection(left[i]) {
+            out.push(right[j]);
+            j = j + 1;
+        } else {
+            out.push(left[i]);
+            i = i + 1;
+        }
+    }
+    while i < left_len {
+        out.push(left[i]);
+        i = i + 1;
+    }
+    while j < right_len {
+        out.push(right[j]);
+        j = j + 1;
+    }
+    return out;
+}
+
 /// @brief Return the sorted multiset union of two sorted ranges.
 /// The result keeps the maximum multiplicity of each value.
 /// C++20 `std::ranges::set_union` equivalent for same-typed lists.
@@ -3514,6 +3546,42 @@ pub fn union_sorted(left: &list<T>, right: &list<T>) -> list<T> {
             out.push(left[i]);
             i = i + 1;
         } else if right[j] < left[i] {
+            out.push(right[j]);
+            j = j + 1;
+        } else {
+            out.push(left[i]);
+            i = i + 1;
+            j = j + 1;
+        }
+    }
+    while i < left_len {
+        out.push(left[i]);
+        i = i + 1;
+    }
+    while j < right_len {
+        out.push(right[j]);
+        j = j + 1;
+    }
+    return out;
+}
+
+/// @brief Return the sorted multiset union according to projected keys.
+/// The result keeps the maximum multiplicity of each projected equivalence
+/// class and prefers left-side representatives for matches.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn union_sorted_projected(left: &list<T>, right: &list<T>,
+                              projection: Projection) -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    while i < left_len && j < right_len {
+        if projection(left[i]) < projection(right[j]) {
+            out.push(left[i]);
+            i = i + 1;
+        } else if projection(right[j]) < projection(left[i]) {
             out.push(right[j]);
             j = j + 1;
         } else {
@@ -3558,6 +3626,31 @@ pub fn intersection_sorted(left: &list<T>, right: &list<T>) -> list<T> {
     return out;
 }
 
+/// @brief Return the sorted intersection under projected-key equivalence.
+/// The result keeps the minimum multiplicity and left-side representatives.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn intersection_sorted_projected(left: &list<T>, right: &list<T>,
+                                     projection: Projection) -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    while i < left_len && j < right_len {
+        if projection(left[i]) < projection(right[j]) {
+            i = i + 1;
+        } else if projection(right[j]) < projection(left[i]) {
+            j = j + 1;
+        } else {
+            out.push(left[i]);
+            i = i + 1;
+            j = j + 1;
+        }
+    }
+    return out;
+}
+
 /// @brief Return elements in the left sorted range not matched by the right.
 /// The result keeps the unmatched excess multiplicity from `left`.
 /// C++20 `std::ranges::set_difference` equivalent for same-typed lists.
@@ -3587,6 +3680,35 @@ pub fn difference_sorted(left: &list<T>, right: &list<T>) -> list<T> {
     return out;
 }
 
+/// @brief Return the projected-key excess multiplicity from the left range.
+/// Both inputs must be sorted by the same projection.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn difference_sorted_projected(left: &list<T>, right: &list<T>,
+                                   projection: Projection) -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    while i < left_len && j < right_len {
+        if projection(left[i]) < projection(right[j]) {
+            out.push(left[i]);
+            i = i + 1;
+        } else if projection(right[j]) < projection(left[i]) {
+            j = j + 1;
+        } else {
+            i = i + 1;
+            j = j + 1;
+        }
+    }
+    while i < left_len {
+        out.push(left[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
 /// @brief Return sorted values whose occurrences belong to exactly one range.
 /// For each value, output the absolute difference in its multiplicities.
 /// C++20 `std::ranges::set_symmetric_difference` equivalent.
@@ -3603,6 +3725,42 @@ pub fn symmetric_difference_sorted(left: &list<T>, right: &list<T>) -> list<T> {
             out.push(left[i]);
             i = i + 1;
         } else if right[j] < left[i] {
+            out.push(right[j]);
+            j = j + 1;
+        } else {
+            i = i + 1;
+            j = j + 1;
+        }
+    }
+    while i < left_len {
+        out.push(left[i]);
+        i = i + 1;
+    }
+    while j < right_len {
+        out.push(right[j]);
+        j = j + 1;
+    }
+    return out;
+}
+
+/// @brief Return projected-key occurrences present in exactly one input.
+/// For each key, the output multiplicity is the absolute difference between
+/// the two inputs; equivalent values preserve their source order.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn symmetric_difference_sorted_projected(left: &list<T>, right: &list<T>,
+                                              projection: Projection)
+    -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    while i < left_len && j < right_len {
+        if projection(left[i]) < projection(right[j]) {
+            out.push(left[i]);
+            i = i + 1;
+        } else if projection(right[j]) < projection(left[i]) {
             out.push(right[j]);
             j = j + 1;
         } else {
