@@ -5,6 +5,37 @@
 /// Standalone `bit` values still use normal ABI byte-sized storage rules for
 /// `size_of(bit)`, but packed bit storage is provided by `std::bitset::BitSet`.
 
+/// @brief Native byte order classification (C++20 `std::endian` equivalent).
+pub enum Endian : i32 {
+    Little = 0,
+    Big = 1,
+    Mixed = 2
+};
+
+extern pub fn __mlang_std_bits_native_endian() -> i32;
+
+/// @brief Return the host's native byte order.
+pub fn native_endian() -> Endian {
+    let endian: i32 = __mlang_std_bits_native_endian();
+    if endian == 0 {
+        return Endian::Little;
+    }
+    if endian == 1 {
+        return Endian::Big;
+    }
+    return Endian::Mixed;
+}
+
+/// @brief Return whether native byte order is uniformly little-endian.
+pub fn is_little_endian() -> bool {
+    return native_endian() == Endian::Little;
+}
+
+/// @brief Return whether native byte order is uniformly big-endian.
+pub fn is_big_endian() -> bool {
+    return native_endian() == Endian::Big;
+}
+
 extern pub fn __mlang_std_bits_popcount_u64(value: u64) -> i64;
 extern pub fn __mlang_std_bits_has_single_bit_u64(value: u64) -> i32;
 extern pub fn __mlang_std_bits_bit_width_u64(value: u64) -> i64;
