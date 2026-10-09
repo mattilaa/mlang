@@ -136,6 +136,10 @@ fn example() {
   key projection. Individual min/max selection keeps the first tie; minmax
   keeps the first minimum and last maximum, and index forms return `-1` for
   empty input.
+- The `_by_projected` extrema forms combine a strict comparator with a unary
+  projection for minimum/maximum indices and values, including minmax variants.
+  They preserve the same first-minimum, first individual maximum, and last
+  minmax-maximum tie rules as the other extrema overloads.
 - The corresponding `min_element_index_by`, `max_element_index_by`,
   `min_element_value_by`, and `max_element_value_by` forms accept a strict
   ordering comparator and also keep the first equivalent element.

@@ -3521,6 +3521,104 @@ pub fn minmax_element_value_projected(data: &list<T>,
     return (minimum, maximum);
 }
 
+/// @brief Return the first minimum index under comparator-projected ordering.
+/// Returns -1 for an empty range.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn min_element_index_by_projected(data: &list<T>, less: Less,
+                                      projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 { return -1; }
+    var best: i64 = 0;
+    for i in 1..n {
+        if less(projection(data[i]), projection(data[best])) { best = i; }
+    }
+    return best;
+}
+
+/// @brief Return the first maximum index under comparator-projected ordering.
+/// Returns -1 for an empty range.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn max_element_index_by_projected(data: &list<T>, less: Less,
+                                      projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 { return -1; }
+    var best: i64 = 0;
+    for i in 1..n {
+        if less(projection(data[best]), projection(data[i])) { best = i; }
+    }
+    return best;
+}
+
+/// @brief Return first-minimum and last-maximum indices under projected order.
+/// Empty input returns `(-1, -1)`.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn minmax_element_index_by_projected(data: &list<T>, less: Less,
+                                         projection: Projection)
+    -> tuple<i64, i64> {
+    let n: i64 = data.len();
+    if n == 0 { return (-1, -1); }
+    var minimum: i64 = 0;
+    var maximum: i64 = 0;
+    for i in 1..n {
+        if less(projection(data[i]), projection(data[minimum])) {
+            minimum = i;
+        }
+        if !less(projection(data[i]), projection(data[maximum])) {
+            maximum = i;
+        }
+    }
+    return (minimum, maximum);
+}
+
+/// @brief Return the first value with a minimum comparator-projected key.
+/// Requires a nonempty input.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn min_element_value_by_projected(data: &list<T>, less: Less,
+                                      projection: Projection) -> T {
+    var best: T = data[0];
+    let n: i64 = data.len();
+    for i in 1..n {
+        if less(projection(data[i]), projection(best)) { best = data[i]; }
+    }
+    return best;
+}
+
+/// @brief Return the first value with a maximum comparator-projected key.
+/// Requires a nonempty input.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn max_element_value_by_projected(data: &list<T>, less: Less,
+                                      projection: Projection) -> T {
+    var best: T = data[0];
+    let n: i64 = data.len();
+    for i in 1..n {
+        if less(projection(best), projection(data[i])) { best = data[i]; }
+    }
+    return best;
+}
+
+/// @brief Return first-minimum and last-maximum values under projected order.
+/// Requires a nonempty input.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn minmax_element_value_by_projected(data: &list<T>, less: Less,
+                                         projection: Projection)
+    -> tuple<T, T> {
+    var minimum: T = data[0];
+    var maximum: T = data[0];
+    let n: i64 = data.len();
+    for i in 1..n {
+        let value: T = data[i];
+        if less(projection(value), projection(minimum)) { minimum = value; }
+        if !less(projection(value), projection(maximum)) { maximum = value; }
+    }
+    return (minimum, maximum);
+}
+
 /// @brief Return count of elements equal to value.
 /// @ingroup algorithm_ranges
 generic<T, U>

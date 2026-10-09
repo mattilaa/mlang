@@ -293,6 +293,12 @@ use std::algorithm::ranges::minmax_element_index_projected;
 use std::algorithm::ranges::min_element_value_projected;
 use std::algorithm::ranges::max_element_value_projected;
 use std::algorithm::ranges::minmax_element_value_projected;
+use std::algorithm::ranges::min_element_index_by_projected;
+use std::algorithm::ranges::max_element_index_by_projected;
+use std::algorithm::ranges::minmax_element_index_by_projected;
+use std::algorithm::ranges::min_element_value_by_projected;
+use std::algorithm::ranges::max_element_value_by_projected;
+use std::algorithm::ranges::minmax_element_value_by_projected;
 use std::algorithm::ranges::remove;
 use std::algorithm::ranges::remove_projected;
 use std::algorithm::ranges::take;
@@ -2343,6 +2349,37 @@ fn test_algorithm_ranges_projected_element_extrema() {
     let extrema: tuple<i32, i32> = minmax_element_value_projected(
         values, project_tens);
     verify(extrema.0 == 11 && extrema.1 == 38);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_projected_element_extrema() {
+    let values: list<i32> = [22, 21, 11, 12, 3, 4];
+    let empty: list<i32> = [];
+    let greater = |left: i32, right: i32| { return left > right; };
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(min_element_index_by_projected(
+        values, greater, project_tens) == 0);
+    verify(max_element_index_by_projected(
+        values, greater, project_tens) == 4);
+    let indices: tuple<i64, i64> = minmax_element_index_by_projected(
+        values, greater, project_tens);
+    verify(indices.0 == 0 && indices.1 == 5);
+    verify(min_element_index_by_projected(
+        empty, greater, project_tens) == -1);
+    verify(max_element_index_by_projected(
+        empty, greater, project_tens) == -1);
+    let empty_indices: tuple<i64, i64> = minmax_element_index_by_projected(
+        empty, greater, project_tens);
+    verify(empty_indices.0 == -1 && empty_indices.1 == -1);
+
+    verify(min_element_value_by_projected(
+        values, greater, project_tens) == 22);
+    verify(max_element_value_by_projected(
+        values, greater, project_tens) == 3);
+    let extrema: tuple<i32, i32> = minmax_element_value_by_projected(
+        values, greater, project_tens);
+    verify(extrema.0 == 22 && extrema.1 == 4);
 }
 
 #[test]
