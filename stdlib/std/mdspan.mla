@@ -2,10 +2,10 @@
 /// \brief Checked list-backed multidimensional views (C++23 mdspan style).
 ///
 /// Mlang's `Mdspan<T>` stores a copied list and runtime extents. It provides
-/// checked row-major access, but does not claim the non-owning lifetime or
-/// layout-policy guarantees of C++ `std::mdspan`.
+/// checked row-major or column-major access, but does not claim the non-owning
+/// lifetime or accessor-policy guarantees of C++ `std::mdspan`.
 
-/// @brief Runtime-rank row-major descriptor over a list of elements.
+/// @brief Runtime-rank row-major or column-major descriptor over a list.
 pub struct Mdspan<T> {
     var data: list<T>;
     var extents: list<i64>;
@@ -93,6 +93,48 @@ impl<T> Mdspan {
         return self.data.len() == 0;
     }
 
+    /// @brief Return the required backing span size for this dense mapping.
+    /// `layout_right` and `layout_left` both cover the complete stored list.
+    pub fn required_span_size(self: Mdspan<T>) -> i64 {
+        return self.data.len();
+    }
+
+    /// @brief Return the element stride of one dimension, or `None` if invalid.
+    pub fn stride(self: Mdspan<T>, dimension: i64) -> option<i64> {
+        let rank: i64 = self.extents.len();
+        if dimension < 0 || dimension >= rank {
+            return None<i64>();
+        }
+        var result: i64 = 1;
+        if self.layout_left {
+            for i in 0..dimension {
+                result = result * self.extents[i];
+            }
+        } else {
+            var i: i64 = dimension + 1;
+            while i < rank {
+                result = result * self.extents[i];
+                i = i + 1;
+            }
+        }
+        return Some<i64>(result);
+    }
+
+    /// @brief Both provided layout mappings are one-to-one.
+    pub fn is_unique(self: Mdspan<T>) -> bool {
+        return true;
+    }
+
+    /// @brief Both provided layout mappings cover the complete backing list.
+    pub fn is_exhaustive(self: Mdspan<T>) -> bool {
+        return true;
+    }
+
+    /// @brief Both provided layout mappings expose a stride per dimension.
+    pub fn is_strided(self: Mdspan<T>) -> bool {
+        return true;
+    }
+
     /// @brief Read an extent, returning `None` for an invalid dimension.
     pub fn extent(self: Mdspan<T>, dimension: i64) -> option<i64> {
         if dimension < 0 || dimension >= self.extents.len() {
@@ -101,7 +143,7 @@ impl<T> Mdspan {
         return Some<i64>(self.extents[dimension]);
     }
 
-    /// @brief Read an element at a full-rank row-major index.
+    /// @brief Read an element at a full-rank index using the selected layout.
     /// Wrong-rank or out-of-bounds indices return `None`.
     pub fn get(self: Mdspan<T>, indices: &list<i64>) -> option<T> {
         let rank: i64 = self.extents.len();

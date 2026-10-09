@@ -16,6 +16,10 @@ single scalar element.
 
 - `rank()`, `size()`, and `is_empty()` report descriptor properties.
 - `extent(dimension)` returns an optional extent.
+- `stride(dimension)` reports the element stride for a valid dimension, and
+  `required_span_size()` reports the complete backing span size.
+- `is_unique()`, `is_exhaustive()`, and `is_strided()` expose the mapping
+  properties; both supported layouts are unique, exhaustive, and strided.
 - `get(indices)` requires exactly one index per dimension and returns `None`
   for invalid rank or out-of-bounds indices.
 - `from_extents_left(data, extents)` validates and copies the same inputs but
