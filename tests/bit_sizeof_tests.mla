@@ -64,6 +64,10 @@ use std::bits::bit_cast_u32_from_f32;
 use std::bits::bit_cast_f32_from_u32;
 use std::bits::bit_cast_u64_from_f64;
 use std::bits::bit_cast_f64_from_u64;
+use std::bits::bit_cast_i32_from_f32;
+use std::bits::bit_cast_f32_from_i32;
+use std::bits::bit_cast_i64_from_f64;
+use std::bits::bit_cast_f64_from_i64;
 use std::bits::bit_cast_u32_from_i32;
 use std::bits::bit_cast_i32_from_u32;
 use std::bits::bit_cast_u64_from_i64;
@@ -268,6 +272,23 @@ fn test_cpp20_bit_cast_float_integer_pairs() {
     verify(bit_cast_f32_from_u32(one_f32_bits) == one_f32);
     verify(bit_cast_u64_from_f64(one_f64) == one_f64_bits);
     verify(bit_cast_f64_from_u64(one_f64_bits) == one_f64);
+}
+
+#[test]
+fn test_cpp20_bit_cast_float_signed_integer_pairs() {
+    let one_f32: f32 = 1.0f;
+    let negative_one_f32: f32 = -1.0f;
+    verify(bit_cast_i32_from_f32(one_f32) == 1065353216);
+    verify(bit_cast_f32_from_i32(1065353216) == one_f32);
+    verify(bit_cast_i32_from_f32(negative_one_f32) == -1082130432);
+    verify(bit_cast_f32_from_i32(-1082130432) == negative_one_f32);
+
+    let one_f64: f64 = 1.0;
+    let negative_one_f64: f64 = -1.0;
+    verify(bit_cast_i64_from_f64(one_f64) == 4607182418800017408);
+    verify(bit_cast_f64_from_i64(4607182418800017408) == one_f64);
+    verify(bit_cast_i64_from_f64(negative_one_f64) == -4616189618054758400);
+    verify(bit_cast_f64_from_i64(-4616189618054758400) == negative_one_f64);
 }
 
 #[test]

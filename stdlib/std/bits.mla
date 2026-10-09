@@ -92,6 +92,10 @@ extern pub fn __mlang_std_bits_f32_to_u32(value: f32) -> u32;
 extern pub fn __mlang_std_bits_u32_to_f32(value: u32) -> f32;
 extern pub fn __mlang_std_bits_f64_to_u64(value: f64) -> u64;
 extern pub fn __mlang_std_bits_u64_to_f64(value: u64) -> f64;
+extern pub fn __mlang_std_bits_f32_to_i32(value: f32) -> i32;
+extern pub fn __mlang_std_bits_i32_to_f32(bits: i32) -> f32;
+extern pub fn __mlang_std_bits_f64_to_i64(value: f64) -> i64;
+extern pub fn __mlang_std_bits_i64_to_f64(bits: i64) -> f64;
 extern pub fn __mlang_std_bits_i32_to_u32(value: i32) -> u32;
 extern pub fn __mlang_std_bits_u32_to_i32(bits: u32) -> i32;
 extern pub fn __mlang_std_bits_i64_to_u64(value: i64) -> u64;
@@ -281,6 +285,26 @@ pub fn bit_cast_u64_from_f64(value: f64) -> u64 {
 /// @brief Reinterpret `u64` bits as an IEEE-754 `f64` value.
 pub fn bit_cast_f64_from_u64(bits: u64) -> f64 {
     return __mlang_std_bits_u64_to_f64(bits);
+}
+
+/// @brief Reinterpret an IEEE-754 `f32` representation as signed `i32` bits.
+pub fn bit_cast_i32_from_f32(value: f32) -> i32 {
+    return __mlang_std_bits_f32_to_i32(value);
+}
+
+/// @brief Reinterpret signed `i32` bits as an IEEE-754 `f32` value.
+pub fn bit_cast_f32_from_i32(bits: i32) -> f32 {
+    return __mlang_std_bits_i32_to_f32(bits);
+}
+
+/// @brief Reinterpret an IEEE-754 `f64` representation as signed `i64` bits.
+pub fn bit_cast_i64_from_f64(value: f64) -> i64 {
+    return __mlang_std_bits_f64_to_i64(value);
+}
+
+/// @brief Reinterpret signed `i64` bits as an IEEE-754 `f64` value.
+pub fn bit_cast_f64_from_i64(bits: i64) -> f64 {
+    return __mlang_std_bits_i64_to_f64(bits);
 }
 
 /// @brief Reinterpret the two's-complement bits of an `i32` as `u32`.

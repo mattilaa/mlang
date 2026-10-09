@@ -42,6 +42,8 @@ The original 64-bit API names remain available for source compatibility.
 
 - `bit_cast_u32_from_f32` and `bit_cast_f32_from_u32`
 - `bit_cast_u64_from_f64` and `bit_cast_f64_from_u64`
+- `bit_cast_i32_from_f32` and `bit_cast_f32_from_i32`
+- `bit_cast_i64_from_f64` and `bit_cast_f64_from_i64`
 - `bit_cast_u32_from_i32` and `bit_cast_i32_from_u32`
 - `bit_cast_u64_from_i64` and `bit_cast_i64_from_u64`
 - `bit_cast_u8_from_i8` and `bit_cast_i8_from_u8`

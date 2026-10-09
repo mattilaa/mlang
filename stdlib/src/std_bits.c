@@ -353,6 +353,34 @@ double __mlang_std_bits_u64_to_f64(uint64_t bits)
     return value;
 }
 
+int32_t __mlang_std_bits_f32_to_i32(float value)
+{
+    int32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+float __mlang_std_bits_i32_to_f32(int32_t bits)
+{
+    float value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+int64_t __mlang_std_bits_f64_to_i64(double value)
+{
+    int64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+double __mlang_std_bits_i64_to_f64(int64_t bits)
+{
+    double value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
 uint32_t __mlang_std_bits_i32_to_u32(int32_t value)
 {
     uint32_t bits;
