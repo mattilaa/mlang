@@ -485,6 +485,22 @@ pub fn cos(x: f64) -> f64 {
     return __mlang_std_math_cos_f64(x);
 }
 
+/// @brief Construct a complex `f32` value from magnitude and phase in radians.
+pub fn polar(magnitude: f32, phase: f32) -> Complex<f32> {
+    return Complex<f32> {
+        re: magnitude * cos(phase),
+        im: magnitude * sin(phase)
+    };
+}
+
+/// @brief Construct a complex `f64` value from magnitude and phase in radians.
+pub fn polar(magnitude: f64, phase: f64) -> Complex<f64> {
+    return Complex<f64> {
+        re: magnitude * cos(phase),
+        im: magnitude * sin(phase)
+    };
+}
+
 /// @brief Tangent.
 /// @param x x value.
 /// @return Tangent.
