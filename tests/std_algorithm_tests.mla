@@ -82,7 +82,9 @@ use std::algorithm::ranges::equal_projected;
 use std::algorithm::ranges::mismatch;
 use std::algorithm::ranges::mismatch_projected;
 use std::algorithm::ranges::mismatch_by;
+use std::algorithm::ranges::mismatch_by_projected;
 use std::algorithm::ranges::equal_by;
+use std::algorithm::ranges::equal_by_projected;
 use std::algorithm::ranges::is_permutation;
 use std::algorithm::ranges::is_permutation_projected;
 use std::algorithm::ranges::is_permutation_by_projected;
@@ -108,6 +110,7 @@ use std::algorithm::ranges::ends_with_by;
 use std::algorithm::ranges::lexicographical_compare;
 use std::algorithm::ranges::lexicographical_compare_projected;
 use std::algorithm::ranges::lexicographical_compare_by;
+use std::algorithm::ranges::lexicographical_compare_by_projected;
 use std::algorithm::ranges::is_sorted;
 use std::algorithm::ranges::is_sorted_until;
 use std::algorithm::ranges::is_sorted_projected;
@@ -684,6 +687,33 @@ fn test_algorithm_ranges_equal_by_equivalence() {
 }
 
 #[test]
+fn test_algorithm_ranges_equal_and_mismatch_by_projected() {
+    let left: list<i32> = [11, 12, 23];
+    let same_keys: list<i64> = [19, 10, 29];
+    let different_keys: list<i64> = [19, 20, 29];
+    let shorter: list<i64> = [19, 10];
+    let identity = |value: i32| { return value; };
+    let identity_wide = |value: i64| { return i32(value); };
+    let same_decade = |a: i32, b: i32| { return a / 10 == b / 10; };
+
+    verify(equal_by_projected(
+        left, same_keys, same_decade, identity, identity_wide));
+    verify(!equal_by_projected(
+        left, different_keys, same_decade, identity, identity_wide));
+    verify(!equal_by_projected(
+        left, shorter, same_decade, identity, identity_wide));
+    let end: tuple<i64, i64> = mismatch_by_projected(
+        left, same_keys, same_decade, identity, identity_wide);
+    let first_difference: tuple<i64, i64> = mismatch_by_projected(
+        left, different_keys, same_decade, identity, identity_wide);
+    let short_end: tuple<i64, i64> = mismatch_by_projected(
+        left, shorter, same_decade, identity, identity_wide);
+    verify(end.0 == 3 && end.1 == 3);
+    verify(first_difference.0 == 1 && first_difference.1 == 1);
+    verify(short_end.0 == 2 && short_end.1 == 2);
+}
+
+#[test]
 fn test_algorithm_ranges_generic_is_permutation() {
     let values: list<i32> = [1, 2, 2, 3];
     let reordered: list<i32> = [3, 2, 1, 2];
@@ -1041,6 +1071,26 @@ fn test_algorithm_ranges_lexicographical_compare_by() {
 
     let equivalent: list<i32> = [9, 7];
     verify(!lexicographical_compare_by(first, equivalent, greater));
+}
+
+#[test]
+fn test_algorithm_ranges_lexicographical_compare_by_projected() {
+    let left: list<i32> = [39, 11];
+    let right: list<i64> = [29, 21];
+    let project_left = |value: i32| { return value / 10; };
+    let project_right = |value: i64| { return i32(value / 10); };
+    let greater = |a: i32, b: i32| { return a > b; };
+    verify(lexicographical_compare_by_projected(
+        left, right, greater, project_left, project_right));
+    verify(!lexicographical_compare_by_projected(
+        right, left, greater, project_right, project_left));
+
+    let prefix: list<i32> = [29];
+    let extended: list<i64> = [20, 19];
+    verify(lexicographical_compare_by_projected(
+        prefix, extended, greater, project_left, project_right));
+    verify(!lexicographical_compare_by_projected(
+        extended, prefix, greater, project_right, project_left));
 }
 
 #[test]

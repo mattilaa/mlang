@@ -88,6 +88,9 @@ fn example() {
 - `equal_projected` and `mismatch_projected` apply independent projections
   before comparing elements; `is_permutation_projected` compares projected
   multisets while preserving duplicate counts.
+- `equal_by_projected` and `mismatch_by_projected` combine independent
+  projections with an equivalence predicate, including heterogeneous input
+  element types; mismatch returns the first unequal pair of indices.
 - `is_permutation_by_projected` compares projected equivalence classes under a
   strict comparator, with independent projections for the two input types and
   duplicate multiplicities preserved.
@@ -104,6 +107,8 @@ fn example() {
   position and a matching prefix sorts before its extension.
 - `lexicographical_compare_projected` applies an independent projection to
   each range before lexicographically comparing the resulting keys.
+- `lexicographical_compare_by_projected` adds a strict comparator over those
+  projected keys while retaining the matching-prefix rule.
 - `includes_by(range, subset, less)` checks sorted-range containment with a
   comparator, including duplicate multiplicities.
 - `includes_projected` performs the same duplicate-aware containment check
