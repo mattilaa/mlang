@@ -664,6 +664,25 @@ pub fn starts_with(data: &list<T>, prefix: &list<U>) -> bool {
     return true;
 }
 
+/// @brief Return whether `prefix` matches the beginning of `data` using a
+/// caller-provided binary predicate.
+/// C++20 `std::ranges::starts_with` predicate overload.
+/// @ingroup algorithm_ranges
+generic<T, U, Predicate>
+pub fn starts_with_by(data: &list<T>, prefix: &list<U>,
+                      equivalent: Predicate) -> bool {
+    let prefix_len: i64 = prefix.len();
+    if prefix_len > data.len() {
+        return false;
+    }
+    for i in 0..prefix_len {
+        if !equivalent(data[i], prefix[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// @brief Find the first occurrence of a subsequence, returning its start index.
 /// Returns 0 for an empty pattern and -1 when no match exists.
 /// @ingroup algorithm_ranges
@@ -864,6 +883,27 @@ pub fn ends_with(data: &list<T>, suffix: &list<U>) -> bool {
     let offset: i64 = data_len - suffix_len;
     for i in 0..suffix_len {
         if data[offset + i] != suffix[i] {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// @brief Return whether `suffix` matches the end of `data` using a
+/// caller-provided binary predicate.
+/// C++20 `std::ranges::ends_with` predicate overload.
+/// @ingroup algorithm_ranges
+generic<T, U, Predicate>
+pub fn ends_with_by(data: &list<T>, suffix: &list<U>,
+                    equivalent: Predicate) -> bool {
+    let suffix_len: i64 = suffix.len();
+    let data_len: i64 = data.len();
+    if suffix_len > data_len {
+        return false;
+    }
+    let offset: i64 = data_len - suffix_len;
+    for i in 0..suffix_len {
+        if !equivalent(data[offset + i], suffix[i]) {
             return false;
         }
     }
