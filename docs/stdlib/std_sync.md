@@ -9,6 +9,7 @@ Module file: `stdlib/std/sync.mla`
 - `lock_free_queue` (SPSC str8 queue)
 - `AtomicI64` (shared 64-bit atomic integer)
 - `Latch` (one-shot countdown latch)
+- `Barrier` (reusable phase barrier)
 
 ### mutex
 - `mutex::new() -> result<mutex, str8>`
@@ -133,6 +134,32 @@ handle, not the underlying integer. Share the handle between threads, and call
 with all atomics, relaxed ordering makes the atomic value race-free but does
 not publish unrelated data; use acquire/release or sequential consistency for
 that synchronization.
+
+### Barrier
+
+`Barrier` is a reusable C++20-style phase barrier for a fixed participant
+group. `arrive()` returns a phase token without blocking; pass it to `wait()`
+to wait for that phase, or use `arrive_and_wait()` for the common combined
+operation. The final arrival advances the phase and wakes all waiters.
+`arrive_by(n)` accounts for multiple participants in one arrival, and
+`arrive_and_drop()` participates in the current phase while reducing the
+expected participant count for future phases. The participant count must be
+positive at construction. Do not close the barrier while any participant is
+arriving or waiting.
+
+```mlang
+mod std::sync;
+use std::sync::Barrier;
+
+fn main() -> i32 {
+    let created: result<Barrier, str8> = Barrier::new(1);
+    if created.is_err() { return 1; }
+    let barrier: Barrier = created.unwrap();
+    let completed: result<i32, str8> = barrier.arrive_and_wait();
+    barrier.close();
+    return completed.is_ok() ? 0 : 1;
+}
+```
 
 ### Latch
 

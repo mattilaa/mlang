@@ -78,6 +78,12 @@ pub struct Latch {
     var handle: i64;
 };
 
+/// @brief Reusable fixed-participant phase barrier. Handle copies share phases.
+/// Close only after all participants and waiters have stopped using it.
+pub struct Barrier {
+    var handle: i64;
+};
+
 fn atomic_order_value(order: AtomicOrder) -> i32 {
     if order == AtomicOrder::Relaxed { return 0; }
     if order == AtomicOrder::Consume { return 1; }
@@ -257,6 +263,60 @@ impl Latch {
     /// @brief Destroy the latch after all threads have stopped using it.
     pub fn close(self: Latch) -> i32 {
         return __mlang_std_sync_latch_free(self.handle);
+    }
+}
+
+impl Barrier {
+    /// @brief Create a reusable barrier with a positive participant count.
+    pub fn new(expected: i64) -> result<Barrier, str8> {
+        let handle: i64 = __mlang_std_sync_barrier_new(expected);
+        if handle == 0 { return Err<Barrier, str8>(last_error()); }
+        return Ok<Barrier, str8>(Barrier { handle: handle });
+    }
+
+    pub fn is_valid(self: Barrier) -> bool {
+        return self.handle != 0;
+    }
+
+    /// @brief Arrive for this phase and receive its phase token.
+    /// The final arrival advances the phase and wakes its waiters.
+    pub fn arrive(self: Barrier) -> result<i64, str8> {
+        return self.arrive_by(1);
+    }
+
+    /// @brief Arrive for `update` participants and return the phase token.
+    pub fn arrive_by(self: Barrier, update: i64) -> result<i64, str8> {
+        let phase: i64 = __mlang_std_sync_barrier_arrive(self.handle, update);
+        if phase < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(phase);
+    }
+
+    /// @brief Block until the phase represented by `phase` has completed.
+    pub fn wait(self: Barrier, phase: i64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_sync_barrier_wait(self.handle, phase);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Arrive at the current phase and wait for all participants.
+    pub fn arrive_and_wait(self: Barrier) -> result<i32, str8> {
+        let phase: i64 = __mlang_std_sync_barrier_arrive(self.handle, 1);
+        if phase < 0 { return Err<i32, str8>(last_error()); }
+        let rc: i32 = __mlang_std_sync_barrier_wait(self.handle, phase);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Arrive and permanently reduce the expected participants by one.
+    pub fn arrive_and_drop(self: Barrier) -> result<i64, str8> {
+        let phase: i64 = __mlang_std_sync_barrier_arrive_and_drop(self.handle);
+        if phase < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(phase);
+    }
+
+    /// @brief Destroy the barrier after all threads stop using it.
+    pub fn close(self: Barrier) -> i32 {
+        return __mlang_std_sync_barrier_free(self.handle);
     }
 }
 
