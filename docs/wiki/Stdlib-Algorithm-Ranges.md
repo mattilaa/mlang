@@ -188,6 +188,9 @@ fn example() {
 - `is_sorted_by`, `is_sorted_until_by`, `lower_bound_by`, `upper_bound_by`, and
   `binary_search_by` accept a strict ordering comparator, enabling descending or
   custom orderings while keeping binary searches logarithmic.
+- The `_by_projected` ordering forms combine a strict comparator with a key
+  projection for sorted checks and binary-search queries, allowing projected
+  keys to use custom orders such as descending order.
 - `equal_range_by(data, value, less)` provides the same half-open matching
   index range with a comparator-defined ordering.
 - `size` and `empty` provide generic list size queries.

@@ -157,14 +157,20 @@ use std::algorithm::ranges::difference_sorted_by;
 use std::algorithm::ranges::symmetric_difference_sorted_by;
 use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::lower_bound_projected;
+use std::algorithm::ranges::lower_bound_by_projected;
 use std::algorithm::ranges::upper_bound;
 use std::algorithm::ranges::upper_bound_projected;
+use std::algorithm::ranges::upper_bound_by_projected;
 use std::algorithm::ranges::equal_range;
 use std::algorithm::ranges::equal_range_projected;
+use std::algorithm::ranges::equal_range_by_projected;
 use std::algorithm::ranges::binary_search;
 use std::algorithm::ranges::binary_search_projected;
+use std::algorithm::ranges::binary_search_by_projected;
 use std::algorithm::ranges::is_sorted_by;
 use std::algorithm::ranges::is_sorted_until_by;
+use std::algorithm::ranges::is_sorted_by_projected;
+use std::algorithm::ranges::is_sorted_until_by_projected;
 use std::algorithm::ranges::lower_bound_by;
 use std::algorithm::ranges::upper_bound_by;
 use std::algorithm::ranges::equal_range_by;
@@ -1464,6 +1470,40 @@ fn test_algorithm_ranges_comparator_order_queries() {
     verify(lower_bound_by(empty, 4, greater) == 0);
     verify(upper_bound_by(empty, 4, greater) == 0);
     verify(!binary_search_by(empty, 4, greater));
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_projected_order_queries() {
+    let descending: list<i32> = [38, 31, 29, 22, 11];
+    let broken: list<i32> = [38, 22, 31];
+    let empty: list<i32> = [];
+    let greater = |left: i32, right: i32| { return left > right; };
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(is_sorted_by_projected(descending, greater, project_tens));
+    verify(!is_sorted_by_projected(broken, greater, project_tens));
+    verify(is_sorted_until_by_projected(
+        descending, greater, project_tens) == 5);
+    verify(is_sorted_until_by_projected(
+        broken, greater, project_tens) == 2);
+    verify(is_sorted_by_projected(empty, greater, project_tens));
+    verify(is_sorted_until_by_projected(empty, greater, project_tens) == 0);
+
+    verify(lower_bound_by_projected(
+        descending, 2, greater, project_tens) == 2);
+    verify(upper_bound_by_projected(
+        descending, 2, greater, project_tens) == 4);
+    let twos: tuple<i64, i64> = equal_range_by_projected(
+        descending, 2, greater, project_tens);
+    verify(twos.0 == 2 && twos.1 == 4);
+    verify(binary_search_by_projected(
+        descending, 2, greater, project_tens));
+    verify(!binary_search_by_projected(
+        descending, 4, greater, project_tens));
+    verify(lower_bound_by_projected(
+        empty, 2, greater, project_tens) == 0);
+    verify(!binary_search_by_projected(
+        empty, 2, greater, project_tens));
 }
 
 #[test]
