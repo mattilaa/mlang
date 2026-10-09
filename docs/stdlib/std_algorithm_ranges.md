@@ -88,6 +88,9 @@ fn example() {
 - `equal_projected` and `mismatch_projected` apply independent projections
   before comparing elements; `is_permutation_projected` compares projected
   multisets while preserving duplicate counts.
+- `is_permutation_by_projected` compares projected equivalence classes under a
+  strict comparator, with independent projections for the two input types and
+  duplicate multiplicities preserved.
 - `mismatch(left, right)` returns a tuple of the first unequal indices,
   stopping at the shorter range; an equal prefix returns its shared length for
   both indices. `mismatch_by` accepts a binary equivalence predicate.
@@ -122,6 +125,9 @@ fn example() {
 - `next_permutation_projected` and `prev_permutation_projected` compare
   projected keys while rearranging the original values, with the same wrapping
   and unchanged-input behavior.
+- `next_permutation_by_projected` and `prev_permutation_by_projected` combine
+  comparator and projection ordering while preserving the same wrap and
+  non-mutating behavior.
 - `min_element_value` and `max_element_value` return the selected value for a
   nonempty input. Use the index forms to handle empty ranges; value forms keep
   the first value on ties.
