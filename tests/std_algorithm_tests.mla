@@ -48,7 +48,9 @@ use std::algorithm::numeric::inner_product;
 use std::algorithm::numeric::inner_product_by;
 use std::algorithm::numeric::partial_sum_i64;
 use std::algorithm::numeric::partial_sum;
+use std::algorithm::numeric::partial_sum_by;
 use std::algorithm::numeric::adjacent_difference;
+use std::algorithm::numeric::adjacent_difference_by;
 use std::algorithm::order::binary_search_i64;
 use std::algorithm::order::is_sorted_i64;
 use std::algorithm::order::lower_bound_i64;
@@ -3641,6 +3643,29 @@ fn test_algorithm_numeric_generic_partial_sum_and_adjacent_difference() {
     let empty_prefix: list<i32> = partial_sum(empty, init);
     let empty_diff: list<i32> = adjacent_difference(empty, init);
     verify(empty_prefix.len() == 0 && empty_diff.len() == 0);
+}
+
+#[test]
+fn test_algorithm_numeric_custom_partial_and_adjacent_operations() {
+    let values: list<i32> = [10, 3, 2, 8];
+    let subtract = |left: i32, right: i32| { return left - right; };
+    let prefixes: list<i32> = partial_sum_by(values, subtract);
+    verify(prefixes.len() == 4 && prefixes[0] == 10 && prefixes[1] == 7 &&
+           prefixes[2] == 5 && prefixes[3] == -3);
+    let differences: list<i32> = adjacent_difference_by(values, subtract);
+    verify(differences.len() == 4 && differences[0] == 10 &&
+           differences[1] == -7 && differences[2] == -1 &&
+           differences[3] == 6);
+
+    let empty: list<i32> = [];
+    let empty_prefixes: list<i32> = partial_sum_by(empty, subtract);
+    let empty_differences: list<i32> = adjacent_difference_by(empty, subtract);
+    verify(empty_prefixes.len() == 0 && empty_differences.len() == 0);
+    let singleton: list<i32> = [42];
+    let one_prefix: list<i32> = partial_sum_by(singleton, subtract);
+    let one_difference: list<i32> = adjacent_difference_by(singleton, subtract);
+    verify(one_prefix.len() == 1 && one_prefix[0] == 42 &&
+           one_difference.len() == 1 && one_difference[0] == 42);
 }
 
 #[test]
