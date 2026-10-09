@@ -286,6 +286,18 @@ pub fn find_if(data: &list<T>, predicate: Predicate) -> i64 {
     return -1;
 }
 
+/// @brief Find the first element accepted after projection, or -1.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn find_if_projected(data: &list<T>, predicate: Predicate,
+                         projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(projection(data[i])) { return i; }
+    }
+    return -1;
+}
+
 /// @brief Return the last index accepted by `predicate`, or -1.
 /// C++23 `std::ranges::find_last_if` semantics.
 /// @ingroup algorithm_ranges
@@ -311,6 +323,19 @@ pub fn count_if(data: &list<T>, predicate: Predicate) -> i64 {
         if predicate(data[i]) {
             matched = matched + 1;
         }
+    }
+    return matched;
+}
+
+/// @brief Count elements whose projected keys satisfy `predicate`.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn count_if_projected(data: &list<T>, predicate: Predicate,
+                          projection: Projection) -> i64 {
+    var matched: i64 = 0;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(projection(data[i])) { matched = matched + 1; }
     }
     return matched;
 }
@@ -646,6 +671,19 @@ pub fn all_of(data: &list<T>, predicate: Predicate) -> bool {
     return true;
 }
 
+/// @brief Check whether every projected key satisfies `predicate`.
+/// Empty ranges return true.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn all_of_projected(data: &list<T>, predicate: Predicate,
+                        projection: Projection) -> bool {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if !predicate(projection(data[i])) { return false; }
+    }
+    return true;
+}
+
 /// @brief Return whether any element is accepted by `predicate`.
 /// Empty ranges return false, matching C++20 `std::ranges::any_of`.
 /// @ingroup algorithm_ranges
@@ -660,6 +698,19 @@ pub fn any_of(data: &list<T>, predicate: Predicate) -> bool {
     return false;
 }
 
+/// @brief Check whether any projected key satisfies `predicate`.
+/// Empty ranges return false.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn any_of_projected(data: &list<T>, predicate: Predicate,
+                        projection: Projection) -> bool {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(projection(data[i])) { return true; }
+    }
+    return false;
+}
+
 /// @brief Return whether no element is accepted by `predicate`.
 /// Empty ranges return true, matching C++20 `std::ranges::none_of`.
 /// @ingroup algorithm_ranges
@@ -670,6 +721,19 @@ pub fn none_of(data: &list<T>, predicate: Predicate) -> bool {
         if predicate(data[i]) {
             return false;
         }
+    }
+    return true;
+}
+
+/// @brief Check whether no projected key satisfies `predicate`.
+/// Empty ranges return true.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn none_of_projected(data: &list<T>, predicate: Predicate,
+                         projection: Projection) -> bool {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(projection(data[i])) { return false; }
     }
     return true;
 }
@@ -895,6 +959,18 @@ pub fn find_if_not(data: &list<T>, predicate: Predicate) -> i64 {
         if !predicate(data[i]) {
             return i;
         }
+    }
+    return -1;
+}
+
+/// @brief Find the first element rejected after projection, or -1.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn find_if_not_projected(data: &list<T>, predicate: Predicate,
+                             projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if !predicate(projection(data[i])) { return i; }
     }
     return -1;
 }

@@ -196,11 +196,16 @@ use std::algorithm::ranges::adjacent_transform;
 use std::algorithm::ranges::replace;
 use std::algorithm::ranges::replace_projected;
 use std::algorithm::ranges::all_of;
+use std::algorithm::ranges::all_of_projected;
 use std::algorithm::ranges::any_of;
+use std::algorithm::ranges::any_of_projected;
 use std::algorithm::ranges::none_of;
+use std::algorithm::ranges::none_of_projected;
 use std::algorithm::ranges::find_if;
+use std::algorithm::ranges::find_if_projected;
 use std::algorithm::ranges::find_last_if;
 use std::algorithm::ranges::count_if;
+use std::algorithm::ranges::count_if_projected;
 use std::algorithm::ranges::for_each;
 use std::algorithm::ranges::for_each_n;
 use std::algorithm::ranges::generate_n;
@@ -222,6 +227,7 @@ use std::algorithm::ranges::partition_projected;
 use std::algorithm::ranges::partition_copy;
 use std::algorithm::ranges::partition_copy_projected;
 use std::algorithm::ranges::find_if_not;
+use std::algorithm::ranges::find_if_not_projected;
 use std::algorithm::ranges::find_last_if_not;
 use std::algorithm::ranges::remove_if;
 use std::algorithm::ranges::copy_if;
@@ -2726,6 +2732,31 @@ fn test_algorithm_ranges_predicate_algorithms() {
     verify(all_of(no_values, is_even));
     verify(!any_of(no_values, is_even));
     verify(none_of(no_values, is_even));
+}
+
+#[test]
+fn test_algorithm_ranges_projected_predicate_queries() {
+    let values: list<i32> = [11, 21, 32, 39, 44];
+    let project_tens = |value: i32| { return value / 10; };
+    let is_even = |key: i32| { return key % 2 == 0; };
+    let below_four = |key: i32| { return key < 4; };
+    let above_nine = |key: i32| { return key > 9; };
+
+    verify(!all_of_projected(values, is_even, project_tens));
+    verify(any_of_projected(values, is_even, project_tens));
+    verify(!none_of_projected(values, is_even, project_tens));
+    verify(find_if_projected(values, is_even, project_tens) == 1);
+    verify(find_if_not_projected(values, below_four, project_tens) == 4);
+    verify(count_if_projected(values, is_even, project_tens) == 2);
+    verify(find_if_projected(values, above_nine, project_tens) == -1);
+
+    let empty: list<i32> = [];
+    verify(all_of_projected(empty, is_even, project_tens));
+    verify(!any_of_projected(empty, is_even, project_tens));
+    verify(none_of_projected(empty, is_even, project_tens));
+    verify(find_if_projected(empty, is_even, project_tens) == -1);
+    verify(find_if_not_projected(empty, is_even, project_tens) == -1);
+    verify(count_if_projected(empty, is_even, project_tens) == 0);
 }
 
 #[test]
