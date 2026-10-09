@@ -154,6 +154,20 @@ fn test_cpp20_lerp_interpolation() {
 }
 
 #[test]
+fn test_cpp20_hypot_stable_norm() {
+    verify(approx_float(hypot(3.0f, 4.0f), 5.0f, 0.00001f));
+    verify(approx_double(hypot(5.0, 12.0), 13.0, 0.000000000001));
+
+    let large: f32 = 200000000000000000000000000000000000000.0f;
+    let large_norm: f32 = hypot(large, large);
+    verify(large_norm > large);
+    verify(large_norm < 340000000000000000000000000000000000000.0f);
+
+    let tiny: f32 = 0.000000000000000000000000000001f;
+    verify(hypot(tiny, tiny) > tiny);
+}
+
+#[test]
 fn test_cpp20_midpoint() {
     verify(midpoint(0, 1) == 0);
     verify(midpoint(1, 0) == 1);
