@@ -66,6 +66,9 @@ fn example() {
 - `search_by` and `find_end_by` find the first or last contiguous subrange
   matching under a caller-provided equivalence predicate, including when the
   two ranges have different element types.
+- `contains_subrange_by(data, pattern, equivalent)` returns whether a
+  contiguous pattern exists under a binary equivalence predicate, including
+  for different element types. An empty pattern matches every range.
 - `equal` compares lists in order, including across distinct equality-comparable
   element types; `is_permutation` compares element multiplicities without
   considering order.

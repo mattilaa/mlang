@@ -74,6 +74,7 @@ use std::algorithm::ranges::search_n_by;
 use std::algorithm::ranges::find_end;
 use std::algorithm::ranges::find_end_by;
 use std::algorithm::ranges::contains_subrange;
+use std::algorithm::ranges::contains_subrange_by;
 use std::algorithm::ranges::ends_with;
 use std::algorithm::ranges::ends_with_by;
 use std::algorithm::ranges::lexicographical_compare;
@@ -544,6 +545,22 @@ fn test_algorithm_ranges_subrange_search_by_edges() {
     verify(search_by(data, too_long, by_tens) == -1);
     verify(search_by(data, empty, by_tens) == 0);
     verify(find_end_by(data, empty, by_tens) == data.len());
+}
+
+#[test]
+fn test_algorithm_ranges_contains_subrange_by() {
+    let values: list<i32> = [11, 22, 34, 45, 58];
+    let matching: list<i32> = [29, 38];
+    let absent: list<i32> = [19, 39];
+    let empty: list<i32> = [];
+    let same_decade = |value: i32, candidate: i32| {
+        return value / 10 == candidate / 10;
+    };
+
+    verify(contains_subrange_by(values, matching, same_decade));
+    verify(!contains_subrange_by(values, absent, same_decade));
+    verify(contains_subrange_by(values, empty, same_decade));
+    verify(contains_subrange_by(empty, empty, same_decade));
 }
 
 #[test]
