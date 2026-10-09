@@ -1848,6 +1848,30 @@ pub fn joined(data: &list<list<T>>) -> list<T> {
     return out;
 }
 
+/// @brief Flatten a list of lists, inserting `separator` between each pair
+/// of inner lists. The separator is inserted even when an inner list is empty.
+/// Eager-list counterpart to C++23 `views::join_with`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn joined_with(data: &list<list<T>>, separator: &list<T>) -> list<T> {
+    var out: list<T> = [];
+    let outer_len: i64 = data.len();
+    let separator_len: i64 = separator.len();
+    for outer_index in 0..outer_len {
+        if outer_index > 0 {
+            for separator_index in 0..separator_len {
+                out.push(separator[separator_index]);
+            }
+        }
+        let inner: list<T> = data[outer_index];
+        let inner_len: i64 = inner.len();
+        for inner_index in 0..inner_len {
+            out.push(inner[inner_index]);
+        }
+    }
+    return out;
+}
+
 /// @brief Concatenate two ranges into a copied list.
 /// Eager-list counterpart to C++23 `views::concat` for two same-typed inputs.
 /// @ingroup algorithm_ranges

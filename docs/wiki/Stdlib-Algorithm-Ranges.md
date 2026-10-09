@@ -176,6 +176,10 @@ fn example() {
   (C++23 `views::stride` style); non-positive steps produce an empty list.
 - `joined(data)` flattens one list-of-lists level into a copied list (C++20
   `views::join` style); empty inner lists contribute no elements.
+- `joined_with(data, separator)` flattens one level and inserts a copied
+  separator between each pair of inner lists (C++23 `views::join_with` style).
+  Separators are inserted between empty inner lists too; an empty outer list
+  produces an empty result.
 - `concat(left, right)` copies two same-typed ranges into one list (C++23
   `views::concat` style).
 - `zip(left, right)` materializes tuple pairs from two ranges, stopping at the
