@@ -300,6 +300,20 @@ pub fn fold_right(data: &list<T>, init: U, operation: Operation) -> U {
     return acc;
 }
 
+/// @brief Fold left and return the final consumed index with the accumulator.
+/// Mlang's eager-list analogue of C++23 `std::ranges::fold_left_with_iter`.
+/// The returned index is the list length, including for empty input.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation>
+pub fn fold_left_with_iter(data: &list<T>, init: U, operation: Operation) -> tuple<i64, U> {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, data[i]);
+    }
+    return (n, acc);
+}
+
 /// @brief Fold a non-empty range from left to right without an initial value.
 /// Empty input returns None. C++23 `std::ranges::fold_left_first` equivalent.
 /// @ingroup algorithm_ranges

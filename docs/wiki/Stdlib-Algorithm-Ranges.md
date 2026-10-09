@@ -131,6 +131,9 @@ fn example() {
   `(accumulator, element)` for left folds and `(element, accumulator)` for
   right folds; the accumulator type may differ from the element type. Empty
   input returns `init` unchanged.
+- `fold_left_with_iter(data, init, operation)` returns `(consumed, accumulator)`;
+  `consumed` is the eager list length (zero for empty input), standing in for
+  the final iterator in C++23 `std::ranges::fold_left_with_iter`.
 - `fold_left_first(data, operation)` and `fold_right_last(data, operation)`
   seed the reduction from the first or last element. They return
   `option<T>`—`None` for empty input and `Some(result)` otherwise. These are
