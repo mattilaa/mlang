@@ -104,11 +104,13 @@ use std::algorithm::ranges::difference_sorted_by;
 use std::algorithm::ranges::symmetric_difference_sorted_by;
 use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::upper_bound;
+use std::algorithm::ranges::equal_range;
 use std::algorithm::ranges::binary_search;
 use std::algorithm::ranges::is_sorted_by;
 use std::algorithm::ranges::is_sorted_until_by;
 use std::algorithm::ranges::lower_bound_by;
 use std::algorithm::ranges::upper_bound_by;
+use std::algorithm::ranges::equal_range_by;
 use std::algorithm::ranges::binary_search_by;
 use std::algorithm::ranges::sorted;
 use std::algorithm::ranges::sorted_by;
@@ -843,6 +845,19 @@ fn test_algorithm_ranges_generic_upper_bound() {
 }
 
 #[test]
+fn test_algorithm_ranges_generic_equal_range() {
+    let values: list<i32> = [1, 3, 3, 7, 9];
+    let threes: tuple<i64, i64> = equal_range(values, 3);
+    let absent: tuple<i64, i64> = equal_range(values, 4);
+    verify(threes.0 == 1 && threes.1 == 3);
+    verify(absent.0 == 3 && absent.1 == 3);
+
+    let empty: list<i32> = [];
+    let empty_result: tuple<i64, i64> = equal_range(empty, 4);
+    verify(empty_result.0 == 0 && empty_result.1 == 0);
+}
+
+#[test]
 fn test_algorithm_ranges_generic_binary_search() {
     let values: list<i32> = [1, 3, 3, 7, 9];
     verify(binary_search(values, 1));
@@ -870,6 +885,8 @@ fn test_algorithm_ranges_comparator_order_queries() {
 
     verify(lower_bound_by(descending, 7, greater) == 1);
     verify(upper_bound_by(descending, 7, greater) == 3);
+    let equal_sevens: tuple<i64, i64> = equal_range_by(descending, 7, greater);
+    verify(equal_sevens.0 == 1 && equal_sevens.1 == 3);
     verify(lower_bound_by(descending, 10, greater) == 0);
     verify(upper_bound_by(descending, 0, greater) == 5);
     verify(binary_search_by(descending, 7, greater));
