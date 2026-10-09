@@ -356,6 +356,30 @@ pub fn zip_transform(left: &list<T>, right: &list<U>, operation: Operation)
     return transformed;
 }
 
+/// @brief Transform corresponding elements from three ranges into a new list.
+/// Stops at the shortest input; output type comes from the ternary operation.
+/// C++23 `ranges::zip_transform` counterpart for three inputs.
+/// @ingroup algorithm_ranges
+generic<T, U, V, Output, Operation>
+pub fn zip_transform(first: &list<T>, second: &list<U>, third: &list<V>,
+                      operation: Operation) -> list<Output> {
+    var transformed: list<Output> = [];
+    let first_len: i64 = first.len();
+    let second_len: i64 = second.len();
+    let third_len: i64 = third.len();
+    var n: i64 = first_len;
+    if second_len < n {
+        n = second_len;
+    }
+    if third_len < n {
+        n = third_len;
+    }
+    for i in 0..n {
+        transformed.push(operation(first[i], second[i], third[i]));
+    }
+    return transformed;
+}
+
 /// @brief Return whether every element is accepted by `predicate`.
 /// Empty ranges return true, matching C++20 `std::ranges::all_of`.
 /// @ingroup algorithm_ranges
