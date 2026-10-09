@@ -250,6 +250,24 @@ fn test_complex_f64_division() {
 }
 
 #[test]
+fn test_complex_norm() {
+    let z: Complex<f64> = Complex<f64> { re: 3.0, im: 4.0 };
+    verify(z.norm() == 25.0);
+}
+
+#[test]
+fn test_atan2_f64() {
+    let angle: f64 = atan2(4.0, 3.0);
+    verify(angle > 0.92729 && angle < 0.92730);
+}
+
+#[test]
+fn test_complex_argument() {
+    let z: Complex<f64> = Complex<f64> { re: 3.0, im: 4.0 };
+    verify(z.arg() > 0.92729 && z.arg() < 0.92730);
+}
+
+#[test]
 fn test_complex_f32_abs() {
     let eps: f32 = 0.0001f;
     let z: Complex<f32> = Complex<f32> { re: 3.0f, im: 4.0f };
