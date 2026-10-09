@@ -10,6 +10,7 @@ Module file: `stdlib/std/sync.mla`
 - `AtomicI64` (shared 64-bit atomic integer)
 - `Latch` (one-shot countdown latch)
 - `Barrier` (reusable phase barrier)
+- `CountingSemaphore` (bounded permit counter)
 
 ### mutex
 - `mutex::new() -> result<mutex, str8>`
@@ -183,5 +184,30 @@ fn main() -> i32 {
     let waited: result<i32, str8> = latch.wait();
     latch.close();
     return arrived.is_ok() && waited.is_ok() ? 0 : 1;
+}
+```
+
+### CountingSemaphore
+
+`CountingSemaphore` is a C++20-style counting semaphore backed by a mutex and
+condition variable. Create it with an initial permit count and a positive
+maximum. `acquire()` blocks until it consumes one permit; `try_acquire()` is
+nonblocking and returns false when empty. `release()` adds one permit, while
+`release_by(n)` adds several. Invalid initial counts, nonpositive releases,
+and releases that would exceed the configured maximum return errors. Call
+`close()` only after all blocked/acquiring threads have finished.
+
+```mlang
+mod std::sync;
+use std::sync::CountingSemaphore;
+
+fn main() -> i32 {
+    let created: result<CountingSemaphore, str8> = CountingSemaphore::new(1, 4);
+    if created.is_err() { return 1; }
+    let permits: CountingSemaphore = created.unwrap();
+    let acquired: result<bool, str8> = permits.try_acquire();
+    let released: result<i32, str8> = permits.release();
+    permits.close();
+    return acquired.is_ok() && acquired.unwrap() && released.is_ok() ? 0 : 1;
 }
 ```

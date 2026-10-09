@@ -71,6 +71,14 @@ typedef struct
     int64_t phase;
 } mlang_sync_barrier_t;
 
+typedef struct
+{
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    int64_t count;
+    int64_t maximum;
+} mlang_sync_semaphore_t;
+
 static void set_error(const char* msg)
 {
     if(!msg)
@@ -667,6 +675,169 @@ int __mlang_std_sync_barrier_free(int64_t handle)
         return -1;
     }
     free(barrier);
+    clear_error();
+    return 0;
+}
+
+int64_t __mlang_std_sync_semaphore_new(int64_t initial, int64_t maximum)
+{
+    if(maximum <= 0 || initial < 0 || initial > maximum)
+    {
+        set_error("std::sync CountingSemaphore: require 0 <= initial <= positive maximum");
+        return 0;
+    }
+    mlang_sync_semaphore_t* semaphore = calloc(1, sizeof(*semaphore));
+    if(!semaphore)
+    {
+        set_error("std::sync CountingSemaphore: out of memory");
+        return 0;
+    }
+    int rc = pthread_mutex_init(&semaphore->mu, NULL);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: mutex init failed: %s", strerror(rc));
+        free(semaphore);
+        return 0;
+    }
+    rc = pthread_cond_init(&semaphore->cv, NULL);
+    if(rc != 0)
+    {
+        (void)pthread_mutex_destroy(&semaphore->mu);
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: condition init failed: %s", strerror(rc));
+        free(semaphore);
+        return 0;
+    }
+    semaphore->count = initial;
+    semaphore->maximum = maximum;
+    clear_error();
+    return (int64_t)(intptr_t)semaphore;
+}
+
+int __mlang_std_sync_semaphore_acquire(int64_t handle)
+{
+    mlang_sync_semaphore_t* semaphore = (mlang_sync_semaphore_t*)(intptr_t)handle;
+    if(!semaphore)
+    {
+        set_error("std::sync CountingSemaphore: invalid handle");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    while(semaphore->count == 0)
+    {
+        rc = pthread_cond_wait(&semaphore->cv, &semaphore->mu);
+        if(rc != 0)
+        {
+            (void)pthread_mutex_unlock(&semaphore->mu);
+            (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: wait failed: %s", strerror(rc));
+            return -1;
+        }
+    }
+    semaphore->count--;
+    rc = pthread_mutex_unlock(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_semaphore_try_acquire(int64_t handle)
+{
+    mlang_sync_semaphore_t* semaphore = (mlang_sync_semaphore_t*)(intptr_t)handle;
+    if(!semaphore)
+    {
+        set_error("std::sync CountingSemaphore: invalid handle");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    int acquired = semaphore->count > 0;
+    if(acquired) semaphore->count--;
+    rc = pthread_mutex_unlock(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return acquired ? 1 : 0;
+}
+
+int __mlang_std_sync_semaphore_release(int64_t handle, int64_t update)
+{
+    mlang_sync_semaphore_t* semaphore = (mlang_sync_semaphore_t*)(intptr_t)handle;
+    if(!semaphore)
+    {
+        set_error("std::sync CountingSemaphore: invalid handle");
+        return -1;
+    }
+    if(update <= 0)
+    {
+        set_error("std::sync CountingSemaphore: update must be positive");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    if(update > semaphore->maximum - semaphore->count)
+    {
+        (void)pthread_mutex_unlock(&semaphore->mu);
+        set_error("std::sync CountingSemaphore: release exceeds maximum count");
+        return -1;
+    }
+    semaphore->count += update;
+    rc = pthread_cond_broadcast(&semaphore->cv);
+    if(rc != 0)
+    {
+        (void)pthread_mutex_unlock(&semaphore->mu);
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: broadcast failed: %s", strerror(rc));
+        return -1;
+    }
+    rc = pthread_mutex_unlock(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_semaphore_free(int64_t handle)
+{
+    mlang_sync_semaphore_t* semaphore = (mlang_sync_semaphore_t*)(intptr_t)handle;
+    if(!semaphore)
+    {
+        set_error("std::sync CountingSemaphore: invalid handle");
+        return -1;
+    }
+    int rc = pthread_cond_destroy(&semaphore->cv);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: condition destroy failed: %s", strerror(rc));
+        return -1;
+    }
+    rc = pthread_mutex_destroy(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: mutex destroy failed: %s", strerror(rc));
+        return -1;
+    }
+    free(semaphore);
     clear_error();
     return 0;
 }
