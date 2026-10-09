@@ -10,6 +10,7 @@ Module file: `stdlib/std/sync.mla`
 - `channel`
 - `lock_free_queue` (SPSC str8 queue)
 - `AtomicI64` (shared 64-bit atomic integer)
+- `AtomicFlag` (guaranteed lock-free boolean flag)
 - `Latch` (one-shot countdown latch)
 - `Barrier` (reusable phase barrier)
 - `CountingSemaphore` (bounded permit counter)
@@ -142,6 +143,15 @@ handle, not the underlying integer. Share the handle between threads, and call
 with all atomics, relaxed ordering makes the atomic value race-free but does
 not publish unrelated data; use acquire/release or sequential consistency for
 that synchronization.
+
+### AtomicFlag
+
+`AtomicFlag` wraps C11 `atomic_flag`, whose representation is guaranteed
+lock-free. `test_and_set()` atomically sets the flag and reports whether it was
+already set; `clear()` resets it. Both default to sequential consistency and
+have `_with_order` variants. `clear` rejects acquire-like memory orders. This
+supports small spin-lock/state-flag use cases; prefer `mutex` when waiting
+threads should sleep instead of spin. Close the flag only after all users stop.
 
 ### Latch
 

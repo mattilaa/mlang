@@ -59,6 +59,11 @@ typedef struct
 
 typedef struct
 {
+    atomic_flag flag;
+} mlang_sync_atomic_flag_t;
+
+typedef struct
+{
     pthread_mutex_t mu;
     pthread_cond_t cv;
     int64_t count;
@@ -564,6 +569,80 @@ int __mlang_std_sync_atomic_i64_free(int64_t handle)
         return -1;
     }
     free(value);
+    clear_error();
+    return 0;
+}
+
+static mlang_sync_atomic_flag_t* atomic_flag_from_handle(int64_t handle)
+{
+    return (mlang_sync_atomic_flag_t*)(intptr_t)handle;
+}
+
+int64_t __mlang_std_sync_atomic_flag_new(void)
+{
+    mlang_sync_atomic_flag_t* flag = malloc(sizeof(*flag));
+    if(!flag)
+    {
+        set_error("std::sync AtomicFlag: out of memory");
+        return 0;
+    }
+    atomic_flag_clear(&flag->flag);
+    clear_error();
+    return (int64_t)(intptr_t)flag;
+}
+
+int __mlang_std_sync_atomic_flag_test_and_set(int64_t handle, int order)
+{
+    memory_order mo;
+    if(!atomic_flag_from_handle(handle))
+    {
+        set_error("std::sync AtomicFlag: invalid handle");
+        return -1;
+    }
+    if(!atomic_order_from_int(order, &mo))
+    {
+        set_error("std::sync AtomicFlag: invalid memory order");
+        return -1;
+    }
+    int was_set = atomic_flag_test_and_set_explicit(
+        &atomic_flag_from_handle(handle)->flag, mo);
+    clear_error();
+    return was_set ? 1 : 0;
+}
+
+int __mlang_std_sync_atomic_flag_clear(int64_t handle, int order)
+{
+    memory_order mo;
+    if(!atomic_flag_from_handle(handle))
+    {
+        set_error("std::sync AtomicFlag: invalid handle");
+        return -1;
+    }
+    if(!atomic_order_from_int(order, &mo))
+    {
+        set_error("std::sync AtomicFlag: invalid memory order");
+        return -1;
+    }
+    if(mo == memory_order_consume || mo == memory_order_acquire ||
+       mo == memory_order_acq_rel)
+    {
+        set_error("std::sync AtomicFlag: invalid clear memory order");
+        return -1;
+    }
+    atomic_flag_clear_explicit(&atomic_flag_from_handle(handle)->flag, mo);
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_atomic_flag_free(int64_t handle)
+{
+    mlang_sync_atomic_flag_t* flag = atomic_flag_from_handle(handle);
+    if(!flag)
+    {
+        set_error("std::sync AtomicFlag: invalid handle");
+        return -1;
+    }
+    free(flag);
     clear_error();
     return 0;
 }

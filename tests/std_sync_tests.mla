@@ -9,6 +9,7 @@ use std::strbuf::contains;
 use std::sync::Channel;
 use std::sync::Condvar;
 use std::sync::AtomicI64;
+use std::sync::AtomicFlag;
 use std::sync::AtomicOrder;
 use std::sync::Barrier;
 use std::sync::CountingSemaphore;
@@ -188,6 +189,27 @@ fn test_atomic_i64_operations_impl() -> i32 {
 #[test]
 fn test_atomic_i64_operations() {
     verify(test_atomic_i64_operations_impl() == 0);
+}
+
+#[test]
+fn test_atomic_flag_operations() {
+    let created: result<AtomicFlag, str8> = AtomicFlag::new();
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let flag: AtomicFlag = created.unwrap();
+    let initially_set: result<bool, str8> =
+        flag.test_and_set_with_order(AtomicOrder::Acquire);
+    let already_set: result<bool, str8> = flag.test_and_set();
+    let cleared: result<i32, str8> = flag.clear_with_order(AtomicOrder::Release);
+    let after_clear: result<bool, str8> =
+        flag.test_and_set_with_order(AtomicOrder::Acquire);
+    let invalid_clear: result<i32, str8> =
+        flag.clear_with_order(AtomicOrder::Acquire);
+    let closed: i32 = flag.close();
+    verify(initially_set.is_ok() && !initially_set.unwrap());
+    verify(already_set.is_ok() && already_set.unwrap());
+    verify(cleared.is_ok() && after_clear.is_ok() && !after_clear.unwrap());
+    verify(invalid_clear.is_err() && closed == 0);
 }
 
 #[test]
