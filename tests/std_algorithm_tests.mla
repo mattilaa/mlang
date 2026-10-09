@@ -60,6 +60,9 @@ use std::algorithm::ranges::contains;
 use std::algorithm::ranges::count;
 use std::algorithm::ranges::find;
 use std::algorithm::ranges::find_projected;
+use std::algorithm::ranges::find_last_projected;
+use std::algorithm::ranges::adjacent_find_projected;
+use std::algorithm::ranges::find_first_of_projected;
 use std::algorithm::ranges::count_projected;
 use std::algorithm::ranges::contains_projected;
 use std::algorithm::ranges::find_last;
@@ -496,6 +499,27 @@ fn test_algorithm_ranges_find_first_of_by_heterogeneous_predicate() {
     verify(find_first_of_by(values, candidates, same_decade) == 0);
     verify(find_first_of_by(values, absent, same_decade) == -1);
     verify(find_first_of_by(values, empty, same_decade) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_lookup_family() {
+    let values: list<i32> = [11, 21, 29, 31, 34];
+    let candidates: list<i32> = [28, 43];
+    let absent: list<i32> = [48];
+    let empty: list<i32> = [];
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(find_last_projected(values, 3, project_tens) == 4);
+    verify(find_last_projected(values, 8, project_tens) == -1);
+    verify(adjacent_find_projected(values, project_tens) == 1);
+    verify(adjacent_find_projected(absent, project_tens) == -1);
+    verify(adjacent_find_projected(empty, project_tens) == -1);
+    verify(find_first_of_projected(
+        values, candidates, project_tens, project_tens) == 1);
+    verify(find_first_of_projected(
+        values, absent, project_tens, project_tens) == -1);
+    verify(find_first_of_projected(
+        values, empty, project_tens, project_tens) == -1);
 }
 
 #[test]

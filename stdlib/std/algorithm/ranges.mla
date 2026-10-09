@@ -36,6 +36,20 @@ pub fn find_projected(data: &list<T>, value: U, projection: Projection) -> i64 {
     return -1;
 }
 
+/// @brief Find the last element whose projected value equals `value`.
+/// Returns -1 when no projected key matches.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn find_last_projected(data: &list<T>, value: U,
+                           projection: Projection) -> i64 {
+    var found: i64 = -1;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if projection(data[i]) == value { found = i; }
+    }
+    return found;
+}
+
 /// @brief Return the last index of a value, or -1 when it is absent.
 /// C++23 ranges-style last-match search.
 /// @ingroup algorithm_ranges
@@ -85,6 +99,19 @@ pub fn adjacent_find(data: &list<T>) -> i64 {
     return -1;
 }
 
+/// @brief Find adjacent values with equal projected keys.
+/// Returns the first pair's left index, or -1 if there is no such pair.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn adjacent_find_projected(data: &list<T>, projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n < 2 { return -1; }
+    for i in 0..(n - 1) {
+        if projection(data[i]) == projection(data[i + 1]) { return i; }
+    }
+    return -1;
+}
+
 /// @brief Return the first adjacent pair accepted by `equivalent`, or -1.
 /// @ingroup algorithm_ranges
 generic<T, Equivalent>
@@ -113,6 +140,25 @@ pub fn find_first_of(data: &list<T>, candidates: &list<U>) -> i64 {
             if data[i] == candidates[j] {
                 return i;
             }
+        }
+    }
+    return -1;
+}
+
+/// @brief Find the first data element matching any candidate after projection.
+/// Each range has its own projection; returns -1 when there is no match.
+/// @ingroup algorithm_ranges
+generic<T, U, DataProjection, CandidateProjection>
+pub fn find_first_of_projected(data: &list<T>, candidates: &list<U>,
+                               data_projection: DataProjection,
+                               candidate_projection: CandidateProjection)
+    -> i64 {
+    let n: i64 = data.len();
+    let candidate_count: i64 = candidates.len();
+    for i in 0..n {
+        let data_key = data_projection(data[i]);
+        for j in 0..candidate_count {
+            if data_key == candidate_projection(candidates[j]) { return i; }
         }
     }
     return -1;
