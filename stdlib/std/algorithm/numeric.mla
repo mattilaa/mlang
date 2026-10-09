@@ -8,6 +8,28 @@
 /// @brief Numeric sequence algorithms.
 /// @{
 
+/// @brief Compute the signed midpoint without overflowing.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_i64(first: i64, second: i64) -> i64 {
+    var middle: i64 = first / 2 + second / 2;
+    let remainder: i64 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == -2 { return middle - 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    if remainder == -1 && first < second { return middle - 1; }
+    return middle;
+}
+
+/// @brief Compute the unsigned midpoint without overflowing.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_u64(first: u64, second: u64) -> u64 {
+    var middle: u64 = first / 2 + second / 2;
+    let remainder: u64 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    return middle;
+}
+
 /// @brief Sum all elements with an initial value.
 /// @ingroup algorithm_numeric
 pub fn accumulate_i64(data: &list<i64>, init: i64) -> i64 {
