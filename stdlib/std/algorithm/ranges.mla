@@ -3657,6 +3657,39 @@ pub fn next_permutation_by(data: &list<T>, less: Less)
     return (true, out);
 }
 
+/// @brief Return the next permutation ordered by projected keys.
+/// Wraps to the first key permutation and returns false when no successor exists.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn next_permutation_projected(data: &list<T>,
+                                  projection: Projection)
+    -> tuple<bool, list<T>> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    var pivot: i64 = n - 2;
+    while pivot >= 0 && !(projection(data[pivot]) <
+                          projection(data[pivot + 1])) {
+        pivot = pivot - 1;
+    }
+    if pivot < 0 {
+        var i: i64 = n;
+        while i > 0 { i = i - 1; out.push(data[i]); }
+        return (false, out);
+    }
+    var successor: i64 = n - 1;
+    while !(projection(data[pivot]) < projection(data[successor])) {
+        successor = successor - 1;
+    }
+    for i in 0..pivot { out.push(data[i]); }
+    out.push(data[successor]);
+    var i: i64 = n - 1;
+    while i > successor { out.push(data[i]); i = i - 1; }
+    out.push(data[pivot]);
+    i = successor - 1;
+    while i > pivot { out.push(data[i]); i = i - 1; }
+    return (true, out);
+}
+
 /// @brief Return the previous lexicographic permutation and whether it exists.
 /// If no predecessor exists, return the descending last permutation.
 /// @ingroup algorithm_ranges
@@ -3737,6 +3770,39 @@ pub fn prev_permutation_by(data: &list<T>, less: Less)
         out.push(data[i]);
         i = i - 1;
     }
+    return (true, out);
+}
+
+/// @brief Return the previous permutation ordered by projected keys.
+/// Wraps to the last key permutation and returns false when none exists.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn prev_permutation_projected(data: &list<T>,
+                                  projection: Projection)
+    -> tuple<bool, list<T>> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    var pivot: i64 = n - 2;
+    while pivot >= 0 && !(projection(data[pivot + 1]) <
+                          projection(data[pivot])) {
+        pivot = pivot - 1;
+    }
+    if pivot < 0 {
+        var i: i64 = n;
+        while i > 0 { i = i - 1; out.push(data[i]); }
+        return (false, out);
+    }
+    var predecessor: i64 = n - 1;
+    while !(projection(data[predecessor]) < projection(data[pivot])) {
+        predecessor = predecessor - 1;
+    }
+    for i in 0..pivot { out.push(data[i]); }
+    out.push(data[predecessor]);
+    var i: i64 = n - 1;
+    while i > predecessor { out.push(data[i]); i = i - 1; }
+    out.push(data[pivot]);
+    i = predecessor - 1;
+    while i > pivot { out.push(data[i]); i = i - 1; }
     return (true, out);
 }
 

@@ -171,8 +171,10 @@ use std::algorithm::ranges::sorted_by;
 use std::algorithm::ranges::sorted_projected;
 use std::algorithm::ranges::next_permutation;
 use std::algorithm::ranges::next_permutation_by;
+use std::algorithm::ranges::next_permutation_projected;
 use std::algorithm::ranges::prev_permutation;
 use std::algorithm::ranges::prev_permutation_by;
+use std::algorithm::ranges::prev_permutation_projected;
 use std::algorithm::ranges::reversed;
 use std::algorithm::ranges::reverse_copy;
 use std::algorithm::ranges::rotate_left;
@@ -1566,6 +1568,31 @@ fn test_algorithm_ranges_permutations() {
     verify(!custom_previous.0 && custom_wrapped[0] == 1 && custom_wrapped[2] == 3);
 
     verify(ascending[0] == 1 && ascending[2] == 3);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_permutations() {
+    let values: list<i32> = [11, 19, 22];
+    let project_tens = |value: i32| { return value / 10; };
+    let next: tuple<bool, list<i32>> = next_permutation_projected(
+        values, project_tens);
+    let next_values: list<i32> = next.1;
+    verify(next.0 && next_values[0] == 11 &&
+           next_values[1] == 22 && next_values[2] == 19);
+
+    let previous: tuple<bool, list<i32>> = prev_permutation_projected(
+        next_values, project_tens);
+    let previous_values: list<i32> = previous.1;
+    verify(previous.0 && previous_values[0] == 11 &&
+           previous_values[1] == 19 && previous_values[2] == 22);
+
+    let descending: list<i32> = [32, 21, 19];
+    let wrapped: tuple<bool, list<i32>> = next_permutation_projected(
+        descending, project_tens);
+    let wrapped_values: list<i32> = wrapped.1;
+    verify(!wrapped.0 && wrapped_values[0] == 19 &&
+           wrapped_values[1] == 21 && wrapped_values[2] == 32);
+    verify(values[0] == 11 && values[2] == 22);
 }
 
 #[test]
