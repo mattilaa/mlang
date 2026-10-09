@@ -20,6 +20,11 @@ Numeric sequence helpers for integer lists, including generic list folds.
   with the first input value. `exclusive_scan(data, init, operation)` emits the
   accumulator before incorporating each element; its accumulator/output type
   may differ from the input element type. Empty inputs yield empty lists.
+- `transform_inclusive_scan` projects each input before accumulation, with
+  overloads that initialize from the first projected element or from an
+  explicit initial value. `transform_exclusive_scan` emits the accumulator
+  before incorporating each projected input. Projection, accumulator, and
+  input element types can differ.
 - `partial_sum_i64(data: &list<i64>, init: i64) -> list<i64>`
 - `adjacent_difference_i64(data: &list<i64>, init: i64) -> list<i64>`
 - `inner_product_i64(a: &list<i64>, b: &list<i64>, init: i64) -> i64`
