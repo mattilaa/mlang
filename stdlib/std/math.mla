@@ -405,6 +405,17 @@ impl < T > Mul for Complex {
     }
 }
 
+impl < T > Div for Complex {
+    /// @brief Divide two complex values using the conjugate formula.
+    fn div(self: &mut Self, other: Complex<T>) -> Complex<T> {
+        let denominator = other.norm_sqr();
+        return Complex<T> {
+            re: ((self.re * other.re) + (self.im * other.im)) / denominator,
+            im: ((self.im * other.re) - (self.re * other.im)) / denominator
+        };
+    }
+}
+
 impl < T > Neg for Complex {
     fn neg(self: &mut Self) -> Complex<T> {
         return Complex<T> { re:-self.re, im:-self.im };

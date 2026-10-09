@@ -37,3 +37,9 @@ Module file: `stdlib/std/math.mla`
 ### Integer-specific
 - `sum_range(start: i32, end: i32) -> i32`
 - `factorial(n: i32) -> i32`
+
+### Complex numbers
+`Complex<T>` provides conjugation, squared norm, magnitude, and the standard
+arithmetic operators `+`, `-`, `*`, `/`, and unary `-`. Division uses the
+conjugate formula and is intended for numeric component types; division by a
+zero complex value follows the component type's normal division behavior.

@@ -241,6 +241,15 @@ fn test_complex_i32_ops() {
     }
 
 #[test]
+fn test_complex_f64_division() {
+    let numerator: Complex<f64> = Complex<f64> { re: 7.0, im: 5.0 };
+    let denominator: Complex<f64> = Complex<f64> { re: 2.0, im: -3.0 };
+    let quotient: Complex<f64> = numerator / denominator;
+    verify(approx_double(quotient.re, -1.0 / 13.0, 0.000000000001));
+    verify(approx_double(quotient.im, 31.0 / 13.0, 0.000000000001));
+}
+
+#[test]
 fn test_complex_f32_abs() {
     let eps: f32 = 0.0001f;
     let z: Complex<f32> = Complex<f32> { re: 3.0f, im: 4.0f };
