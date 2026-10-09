@@ -5175,6 +5175,46 @@ pub fn joined_with(data: &list<list<T>>, separator: &list<T>) -> list<T> {
     return out;
 }
 
+/// @brief C++23 `views::chunk` spelling for `chunked`.
+/// Materializes the same eager list-of-lists result.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn chunk(data: &list<T>, chunk_size: i64) -> list<list<T>> {
+    return chunked(data, chunk_size);
+}
+
+/// @brief C++23 `views::slide` spelling for `windows`.
+/// Materializes every overlapping fixed-size sublist.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn slide(data: &list<T>, window_size: i64) -> list<list<T>> {
+    return windows(data, window_size);
+}
+
+/// @brief C++23 `views::stride` spelling for `strided`.
+/// Copies every `stride`-th element starting at index zero.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn stride(data: &list<T>, stride: i64) -> list<T> {
+    return strided(data, stride);
+}
+
+/// @brief C++20 `views::join` spelling for `joined`.
+/// Flattens one list-of-lists level into an eager copied list.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn join(data: &list<list<T>>) -> list<T> {
+    return joined(data);
+}
+
+/// @brief C++23 `views::join_with` spelling for `joined_with`.
+/// Flattens one level and inserts a separator between each pair of lists.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn join_with(data: &list<list<T>>, separator: &list<T>) -> list<T> {
+    return joined_with(data, separator);
+}
+
 /// @brief Split a range at each non-overlapping occurrence of `delimiter`.
 /// Empty fields are retained between leading, adjacent, and trailing matches.
 /// An empty input produces no fields; an empty delimiter returns the whole

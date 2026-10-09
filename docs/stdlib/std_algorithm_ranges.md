@@ -400,22 +400,25 @@ fn example() {
   yield an empty list.
 - `chunked(data, size)` materializes consecutive sublists (C++23
   `views::chunk` style); the final chunk can be shorter, and non-positive sizes
-  produce an empty list.
+  produce an empty list. `chunk(data, size)` is the standard view spelling.
 - `chunk_by(data, equivalent)` groups adjacent elements while the binary
   predicate accepts each neighboring pair (C++23 `views::chunk_by` style).
 - `chunk_by_projected(data, equivalent, projection)` groups adjacent values
   when their projected keys are equivalent, preserving the original elements
   in each eager output chunk.
 - `windows(data, size)` materializes every overlapping fixed-size sublist
-  (C++23 `views::slide` style); invalid sizes produce an empty list.
+  (C++23 `views::slide` style); invalid sizes produce an empty list. `slide`
+  is the standard view spelling.
 - `strided(data, step)` copies every `step`-th element from index zero
   (C++23 `views::stride` style); non-positive steps produce an empty list.
+  `stride` is the standard view spelling.
 - `joined(data)` flattens one list-of-lists level into a copied list (C++20
-  `views::join` style); empty inner lists contribute no elements.
+  `views::join` style); empty inner lists contribute no elements. `join` is
+  the standard view spelling.
 - `joined_with(data, separator)` flattens one level and inserts a copied
   separator between each pair of inner lists (C++23 `views::join_with` style).
   Separators are inserted between empty inner lists too; an empty outer list
-  produces an empty result.
+  produces an empty result. `join_with` is the standard view spelling.
 - `split(data, delimiter)` eagerly splits at non-overlapping delimiter matches
   and preserves empty fields around leading, repeated, and trailing matches.
   Empty input yields no fields; an empty delimiter yields the whole nonempty
