@@ -165,6 +165,49 @@ pub fn clear(v: list<i64>) -> void {
     v.clear();
 }
 
+/// @brief Remove every value equal to `value` from a mutable Vec.
+/// C++20 `std::erase(vector, value)` counterpart; returns the number removed.
+/// @ingroup vec_methods
+generic<T, U>
+pub fn erase(v: &mut list<T>, value: U) -> i64 {
+    var kept: list<T> = [];
+    var removed: i64 = 0;
+    let n: i64 = v.len();
+    for i in 0..n {
+        let item: T = v[i];
+        if item == value {
+            removed = removed + 1;
+        } else {
+            kept.push(item);
+        }
+    }
+    v.clear();
+    for item in kept { v.push(item); }
+    return removed;
+}
+
+/// @brief Remove every value accepted by `predicate` from a mutable Vec.
+/// C++20 `std::erase_if(vector, predicate)` counterpart; returns the number
+/// removed and retains the original order of all remaining values.
+/// @ingroup vec_methods
+generic<T, Predicate>
+pub fn erase_if(v: &mut list<T>, predicate: Predicate) -> i64 {
+    var kept: list<T> = [];
+    var removed: i64 = 0;
+    let n: i64 = v.len();
+    for i in 0..n {
+        let item: T = v[i];
+        if predicate(item) {
+            removed = removed + 1;
+        } else {
+            kept.push(item);
+        }
+    }
+    v.clear();
+    for item in kept { v.push(item); }
+    return removed;
+}
+
 /// @brief Replace one f32 element without changing length or allocating.
 /// @ingroup vec_methods
 ///

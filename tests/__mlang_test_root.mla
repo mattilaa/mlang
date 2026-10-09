@@ -48,6 +48,8 @@ mod std_audio_tests;
 use std_audio_tests::*;
 mod std_fs_tests;
 use std_fs_tests::*;
+mod std_vec_tests;
+use std_vec_tests::*;
 mod std_string_tests;
 use std_string_tests::*;
 mod std_esc_tests;
