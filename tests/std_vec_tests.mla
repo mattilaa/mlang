@@ -1,0 +1,32 @@
+mod std::vec;
+mod std::testing;
+
+use std::vec::erase;
+use std::vec::erase_if;
+use std::testing::verify;
+
+#[test]
+fn test_vec_erase_all_equal_values() {
+    var values: list<i32> = [1, 2, 2, 3, 2, 4];
+    verify(erase(&mut values, 2) == 3);
+    verify(values.len() == 3 && values[0] == 1 && values[1] == 3 &&
+           values[2] == 4);
+    verify(erase(&mut values, 9) == 0);
+    verify(values.len() == 3);
+    var words: list<str8> = ["a", "b", "a"];
+    verify(erase(&mut words, "a") == 2);
+    verify(words.len() == 1 && words[0] == "b");
+}
+
+#[test]
+fn test_vec_erase_if_preserves_order() {
+    var values: list<i32> = [1, 2, 3, 4, 5, 6];
+    let is_even = |value: i32| { return value % 2 == 0; };
+    verify(erase_if(&mut values, is_even) == 3);
+    verify(values.len() == 3 && values[0] == 1 && values[1] == 3 &&
+           values[2] == 5);
+    let always = |value: i32| { return value >= 0; };
+    verify(erase_if(&mut values, always) == 3 && values.is_empty());
+    var empty: list<i32> = [];
+    verify(erase_if(&mut empty, is_even) == 0 && empty.is_empty());
+}

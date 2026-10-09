@@ -7,7 +7,8 @@ Module file: `stdlib/std/vec.mla`
 [`Vec<T>`](Stdlib-Vec) is a type alias for [`list<T>`](Quick-Guide#types). The two are interchangeable in all
 contexts. Methods listed below are compiler intrinsics backed by `libmlang_std`
 and are also summarized in "Built-in Collection Methods (Compiler Intrinsics)"
-above.
+above. The free `erase` helpers are generic library operations that mutate a
+Vec by retaining the surviving elements in order.
 
 ### Constructors
 
@@ -29,6 +30,11 @@ above.
 - `v.pop() -> T` — remove and return the last element; known-empty arrays are
   rejected at compile time, otherwise empty containers abort at runtime
 - `v.clear()` — remove all elements (Vec remains valid for further pushes)
+- `erase(v, value) -> i64` — remove all matching values (C++20
+  `std::erase(vector, value)`); returns the number removed
+- `erase_if(v, predicate) -> i64` — remove values accepted by a predicate
+  (C++20 `std::erase_if(vector, predicate)`); preserves survivor order and
+  returns the number removed
 - `set_f32(values, index, value) -> i32` — replace one [`f32`](Quick-Guide#types) element without
   changing list length or allocating; returns `-1` for an invalid index
 
