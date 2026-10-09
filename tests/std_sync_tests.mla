@@ -8,6 +8,7 @@ use std::sync::Channel;
 use std::sync::Condvar;
 use std::sync::AtomicI64;
 use std::sync::AtomicOrder;
+use std::sync::Barrier;
 use std::sync::LockFreeQueue;
 use std::sync::Latch;
 use std::sync::mutex;
@@ -29,6 +30,25 @@ fn latch_arrive_worker(raw_handle: i64) -> i32 {
     let latch: Latch = Latch { handle: raw_handle };
     let waited: result<i32, str8> = latch.arrive_and_wait();
     return waited.is_ok() ? 0 : 1;
+}
+
+fn barrier_phase_worker(raw_handle: i64, phases: i64) -> i32 {
+    let barrier: Barrier = Barrier { handle: raw_handle };
+    var phase_index: i64 = 0;
+    while phase_index < phases {
+        let token: result<i64, str8> = barrier.arrive();
+        if token.is_err() { return 1; }
+        let waited: result<i32, str8> = barrier.wait(token.unwrap());
+        if waited.is_err() { return 1; }
+        phase_index = phase_index + 1;
+    }
+    return 0;
+}
+
+fn barrier_drop_worker(raw_handle: i64) -> i32 {
+    let barrier: Barrier = Barrier { handle: raw_handle };
+    let phase: result<i64, str8> = barrier.arrive_and_drop();
+    return phase.is_ok() ? 0 : 1;
 }
 
 fn test_mutex_lock_unlock_impl() -> i32 {
@@ -156,6 +176,48 @@ fn test_latch_zero_count_is_ready() {
     latch.close();
     verify(ready.is_ok() && waited.is_ok());
     if ready.is_ok() { verify(ready.unwrap()); }
+}
+
+#[test]
+fn test_barrier_multiple_phases() {
+    let invalid_count: result<Barrier, str8> = Barrier::new(0);
+    verify(invalid_count.is_err());
+    let created: result<Barrier, str8> = Barrier::new(3);
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let barrier: Barrier = created.unwrap();
+    let invalid_future_phase: result<i32, str8> = barrier.wait(1);
+    verify(invalid_future_phase.is_err());
+    let phase_count: i64 = 12;
+    let h1: std::thread::thread = thread::spawn(barrier_phase_worker, barrier.handle, phase_count);
+    let h2: std::thread::thread = thread::spawn(barrier_phase_worker, barrier.handle, phase_count);
+    var index: i64 = 0;
+    var failed: bool = false;
+    while index < phase_count {
+        let waited: result<i32, str8> = barrier.arrive_and_wait();
+        if waited.is_err() { failed = true; }
+        index = index + 1;
+    }
+    let r1: i32 = join(h1);
+    let r2: i32 = join(h2);
+    barrier.close();
+    verify(!failed && r1 == 0 && r2 == 0);
+}
+
+#[test]
+fn test_barrier_arrive_and_drop_reduces_future_participants() {
+    let created: result<Barrier, str8> = Barrier::new(2);
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let barrier: Barrier = created.unwrap();
+    let dropper: std::thread::thread = thread::spawn(barrier_drop_worker, barrier.handle);
+    let first: result<i32, str8> = barrier.arrive_and_wait();
+    // After the other participant drops, this thread is the only expected
+    // participant in the following phase.
+    let second: result<i32, str8> = barrier.arrive_and_wait();
+    let dropped: i32 = join(dropper);
+    barrier.close();
+    verify(first.is_ok() && second.is_ok() && dropped == 0);
 }
 
 fn test_condvar_wait_timeout_impl() -> i32 {

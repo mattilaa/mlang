@@ -43,3 +43,8 @@ extern pub fn __mlang_std_sync_latch_count_down(handle: i64, update: i64) -> i32
 extern pub fn __mlang_std_sync_latch_try_wait(handle: i64) -> i32;
 extern pub fn __mlang_std_sync_latch_wait(handle: i64) -> i32;
 extern pub fn __mlang_std_sync_latch_free(handle: i64) -> i32;
+extern pub fn __mlang_std_sync_barrier_new(expected: i64) -> i64;
+extern pub fn __mlang_std_sync_barrier_arrive(handle: i64, update: i64) -> i64;
+extern pub fn __mlang_std_sync_barrier_arrive_and_drop(handle: i64) -> i64;
+extern pub fn __mlang_std_sync_barrier_wait(handle: i64, phase: i64) -> i32;
+extern pub fn __mlang_std_sync_barrier_free(handle: i64) -> i32;

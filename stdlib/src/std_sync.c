@@ -62,6 +62,15 @@ typedef struct
     int64_t count;
 } mlang_sync_latch_t;
 
+typedef struct
+{
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    int64_t expected;
+    int64_t remaining;
+    int64_t phase;
+} mlang_sync_barrier_t;
+
 static void set_error(const char* msg)
 {
     if(!msg)
@@ -444,6 +453,220 @@ int __mlang_std_sync_latch_free(int64_t handle)
         return -1;
     }
     free(latch);
+    clear_error();
+    return 0;
+}
+
+int64_t __mlang_std_sync_barrier_new(int64_t expected)
+{
+    if(expected <= 0)
+    {
+        set_error("std::sync Barrier: expected count must be positive");
+        return 0;
+    }
+    mlang_sync_barrier_t* barrier = calloc(1, sizeof(*barrier));
+    if(!barrier)
+    {
+        set_error("std::sync Barrier: out of memory");
+        return 0;
+    }
+    int rc = pthread_mutex_init(&barrier->mu, NULL);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: mutex init failed: %s", strerror(rc));
+        free(barrier);
+        return 0;
+    }
+    rc = pthread_cond_init(&barrier->cv, NULL);
+    if(rc != 0)
+    {
+        (void)pthread_mutex_destroy(&barrier->mu);
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: condition init failed: %s", strerror(rc));
+        free(barrier);
+        return 0;
+    }
+    barrier->expected = expected;
+    barrier->remaining = expected;
+    clear_error();
+    return (int64_t)(intptr_t)barrier;
+}
+
+static int barrier_advance_phase(mlang_sync_barrier_t* barrier)
+{
+    if(barrier->phase == INT64_MAX)
+    {
+        set_error("std::sync Barrier: phase counter exhausted");
+        return 0;
+    }
+    barrier->phase++;
+    barrier->remaining = barrier->expected;
+    int rc = pthread_cond_broadcast(&barrier->cv);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: broadcast failed: %s", strerror(rc));
+        return 0;
+    }
+    return 1;
+}
+
+int64_t __mlang_std_sync_barrier_arrive(int64_t handle, int64_t update)
+{
+    mlang_sync_barrier_t* barrier = (mlang_sync_barrier_t*)(intptr_t)handle;
+    if(!barrier)
+    {
+        set_error("std::sync Barrier: invalid handle");
+        return -1;
+    }
+    if(update <= 0)
+    {
+        set_error("std::sync Barrier: update must be positive");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    if(update > barrier->remaining)
+    {
+        (void)pthread_mutex_unlock(&barrier->mu);
+        set_error("std::sync Barrier: update exceeds remaining arrivals");
+        return -1;
+    }
+    int64_t phase = barrier->phase;
+    if(update == barrier->remaining)
+    {
+        if(!barrier_advance_phase(barrier))
+        {
+            (void)pthread_mutex_unlock(&barrier->mu);
+            return -1;
+        }
+    }
+    else
+    {
+        barrier->remaining -= update;
+    }
+    rc = pthread_mutex_unlock(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return phase;
+}
+
+int64_t __mlang_std_sync_barrier_arrive_and_drop(int64_t handle)
+{
+    mlang_sync_barrier_t* barrier = (mlang_sync_barrier_t*)(intptr_t)handle;
+    if(!barrier)
+    {
+        set_error("std::sync Barrier: invalid handle");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    if(barrier->expected <= 0 || barrier->remaining <= 0)
+    {
+        (void)pthread_mutex_unlock(&barrier->mu);
+        set_error("std::sync Barrier: no participant can arrive and drop");
+        return -1;
+    }
+    if(barrier->remaining == 1 && barrier->phase == INT64_MAX)
+    {
+        (void)pthread_mutex_unlock(&barrier->mu);
+        set_error("std::sync Barrier: phase counter exhausted");
+        return -1;
+    }
+    int64_t phase = barrier->phase;
+    barrier->expected--;
+    barrier->remaining--;
+    if(barrier->remaining == 0 && !barrier_advance_phase(barrier))
+    {
+        (void)pthread_mutex_unlock(&barrier->mu);
+        return -1;
+    }
+    rc = pthread_mutex_unlock(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return phase;
+}
+
+int __mlang_std_sync_barrier_wait(int64_t handle, int64_t phase)
+{
+    mlang_sync_barrier_t* barrier = (mlang_sync_barrier_t*)(intptr_t)handle;
+    if(!barrier)
+    {
+        set_error("std::sync Barrier: invalid handle");
+        return -1;
+    }
+    if(phase < 0)
+    {
+        set_error("std::sync Barrier: invalid phase token");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    if(phase > barrier->phase)
+    {
+        (void)pthread_mutex_unlock(&barrier->mu);
+        set_error("std::sync Barrier: phase token is from the future");
+        return -1;
+    }
+    while(barrier->phase == phase)
+    {
+        rc = pthread_cond_wait(&barrier->cv, &barrier->mu);
+        if(rc != 0)
+        {
+            (void)pthread_mutex_unlock(&barrier->mu);
+            (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: wait failed: %s", strerror(rc));
+            return -1;
+        }
+    }
+    rc = pthread_mutex_unlock(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_barrier_free(int64_t handle)
+{
+    mlang_sync_barrier_t* barrier = (mlang_sync_barrier_t*)(intptr_t)handle;
+    if(!barrier)
+    {
+        set_error("std::sync Barrier: invalid handle");
+        return -1;
+    }
+    int rc = pthread_cond_destroy(&barrier->cv);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: condition destroy failed: %s", strerror(rc));
+        return -1;
+    }
+    rc = pthread_mutex_destroy(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: mutex destroy failed: %s", strerror(rc));
+        return -1;
+    }
+    free(barrier);
     clear_error();
     return 0;
 }
