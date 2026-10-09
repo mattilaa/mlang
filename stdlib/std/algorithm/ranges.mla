@@ -2138,6 +2138,34 @@ pub fn enumerate(data: &list<T>) -> list<tuple<i64, T>> {
     return out;
 }
 
+/// @brief Project the first element from every pair-like tuple.
+/// Eager C++20 `views::keys` counterpart for `list<tuple<K, V>>`.
+/// @ingroup algorithm_ranges
+generic<K, V>
+pub fn keys(data: &list<tuple<K, V>>) -> list<K> {
+    var projected: list<K> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<K, V> = data[i];
+        projected.push(entry.0);
+    }
+    return projected;
+}
+
+/// @brief Project the second element from every pair-like tuple.
+/// Eager C++20 `views::values` counterpart for `list<tuple<K, V>>`.
+/// @ingroup algorithm_ranges
+generic<K, V>
+pub fn values(data: &list<tuple<K, V>>) -> list<V> {
+    var projected: list<V> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<K, V> = data[i];
+        projected.push(entry.1);
+    }
+    return projected;
+}
+
 /// @brief Merge two nondecreasing ranges into one stable sorted copy.
 /// Both inputs must already be sorted; equal elements from `left` come first.
 /// C++20 `std::ranges::merge` equivalent for same-typed lists.

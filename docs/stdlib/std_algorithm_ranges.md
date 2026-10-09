@@ -204,6 +204,8 @@ fn example() {
   `views::adjacent_transform<2>` style).
 - `enumerate(data)` materializes `(index, value)` tuples with zero-based indices
   (C++23 `views::enumerate` style).
+- `keys(data)` and `values(data)` project the first or second member of each
+  `tuple<K, V>` (eager counterparts to C++20 `views::keys` and `views::values`).
 - `cartesian_product(left, right)` materializes all tuple pairs, with the right
   range varying fastest (C++23 `views::cartesian_product` style).
 - `merged(left, right)` stably merges two sorted same-typed ranges into a new

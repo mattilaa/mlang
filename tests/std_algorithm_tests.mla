@@ -122,6 +122,8 @@ use std::algorithm::ranges::split;
 use std::algorithm::ranges::concat;
 use std::algorithm::ranges::zip;
 use std::algorithm::ranges::enumerate;
+use std::algorithm::ranges::keys;
+use std::algorithm::ranges::values;
 use std::algorithm::ranges::cartesian_product;
 use std::algorithm::ranges::pairwise;
 use std::algorithm::ranges::adjacent_transform;
@@ -1228,6 +1230,33 @@ fn test_algorithm_ranges_cartesian_product() {
     let empty: list<i32> = [];
     let no_pairs: list<tuple<i32, i32>> = cartesian_product(left, empty);
     verify(no_pairs.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_tuple_keys_and_values() {
+    let numbers: list<i32> = [4, 8, 15];
+    let offsets: list<i64> = [40, 80, 150];
+    let pairs: list<tuple<i32, i64>> = zip(numbers, offsets);
+
+    let selected_keys: list<i32> = keys(pairs);
+    let selected_values: list<i64> = values(pairs);
+    verify(selected_keys.len() == 3 && selected_keys[0] == 4);
+    verify(selected_keys[1] == 8 && selected_keys[2] == 15);
+    verify(selected_values.len() == 3);
+    verify(selected_values[0] == 40 && selected_values[2] == 150);
+    let original_pair: tuple<i32, i64> = pairs[1];
+    verify(original_pair.0 == 8 && original_pair.1 == 80);
+
+    let words: list<str8> = ["four", "eight"];
+    let word_pairs: list<tuple<i32, str8>> = zip(numbers, words);
+    let projected_words: list<str8> = values(word_pairs);
+    verify(eq(projected_words[0], "four") == 1);
+    verify(eq(projected_words[1], "eight") == 1);
+
+    let empty_pairs: list<tuple<i32, i64>> = [];
+    let no_keys: list<i32> = keys(empty_pairs);
+    let no_values: list<i64> = values(empty_pairs);
+    verify(no_keys.len() == 0 && no_values.len() == 0);
 }
 
 #[test]
