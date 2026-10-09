@@ -687,6 +687,44 @@ pub fn copy_if(data: &list<T>, predicate: Predicate) -> list<T> {
     return copied;
 }
 
+/// @brief Sample up to `count` distinct elements in their original order.
+/// `choose_index(upper_bound)` must return an index in
+/// `[0, upper_bound)`. This eager C++20 `std::ranges::sample` counterpart lets
+/// callers supply their own random engine and leaves the input unchanged.
+/// @ingroup algorithm_ranges
+generic<T, ChooseIndex>
+pub fn sample(data: &list<T>, count: i64, choose_index: ChooseIndex) -> list<T> {
+    var sampled: list<T> = [];
+    let n: i64 = data.len();
+    var sample_count: i64 = count;
+    if sample_count < 0 {
+        sample_count = 0;
+    }
+    if sample_count > n {
+        sample_count = n;
+    }
+
+    // Sequential selection chooses each candidate with probability
+    // remaining_needed / remaining_items, and stops drawing once all remaining
+    // candidates must be selected. This samples uniformly without replacement.
+    for i in 0..n {
+        let needed: i64 = sample_count - sampled.len();
+        let remaining_items: i64 = n - i;
+        if needed >= remaining_items {
+            sampled.push(data[i]);
+        } else if needed > 0 {
+            let requested_index: i64 = choose_index(remaining_items);
+            let selected_index: i64 = requested_index < 0 ? 0 :
+                (requested_index >= remaining_items ?
+                    remaining_items - 1 : requested_index);
+            if selected_index < needed {
+                sampled.push(data[i]);
+            }
+        }
+    }
+    return sampled;
+}
+
 /// @brief Copy elements unequal to `value` into a new list.
 /// C++20 `std::ranges::remove_copy` counterpart; the input is unchanged.
 /// @ingroup algorithm_ranges

@@ -155,6 +155,11 @@ fn example() {
 - `copy_if`, `remove_copy`, `remove_copy_if`, `replace_copy`, and
   `replace_copy_if` provide the corresponding C++20 copying algorithms. Each
   returns a new list in source order and leaves the input unchanged.
+- `sample(data, count, choose_index)` selects up to `count` distinct elements
+  without replacement and preserves their input order. The supplied selector
+  receives the current exclusive bound, allowing a caller-owned random engine
+  (for example, `range_i64(0, bound - 1)`); the selection pass is O(N).
+  Negative counts return empty and oversized counts clamp to the input length.
 - `unique_by(data, equivalent)` removes adjacent equivalent elements while
   keeping the first value in each run.
 - `all_of`, `any_of`, and `none_of` accept predicates as well as retaining the
