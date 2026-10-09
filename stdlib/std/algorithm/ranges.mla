@@ -1729,6 +1729,30 @@ pub fn search_n(data: &list<T>, count: i64, value: U) -> i64 {
     return -1;
 }
 
+/// @brief Find a run whose projected keys equal `value`.
+/// Returns 0 for a non-positive count and -1 when no run exists.
+/// C++20 `std::ranges::search_n` projection form.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn search_n_projected(data: &list<T>, count: i64, value: U,
+                          projection: Projection) -> i64 {
+    if count <= 0 { return 0; }
+    let n: i64 = data.len();
+    if count > n { return -1; }
+    let last_start: i64 = n - count;
+    for start in 0..(last_start + 1) {
+        var matches: bool = true;
+        for offset in 0..count {
+            if projection(data[start + offset]) != value {
+                matches = false;
+                break;
+            }
+        }
+        if matches { return start; }
+    }
+    return -1;
+}
+
 /// @brief Find a run whose elements satisfy `equivalent(element, value)`.
 /// Returns 0 for a non-positive count and -1 when no run exists.
 /// @ingroup algorithm_ranges
