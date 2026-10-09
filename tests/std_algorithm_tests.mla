@@ -21,6 +21,12 @@ use std::algorithm::numeric::midpoint_i64;
 use std::algorithm::numeric::midpoint_u64;
 use std::algorithm::numeric::midpoint_f32;
 use std::algorithm::numeric::midpoint_f64;
+use std::algorithm::numeric::midpoint_i8;
+use std::algorithm::numeric::midpoint_i16;
+use std::algorithm::numeric::midpoint_i32;
+use std::algorithm::numeric::midpoint_u8;
+use std::algorithm::numeric::midpoint_u16;
+use std::algorithm::numeric::midpoint_u32;
 use std::algorithm::numeric::accumulate;
 use std::algorithm::numeric::fold_left;
 use std::algorithm::numeric::fold_right;
@@ -3266,6 +3272,23 @@ fn test_cpp20_floating_midpoint() {
     verify(midpoint_f64(6.0, 4.0) == 5.0);
     verify(midpoint_f64(10000000000000000000.0,
                         10000000000000000000.0) == 10000000000000000000.0);
+}
+
+#[test]
+fn test_cpp20_narrow_integer_midpoint() {
+    verify(midpoint_i8(-128, 127) == -1);
+    verify(midpoint_i8(127, -128) == 0);
+    verify(midpoint_i16(-32768, 32767) == -1);
+    verify(midpoint_i16(32767, -32768) == 0);
+    verify(midpoint_i32(-2147483648, 2147483647) == -1);
+    verify(midpoint_i32(2147483647, -2147483648) == 0);
+
+    verify(midpoint_u8(0, 255) == 127);
+    verify(midpoint_u8(255, 0) == 128);
+    verify(midpoint_u16(0, 65535) == 32767);
+    verify(midpoint_u16(65535, 0) == 32768);
+    verify(midpoint_u32(0, 4294967295) == 2147483647);
+    verify(midpoint_u32(4294967295, 0) == 2147483648);
 }
 
 #[test]
