@@ -61,6 +61,7 @@ mod std::serde;
 mod std::simd;
 mod std::span;
 mod std::mdspan;
+mod std::flat_map;
 mod std::strbuf;
 mod std::sync;
 mod std::term;
@@ -158,6 +159,7 @@ The source-of-truth implementation files are:
 - [std::serde](stdlib/std_serde.md)
 - [std::span](stdlib/std_span.md)
 - [std::mdspan](stdlib/std_mdspan.md)
+- [std::flat_map](stdlib/std_flat_map.md)
 - [std::strbuf](stdlib/std_strbuf.md)
 - [std::unordered](stdlib/std_unordered.md)
 - [std::vec](stdlib/std_vec.md)

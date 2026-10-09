@@ -1,0 +1,43 @@
+mod std::testing;
+mod std::flat_map;
+use std::testing::verify;
+use std::flat_map::FlatMap;
+
+#[test]
+fn test_flat_map_sorted_insert_lookup_and_replace() {
+    var prices: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    verify(prices.is_empty());
+    verify(prices.insert(4, 40));
+    verify(prices.insert(1, 10));
+    verify(prices.insert(3, 30));
+    verify(!prices.insert(3, 31));
+    verify(prices.len() == 3);
+
+    verify(prices.key_at(0) == 1 && prices.key_at(1) == 3 && prices.key_at(2) == 4);
+    verify(prices.lower_bound(0) == 0);
+    verify(prices.lower_bound(2) == 1);
+    verify(prices.lower_bound(4) == 2);
+    verify(prices.lower_bound(9) == 3);
+    verify(prices.contains(3) && !prices.contains(2));
+    let found: option<i32> = prices.get(3);
+    let found_value: i32 = found.unwrap();
+    verify(found.is_some() && found_value == 31);
+    let missing: option<i32> = prices.get(2);
+    verify(missing.is_none());
+
+    verify(prices.value_at(0) == 10 && prices.value_at(1) == 31 &&
+           prices.value_at(2) == 40);
+}
+
+#[test]
+fn test_flat_map_remove_and_clear() {
+    var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    values.insert(2, 20);
+    values.insert(1, 10);
+    values.insert(3, 30);
+    verify(values.remove(2));
+    verify(!values.remove(2));
+    verify(values.len() == 2 && values.key_at(0) == 1 && values.key_at(1) == 3);
+    values.clear();
+    verify(values.is_empty());
+}

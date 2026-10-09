@@ -81,6 +81,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::simd", "std_simd.md"),
     ("std::span", "std_span.md"),
     ("std::mdspan", "std_mdspan.md"),
+    ("std::flat_map", "std_flat_map.md"),
     ("std::stop_token", "std_stop_token.md"),
     ("std::strbuf", "std_strbuf.md"),
     ("std::sync", "std_sync.md"),
