@@ -364,6 +364,8 @@ fn example() {
 - `take_while(data, predicate)` copies the initial matching prefix;
   `drop_while(data, predicate)` copies the rest after that prefix, matching the
   eager behavior of C++20 `views::take_while` and `views::drop_while`.
+- `take_while_projected` and `drop_while_projected` apply their predicate to
+  projected keys while retaining the original elements in the output.
 - `take_last(data, count)` copies a suffix and `drop_last(data, count)` copies
   the prefix before it (C++23 `views::take_last`/`drop_last` counterparts).
   Counts are clamped to the range; non-positive counts yield empty/all values,

@@ -4310,6 +4310,21 @@ pub fn take_while(data: &list<T>, predicate: Predicate) -> list<T> {
     return out;
 }
 
+/// @brief Copy the initial prefix whose projected keys satisfy `predicate`.
+/// The output preserves original elements, not their projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn take_while_projected(data: &list<T>, predicate: Predicate,
+                            projection: Projection) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if !predicate(projection(data[i])) { break; }
+        out.push(data[i]);
+    }
+    return out;
+}
+
 /// @brief Materialize the integers in the half-open interval `[start, end)`.
 /// This is an eager list counterpart to C++20 `std::views::iota`.
 /// If `start >= end`, the result is empty.
@@ -4506,6 +4521,24 @@ pub fn drop_while(data: &list<T>, predicate: Predicate) -> list<T> {
     let n: i64 = data.len();
     var start: i64 = 0;
     while start < n && predicate(data[start]) {
+        start = start + 1;
+    }
+    for i in start..n {
+        out.push(data[i]);
+    }
+    return out;
+}
+
+/// @brief Copy the range after skipping the prefix whose projected keys
+/// satisfy `predicate`, preserving original elements in the output.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn drop_while_projected(data: &list<T>, predicate: Predicate,
+                            projection: Projection) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    var start: i64 = 0;
+    while start < n && predicate(projection(data[start])) {
         start = start + 1;
     }
     for i in start..n {
