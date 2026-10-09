@@ -1318,6 +1318,39 @@ pub fn iota(start: i64, end: i64) -> list<i64> {
     return out;
 }
 
+/// @brief Materialize a half-open integer progression using `step`.
+/// Positive steps produce values below `end`; negative steps produce values
+/// above `end`. A zero step or a step directed away from the bound returns an
+/// empty list. This combines the behavior of C++20 `views::iota` with a
+/// stride-style increment in an eager list.
+/// @ingroup algorithm_ranges
+pub fn iota_by(start: i64, end: i64, step: i64) -> list<i64> {
+    var out: list<i64> = [];
+    if step == 0 {
+        return out;
+    }
+
+    var value: i64 = start;
+    if step > 0 {
+        while value < end {
+            out.push(value);
+            if value > 9223372036854775807 - step {
+                break;
+            }
+            value = value + step;
+        }
+    } else {
+        while value > end {
+            out.push(value);
+            if value < (-9223372036854775807 - 1) - step {
+                break;
+            }
+            value = value + step;
+        }
+    }
+    return out;
+}
+
 /// @brief Copy all elements after skipping the first `n`.
 /// @ingroup algorithm_ranges
 generic<T>
