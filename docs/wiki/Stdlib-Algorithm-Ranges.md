@@ -80,7 +80,8 @@ fn example() {
 - `includes_by(range, subset, less)` checks sorted-range containment with a
   comparator, including duplicate multiplicities.
 - `starts_with` and `ends_with` compare prefixes and suffixes, including across
-  distinct equality-comparable element types.
+  distinct equality-comparable element types; `starts_with_by` and
+  `ends_with_by` accept a binary equivalence predicate for custom matching.
 - `lexicographical_compare`, `is_sorted`, `min_element_index`, and
   `max_element_index` provide ordering queries. The min/max index functions
   return `-1` on an empty list and keep the first index on ties.

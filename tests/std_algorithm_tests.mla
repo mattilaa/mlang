@@ -65,6 +65,7 @@ use std::algorithm::ranges::equal_by;
 use std::algorithm::ranges::is_permutation;
 use std::algorithm::ranges::is_permutation_by;
 use std::algorithm::ranges::starts_with;
+use std::algorithm::ranges::starts_with_by;
 use std::algorithm::ranges::search;
 use std::algorithm::ranges::search_by;
 use std::algorithm::ranges::search_n;
@@ -73,6 +74,7 @@ use std::algorithm::ranges::find_end;
 use std::algorithm::ranges::find_end_by;
 use std::algorithm::ranges::contains_subrange;
 use std::algorithm::ranges::ends_with;
+use std::algorithm::ranges::ends_with_by;
 use std::algorithm::ranges::lexicographical_compare;
 use std::algorithm::ranges::lexicographical_compare_by;
 use std::algorithm::ranges::is_sorted;
@@ -563,6 +565,30 @@ fn test_algorithm_ranges_generic_ends_with() {
     verify(ends_with(values, empty));
     let mixed_suffix: list<i64> = [8, 13];
     verify(ends_with(values, mixed_suffix));
+}
+
+#[test]
+fn test_algorithm_ranges_starts_ends_with_by_predicate() {
+    let values: list<i32> = [21, 25, 31, 38];
+    let same_decade = |left: i32, right: i32| {
+        return left / 10 == right / 10;
+    };
+    let prefix: list<i32> = [29, 20];
+    let wrong_prefix: list<i32> = [17];
+    let suffix: list<i32> = [30, 39];
+    let wrong_suffix: list<i32> = [30, 49];
+    let too_long: list<i32> = [10, 20, 30, 40, 50];
+    let empty: list<i32> = [];
+
+    verify(starts_with_by(values, prefix, same_decade));
+    verify(!starts_with_by(values, wrong_prefix, same_decade));
+    verify(!starts_with_by(values, too_long, same_decade));
+    verify(starts_with_by(values, empty, same_decade));
+
+    verify(ends_with_by(values, suffix, same_decade));
+    verify(!ends_with_by(values, wrong_suffix, same_decade));
+    verify(!ends_with_by(values, too_long, same_decade));
+    verify(ends_with_by(values, empty, same_decade));
 }
 
 #[test]
