@@ -117,6 +117,9 @@ fn example() {
   when no next/previous permutation exists, they wrap the copy to the first or
   last permutation and return `false`. The `_by` variants use a strict
   comparator. Inputs are never mutated.
+- `next_permutation_projected` and `prev_permutation_projected` compare
+  projected keys while rearranging the original values, with the same wrapping
+  and unchanged-input behavior.
 - `min_element_value` and `max_element_value` return the selected value for a
   nonempty input. Use the index forms to handle empty ranges; value forms keep
   the first value on ties.
