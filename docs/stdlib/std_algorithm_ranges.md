@@ -124,6 +124,15 @@ fn example() {
 - `generate_n(count, generator)` materializes values by invoking a zero-argument
   generator closure `count` times; non-positive counts return an empty list.
   Captured generator state is preserved between invocations.
+- `fold_left(data, init, operation)` and `fold_right(data, init, operation)`
+  reduce a range in forward or reverse order. The operation receives
+  `(accumulator, element)` for left folds and `(element, accumulator)` for
+  right folds; the accumulator type may differ from the element type. Empty
+  input returns `init` unchanged.
+- `fold_left_first(data, operation)` and `fold_right_last(data, operation)`
+  seed the reduction from the first or last element. They return
+  `option<T>`—`None` for empty input and `Some(result)` otherwise. These are
+  eager counterparts to the C++23 `std::ranges` fold algorithms.
 - `copy_n(data, count)` copies a bounded prefix; negative counts produce an
   empty list and oversized counts clamp to the input length. This eager,
   non-mutating operation is the Mlang counterpart to the C++20 algorithm.

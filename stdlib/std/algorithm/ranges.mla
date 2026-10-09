@@ -270,6 +270,70 @@ pub fn for_each_n(data: &list<T>, count: i64, operation: Operation) -> void {
     }
 }
 
+/// @brief Fold a range from left to right with an explicit initial value.
+/// `operation(accumulator, element)` returns the next accumulator; the
+/// accumulator type may differ from the element type. C++23
+/// `std::ranges::fold_left` equivalent.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation>
+pub fn fold_left(data: &list<T>, init: U, operation: Operation) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, data[i]);
+    }
+    return acc;
+}
+
+/// @brief Fold a range from right to left with an explicit initial value.
+/// `operation(element, accumulator)` returns the next accumulator. C++23
+/// `std::ranges::fold_right` equivalent.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation>
+pub fn fold_right(data: &list<T>, init: U, operation: Operation) -> U {
+    var acc: U = init;
+    var i: i64 = data.len();
+    while i > 0 {
+        i = i - 1;
+        acc = operation(data[i], acc);
+    }
+    return acc;
+}
+
+/// @brief Fold a non-empty range from left to right without an initial value.
+/// Empty input returns None. C++23 `std::ranges::fold_left_first` equivalent.
+/// @ingroup algorithm_ranges
+generic<T, Operation>
+pub fn fold_left_first(data: &list<T>, operation: Operation) -> option<T> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return None<T>();
+    }
+    var acc: T = data[0];
+    for i in 1..n {
+        acc = operation(acc, data[i]);
+    }
+    return Some<T>(acc);
+}
+
+/// @brief Fold a non-empty range from right to left without an initial value.
+/// Empty input returns None. C++23 `std::ranges::fold_right_last` equivalent.
+/// @ingroup algorithm_ranges
+generic<T, Operation>
+pub fn fold_right_last(data: &list<T>, operation: Operation) -> option<T> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return None<T>();
+    }
+    var i: i64 = n - 1;
+    var acc: T = data[i];
+    while i > 0 {
+        i = i - 1;
+        acc = operation(data[i], acc);
+    }
+    return Some<T>(acc);
+}
+
 /// @brief Materialize `count` values from a zero-argument generator closure.
 /// Non-positive counts return an empty list without invoking the generator.
 /// Mlang's eager-list form of C++ `std::generate_n`.
