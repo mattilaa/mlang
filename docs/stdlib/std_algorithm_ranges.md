@@ -52,6 +52,8 @@ fn example() {
   predicate, or `-1` when none matches.
 - `find_by`, `count_by`, and `contains_by` apply the same element/key
   equivalence predicate for first-match lookup, counting, and membership.
+- `find_by_projected`, `count_by_projected`, and `contains_by_projected` apply
+  the equivalence predicate to a projected element key and the lookup key.
 - `adjacent_find_by(data, equivalent)` returns the first adjacent index whose
   pair satisfies a caller-provided binary equivalence predicate, or `-1`.
 - `adjacent_find_by_projected` applies that equivalence predicate to adjacent
@@ -464,6 +466,8 @@ fn example() {
   four return a new list and leave the input unchanged.
 - `remove_by` and `remove_copy_by` exclude every element matching a lookup key
   under a caller-supplied equivalence predicate; both preserve source order.
+- `remove_by_projected` and `remove_copy_by_projected` apply that equivalence
+  predicate to each projected key while retaining the original elements.
 - `replace_by` and `replace_copy_by` substitute values matching a lookup key
   under a caller-supplied equivalence predicate. Their `_by_projected` forms
   apply that predicate to each projected element key and the supplied old key.
