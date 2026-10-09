@@ -246,6 +246,7 @@ use std::algorithm::ranges::split;
 use std::algorithm::ranges::concat;
 use std::algorithm::ranges::zip;
 use std::algorithm::ranges::enumerate;
+use std::algorithm::ranges::enumerate_from;
 use std::algorithm::ranges::keys;
 use std::algorithm::ranges::values;
 use std::algorithm::ranges::cartesian_product;
@@ -2423,6 +2424,19 @@ fn test_algorithm_ranges_enumerate() {
     let empty: list<i32> = [];
     let no_items: list<tuple<i64, i32>> = enumerate(empty);
     verify(no_items.len() == 0);
+
+    let from_ten: list<tuple<i64, i32>> = enumerate_from(values, 10);
+    let from_ten_first = from_ten[0];
+    let from_ten_middle = from_ten[1];
+    let from_ten_last = from_ten[2];
+    verify(from_ten.len() == 3 && from_ten_first.0 == 10 &&
+           from_ten_last.0 == 12 && from_ten_middle.1 == 3);
+    let negative: list<tuple<i64, i32>> = enumerate_from(values, -2);
+    let negative_first = negative[0];
+    let negative_last = negative[2];
+    verify(negative_first.0 == -2 && negative_last.0 == 0);
+    let empty_from: list<tuple<i64, i32>> = enumerate_from(empty, 5);
+    verify(empty_from.len() == 0);
 }
 
 #[test]
@@ -3088,7 +3102,9 @@ fn test_algorithm_ranges_iota() {
     let last: i32 = 6;
     let typed: list<i32> = iota_range(first, last);
     verify(typed.len() == 4 && typed[0] == 2 && typed[3] == 5);
+
 }
+
 
 #[test]
 fn test_algorithm_ranges_repeat_len() {

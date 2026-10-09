@@ -5432,6 +5432,20 @@ pub fn enumerate(data: &list<T>) -> list<tuple<i64, T>> {
     return out;
 }
 
+/// @brief Pair each element with a position beginning at `first_index`.
+/// The input is unchanged; negative starting indices are permitted.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn enumerate_from(data: &list<T>, first_index: i64)
+    -> list<tuple<i64, T>> {
+    var out: list<tuple<i64, T>> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        out.push((first_index + i, data[i]));
+    }
+    return out;
+}
+
 /// @brief Project the first element from every pair-like tuple.
 /// Eager C++20 `views::keys` counterpart for `list<tuple<K, V>>`.
 /// @ingroup algorithm_ranges
