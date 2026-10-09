@@ -1721,6 +1721,39 @@ pub fn is_permutation_projected(left: &list<T>, right: &list<U>,
     return true;
 }
 
+/// @brief Compare projected multisets by a strict ordering's equivalence.
+/// Duplicate multiplicities matter; the projections may accept different
+/// element types but must produce keys accepted by the same comparator.
+/// @ingroup algorithm_ranges
+generic<T, U, Less, LeftProjection, RightProjection>
+pub fn is_permutation_by_projected(
+    left: &list<T>, right: &list<U>, less: Less,
+    left_projection: LeftProjection, right_projection: RightProjection)
+    -> bool {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    if left_len != right_len { return false; }
+    for i in 0..left_len {
+        let key = left_projection(left[i]);
+        var left_count: i64 = 0;
+        var right_count: i64 = 0;
+        for j in 0..left_len {
+            let candidate = left_projection(left[j]);
+            if !less(key, candidate) && !less(candidate, key) {
+                left_count = left_count + 1;
+            }
+        }
+        for j in 0..right_len {
+            let candidate = right_projection(right[j]);
+            if !less(key, candidate) && !less(candidate, key) {
+                right_count = right_count + 1;
+            }
+        }
+        if left_count != right_count { return false; }
+    }
+    return true;
+}
+
 /// @brief Return whether `prefix` matches the beginning of `data`.
 /// The two ranges may have different, equality-comparable element types.
 /// @ingroup algorithm_ranges
@@ -4204,6 +4237,39 @@ pub fn next_permutation_projected(data: &list<T>,
     return (true, out);
 }
 
+/// @brief Advance a permutation under comparator-projected key ordering.
+/// On wrap, returns false and reverses the source into the first arrangement.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn next_permutation_by_projected(data: &list<T>, less: Less,
+                                     projection: Projection)
+    -> tuple<bool, list<T>> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    var pivot: i64 = n - 2;
+    while pivot >= 0 && !less(projection(data[pivot]),
+                              projection(data[pivot + 1])) {
+        pivot = pivot - 1;
+    }
+    if pivot < 0 {
+        var i: i64 = n;
+        while i > 0 { i = i - 1; out.push(data[i]); }
+        return (false, out);
+    }
+    var successor: i64 = n - 1;
+    while !less(projection(data[pivot]), projection(data[successor])) {
+        successor = successor - 1;
+    }
+    for i in 0..pivot { out.push(data[i]); }
+    out.push(data[successor]);
+    var i: i64 = n - 1;
+    while i > successor { out.push(data[i]); i = i - 1; }
+    out.push(data[pivot]);
+    i = successor - 1;
+    while i > pivot { out.push(data[i]); i = i - 1; }
+    return (true, out);
+}
+
 /// @brief Return the previous lexicographic permutation and whether it exists.
 /// If no predecessor exists, return the descending last permutation.
 /// @ingroup algorithm_ranges
@@ -4308,6 +4374,39 @@ pub fn prev_permutation_projected(data: &list<T>,
     }
     var predecessor: i64 = n - 1;
     while !(projection(data[predecessor]) < projection(data[pivot])) {
+        predecessor = predecessor - 1;
+    }
+    for i in 0..pivot { out.push(data[i]); }
+    out.push(data[predecessor]);
+    var i: i64 = n - 1;
+    while i > predecessor { out.push(data[i]); i = i - 1; }
+    out.push(data[pivot]);
+    i = predecessor - 1;
+    while i > pivot { out.push(data[i]); i = i - 1; }
+    return (true, out);
+}
+
+/// @brief Retreat a permutation under comparator-projected key ordering.
+/// On wrap, returns false and reverses the source into the last arrangement.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn prev_permutation_by_projected(data: &list<T>, less: Less,
+                                     projection: Projection)
+    -> tuple<bool, list<T>> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    var pivot: i64 = n - 2;
+    while pivot >= 0 && !less(projection(data[pivot + 1]),
+                              projection(data[pivot])) {
+        pivot = pivot - 1;
+    }
+    if pivot < 0 {
+        var i: i64 = n;
+        while i > 0 { i = i - 1; out.push(data[i]); }
+        return (false, out);
+    }
+    var predecessor: i64 = n - 1;
+    while !less(projection(data[predecessor]), projection(data[pivot])) {
         predecessor = predecessor - 1;
     }
     for i in 0..pivot { out.push(data[i]); }

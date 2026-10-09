@@ -85,6 +85,7 @@ use std::algorithm::ranges::mismatch_by;
 use std::algorithm::ranges::equal_by;
 use std::algorithm::ranges::is_permutation;
 use std::algorithm::ranges::is_permutation_projected;
+use std::algorithm::ranges::is_permutation_by_projected;
 use std::algorithm::ranges::is_permutation_by;
 use std::algorithm::ranges::starts_with;
 use std::algorithm::ranges::starts_with_projected;
@@ -198,9 +199,11 @@ use std::algorithm::ranges::sorted_by_projected;
 use std::algorithm::ranges::next_permutation;
 use std::algorithm::ranges::next_permutation_by;
 use std::algorithm::ranges::next_permutation_projected;
+use std::algorithm::ranges::next_permutation_by_projected;
 use std::algorithm::ranges::prev_permutation;
 use std::algorithm::ranges::prev_permutation_by;
 use std::algorithm::ranges::prev_permutation_projected;
+use std::algorithm::ranges::prev_permutation_by_projected;
 use std::algorithm::ranges::reversed;
 use std::algorithm::ranges::reverse_copy;
 use std::algorithm::ranges::rotate_left;
@@ -717,6 +720,19 @@ fn test_algorithm_ranges_projected_comparisons() {
     let wrong_counts: list<i32> = [19, 13, 28, 46];
     verify(!is_permutation_projected(
         perm_left, wrong_counts, project_left, project_right));
+
+    let less_tens = |a: i32, b: i32| { return a / 10 < b / 10; };
+    let identity = |value: i32| { return value; };
+    let identity_wide = |value: i64| { return i32(value); };
+    let comparator_perm_left: list<i32> = [11, 19, 22, 25];
+    let comparator_perm_right: list<i64> = [12, 28, 18, 29];
+    verify(is_permutation_by_projected(
+        comparator_perm_left, comparator_perm_right, less_tens,
+        identity, identity_wide));
+    let wrong_comparator_perm: list<i64> = [12, 18, 14, 29];
+    verify(!is_permutation_by_projected(
+        comparator_perm_left, wrong_comparator_perm, less_tens,
+        identity, identity_wide));
 
     let prefix: list<i32> = [19, 28];
     let wrong_prefix: list<i32> = [19, 39];
@@ -1867,6 +1883,41 @@ fn test_algorithm_ranges_projected_permutations() {
     verify(!wrapped.0 && wrapped_values[0] == 19 &&
            wrapped_values[1] == 21 && wrapped_values[2] == 32);
     verify(values[0] == 11 && values[2] == 22);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_projected_permutations() {
+    let values: list<i32> = [11, 21, 12];
+    let greater = |left: i32, right: i32| { return left > right; };
+    let project_tens = |value: i32| { return value / 10; };
+    let next: tuple<bool, list<i32>> = next_permutation_by_projected(
+        values, greater, project_tens);
+    let next_values: list<i32> = next.1;
+    verify(next.0 && project_tens(next_values[0]) == 1 &&
+           project_tens(next_values[1]) == 1 &&
+           project_tens(next_values[2]) == 2);
+
+    let previous: tuple<bool, list<i32>> = prev_permutation_by_projected(
+        next_values, greater, project_tens);
+    let previous_values: list<i32> = previous.1;
+    verify(previous.0 && previous_values[0] == values[0] &&
+           previous_values[1] == values[1] &&
+           previous_values[2] == values[2]);
+
+    let last: list<i32> = [12, 11, 21];
+    let wrapped_next: tuple<bool, list<i32>> = next_permutation_by_projected(
+        last, greater, project_tens);
+    let wrapped_next_values: list<i32> = wrapped_next.1;
+    verify(!wrapped_next.0 &&
+           project_tens(wrapped_next_values[0]) == 2 &&
+           project_tens(wrapped_next_values[2]) == 1);
+    let first: list<i32> = [21, 11, 12];
+    let wrapped_previous: tuple<bool, list<i32>> =
+        prev_permutation_by_projected(first, greater, project_tens);
+    let wrapped_previous_values: list<i32> = wrapped_previous.1;
+    verify(!wrapped_previous.0 &&
+           project_tens(wrapped_previous_values[0]) == 1 &&
+           project_tens(wrapped_previous_values[2]) == 2);
 }
 
 #[test]
