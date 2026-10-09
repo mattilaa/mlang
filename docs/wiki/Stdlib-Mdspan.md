@@ -8,7 +8,8 @@ Module file: `stdlib/std/mdspan.mla`
 inspired by C++23 `std::mdspan`. Mlang currently stores its own copy of the
 input data and extents; it is not a zero-copy view and does not implement C++
 accessor policies. `from_extents` uses C++ `layout_right` (row-major) mapping;
-`from_extents_left` uses C++ `layout_left` (column-major) mapping.
+`from_extents_left` uses C++ `layout_left` (column-major) mapping, and
+`from_extents_strided` accepts explicit strides like C++23 `layout_stride`.
 
 Use `from_extents(data, extents)` to construct a descriptor. Both arguments
 are borrowed and copied, so the caller retains its lists. It returns
@@ -26,6 +27,12 @@ single scalar element.
   for invalid rank or out-of-bounds indices.
 - `from_extents_left(data, extents)` validates and copies the same inputs but
   maps the leftmost extent contiguously, following C++23 `layout_left`.
+- `from_extents_strided(data, extents, strides)` copies all three lists and
+  accepts only non-negative extents, positive strides, a required span within
+  the backing data, and a unique index-to-offset mapping. Its required span
+  may be larger than its logical size; unused padding elements are allowed.
+  The constructor checks uniqueness by enumerating the mapping, so its cost is
+  proportional to the number of logical elements (plus sorting those offsets).
 - `mdspan<T>` is a lowercase type alias for `Mdspan<T>`.
 
 ```rust

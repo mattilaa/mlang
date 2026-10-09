@@ -4,6 +4,7 @@ mod std::testing;
 use std::mdspan::Mdspan;
 use std::mdspan::from_extents;
 use std::mdspan::from_extents_left;
+use std::mdspan::from_extents_strided;
 use std::testing::verify;
 use std::testing::verify_eq_i32;
 use std::testing::verify_eq_i64;
@@ -114,4 +115,55 @@ fn test_mdspan_layout_left_column_major_access() {
     let bad_shape: list<i64> = [2, 4];
     let invalid: option<Mdspan<i32>> = from_extents_left(data, bad_shape);
     verify(invalid.is_none());
+}
+
+#[test]
+fn test_mdspan_layout_stride_custom_mapping() {
+    let data: list<i32> = [10, 20, 30, 40, 50, 60, 70, 80];
+    let shape: list<i64> = [2, 3];
+    let strides: list<i64> = [3, 2];
+    let maybe_view: option<Mdspan<i32>> =
+        from_extents_strided(data, shape, strides);
+    verify(maybe_view.is_some());
+    let view: Mdspan<i32> = maybe_view.unwrap();
+    verify(view.rank() == 2 && view.size() == 6);
+    verify(view.required_span_size() == 8);
+    verify(view.is_unique() && !view.is_exhaustive() && view.is_strided());
+    let row_stride: option<i64> = view.stride(0);
+    let column_stride: option<i64> = view.stride(1);
+    verify(row_stride.is_some() && row_stride.unwrap() == 3);
+    verify(column_stride.is_some() && column_stride.unwrap() == 2);
+    let a_indices: list<i64> = [1, 0];
+    let b_indices: list<i64> = [0, 1];
+    let c_indices: list<i64> = [1, 2];
+    let a: option<i32> = view.get(a_indices);
+    let b: option<i32> = view.get(b_indices);
+    let c: option<i32> = view.get(c_indices);
+    verify(a.is_some() && a.unwrap() == 40);
+    verify(b.is_some() && b.unwrap() == 30);
+    verify(c.is_some() && c.unwrap() == 80);
+}
+
+#[test]
+fn test_mdspan_layout_stride_rejects_invalid_mappings() {
+    let data: list<i32> = [1, 2, 3, 4];
+    let shape: list<i64> = [2, 2];
+    let overlap: list<i64> = [1, 1];
+    let zero_stride: list<i64> = [0, 1];
+    let wrong_rank: list<i64> = [1];
+    let short_buffer: list<i32> = [1, 2, 3];
+    let valid_shape: list<i64> = [2, 2];
+    let valid_strides: list<i64> = [2, 1];
+    let overlapping: option<Mdspan<i32>> =
+        from_extents_strided(data, shape, overlap);
+    let zero: option<Mdspan<i32>> =
+        from_extents_strided(data, shape, zero_stride);
+    let wrong: option<Mdspan<i32>> =
+        from_extents_strided(data, shape, wrong_rank);
+    let too_short: option<Mdspan<i32>> =
+        from_extents_strided(short_buffer, valid_shape, valid_strides);
+    verify(overlapping.is_none());
+    verify(zero.is_none());
+    verify(wrong.is_none());
+    verify(too_short.is_none());
 }
