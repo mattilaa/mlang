@@ -227,6 +227,9 @@ fn example() {
 - `transform(data, operation)` eagerly maps every element into a new list;
   the output element type is inferred from the closure return type and may
   differ from the input element type.
+- `transform_projected` applies a projection before its unary operation;
+  `zip_transform_projected` applies independent projections to paired inputs
+  before the binary operation, stopping at the shorter range.
 - `zip_transform` applies a binary, ternary, or four-argument operation to
   corresponding values and stops at the shortest input, matching C++23
   `std::ranges::zip_transform` for those arities.
