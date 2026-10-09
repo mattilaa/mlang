@@ -38,3 +38,8 @@ extern pub fn __mlang_std_sync_atomic_i64_fetch_or(handle: i64, value: i64, orde
 extern pub fn __mlang_std_sync_atomic_i64_fetch_xor(handle: i64, value: i64, order: i32, output: ptr<i64>) -> i32;
 extern pub fn __mlang_std_sync_atomic_i64_compare_exchange(handle: i64, expected: ptr<i64>, desired: i64, order: i32) -> i32;
 extern pub fn __mlang_std_sync_atomic_i64_free(handle: i64) -> i32;
+extern pub fn __mlang_std_sync_latch_new(expected: i64) -> i64;
+extern pub fn __mlang_std_sync_latch_count_down(handle: i64, update: i64) -> i32;
+extern pub fn __mlang_std_sync_latch_try_wait(handle: i64) -> i32;
+extern pub fn __mlang_std_sync_latch_wait(handle: i64) -> i32;
+extern pub fn __mlang_std_sync_latch_free(handle: i64) -> i32;
