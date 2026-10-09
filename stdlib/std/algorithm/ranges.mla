@@ -2222,6 +2222,43 @@ pub fn rotate(data: &list<T>, middle: i64) -> list<T> {
     return out;
 }
 
+/// @brief Return the retained range after a left shift by `count` positions.
+/// The suffix `[count, end)` is copied to the front; non-positive counts are
+/// no-ops, and counts at least the input length produce an empty list.
+/// Eager-list counterpart to C++20 `std::ranges::shift_left`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn shift_left(data: &list<T>, count: i64) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    var start: i64 = count;
+    if start < 0 { start = 0; }
+    if start > n { start = n; }
+    for i in start..n {
+        out.push(data[i]);
+    }
+    return out;
+}
+
+/// @brief Return the retained range after a right shift by `count` positions.
+/// The prefix `[0, len-count)` is what C++20 `std::ranges::shift_right`
+/// moves to the right; this eager-list counterpart returns that retained
+/// prefix. Non-positive counts are no-ops; counts at least the length are empty.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn shift_right(data: &list<T>, count: i64) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    var removed: i64 = count;
+    if removed < 0 { removed = 0; }
+    if removed > n { removed = n; }
+    let retained: i64 = n - removed;
+    for i in 0..retained {
+        out.push(data[i]);
+    }
+    return out;
+}
+
 /// @brief Materialize consecutive chunks of at most `chunk_size` elements.
 /// Eager-list counterpart to C++23 `views::chunk`; non-positive sizes are empty.
 /// @ingroup algorithm_ranges

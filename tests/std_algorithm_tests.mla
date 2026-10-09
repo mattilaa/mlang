@@ -121,6 +121,8 @@ use std::algorithm::ranges::prev_permutation_by;
 use std::algorithm::ranges::reversed;
 use std::algorithm::ranges::rotate_left;
 use std::algorithm::ranges::rotate;
+use std::algorithm::ranges::shift_left;
+use std::algorithm::ranges::shift_right;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::windows;
 use std::algorithm::ranges::strided;
@@ -327,6 +329,25 @@ fn test_algorithm_ranges_rotate_at_middle() {
     let empty: list<i32> = [];
     let empty_rotated: list<i32> = rotate(empty, 3);
     verify(empty_rotated.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_shift_algorithms() {
+    let values: list<i32> = [1, 2, 3, 4, 5];
+    let left: list<i32> = shift_left(values, 2);
+    let right: list<i32> = shift_right(values, 2);
+    verify(left.len() == 3 && left[0] == 3 && left[1] == 4 && left[2] == 5);
+    verify(right.len() == 3 && right[0] == 1 && right[1] == 2 && right[2] == 3);
+
+    let left_noop: list<i32> = shift_left(values, -1);
+    let right_noop: list<i32> = shift_right(values, 0);
+    verify(left_noop.len() == 5 && right_noop.len() == 5);
+    let left_empty: list<i32> = shift_left(values, 5);
+    let right_empty: list<i32> = shift_right(values, 8);
+    verify(left_empty.len() == 0 && right_empty.len() == 0);
+    let empty: list<i32> = [];
+    let shifted_empty: list<i32> = shift_left(empty, 1);
+    verify(shifted_empty.len() == 0);
 }
 
 #[test]
