@@ -379,6 +379,19 @@ pub fn generate_n(count: i64, generator: Generator) -> list<T> {
     return generated;
 }
 
+/// @brief Generate one value for each position in `shape`.
+/// The shape values are ignored; its length specifies the output range size.
+/// Eager-list counterpart to C++20 `std::ranges::generate`.
+/// @ingroup algorithm_ranges
+generic<Shape, Output, Generator>
+pub fn generate(shape: &list<Shape>, generator: Generator) -> list<Output> {
+    var generated: list<Output> = [];
+    for i in 0..shape.len() {
+        generated.push(generator());
+    }
+    return generated;
+}
+
 /// @brief Return a copy of `data` filled with `value` at every position.
 /// The input length acts as the output range size; the source is unchanged.
 /// Eager-list counterpart to C++20 `std::ranges::fill`.

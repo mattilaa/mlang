@@ -20,6 +20,7 @@ use std::algorithm::ranges::pairwise;
 use std::algorithm::ranges::adjacent_transform;
 use std::algorithm::ranges::next_permutation;
 use std::algorithm::ranges::generate_n;
+use std::algorithm::ranges::generate;
 
 fn example() {
     let data: list<i32> = [4, 2, 4, 7];
@@ -154,6 +155,9 @@ fn example() {
 - `generate_n(count, generator)` materializes values by invoking a zero-argument
   generator closure `count` times; non-positive counts return an empty list.
   Captured generator state is preserved between invocations.
+- `generate(shape, generator)` uses the shape list's length to invoke a
+  zero-argument generator into a new list; shape values are ignored and the
+  source remains unchanged. Empty shape performs no calls.
 - `fold_left(data, init, operation)` and `fold_right(data, init, operation)`
   reduce a range in forward or reverse order. The operation receives
   `(accumulator, element)` for left folds and `(element, accumulator)` for
