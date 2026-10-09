@@ -1629,6 +1629,13 @@ fn test_algorithm_numeric_scans() {
     let one_inclusive: list<i32> = inclusive_scan(one, add);
     let one_exclusive: list<i32> = exclusive_scan(one, empty_initial, add);
     verify(one_inclusive[0] == 8 && one_exclusive[0] == 7);
+
+    let add_wide = |acc: f64, value: i32| { return acc + f64(value); };
+    let wide_initial: f64 = 0.5;
+    let wide_exclusive: list<f64> = exclusive_scan(values, wide_initial, add_wide);
+    verify(wide_exclusive.len() == 4);
+    verify(wide_exclusive[0] == 0.5 && wide_exclusive[1] == 1.5);
+    verify(wide_exclusive[2] == 3.5 && wide_exclusive[3] == 6.5);
 }
 
 #[test]
