@@ -965,12 +965,42 @@ pub fn unique_by(data: &list<T>, equivalent: Equivalent) -> list<T> {
     return unique_values;
 }
 
+/// @brief Remove adjacent values whose projected keys are equal.
+/// The first original value in each adjacent key run is preserved.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn unique_projected(data: &list<T>, projection: Projection) -> list<T> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return [];
+    }
+    var unique_values: list<T> = [];
+    var previous_key = projection(data[0]);
+    unique_values.push(data[0]);
+    for i in 1..n {
+        let current_key = projection(data[i]);
+        if current_key != previous_key {
+            unique_values.push(data[i]);
+            previous_key = current_key;
+        }
+    }
+    return unique_values;
+}
+
 /// @brief Copy one value from each adjacent equivalence class.
 /// C++20 `std::ranges::unique_copy` counterpart; the source is unchanged.
 /// @ingroup algorithm_ranges
 generic<T, Equivalent>
 pub fn unique_copy_by(data: &list<T>, equivalent: Equivalent) -> list<T> {
     return unique_by(data, equivalent);
+}
+
+/// @brief Copy one value from each adjacent projected-key run.
+/// The first original value in each run is retained; the source is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn unique_copy_projected(data: &list<T>, projection: Projection) -> list<T> {
+    return unique_projected(data, projection);
 }
 
 
