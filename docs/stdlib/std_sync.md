@@ -7,6 +7,7 @@ Module file: `stdlib/std/sync.mla`
 - `condvar`
 - `channel`
 - `lock_free_queue` (SPSC str8 queue)
+- `AtomicI64` (shared 64-bit atomic integer)
 
 ### mutex
 - `mutex::new() -> result<mutex, str8>`
@@ -95,3 +96,39 @@ See `examples/spsc_sequencer_events.mla` for typed event dispatch and
 `tests/std_spsc_tests.mla` for capacity, wraparound, and concurrent delivery tests.
 The older `LockFreeQueue` is string-based and allocates on send/frees on receive;
 use `SpscQueue<T>` for fixed-size audio commands.
+
+### AtomicI64
+
+`AtomicI64` provides a C11 atomic signed 64-bit integer; the implementation may
+use a lock-backed runtime operation on targets where native 64-bit atomics are
+not lock-free. Construction returns `result<AtomicI64, str8>` and reports
+allocation failures. It offers `load`, `store`,
+`exchange`, `fetch_add`, `fetch_sub`, `fetch_and`, `fetch_or`, `fetch_xor`, and
+strong `compare_exchange`. Operations without an explicit order use
+sequentially consistent ordering. The `_with_order` variants accept
+`AtomicOrder::{Relaxed, Consume, Acquire, Release, AcqRel, SeqCst}`; invalid
+load/store orderings are rejected and returned as errors.
+
+```mlang
+mod std::sync;
+use std::sync::AtomicI64;
+use std::sync::AtomicOrder;
+
+fn main() -> i32 {
+    let created: result<AtomicI64, str8> = AtomicI64::new(0);
+    if created.is_err() { return 1; }
+    let counter: AtomicI64 = created.unwrap();
+    let previous: result<i64, str8> = counter.fetch_add_with_order(1, AtomicOrder::Relaxed);
+    let observed: result<i64, str8> = counter.load();
+    counter.close(); // exactly once, after all threads stop using it
+    if previous.is_err() || observed.is_err() { return 1; }
+    return observed.unwrap() == 1 ? 0 : 1;
+}
+```
+
+The value is stored in an opaque shared handle: copying `AtomicI64` copies the
+handle, not the underlying integer. Share the handle between threads, and call
+`close()` exactly once only after every thread has stopped accessing it. As
+with all atomics, relaxed ordering makes the atomic value race-free but does
+not publish unrelated data; use acquire/release or sequential consistency for
+that synchronization.

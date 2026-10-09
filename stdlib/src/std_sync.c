@@ -50,6 +50,11 @@ typedef struct
     unsigned char* items;
 } mlang_sync_spsc_t;
 
+typedef struct
+{
+    _Atomic int64_t value;
+} mlang_sync_atomic_i64_t;
+
 static void set_error(const char* msg)
 {
     if(!msg)
@@ -137,6 +142,140 @@ void __mlang_std_sync_spsc_free(int64_t handle)
     if(!q) return;
     free(q->items);
     free(q);
+}
+
+static int atomic_order_from_int(int order, memory_order* out)
+{
+    if(!out) return 0;
+    switch(order)
+    {
+        case 0: *out = memory_order_relaxed; return 1;
+        case 1: *out = memory_order_consume; return 1;
+        case 2: *out = memory_order_acquire; return 1;
+        case 3: *out = memory_order_release; return 1;
+        case 4: *out = memory_order_acq_rel; return 1;
+        case 5: *out = memory_order_seq_cst; return 1;
+        default: return 0;
+    }
+}
+
+static mlang_sync_atomic_i64_t* atomic_i64_from_handle(int64_t handle)
+{
+    return (mlang_sync_atomic_i64_t*)(intptr_t)handle;
+}
+
+static int atomic_i64_validate(int64_t handle, int order, memory_order* memory_order_out)
+{
+    if(!atomic_i64_from_handle(handle))
+    {
+        set_error("std::sync AtomicI64: invalid handle");
+        return 0;
+    }
+    if(!atomic_order_from_int(order, memory_order_out))
+    {
+        set_error("std::sync AtomicI64: invalid memory order");
+        return 0;
+    }
+    return 1;
+}
+
+int64_t __mlang_std_sync_atomic_i64_new(int64_t initial)
+{
+    mlang_sync_atomic_i64_t* value = malloc(sizeof(*value));
+    if(!value)
+    {
+        set_error("std::sync AtomicI64: out of memory");
+        return 0;
+    }
+    atomic_init(&value->value, initial);
+    clear_error();
+    return (int64_t)(intptr_t)value;
+}
+
+int __mlang_std_sync_atomic_i64_load(int64_t handle, int order, int64_t* output)
+{
+    memory_order mo;
+    if(!output)
+    {
+        set_error("std::sync AtomicI64: null output");
+        return -1;
+    }
+    if(!atomic_i64_validate(handle, order, &mo)) return -1;
+    if(mo == memory_order_release || mo == memory_order_acq_rel)
+    {
+        set_error("std::sync AtomicI64: invalid load memory order");
+        return -1;
+    }
+    *output = atomic_load_explicit(&atomic_i64_from_handle(handle)->value, mo);
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_atomic_i64_store(int64_t handle, int64_t value, int order)
+{
+    memory_order mo;
+    if(!atomic_i64_validate(handle, order, &mo)) return -1;
+    if(mo == memory_order_consume || mo == memory_order_acquire || mo == memory_order_acq_rel)
+    {
+        set_error("std::sync AtomicI64: invalid store memory order");
+        return -1;
+    }
+    atomic_store_explicit(&atomic_i64_from_handle(handle)->value, value, mo);
+    clear_error();
+    return 0;
+}
+
+#define DEFINE_ATOMIC_I64_RMW(name, expression) \
+int __mlang_std_sync_atomic_i64_##name(int64_t handle, int64_t value, int order, int64_t* output) \
+{ \
+    memory_order mo; \
+    if(!output || !atomic_i64_validate(handle, order, &mo)) { \
+        if(!output) set_error("std::sync AtomicI64: null output"); \
+        return -1; \
+    } \
+    *output = (expression); \
+    clear_error(); \
+    return 0; \
+}
+
+DEFINE_ATOMIC_I64_RMW(exchange, atomic_exchange_explicit(&atomic_i64_from_handle(handle)->value, value, mo))
+DEFINE_ATOMIC_I64_RMW(fetch_add, atomic_fetch_add_explicit(&atomic_i64_from_handle(handle)->value, value, mo))
+DEFINE_ATOMIC_I64_RMW(fetch_sub, atomic_fetch_sub_explicit(&atomic_i64_from_handle(handle)->value, value, mo))
+DEFINE_ATOMIC_I64_RMW(fetch_and, atomic_fetch_and_explicit(&atomic_i64_from_handle(handle)->value, value, mo))
+DEFINE_ATOMIC_I64_RMW(fetch_or, atomic_fetch_or_explicit(&atomic_i64_from_handle(handle)->value, value, mo))
+DEFINE_ATOMIC_I64_RMW(fetch_xor, atomic_fetch_xor_explicit(&atomic_i64_from_handle(handle)->value, value, mo))
+
+#undef DEFINE_ATOMIC_I64_RMW
+
+int __mlang_std_sync_atomic_i64_compare_exchange(int64_t handle, int64_t* expected,
+                                                 int64_t desired, int order)
+{
+    memory_order success;
+    if(!expected || !atomic_i64_validate(handle, order, &success))
+    {
+        if(!expected) set_error("std::sync AtomicI64: null expected pointer");
+        return -1;
+    }
+    memory_order failure = success;
+    if(success == memory_order_release) failure = memory_order_relaxed;
+    else if(success == memory_order_acq_rel) failure = memory_order_acquire;
+    int exchanged = atomic_compare_exchange_strong_explicit(
+        &atomic_i64_from_handle(handle)->value, expected, desired, success, failure);
+    clear_error();
+    return exchanged ? 1 : 0;
+}
+
+int __mlang_std_sync_atomic_i64_free(int64_t handle)
+{
+    mlang_sync_atomic_i64_t* value = atomic_i64_from_handle(handle);
+    if(!value)
+    {
+        set_error("std::sync AtomicI64: invalid handle");
+        return -1;
+    }
+    free(value);
+    clear_error();
+    return 0;
 }
 
 static char* dup_cstr(const char* s)
