@@ -45,6 +45,7 @@ use std::algorithm::numeric::transform_exclusive_scan;
 use std::algorithm::numeric::adjacent_difference_i64;
 use std::algorithm::numeric::inner_product_i64;
 use std::algorithm::numeric::inner_product;
+use std::algorithm::numeric::inner_product_by;
 use std::algorithm::numeric::partial_sum_i64;
 use std::algorithm::numeric::partial_sum;
 use std::algorithm::numeric::adjacent_difference;
@@ -3596,6 +3597,16 @@ fn test_algorithm_numeric_generic_inner_product() {
 
     let empty: list<i32> = [];
     verify(inner_product(left, empty, initial) == initial);
+
+    let wide_right: list<i64> = [10, 20, 30];
+    verify(inner_product(left, wide_right, initial) == 147);
+
+    let pair_term = |a: i32, b: i64| { return a + b; };
+    let decimal_fold = |acc: i64, term: i64| { return acc * 10 + term; };
+    verify(inner_product_by(left, wide_right, 0, decimal_fold, pair_term) ==
+           1353);
+    let empty_wide: list<i64> = [];
+    verify(inner_product_by(left, empty_wide, 17, decimal_fold, pair_term) == 17);
 }
 
 #[test]
