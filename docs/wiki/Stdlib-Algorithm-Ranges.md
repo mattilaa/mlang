@@ -218,6 +218,11 @@ fn example() {
   copy rotated by a normalized signed offset. `rotate(data, middle)` places
   the suffix beginning at the split before the prefix (C++20 `ranges::rotate`
   style), clamping the split index and leaving the input unchanged.
+- `shift_left(data, count)` returns the retained suffix after a left shift;
+  `shift_right(data, count)` returns the retained prefix moved right. These
+  eager C++20 `ranges::shift_left`/`shift_right` counterparts leave the input
+  unchanged; non-positive counts are no-ops and counts at least the length
+  yield an empty list.
 - `chunked(data, size)` materializes consecutive sublists (C++23
   `views::chunk` style); the final chunk can be shorter, and non-positive sizes
   produce an empty list.
