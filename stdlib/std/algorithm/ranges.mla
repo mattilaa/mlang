@@ -1685,6 +1685,16 @@ pub fn iota_by(start: i64, end: i64, step: i64) -> list<i64> {
     return out;
 }
 
+/// @brief Materialize a one-element list view of `value`.
+/// Eager-list counterpart to the C++20 `std::views::single` view.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn single(value: T) -> list<T> {
+    var out: list<T> = [];
+    out.push(value);
+    return out;
+}
+
 /// @brief Materialize `count` copies of `value`.
 /// Eager-list counterpart to the C++23 `std::views::repeat` view.
 /// Non-positive counts return an empty list.

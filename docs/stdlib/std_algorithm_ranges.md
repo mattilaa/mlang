@@ -185,6 +185,8 @@ fn example() {
 - `repeat(value, count)` eagerly materializes `count` copies of a value, the
   list counterpart to the C++23 `std::views::repeat`; non-positive counts are
   empty.
+- `single(value)` materializes a one-element list, corresponding to C++20
+  `std::views::single`.
 - `clamp_by(data, low, high, less)` clamps each element using a custom ordering;
   bounds must be ordered according to the comparator.
 - `sorted` returns a stable ascending copy and leaves the input unchanged.
