@@ -194,6 +194,7 @@ use std::algorithm::ranges::cartesian_product;
 use std::algorithm::ranges::pairwise;
 use std::algorithm::ranges::adjacent_transform;
 use std::algorithm::ranges::replace;
+use std::algorithm::ranges::replace_projected;
 use std::algorithm::ranges::all_of;
 use std::algorithm::ranges::any_of;
 use std::algorithm::ranges::none_of;
@@ -221,8 +222,10 @@ use std::algorithm::ranges::copy_if;
 use std::algorithm::ranges::sample as ranges_sample;
 use std::algorithm::ranges::shuffle as ranges_shuffle;
 use std::algorithm::ranges::remove_copy;
+use std::algorithm::ranges::remove_copy_projected;
 use std::algorithm::ranges::remove_copy_if;
 use std::algorithm::ranges::replace_copy;
+use std::algorithm::ranges::replace_copy_projected;
 use std::algorithm::ranges::replace_copy_if;
 use std::algorithm::ranges::replace_if;
 use std::algorithm::ranges::unique_by;
@@ -243,6 +246,7 @@ use std::algorithm::ranges::min_element_value_by;
 use std::algorithm::ranges::max_element_value_by;
 use std::algorithm::ranges::minmax_element_value_by;
 use std::algorithm::ranges::remove;
+use std::algorithm::ranges::remove_projected;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::iota;
 use std::algorithm::ranges::iota_by;
@@ -1922,6 +1926,31 @@ fn test_algorithm_ranges_copy_remove_replace_copy() {
     verify(empty_without_predicate.len() == 0);
     verify(empty_replaced.len() == 0);
     verify(empty_replaced_if.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_remove_replace() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let project_tens = |value: i32| { return value / 10; };
+
+    let removed: list<i32> = remove_projected(values, 2, project_tens);
+    verify(removed.len() == 3 && removed[0] == 11 &&
+           removed[1] == 31 && removed[2] == 42);
+    let removed_copy: list<i32> = remove_copy_projected(
+        values, 2, project_tens);
+    verify(removed_copy.len() == 3 && removed_copy[0] == 11 &&
+           removed_copy[1] == 31 && removed_copy[2] == 42);
+
+    let replaced: list<i32> = replace_projected(
+        values, 2, 99, project_tens);
+    verify(replaced.len() == 5 && replaced[0] == 11 &&
+           replaced[1] == 99 && replaced[2] == 99 &&
+           replaced[3] == 31 && replaced[4] == 42);
+    let replaced_copy: list<i32> = replace_copy_projected(
+        values, 2, 99, project_tens);
+    verify(replaced_copy.len() == 5 && replaced_copy[1] == 99 &&
+           replaced_copy[2] == 99);
+    verify(values[1] == 22 && values[2] == 29);
 }
 
 
