@@ -34,6 +34,8 @@ The original 64-bit API names remain available for source compatibility.
 - `bit_cast_u64_from_f64` and `bit_cast_f64_from_u64`
 - `bit_cast_u32_from_i32` and `bit_cast_i32_from_u32`
 - `bit_cast_u64_from_i64` and `bit_cast_i64_from_u64`
+- `bit_cast_u8_from_i8` and `bit_cast_i8_from_u8`
+- `bit_cast_u16_from_i16` and `bit_cast_i16_from_u16`
 
 These reinterpret bits without performing a numeric conversion. Float pairs
 reinterpret IEEE-754 binary32/binary64 layouts; signed/unsigned integer pairs
