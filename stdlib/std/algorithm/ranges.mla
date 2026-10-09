@@ -2073,6 +2073,29 @@ pub fn zip(left: &list<T>, right: &list<U>) -> list<tuple<T, U>> {
     return out;
 }
 
+/// @brief Pair corresponding elements from three ranges, stopping at the
+/// shortest input. C++23 `views::zip` counterpart with heterogeneous inputs.
+/// @ingroup algorithm_ranges
+generic<T, U, V>
+pub fn zip(first: &list<T>, second: &list<U>, third: &list<V>)
+    -> list<tuple<T, U, V>> {
+    var out: list<tuple<T, U, V>> = [];
+    let first_len: i64 = first.len();
+    let second_len: i64 = second.len();
+    let third_len: i64 = third.len();
+    var n: i64 = first_len;
+    if second_len < n {
+        n = second_len;
+    }
+    if third_len < n {
+        n = third_len;
+    }
+    for i in 0..n {
+        out.push((first[i], second[i], third[i]));
+    }
+    return out;
+}
+
 /// @brief Materialize tuples for each pair of adjacent elements.
 /// Eager C++23 `views::pairwise` equivalent; fewer than two elements yield
 /// an empty list and the input is unchanged.
