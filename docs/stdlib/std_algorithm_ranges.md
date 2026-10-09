@@ -360,6 +360,8 @@ fn example() {
   the prefix before it (C++23 `views::take_last`/`drop_last` counterparts).
   Counts are clamped to the range; non-positive counts yield empty/all values,
   respectively.
+- `subrange(data, first, last)` copies the half-open interval `[first, last)`;
+  bounds are clamped to `[0, len]`, while empty/reversed intervals are empty.
 - `iota(start, end)` materializes `[start, end)`; `iota_by(start, end, step)`
   supports positive and negative strides. A zero step or a step pointing away
   from the bound returns an empty list. `iota_range(start, end)` is the generic
