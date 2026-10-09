@@ -149,6 +149,15 @@ pub fn accumulate_by(data: &list<T>, init: U, operation: Operation) -> U {
     return acc;
 }
 
+/// @brief C++-style custom-operation overload of `accumulate`.
+/// The operation receives `(accumulator, element)` and the accumulator may
+/// have a different type from the list elements.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation>
+pub fn accumulate(data: &list<T>, init: U, operation: Operation) -> U {
+    return accumulate_by(data, init, operation);
+}
+
 /// @brief Reduce a list with addition and a caller-supplied initial value.
 /// C++ `std::reduce` equivalent. This eager Mlang implementation evaluates
 /// elements sequentially; unlike `accumulate`, callers should use an

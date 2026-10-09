@@ -3437,8 +3437,10 @@ fn test_algorithm_numeric_generic_accumulate() {
     let subtract = |acc: i64, value: i32| { return acc - value; };
     let initial_difference: i64 = 20;
     verify(accumulate_by(values, initial_difference, subtract) == 10);
+    verify(accumulate(values, initial_difference, subtract) == 10);
     let empty: list<i32> = [];
     verify(accumulate_by(empty, initial_difference, subtract) == 20);
+    verify(accumulate(empty, initial_difference, subtract) == 20);
 
     verify(reduce(values, initial) == 20);
     let multiply = |acc: i64, value: i32| { return acc * value; };
