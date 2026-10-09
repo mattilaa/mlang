@@ -50,5 +50,6 @@ magnitude and phase in radians.
 Floating-point overloads of `exp`, `log`, and `sqrt` provide the usual
 principal complex exponential, logarithm, and square root; `log` and `sqrt`
 use a scaled Euclidean magnitude to avoid the direct `re*re + im*im` overflow.
-`sin`, `cos`, `sinh`, and `cosh` are also available for both floating complex
-types. Scalar `sinh` and `cosh` overloads are provided for `f32` and `f64`.
+`sin`, `cos`, `tan`, `sinh`, `cosh`, and `tanh` are also available for both
+floating complex types. Scalar `sinh` and `cosh` overloads are provided for
+`f32` and `f64`.

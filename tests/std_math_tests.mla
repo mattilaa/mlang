@@ -334,6 +334,22 @@ fn test_complex_trigonometric_and_hyperbolic_functions() {
 }
 
 #[test]
+fn test_complex_tan_and_tanh() {
+    let imaginary: Complex<f64> = Complex<f64> { re: 0.0, im: 0.5 };
+    let tangent: Complex<f64> = tan(imaginary);
+    let hyper_tangent_value: f64 = sinh(0.5) / cosh(0.5);
+    verify(approx_double(tangent.re, 0.0, 0.000001));
+    verify(approx_double(tangent.im, hyper_tangent_value, 0.000001));
+
+    let hyper_tangent: Complex<f64> = tanh(imaginary);
+    verify(approx_double(hyper_tangent.re, 0.0, 0.000001));
+    verify(approx_double(hyper_tangent.im, tan(0.5), 0.000001));
+
+    let zero: Complex<f32> = Complex<f32> { re: 0.0f, im: 0.0f };
+    verify(tan(zero).re == 0.0f && tanh(zero).im == 0.0f);
+}
+
+#[test]
 fn test_complex_f32_abs() {
     let eps: f32 = 0.0001f;
     let z: Complex<f32> = Complex<f32> { re: 3.0f, im: 4.0f };
