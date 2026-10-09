@@ -1572,6 +1572,29 @@ pub fn max_element_index(data: &list<T>) -> i64 {
     return best;
 }
 
+/// @brief Return the first minimum and last maximum indices in one pass.
+/// Empty input returns `(-1, -1)`, matching C++20 `std::ranges::minmax_element`
+/// with index sentinels instead of iterators.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn minmax_element_index(data: &list<T>) -> tuple<i64, i64> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return (-1, -1);
+    }
+    var minimum: i64 = 0;
+    var maximum: i64 = 0;
+    for i in 1..n {
+        if data[i] < data[minimum] {
+            minimum = i;
+        }
+        if !(data[i] < data[maximum]) {
+            maximum = i;
+        }
+    }
+    return (minimum, maximum);
+}
+
 /// @brief Return the smallest element of a nonempty range.
 /// Use `min_element_index` to handle an empty range without a precondition.
 /// @ingroup algorithm_ranges
@@ -1634,6 +1657,28 @@ pub fn max_element_index_by(data: &list<T>, less: Less) -> i64 {
         }
     }
     return best;
+}
+
+/// @brief Return the first minimum and last maximum indices under `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn minmax_element_index_by(data: &list<T>, less: Less)
+    -> tuple<i64, i64> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return (-1, -1);
+    }
+    var minimum: i64 = 0;
+    var maximum: i64 = 0;
+    for i in 1..n {
+        if less(data[i], data[minimum]) {
+            minimum = i;
+        }
+        if !less(data[i], data[maximum]) {
+            maximum = i;
+        }
+    }
+    return (minimum, maximum);
 }
 
 /// @brief Return the first minimum value under `less`; requires nonempty input.

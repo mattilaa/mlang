@@ -167,10 +167,12 @@ use std::algorithm::ranges::unique_by;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
+use std::algorithm::ranges::minmax_element_index;
 use std::algorithm::ranges::min_element_value;
 use std::algorithm::ranges::max_element_value;
 use std::algorithm::ranges::min_element_index_by;
 use std::algorithm::ranges::max_element_index_by;
+use std::algorithm::ranges::minmax_element_index_by;
 use std::algorithm::ranges::min_element_value_by;
 use std::algorithm::ranges::max_element_value_by;
 use std::algorithm::ranges::remove;
@@ -1406,6 +1408,10 @@ fn test_algorithm_ranges_generic_element_extrema() {
     verify(max_element_index(values) == 2);
     verify(min_element_index(empty) == -1);
     verify(max_element_index(empty) == -1);
+    let extrema: tuple<i64, i64> = minmax_element_index(values);
+    let no_extrema: tuple<i64, i64> = minmax_element_index(empty);
+    verify(extrema.0 == 1 && extrema.1 == 3);
+    verify(no_extrema.0 == -1 && no_extrema.1 == -1);
 }
 
 #[test]
@@ -1429,10 +1435,16 @@ fn test_algorithm_ranges_comparator_element_extrema() {
     verify(max_element_value_by(values, by_tens) == 22);
     verify(min_element_index_by(empty, by_tens) == -1);
     verify(max_element_index_by(empty, by_tens) == -1);
+    let by_tens_extrema: tuple<i64, i64> =
+        minmax_element_index_by(values, by_tens);
+    verify(by_tens_extrema.0 == 4 && by_tens_extrema.1 == 2);
 
     let tied: list<i32> = [12, 11, 19];
     verify(min_element_index_by(tied, by_tens) == 0);
     verify(max_element_index_by(tied, by_tens) == 0);
+    let tied_extrema: tuple<i64, i64> =
+        minmax_element_index_by(tied, by_tens);
+    verify(tied_extrema.0 == 0 && tied_extrema.1 == 2);
     verify(min_element_value_by(tied, by_tens) == 12);
     verify(max_element_value_by(tied, by_tens) == 12);
 

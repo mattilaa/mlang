@@ -98,6 +98,10 @@ fn example() {
 - `min_element_value` and `max_element_value` return the selected value for a
   nonempty input. Use the index forms to handle empty ranges; value forms keep
   the first value on ties.
+- `minmax_element_index(data)` returns `(first_minimum, last_maximum)` in one
+  pass, or `(-1, -1)` for empty input. The comparator form
+  `minmax_element_index_by(data, less)` applies the same tie rules under a
+  strict ordering.
 - The corresponding `min_element_index_by`, `max_element_index_by`,
   `min_element_value_by`, and `max_element_value_by` forms accept a strict
   ordering comparator and also keep the first equivalent element.
