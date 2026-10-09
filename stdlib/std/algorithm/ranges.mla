@@ -2205,6 +2205,29 @@ pub fn is_heap_by(data: &list<T>, less: Less) -> bool {
     return is_heap_until_by(data, less) == data.len();
 }
 
+/// @brief Return the first child violating projected heap order defined by `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn is_heap_until_by_projected(data: &list<T>, less: Less,
+                                  projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    for child in 1..n {
+        let parent: i64 = (child - 1) / 2;
+        if less(projection(data[parent]), projection(data[child])) {
+            return child;
+        }
+    }
+    return n;
+}
+
+/// @brief Check heap order defined by a comparator over projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn is_heap_by_projected(data: &list<T>, less: Less,
+                            projection: Projection) -> bool {
+    return is_heap_until_by_projected(data, less, projection) == data.len();
+}
+
 /// @brief Return the first child violating max-heap order after projection.
 /// @ingroup algorithm_ranges
 generic<T, Projection>
@@ -2284,6 +2307,28 @@ fn heap_sift_down_projected(data: &list<T>, heap_len: i64, root: i64,
     return heap;
 }
 
+generic<T, Less, Projection>
+fn heap_sift_down_by_projected(data: &list<T>, heap_len: i64, root: i64,
+                               less: Less, projection: Projection) -> list<T> {
+    var heap: list<T> = take(data, data.len());
+    var parent: i64 = root;
+    while parent < heap_len / 2 {
+        let left: i64 = parent * 2 + 1;
+        var larger: i64 = left;
+        let right: i64 = left + 1;
+        if right < heap_len &&
+           less(projection(heap[left]), projection(heap[right])) {
+            larger = right;
+        }
+        if !less(projection(heap[parent]), projection(heap[larger])) {
+            break;
+        }
+        heap = heap_swap_at(heap, parent, larger);
+        parent = larger;
+    }
+    return heap;
+}
+
 /// @brief Return a max-heap copy of `data` (C++20 `ranges::make_heap`).
 /// @ingroup algorithm_ranges
 generic<T>
@@ -2336,6 +2381,21 @@ pub fn make_heap_projected(data: &list<T>, projection: Projection) -> list<T> {
     return heap;
 }
 
+/// @brief Build a heap ordered by `less` over projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn make_heap_by_projected(data: &list<T>, less: Less,
+                              projection: Projection) -> list<T> {
+    var heap: list<T> = take(data, data.len());
+    var parent: i64 = heap.len() / 2;
+    while parent > 0 {
+        parent = parent - 1;
+        heap = heap_sift_down_by_projected(heap, heap.len(), parent,
+                                           less, projection);
+    }
+    return heap;
+}
+
 /// @brief Restore heap order after appending one item to a max-heap copy.
 /// The input must have a heap-ordered prefix; the last element is the new item.
 /// @ingroup algorithm_ranges
@@ -2382,6 +2442,25 @@ pub fn push_heap_projected(data: &list<T>, projection: Projection) -> list<T> {
     while child > 0 {
         let parent: i64 = (child - 1) / 2;
         if !(projection(heap[parent]) < projection(heap[child])) {
+            break;
+        }
+        heap = heap_swap_at(heap, parent, child);
+        child = parent;
+    }
+    return heap;
+}
+
+/// @brief Restore heap order by `less` over projected keys after appending.
+/// The prefix before the final element must already be a matching heap.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn push_heap_by_projected(data: &list<T>, less: Less,
+                              projection: Projection) -> list<T> {
+    var heap: list<T> = take(data, data.len());
+    var child: i64 = heap.len() - 1;
+    while child > 0 {
+        let parent: i64 = (child - 1) / 2;
+        if !less(projection(heap[parent]), projection(heap[child])) {
             break;
         }
         heap = heap_swap_at(heap, parent, child);
@@ -2445,6 +2524,18 @@ pub fn pop_heap_projected(data: &list<T>, projection: Projection) -> list<T> {
     return heap_sift_down_projected(heap, n - 1, 0, projection);
 }
 
+/// @brief Move the top value to the end and restore projected comparator order.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn pop_heap_by_projected(data: &list<T>, less: Less,
+                             projection: Projection) -> list<T> {
+    let n: i64 = data.len();
+    var heap: list<T> = take(data, n);
+    if n < 2 { return heap; }
+    heap = heap_swap_at(heap, 0, n - 1);
+    return heap_sift_down_by_projected(heap, n - 1, 0, less, projection);
+}
+
 /// @brief Return an ascending copy sorted from a max-heap.
 /// The input must satisfy max-heap order; inputs are not modified.
 /// @ingroup algorithm_ranges
@@ -2465,6 +2556,14 @@ pub fn sort_heap_by(data: &list<T>, less: Less) -> list<T> {
 generic<T, Projection>
 pub fn sort_heap_projected(data: &list<T>, projection: Projection) -> list<T> {
     return sorted_projected(data, projection);
+}
+
+/// @brief Return heap values sorted by `less` over projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn sort_heap_by_projected(data: &list<T>, less: Less,
+                              projection: Projection) -> list<T> {
+    return sorted_by_projected(data, less, projection);
 }
 
 /// @brief Return the smallest `count` elements in ascending order.
@@ -2544,6 +2643,32 @@ pub fn partial_sort_projected(data: &list<T>, count: i64,
     return sort_heap_projected(heap, projection);
 }
 
+/// @brief Select and sort a prefix using a comparator over projected keys.
+/// Counts clamp to `[0, data.len()]`; the input list remains unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn partial_sort_by_projected(data: &list<T>, count: i64, less: Less,
+                                 projection: Projection) -> list<T> {
+    var limit: i64 = count;
+    let n: i64 = data.len();
+    if limit < 0 { limit = 0; }
+    if limit > n { limit = n; }
+    if limit == 0 { return []; }
+
+    let initial: list<T> = take(data, limit);
+    var heap: list<T> = make_heap_by_projected(initial, less, projection);
+    for i in limit..n {
+        if less(projection(data[i]), projection(heap[0])) {
+            let popped: list<T> = pop_heap_by_projected(heap, less,
+                                                         projection);
+            var prefix: list<T> = take(popped, limit - 1);
+            prefix.push(data[i]);
+            heap = push_heap_by_projected(prefix, less, projection);
+        }
+    }
+    return sort_heap_by_projected(heap, less, projection);
+}
+
 /// @brief Sort up to `output_capacity` selected values into a new list.
 /// This is the eager-list C++20 `std::ranges::partial_sort_copy` counterpart:
 /// the capacity stands for the destination range length, and the source stays
@@ -2570,6 +2695,15 @@ generic<T, Less>
 pub fn partial_sort_copy_by(data: &list<T>, output_capacity: i64,
                             less: Less) -> list<T> {
     return partial_sort_by(data, output_capacity, less);
+}
+
+/// @brief Comparator-and-projection form of `partial_sort_copy`.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn partial_sort_copy_by_projected(data: &list<T>, output_capacity: i64,
+                                      less: Less,
+                                      projection: Projection) -> list<T> {
+    return partial_sort_by_projected(data, output_capacity, less, projection);
 }
 
 generic<T, Less>

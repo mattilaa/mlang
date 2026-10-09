@@ -116,24 +116,32 @@ use std::algorithm::ranges::is_heap_by;
 use std::algorithm::ranges::is_heap_until_by;
 use std::algorithm::ranges::is_heap_projected;
 use std::algorithm::ranges::is_heap_until_projected;
+use std::algorithm::ranges::is_heap_by_projected;
+use std::algorithm::ranges::is_heap_until_by_projected;
 use std::algorithm::ranges::make_heap;
 use std::algorithm::ranges::make_heap_by;
 use std::algorithm::ranges::make_heap_projected;
+use std::algorithm::ranges::make_heap_by_projected;
 use std::algorithm::ranges::push_heap;
 use std::algorithm::ranges::push_heap_by;
 use std::algorithm::ranges::push_heap_projected;
+use std::algorithm::ranges::push_heap_by_projected;
 use std::algorithm::ranges::pop_heap;
 use std::algorithm::ranges::pop_heap_by;
 use std::algorithm::ranges::pop_heap_projected;
+use std::algorithm::ranges::pop_heap_by_projected;
 use std::algorithm::ranges::sort_heap;
 use std::algorithm::ranges::sort_heap_by;
 use std::algorithm::ranges::sort_heap_projected;
+use std::algorithm::ranges::sort_heap_by_projected;
 use std::algorithm::ranges::partial_sort;
 use std::algorithm::ranges::partial_sort_by;
 use std::algorithm::ranges::partial_sort_projected;
+use std::algorithm::ranges::partial_sort_by_projected;
 use std::algorithm::ranges::partial_sort_copy;
 use std::algorithm::ranges::partial_sort_copy_projected;
 use std::algorithm::ranges::partial_sort_copy_by;
+use std::algorithm::ranges::partial_sort_copy_by_projected;
 use std::algorithm::ranges::nth_element;
 use std::algorithm::ranges::nth_element_by;
 use std::algorithm::ranges::nth_element_projected;
@@ -1151,6 +1159,56 @@ fn test_algorithm_ranges_projected_heap_operations() {
     let ordered: list<i32> = sort_heap_projected(heap, project_tens);
     verify(is_sorted_projected(ordered, project_tens));
     verify(ordered[0] == 12 && ordered[5] == 58);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_projected_heap_operations() {
+    let values: list<i32> = [41, 12, 35, 24, 58, 17];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let project_tens = |value: i32| { return value / 10; };
+    let heap: list<i32> = make_heap_by_projected(values, greater,
+                                                  project_tens);
+    verify(is_heap_by_projected(heap, greater, project_tens));
+    verify(is_heap_until_by_projected(heap, greater, project_tens) ==
+           heap.len());
+    verify(project_tens(heap[0]) == 1);
+
+    var appended: list<i32> = take(heap, heap.len());
+    appended.push(9);
+    let pushed: list<i32> = push_heap_by_projected(appended, greater,
+                                                   project_tens);
+    verify(is_heap_by_projected(pushed, greater, project_tens));
+    verify(pushed[0] == 9);
+    let popped: list<i32> = pop_heap_by_projected(pushed, greater,
+                                                  project_tens);
+    verify(popped[popped.len() - 1] == 9);
+    verify(is_heap_until_by_projected(popped, greater, project_tens) ==
+           popped.len() - 1);
+
+    let ordered: list<i32> = sort_heap_by_projected(heap, greater,
+                                                     project_tens);
+    verify(is_sorted_by_projected(ordered, greater, project_tens));
+    verify(ordered[0] == 58 &&
+           project_tens(ordered[ordered.len() - 1]) == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_partial_sort_comparator_projection() {
+    let values: list<i32> = [42, 11, 23, 31, 19, 55];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let project_tens = |value: i32| { return value / 10; };
+    let largest: list<i32> = partial_sort_by_projected(
+        values, 3, greater, project_tens);
+    verify(largest.len() == 3 && largest[0] == 55 &&
+           largest[1] == 42 && largest[2] == 31);
+    verify(is_sorted_by_projected(largest, greater, project_tens));
+
+    let copied: list<i32> = partial_sort_copy_by_projected(
+        values, 2, greater, project_tens);
+    verify(copied.len() == 2 && copied[0] == 55 && copied[1] == 42);
+    let empty: list<i32> = partial_sort_by_projected(
+        values, -1, greater, project_tens);
+    verify(empty.len() == 0 && values[0] == 42);
 }
 
 #[test]
