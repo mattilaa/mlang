@@ -157,6 +157,7 @@ use std::algorithm::ranges::find_last_if_not;
 use std::algorithm::ranges::remove_if;
 use std::algorithm::ranges::copy_if;
 use std::algorithm::ranges::sample as ranges_sample;
+use std::algorithm::ranges::shuffle as ranges_shuffle;
 use std::algorithm::ranges::remove_copy;
 use std::algorithm::ranges::remove_copy_if;
 use std::algorithm::ranges::replace_copy;
@@ -2173,6 +2174,24 @@ fn test_algorithm_ranges_sample_without_replacement() {
     let empty: list<i32> = [];
     let sampled_empty: list<i32> = ranges_sample(empty, 3, choose_last);
     verify(sampled_empty.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_shuffle_copy() {
+    let values: list<i32> = [1, 2, 3, 4];
+    let choose_last = |bound: i64| { return bound - 1; };
+    let shuffled: list<i32> = ranges_shuffle(values, choose_last);
+    verify(shuffled.len() == 4);
+    verify(shuffled[0] == 4 && shuffled[1] == 3 &&
+           shuffled[2] == 2 && shuffled[3] == 1);
+    verify(values[0] == 1 && values[3] == 4);
+
+    let empty: list<i32> = [];
+    let shuffled_empty: list<i32> = ranges_shuffle(empty, choose_last);
+    verify(shuffled_empty.len() == 0);
+    let singleton: list<i32> = [8];
+    let shuffled_singleton: list<i32> = ranges_shuffle(singleton, choose_last);
+    verify(shuffled_singleton.len() == 1 && shuffled_singleton[0] == 8);
 }
 
 

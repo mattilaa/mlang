@@ -162,6 +162,10 @@ fn example() {
   receives the current exclusive bound, allowing a caller-owned random engine
   (for example, `range_i64(0, bound - 1)`); the selection pass is O(N).
   Negative counts return empty and oversized counts clamp to the input length.
+- `shuffle(data, choose_index)` returns a randomized copy. The selector receives
+  each current exclusive bound; use a uniformly distributed selector for an
+  unbiased permutation. Because lists are eagerly rebuilt without indexed
+  mutation, this implementation is O(N²) and leaves the input unchanged.
 - `unique_by(data, equivalent)` removes adjacent equivalent elements while
   keeping the first value in each run.
 - `all_of`, `any_of`, and `none_of` accept predicates as well as retaining the
