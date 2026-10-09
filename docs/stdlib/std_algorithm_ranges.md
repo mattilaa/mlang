@@ -118,6 +118,9 @@ fn example() {
   local values, and captured mutations are visible to the caller.
 - `for_each(data, operation)` invokes a closure once per element in iteration
   order; captured mutable state can collect side effects or a result.
+- `for_each_n(data, count, operation)` invokes a closure on a bounded prefix
+  in iteration order. Negative counts perform no calls and oversized counts
+  clamp to the input length.
 - `generate_n(count, generator)` materializes values by invoking a zero-argument
   generator closure `count` times; non-positive counts return an empty list.
   Captured generator state is preserved between invocations.
