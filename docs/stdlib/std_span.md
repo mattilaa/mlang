@@ -2,8 +2,9 @@
 
 Module file: `stdlib/std/span.mla`
 
-C++20-style non-owning span/view aliases over the existing safe list runtime
-shape.
+C++20-style span aliases over the existing safe list runtime shape. Because
+these are type aliases for `list<T>`, they have list ownership/lifetime
+semantics and do not provide zero-copy, lifetime-tracked C++ span views.
 
 - `Span<T>` is a compiler alias for `list<T>`
 - `span<T>` is the lowercase alias for the same type
@@ -15,6 +16,11 @@ Properties:
   like `[value; N]`
 - `size_of(spanValue)` is accepted in `static_assert!` when the span value type
   is known at compile time
+- `size(data)` and `empty(data)` query the alias
+- `first(data, count)`, `last(data, count)`, and `subspan(data, offset, count)`
+  return copied lists, not non-owning subviews. Counts are safely clamped;
+  negative `first`/`last` counts return empty, and a negative `subspan` count
+  means through the end.
 
 Example:
 
