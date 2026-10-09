@@ -569,8 +569,8 @@ pub fn mismatch_by(left: &list<T>, right: &list<U>, equivalent: Equivalent)
 /// The ranges are equal only when they have the same length and every pair
 /// satisfies `equivalent(left[i], right[i])`.
 /// @ingroup algorithm_ranges
-generic<T, Equivalent>
-pub fn equal_by(left: &list<T>, right: &list<T>, equivalent: Equivalent)
+generic<T, U, Equivalent>
+pub fn equal_by(left: &list<T>, right: &list<U>, equivalent: Equivalent)
     -> bool {
     let n: i64 = left.len();
     if n != right.len() {
