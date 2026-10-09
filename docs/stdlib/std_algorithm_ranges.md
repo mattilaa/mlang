@@ -130,6 +130,9 @@ fn example() {
 - `find_if_not` returns the first rejected element's index; `remove_if` returns
   a copy without accepted elements, and `replace_if` substitutes a value for
   every accepted element. These transforms leave their input unchanged.
+- `copy_if`, `remove_copy`, `remove_copy_if`, `replace_copy`, and
+  `replace_copy_if` provide the corresponding C++20 copying algorithms. Each
+  returns a new list in source order and leaves the input unchanged.
 - `unique_by(data, equivalent)` removes adjacent equivalent elements while
   keeping the first value in each run.
 - `all_of`, `any_of`, and `none_of` accept predicates as well as retaining the

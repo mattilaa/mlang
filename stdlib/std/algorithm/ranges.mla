@@ -488,6 +488,86 @@ pub fn remove_if(data: &list<T>, predicate: Predicate) -> list<T> {
     return kept;
 }
 
+/// @brief Copy elements accepted by `predicate` into a new list.
+/// C++20 `std::ranges::copy_if` counterpart for eager Mlang lists.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn copy_if(data: &list<T>, predicate: Predicate) -> list<T> {
+    var copied: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            copied.push(data[i]);
+        }
+    }
+    return copied;
+}
+
+/// @brief Copy elements unequal to `value` into a new list.
+/// C++20 `std::ranges::remove_copy` counterpart; the input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn remove_copy(data: &list<T>, value: U) -> list<T> {
+    var copied: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if data[i] != value {
+            copied.push(data[i]);
+        }
+    }
+    return copied;
+}
+
+/// @brief Copy elements rejected by `predicate` into a new list.
+/// C++20 `std::ranges::remove_copy_if` counterpart; the input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn remove_copy_if(data: &list<T>, predicate: Predicate) -> list<T> {
+    var copied: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if !predicate(data[i]) {
+            copied.push(data[i]);
+        }
+    }
+    return copied;
+}
+
+/// @brief Copy a range while replacing each value equal to `old_value`.
+/// C++20 `std::ranges::replace_copy` counterpart; the input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U, V>
+pub fn replace_copy(data: &list<T>, old_value: U, new_value: V) -> list<T> {
+    var copied: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if data[i] == old_value {
+            copied.push(new_value);
+        } else {
+            copied.push(data[i]);
+        }
+    }
+    return copied;
+}
+
+/// @brief Copy a range, replacing each element accepted by `predicate`.
+/// C++20 `std::ranges::replace_copy_if` counterpart; the input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, V>
+pub fn replace_copy_if(data: &list<T>, predicate: Predicate,
+                       new_value: V) -> list<T> {
+    var copied: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            copied.push(new_value);
+        } else {
+            copied.push(data[i]);
+        }
+    }
+    return copied;
+}
+
 /// @brief Replace each element accepted by `predicate` in a copied range.
 /// The original range is unchanged.
 /// @ingroup algorithm_ranges
