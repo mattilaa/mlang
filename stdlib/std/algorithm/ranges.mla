@@ -1509,6 +1509,30 @@ pub fn lexicographical_compare(left: &list<T>, right: &list<U>) -> bool {
     return left_len < right_len;
 }
 
+/// @brief Compare projected keys in lexicographical order.
+/// Each range has an independent projection; projected key types must be
+/// mutually order-comparable.
+/// @ingroup algorithm_ranges
+generic<T, U, LeftProjection, RightProjection>
+pub fn lexicographical_compare_projected(
+    left: &list<T>, right: &list<U>,
+    left_projection: LeftProjection, right_projection: RightProjection) -> bool {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        let left_key = left_projection(left[i]);
+        let right_key = right_projection(right[i]);
+        if left_key < right_key {
+            return true;
+        }
+        if left_key > right_key {
+            return false;
+        }
+    }
+    return left_len < right_len;
+}
+
 /// @brief Compare ranges lexicographically using the strict ordering `less`.
 /// @ingroup algorithm_ranges
 generic<T, U, Less>

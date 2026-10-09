@@ -93,6 +93,8 @@ fn example() {
 - `lexicographical_compare_by` performs the same range comparison with a
   caller-supplied strict ordering; equivalent elements continue to the next
   position and a matching prefix sorts before its extension.
+- `lexicographical_compare_projected` applies an independent projection to
+  each range before lexicographically comparing the resulting keys.
 - `includes_by(range, subset, less)` checks sorted-range containment with a
   comparator, including duplicate multiplicities.
 - `starts_with` and `ends_with` compare prefixes and suffixes, including across
