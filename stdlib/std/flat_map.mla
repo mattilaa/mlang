@@ -188,6 +188,55 @@ impl<K, V> FlatMap {
     }
 }
 
+/// @brief Transfer non-colliding entries from `source` into `destination`.
+/// Destination values win for equivalent keys; colliding source entries stay
+/// in the source. Return the number of transferred entries (associative
+/// container `merge` semantics).
+generic<K, V>
+pub fn merge(destination: &mut FlatMap<K, V>,
+             source_map: &mut FlatMap<K, V>) -> i64 {
+    var merged: list<tuple<K, V>> = [];
+    var retained_source: list<tuple<K, V>> = [];
+    let destination_len: i64 = destination.entries.len();
+    let source_len: i64 = source_map.entries.len();
+    var destination_index: i64 = 0;
+    var source_index: i64 = 0;
+    var transferred: i64 = 0;
+
+    while destination_index < destination_len && source_index < source_len {
+        let destination_entry: tuple<K, V> =
+            destination.entries[destination_index];
+        let source_entry: tuple<K, V> = source_map.entries[source_index];
+        if destination_entry.0 < source_entry.0 {
+            merged.push(destination_entry);
+            destination_index = destination_index + 1;
+        } else if source_entry.0 < destination_entry.0 {
+            merged.push(source_entry);
+            transferred = transferred + 1;
+            source_index = source_index + 1;
+        } else {
+            merged.push(destination_entry);
+            retained_source.push(source_entry);
+            destination_index = destination_index + 1;
+            source_index = source_index + 1;
+        }
+    }
+
+    while destination_index < destination_len {
+        merged.push(destination.entries[destination_index]);
+        destination_index = destination_index + 1;
+    }
+    while source_index < source_len {
+        merged.push(source_map.entries[source_index]);
+        transferred = transferred + 1;
+        source_index = source_index + 1;
+    }
+
+    destination.entries = merged;
+    source_map.entries = retained_source;
+    return transferred;
+}
+
 /// @brief Remove entries accepted by `predicate` and return the removal count.
 /// The predicate receives a key and value as two arguments, matching C++20
 /// associative-container `erase_if`.

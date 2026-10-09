@@ -9,3 +9,5 @@ key/value entries in order, with the last duplicate supplying the stored value.
 `erase_if(map, predicate)` removes matching key/value pairs and preserves the
 sorted order of all remaining entries. `replace(keys, values)` validates equal
 lengths and strictly increasing keys before replacing the contents.
+`merge(destination, source)` transfers non-colliding entries while retaining
+colliding keys in the source map.
