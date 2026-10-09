@@ -142,6 +142,7 @@ use std::algorithm::ranges::equal_range_by;
 use std::algorithm::ranges::binary_search_by;
 use std::algorithm::ranges::sorted;
 use std::algorithm::ranges::sorted_by;
+use std::algorithm::ranges::sorted_projected;
 use std::algorithm::ranges::next_permutation;
 use std::algorithm::ranges::next_permutation_by;
 use std::algorithm::ranges::prev_permutation;
@@ -1248,6 +1249,25 @@ fn test_algorithm_ranges_sorted_by_comparator() {
     verify(empty_sorted.len() == 0);
     let one: list<i32> = [7];
     let one_sorted: list<i32> = sorted_by(one, greater);
+    verify(one_sorted[0] == 7);
+}
+
+#[test]
+fn test_algorithm_ranges_sorted_by_projection() {
+    let values: list<i32> = [22, 11, 21, 12, 3, 19];
+    let project_tens = |value: i32| { return value / 10; };
+    let ordered: list<i32> = sorted_projected(values, project_tens);
+    verify(ordered.len() == 6);
+    verify(ordered[0] == 3 && ordered[1] == 11 && ordered[2] == 12);
+    verify(ordered[3] == 19 && ordered[4] == 22 && ordered[5] == 21);
+    verify(is_sorted_projected(ordered, project_tens));
+    verify(values[0] == 22 && values[5] == 19);
+
+    let empty: list<i32> = [];
+    let one: list<i32> = [7];
+    let empty_sorted: list<i32> = sorted_projected(empty, project_tens);
+    let one_sorted: list<i32> = sorted_projected(one, project_tens);
+    verify(empty_sorted.len() == 0);
     verify(one_sorted[0] == 7);
 }
 
