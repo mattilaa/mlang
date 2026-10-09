@@ -6,14 +6,15 @@ Module file: `stdlib/std/jthread.mla`
 
 `jthread` owns a native thread and a cooperative `StopSource`. Since Mlang has
 no implicit destructor execution yet, explicitly call `close()` to request
-stop, join, and release the source. For a complete worker example, see
+stop, join, and release the source. Plain `join()` waits without requesting
+stop, then releases the source. For a complete worker example, see
 [`std::jthread`](../stdlib/std_jthread.md).
 
 ### API
 - `jthread::from_parts(worker, source) -> jthread`: own a thread spawned with a token from the source
 - `token() -> result<StopToken, str8>`: obtain another retained token
 - `request_stop() -> result<bool, str8>`: request cooperative cancellation
-- `join() -> i32`: join without requesting stop
+- `join() -> i32`: join without requesting stop, then release the source
 - `close() -> i32`: request stop, join, then release the source
 
 The worker should poll its `StopToken` and close its token owner before

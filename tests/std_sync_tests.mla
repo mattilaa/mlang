@@ -106,6 +106,11 @@ fn jthread_token_worker(token: StopToken) -> i32 {
     return status;
 }
 
+fn jthread_natural_exit_worker(token: StopToken) -> i32 {
+    token.close();
+    return 0;
+}
+
 #[test]
 fn test_jthread_cooperative_stop_and_join() {
     let created: result<StopSource, str8> = StopSource::new();
@@ -122,6 +127,24 @@ fn test_jthread_cooperative_stop_and_join() {
     let worker: std::thread::thread = thread::spawn(jthread_token_worker, token);
     let joined: jthread = jthread::from_parts(worker, source);
     verify(joined.close() == 0);
+}
+
+#[test]
+fn test_jthread_join_without_stop() {
+    let created: result<StopSource, str8> = StopSource::new();
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let source: StopSource = created.unwrap();
+    let token_result: result<StopToken, str8> = source.token();
+    verify(token_result.is_ok());
+    if token_result.is_err() {
+        source.close();
+        return;
+    }
+    let token: StopToken = token_result.unwrap();
+    let worker: std::thread::thread = thread::spawn(jthread_natural_exit_worker, token);
+    let owner: jthread = jthread::from_parts(worker, source);
+    verify(owner.join() == 0);
 }
 
 fn test_mutex_lock_unlock_impl() -> i32 {
