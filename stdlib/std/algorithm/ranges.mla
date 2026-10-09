@@ -22,6 +22,18 @@ pub fn find(data: &list<T>, value: U) -> i64 {
     return -1;
 }
 
+/// @brief Find the first element equivalent to `value` under `equivalent`.
+/// Returns -1 if no element matches.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn find_by(data: &list<T>, value: U, equivalent: Equivalent) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if equivalent(data[i], value) { return i; }
+    }
+    return -1;
+}
+
 /// @brief Find the first element whose projected value equals `value`.
 /// C++20 `std::ranges::find`-style projection support; returns `-1` if absent.
 /// @ingroup algorithm_ranges
@@ -1357,6 +1369,14 @@ pub fn remove_copy(data: &list<T>, value: U) -> list<T> {
         }
     }
     return copied;
+}
+
+/// @brief Copy elements not equivalent to `value` into a new list.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn remove_copy_by(data: &list<T>, value: U,
+                      equivalent: Equivalent) -> list<T> {
+    return remove_by(data, value, equivalent);
 }
 
 /// @brief Copy elements whose projected key differs from `value`.
@@ -3994,6 +4014,18 @@ pub fn count(data: &list<T>, value: U) -> i64 {
     return out;
 }
 
+/// @brief Count elements equivalent to `value` under `equivalent`.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn count_by(data: &list<T>, value: U, equivalent: Equivalent) -> i64 {
+    var out: i64 = 0;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if equivalent(data[i], value) { out = out + 1; }
+    }
+    return out;
+}
+
 /// @brief Count elements whose projected value equals `value`.
 /// @ingroup algorithm_ranges
 generic<T, U, Projection>
@@ -4015,6 +4047,13 @@ pub fn contains(data: &list<T>, value: U) -> bool {
     return find(data, value) >= 0;
 }
 
+/// @brief Test whether any element is equivalent to `value`.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn contains_by(data: &list<T>, value: U, equivalent: Equivalent) -> bool {
+    return find_by(data, value, equivalent) >= 0;
+}
+
 /// @brief Test whether any element's projected value equals `value`.
 /// @ingroup algorithm_ranges
 generic<T, U, Projection>
@@ -4033,6 +4072,19 @@ pub fn remove(data: &list<T>, value: U) -> list<T> {
         if item != value {
             out.push(item);
         }
+    }
+    return out;
+}
+
+/// @brief Copy a list, excluding values equivalent under `equivalent`.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn remove_by(data: &list<T>, value: U, equivalent: Equivalent) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let item: T = data[i];
+        if !equivalent(item, value) { out.push(item); }
     }
     return out;
 }

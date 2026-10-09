@@ -57,8 +57,11 @@ use std::algorithm::ranges::unique_i64;
 use std::algorithm::ranges::unique_stable_i64;
 use std::algorithm::ranges::clamp_i64;
 use std::algorithm::ranges::contains;
+use std::algorithm::ranges::contains_by;
 use std::algorithm::ranges::count;
+use std::algorithm::ranges::count_by;
 use std::algorithm::ranges::find;
+use std::algorithm::ranges::find_by;
 use std::algorithm::ranges::find_projected;
 use std::algorithm::ranges::find_last_projected;
 use std::algorithm::ranges::adjacent_find_projected;
@@ -284,6 +287,7 @@ use std::algorithm::ranges::copy_if;
 use std::algorithm::ranges::sample as ranges_sample;
 use std::algorithm::ranges::shuffle as ranges_shuffle;
 use std::algorithm::ranges::remove_copy;
+use std::algorithm::ranges::remove_copy_by;
 use std::algorithm::ranges::remove_copy_projected;
 use std::algorithm::ranges::remove_copy_if;
 use std::algorithm::ranges::remove_copy_if_projected;
@@ -325,6 +329,7 @@ use std::algorithm::ranges::min_element_value_by_projected;
 use std::algorithm::ranges::max_element_value_by_projected;
 use std::algorithm::ranges::minmax_element_value_by_projected;
 use std::algorithm::ranges::remove;
+use std::algorithm::ranges::remove_by;
 use std::algorithm::ranges::remove_projected;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::iota;
@@ -535,6 +540,30 @@ fn test_algorithm_ranges_find_last_by_equivalence() {
     verify(find_last_by(values, 90, same_decade) == -1);
     let empty: list<i32> = [];
     verify(find_last_by(empty, 20, same_decade) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_equivalence_lookup_and_removal() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let same_decade = |item: i32, key: i32| { return item / 10 == key / 10; };
+    verify(find_by(values, 20, same_decade) == 1);
+    verify(count_by(values, 20, same_decade) == 2);
+    verify(contains_by(values, 40, same_decade));
+    verify(!contains_by(values, 90, same_decade));
+
+    let removed: list<i32> = remove_by(values, 20, same_decade);
+    let removed_copy: list<i32> = remove_copy_by(values, 20, same_decade);
+    verify(removed.len() == 3 && removed[0] == 11 &&
+           removed[1] == 31 && removed[2] == 42);
+    verify(removed_copy.len() == 3 && removed_copy[0] == 11 &&
+           removed_copy[2] == 42);
+    verify(values.len() == 5 && values[1] == 22 && values[2] == 29);
+
+    let empty: list<i32> = [];
+    verify(find_by(empty, 20, same_decade) == -1);
+    verify(count_by(empty, 20, same_decade) == 0);
+    let empty_removed: list<i32> = remove_by(empty, 20, same_decade);
+    verify(empty_removed.len() == 0);
 }
 
 #[test]

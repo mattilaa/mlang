@@ -52,6 +52,8 @@ fn example() {
 - `find_last_by(data, key, equivalent)` searches backward and returns the last
   index whose element matches a separate key under the supplied binary
   predicate, or `-1` when none matches.
+- `find_by`, `count_by`, and `contains_by` apply the same element/key
+  equivalence predicate for first-match lookup, counting, and membership.
 - `adjacent_find_by(data, equivalent)` returns the first adjacent index whose
   pair satisfies a caller-provided binary equivalence predicate, or `-1`.
 - `adjacent_find_by_projected` applies that equivalence predicate to adjacent
@@ -462,6 +464,8 @@ fn example() {
   projected key matches a value. `replace_projected` and
   `replace_copy_projected` replace elements by projected-key equality; all
   four return a new list and leave the input unchanged.
+- `remove_by` and `remove_copy_by` exclude every element matching a lookup key
+  under a caller-supplied equivalence predicate; both preserve source order.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 - `iota_range(start, end)` materializes a typed half-open range, preserving
