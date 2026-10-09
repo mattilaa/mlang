@@ -351,3 +351,31 @@ int64_t __mlang_std_bits_u64_to_i64(uint64_t bits)
     memcpy(&value, &bits, sizeof(value));
     return value;
 }
+
+uint8_t __mlang_std_bits_i8_to_u8(int8_t value)
+{
+    uint8_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+int8_t __mlang_std_bits_u8_to_i8(uint8_t bits)
+{
+    int8_t value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+uint16_t __mlang_std_bits_i16_to_u16(int16_t value)
+{
+    uint16_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+int16_t __mlang_std_bits_u16_to_i16(uint16_t bits)
+{
+    int16_t value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
