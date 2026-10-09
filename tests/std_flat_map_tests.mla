@@ -1,7 +1,10 @@
 mod std::testing;
 mod std::flat_map;
+mod std::algorithm::ranges;
 use std::testing::verify;
+use std::testing::verify_eq_i32;
 use std::flat_map::FlatMap;
+use std::algorithm::ranges::zip;
 
 #[test]
 fn test_flat_map_sorted_insert_lookup_and_replace() {
@@ -48,4 +51,61 @@ fn test_flat_map_remove_and_clear() {
     verify(values.len() == 2 && values.key_at(0) == 1 && values.key_at(1) == 3);
     values.clear();
     verify(values.is_empty());
+}
+
+#[test]
+fn test_flat_map_insert_range_counts_new_keys() {
+    var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    values.insert(2, 20);
+    let incoming_keys: list<i32> = [3, 1, 3, 2];
+    let incoming_values: list<i32> = [30, 10, 31, 22];
+    let incoming: list<tuple<i32, i32>> = zip(incoming_keys, incoming_values);
+    let first_entry: tuple<i32, i32> = incoming[0];
+    verify_eq_i32(30, first_entry.1);
+    let inserted: i64 = values.insert_range(incoming);
+    verify(inserted == 2 && values.len() == 3);
+}
+
+fn make_range_insert_map() -> FlatMap<i32, i32> {
+    var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    values.insert(2, 20);
+    let incoming_keys: list<i32> = [3, 1, 3, 2];
+    let incoming_values: list<i32> = [30, 10, 31, 22];
+    let incoming: list<tuple<i32, i32>> = zip(incoming_keys, incoming_values);
+    values.insert_range(incoming);
+    return values;
+}
+
+#[test]
+fn test_flat_map_insert_range_orders() {
+    let values: FlatMap<i32, i32> = make_range_insert_map();
+    verify(values.key_at(0) == 1);
+    verify(values.key_at(1) == 2);
+    verify(values.key_at(2) == 3);
+}
+
+#[test]
+fn test_flat_map_insert_range_assigns_first_value() {
+    let values: FlatMap<i32, i32> = make_range_insert_map();
+    verify_eq_i32(10, values.value_at(0));
+}
+
+#[test]
+fn test_flat_map_insert_range_assigns_existing_key() {
+    let values: FlatMap<i32, i32> = make_range_insert_map();
+    verify(values.value_at(1) == 22);
+}
+
+#[test]
+fn test_flat_map_insert_range_assigns_last_duplicate() {
+    let values: FlatMap<i32, i32> = make_range_insert_map();
+    verify(values.value_at(2) == 31);
+}
+
+#[test]
+fn test_flat_map_insert_range_empty() {
+    var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    values.insert(2, 20);
+    let empty: list<tuple<i32, i32>> = [];
+    verify(values.insert_range(empty) == 0 && values.len() == 1);
 }

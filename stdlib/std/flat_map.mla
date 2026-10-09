@@ -118,6 +118,22 @@ impl<K, V> FlatMap {
         return inserted;
     }
 
+    /// @brief Insert or assign every key/value pair in `range`.
+    /// Entries are processed in input order, so the last occurrence of a
+    /// duplicate key supplies its final value. Return the number of distinct
+    /// keys that were new to this map (C++23 `insert_range` counterpart).
+    pub fn insert_range(self: &mut FlatMap<K, V>,
+                        range: &list<tuple<K, V>>) -> i64 {
+        var inserted_count: i64 = 0;
+        for i in 0..range.len() {
+            let entry: tuple<K, V> = range[i];
+            if self.insert(entry.0, entry.1) {
+                inserted_count = inserted_count + 1;
+            }
+        }
+        return inserted_count;
+    }
+
     /// @brief Erase a key, returning whether it was present.
     pub fn remove(self: &mut FlatMap<K, V>, key: K) -> bool {
         var updated: list<tuple<K, V>> = [];
