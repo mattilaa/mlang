@@ -4690,6 +4690,34 @@ pub fn inplace_merge_by(data: &list<T>, middle: i64, less: Less) -> list<T> {
     return merged_by(left, right, less);
 }
 
+/// @brief Stably merge sorted halves by projected keys into a copied list.
+/// Equivalent projected keys from the left half remain before right-half
+/// equivalents; `middle` is clamped to the range bounds.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn inplace_merge_projected(data: &list<T>, middle: i64,
+                               projection: Projection) -> list<T> {
+    var split: i64 = middle;
+    let n: i64 = data.len();
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    var out: list<T> = [];
+    var left: i64 = 0;
+    var right: i64 = split;
+    while left < split && right < n {
+        if projection(data[right]) < projection(data[left]) {
+            out.push(data[right]);
+            right = right + 1;
+        } else {
+            out.push(data[left]);
+            left = left + 1;
+        }
+    }
+    while left < split { out.push(data[left]); left = left + 1; }
+    while right < n { out.push(data[right]); right = right + 1; }
+    return out;
+}
+
 /// @brief Return the sorted multiset union using `less` as the ordering.
 /// Equivalent elements are those for which neither value is less than the
 /// other.

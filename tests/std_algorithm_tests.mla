@@ -149,6 +149,7 @@ use std::algorithm::ranges::symmetric_difference_sorted_projected;
 use std::algorithm::ranges::merged_by;
 use std::algorithm::ranges::inplace_merge;
 use std::algorithm::ranges::inplace_merge_by;
+use std::algorithm::ranges::inplace_merge_projected;
 use std::algorithm::ranges::union_sorted_by;
 use std::algorithm::ranges::intersection_sorted_by;
 use std::algorithm::ranges::difference_sorted_by;
@@ -1251,6 +1252,19 @@ fn test_algorithm_ranges_inplace_merge_copy() {
     let empty: list<i32> = [];
     let empty_result: list<i32> = inplace_merge(empty, 5);
     verify(empty_result.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_inplace_merge_projected() {
+    let values: list<i32> = [11, 29, 22, 18, 31, 39];
+    let project_tens = |value: i32| { return value / 10; };
+    let merged_values: list<i32> = inplace_merge_projected(
+        values, 3, project_tens);
+    verify(merged_values.len() == 6 && merged_values[0] == 11 &&
+           merged_values[1] == 18 && merged_values[2] == 29 &&
+           merged_values[3] == 22 && merged_values[4] == 31 &&
+           merged_values[5] == 39);
+    verify(values[0] == 11 && values[1] == 29 && values[3] == 18);
 }
 
 #[test]
