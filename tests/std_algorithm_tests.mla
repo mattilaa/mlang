@@ -498,6 +498,10 @@ fn test_algorithm_ranges_search_by_equivalence() {
     let by_tens = |a: i32, b: i32| { return a / 10 == b / 10; };
 
     verify(search_by(data, pattern, by_tens) == 1);
+
+    let mixed_pattern: list<i64> = [20, 29];
+    let mixed_by_tens = |a: i32, b: i64| { return a / 10 == b / 10; };
+    verify(search_by(data, mixed_pattern, mixed_by_tens) == 1);
 }
 
 #[test]
@@ -506,6 +510,10 @@ fn test_algorithm_ranges_find_end_by_equivalence() {
     let pattern: list<i32> = [20, 29];
     let by_tens = |a: i32, b: i32| { return a / 10 == b / 10; };
     verify(find_end_by(data, pattern, by_tens) == 4);
+
+    let mixed_pattern: list<i64> = [20, 29];
+    let mixed_by_tens = |a: i32, b: i64| { return a / 10 == b / 10; };
+    verify(find_end_by(data, mixed_pattern, mixed_by_tens) == 4);
 }
 
 #[test]

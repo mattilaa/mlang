@@ -63,7 +63,8 @@ fn example() {
 - `find_end` returns the last matching subrange start (`data.len()` for an
   empty pattern, `-1` if absent).
 - `search_by` and `find_end_by` find the first or last contiguous subrange
-  matching under a caller-provided equivalence predicate.
+  matching under a caller-provided equivalence predicate, including when the
+  two ranges have different element types.
 - `equal` compares lists in order, including across distinct equality-comparable
   element types; `is_permutation` compares element multiplicities without
   considering order.
