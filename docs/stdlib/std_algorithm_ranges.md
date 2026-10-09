@@ -68,8 +68,9 @@ fn example() {
 - `mismatch(left, right)` returns a tuple of the first unequal indices,
   stopping at the shorter range; an equal prefix returns its shared length for
   both indices. `mismatch_by` accepts a binary equivalence predicate.
-- `equal_by` compares each pair with a supplied equivalence predicate, while
-  `is_permutation_by` compares multiplicities under that equivalence.
+- `equal_by` compares each pair with a supplied equivalence predicate and
+  supports distinct left/right element types; `is_permutation_by` compares
+  multiplicities under an equivalence relation for same-typed ranges.
 - `lexicographical_compare` supports ranges with distinct mutually
   order-comparable element types.
 - `lexicographical_compare_by` performs the same range comparison with a
