@@ -195,8 +195,8 @@ fn example() {
   input as one field.
 - `concat(left, right)` copies two same-typed ranges into one list (C++23
   `views::concat` style).
-- `zip(left, right)` materializes tuple pairs from two ranges, stopping at the
-  shorter input (C++23 `views::zip` style).
+- `zip(left, right)` and its three-range overload materialize tuple matches,
+  stopping at the shortest input (C++23 `views::zip` style).
 - `pairwise(data)` materializes tuples of each adjacent pair (C++23
   `views::pairwise` style); inputs shorter than two elements produce an empty
   list.
