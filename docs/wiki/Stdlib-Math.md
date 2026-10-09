@@ -45,3 +45,6 @@ zero complex value follows the component type's normal division behavior.
 the phase angle as `f64` using the `atan2(y, x)` helpers.
 `polar(magnitude, phase)` constructs a floating-point complex value from its
 magnitude and phase in radians.
+Floating-point overloads of `exp`, `log`, and `sqrt` provide the usual
+principal complex exponential, logarithm, and square root; `log` and `sqrt`
+use a scaled Euclidean magnitude to avoid the direct `re*re + im*im` overflow.

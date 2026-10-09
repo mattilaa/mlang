@@ -485,6 +485,88 @@ pub fn cos(x: f64) -> f64 {
     return __mlang_std_math_cos_f64(x);
 }
 
+/// @brief Complex exponential for `f32`, matching `std::exp`.
+pub fn exp(value: Complex<f32>) -> Complex<f32> {
+    let magnitude: f32 = exp(value.re);
+    return Complex<f32> {
+        re: magnitude * cos(value.im),
+        im: magnitude * sin(value.im)
+    };
+}
+
+/// @brief Complex exponential for `f64`, matching `std::exp`.
+pub fn exp(value: Complex<f64>) -> Complex<f64> {
+    let magnitude: f64 = exp(value.re);
+    return Complex<f64> {
+        re: magnitude * cos(value.im),
+        im: magnitude * sin(value.im)
+    };
+}
+
+/// @brief Principal complex logarithm for `f32`, matching `std::log`.
+pub fn log(value: Complex<f32>) -> Complex<f32> {
+    return Complex<f32> {
+        re: log(hypot(value.re, value.im)),
+        im: atan2(value.im, value.re)
+    };
+}
+
+/// @brief Principal complex logarithm for `f64`, matching `std::log`.
+pub fn log(value: Complex<f64>) -> Complex<f64> {
+    return Complex<f64> {
+        re: log(hypot(value.re, value.im)),
+        im: atan2(value.im, value.re)
+    };
+}
+
+/// @brief Principal complex square root for `f32`, matching `std::sqrt`.
+pub fn sqrt(value: Complex<f32>) -> Complex<f32> {
+    if value.re == 0.0f && value.im == 0.0f {
+        return Complex<f32> { re: 0.0f, im: value.im };
+    }
+    let magnitude: f32 = hypot(value.re, value.im);
+    if value.re >= 0.0f {
+        let real_part: f32 = sqrt((magnitude + value.re) / 2.0f);
+        return Complex<f32> {
+            re: real_part,
+            im: value.im / (2.0f * real_part)
+        };
+    }
+    let imag_magnitude: f32 = sqrt((magnitude - value.re) / 2.0f);
+    var imag_part: f32 = imag_magnitude;
+    if value.im < 0.0f || (value.im == 0.0f && signbit(value.im)) {
+        imag_part = 0.0f - imag_magnitude;
+    }
+    return Complex<f32> {
+        re: abs(value.im) / (2.0f * imag_magnitude),
+        im: imag_part
+    };
+}
+
+/// @brief Principal complex square root for `f64`, matching `std::sqrt`.
+pub fn sqrt(value: Complex<f64>) -> Complex<f64> {
+    if value.re == 0.0 && value.im == 0.0 {
+        return Complex<f64> { re: 0.0, im: value.im };
+    }
+    let magnitude: f64 = hypot(value.re, value.im);
+    if value.re >= 0.0 {
+        let real_part: f64 = sqrt((magnitude + value.re) / 2.0);
+        return Complex<f64> {
+            re: real_part,
+            im: value.im / (2.0 * real_part)
+        };
+    }
+    let imag_magnitude: f64 = sqrt((magnitude - value.re) / 2.0);
+    var imag_part: f64 = imag_magnitude;
+    if value.im < 0.0 || (value.im == 0.0 && signbit(value.im)) {
+        imag_part = 0.0 - imag_magnitude;
+    }
+    return Complex<f64> {
+        re: abs(value.im) / (2.0 * imag_magnitude),
+        im: imag_part
+    };
+}
+
 /// @brief Construct a complex `f32` value from magnitude and phase in radians.
 pub fn polar(magnitude: f32, phase: f32) -> Complex<f32> {
     return Complex<f32> {
