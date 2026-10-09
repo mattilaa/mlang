@@ -645,6 +645,21 @@ pub fn fill(data: &list<T>, value: T) -> list<T> {
     return filled;
 }
 
+/// @brief Materialize `count` copies of `value` in a new list.
+/// Non-positive counts return an empty list. Eager-list counterpart to C++20
+/// `std::ranges::fill_n`; the input count defines the output length.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn fill_n(count: i64, value: T) -> list<T> {
+    var filled: list<T> = [];
+    var i: i64 = 0;
+    while i < count {
+        filled.push(value);
+        i = i + 1;
+    }
+    return filled;
+}
+
 /// @brief Copy at most `count` values from the beginning of `data`.
 /// Negative counts return an empty list and counts larger than the range length
 /// are clamped to its length. C++20 `std::ranges::copy_n` counterpart.
