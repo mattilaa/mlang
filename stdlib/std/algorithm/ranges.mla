@@ -635,6 +635,20 @@ pub fn transform(data: &list<T>, operation: Operation) -> list<Output> {
     return transformed;
 }
 
+/// @brief Project each input element, then transform the projected value.
+/// The result type is inferred from the operation's return type.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn transform_projected(data: &list<T>, operation: Operation,
+                           projection: Projection) -> list<Output> {
+    var transformed: list<Output> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        transformed.push(operation(projection(data[i])));
+    }
+    return transformed;
+}
+
 /// @brief Transform corresponding elements from two ranges into a new list.
 /// Stops when either input range ends. The output element type is inferred
 /// from the binary operation's return type (C++23 `ranges::zip_transform`).
@@ -651,6 +665,26 @@ pub fn zip_transform(left: &list<T>, right: &list<U>, operation: Operation)
     }
     for i in 0..n {
         transformed.push(operation(left[i], right[i]));
+    }
+    return transformed;
+}
+
+/// @brief Transform paired values after applying an independent projection.
+/// Stops at the shorter input; output type is inferred from `operation`.
+/// @ingroup algorithm_ranges
+generic<T, U, Output, Operation, LeftProjection, RightProjection>
+pub fn zip_transform_projected(
+    left: &list<T>, right: &list<U>, operation: Operation,
+    left_projection: LeftProjection, right_projection: RightProjection)
+    -> list<Output> {
+    var transformed: list<Output> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var n: i64 = left_len;
+    if right_len < n { n = right_len; }
+    for i in 0..n {
+        transformed.push(operation(left_projection(left[i]),
+                                   right_projection(right[i])));
     }
     return transformed;
 }

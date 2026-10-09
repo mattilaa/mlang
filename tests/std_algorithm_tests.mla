@@ -278,7 +278,9 @@ use std::algorithm::ranges::drop;
 use std::algorithm::ranges::take_while;
 use std::algorithm::ranges::drop_while;
 use std::algorithm::ranges::transform;
+use std::algorithm::ranges::transform_projected;
 use std::algorithm::ranges::zip_transform;
+use std::algorithm::ranges::zip_transform_projected;
 use std::algorithm::ranges::chunk_by;
 use std::algorithm::ranges::unique;
 use std::algorithm::ranges::unique_copy;
@@ -2143,6 +2145,24 @@ fn test_algorithm_ranges_transform_changes_element_type() {
     let incremented: list<i32> = transform(values, add_one);
     verify(incremented.len() == 3);
     verify(incremented[0] == 2 && incremented[1] == 4 && incremented[2] == 3);
+}
+
+#[test]
+fn test_algorithm_ranges_transform_projected() {
+    let values: list<i32> = [11, 22, 33];
+    let project_tens = |value: i32| { return value / 10; };
+    let square_as_float = |key: i32| { return f64(key * key); };
+    let squares: list<f64> = transform_projected(
+        values, square_as_float, project_tens);
+    verify(squares.len() == 3 && squares[0] == 1.0 &&
+           squares[1] == 4.0 && squares[2] == 9.0);
+
+    let other: list<i32> = [19, 28];
+    let add_keys = |left: i32, right: i32| { return left + right; };
+    let sums: list<i32> = zip_transform_projected(
+        values, other, add_keys, project_tens, project_tens);
+    verify(sums.len() == 2 && sums[0] == 2 && sums[1] == 4);
+    verify(values[0] == 11 && other.len() == 2);
 }
 
 #[test]
