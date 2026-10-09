@@ -136,6 +136,35 @@ impl AtomicI64 {
         return Ok<i32, str8>(0);
     }
 
+    /// @brief Block while the value equals `old_value`, then recheck it.
+    /// Notification alone does not satisfy the wait; the atomic value must
+    /// change, and callers should always re-evaluate their own condition.
+    pub fn wait(self: AtomicI64, old_value: i64) -> result<i32, str8> {
+        return self.wait_with_order(old_value, AtomicOrder::SeqCst);
+    }
+
+    pub fn wait_with_order(self: AtomicI64, old_value: i64,
+                           order: AtomicOrder) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_sync_atomic_i64_wait(
+            self.handle, old_value, atomic_order_value(order));
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Wake one thread waiting on this atomic.
+    pub fn notify_one(self: AtomicI64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_sync_atomic_i64_notify_one(self.handle);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Wake all threads waiting on this atomic.
+    pub fn notify_all(self: AtomicI64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_sync_atomic_i64_notify_all(self.handle);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
     /// @brief Replace the value; return the old value (seq_cst).
     pub fn exchange(self: AtomicI64, value: i64) -> result<i64, str8> {
         return self.exchange_with_order(value, AtomicOrder::SeqCst);
