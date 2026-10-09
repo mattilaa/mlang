@@ -3008,6 +3008,47 @@ pub fn merged_by(left: &list<T>, right: &list<T>, less: Less) -> list<T> {
     return out;
 }
 
+/// @brief Stably merge two sorted halves of one range into a copied range.
+/// `middle` is clamped to the valid index interval; both halves must already
+/// be sorted in ascending order. C++20 `std::ranges::inplace_merge` analogue.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn inplace_merge(data: &list<T>, middle: i64) -> list<T> {
+    var split: i64 = middle;
+    let n: i64 = data.len();
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    var left: list<T> = [];
+    var right: list<T> = [];
+    for i in 0..split {
+        left.push(data[i]);
+    }
+    for i in split..n {
+        right.push(data[i]);
+    }
+    return merged(left, right);
+}
+
+/// @brief Comparator-based stable merge of two sorted halves.
+/// Both halves must be ordered by `less`; `middle` is clamped to the range.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn inplace_merge_by(data: &list<T>, middle: i64, less: Less) -> list<T> {
+    var split: i64 = middle;
+    let n: i64 = data.len();
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    var left: list<T> = [];
+    var right: list<T> = [];
+    for i in 0..split {
+        left.push(data[i]);
+    }
+    for i in split..n {
+        right.push(data[i]);
+    }
+    return merged_by(left, right, less);
+}
+
 /// @brief Return the sorted multiset union using `less` as the ordering.
 /// Equivalent elements are those for which neither value is less than the
 /// other.
