@@ -172,6 +172,7 @@ The source-of-truth implementation files are:
 - [std::event_loop](Stdlib-Event-Loop)
 - [std::exceptions](Stdlib-Exceptions)
 - [std::platform](Stdlib-Platform)
+- [std::stop_token](Stdlib-Stop-Token)
 - [std::sync](Stdlib-Sync)
 - [std::testing](Stdlib-Testing)
 - [std::thread](Stdlib-Thread)

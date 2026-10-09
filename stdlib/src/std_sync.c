@@ -79,6 +79,13 @@ typedef struct
     int64_t maximum;
 } mlang_sync_semaphore_t;
 
+typedef struct
+{
+    _Atomic uint32_t references;
+    _Atomic uint32_t sources;
+    _Atomic int requested;
+} mlang_stop_state_t;
+
 static void set_error(const char* msg)
 {
     if(!msg)
@@ -96,6 +103,160 @@ static void set_errno_error(const char* prefix)
 static void clear_error(void)
 {
     g_last_error[0] = '\0';
+}
+
+int64_t __mlang_std_sync_stop_new(void)
+{
+    mlang_stop_state_t* state = calloc(1, sizeof(*state));
+    if(!state)
+    {
+        set_error("std::stop_token: out of memory");
+        return 0;
+    }
+    atomic_init(&state->references, 1);
+    atomic_init(&state->sources, 1);
+    atomic_init(&state->requested, 0);
+    clear_error();
+    return (int64_t)(intptr_t)state;
+}
+
+int __mlang_std_sync_stop_release(int64_t handle);
+
+int __mlang_std_sync_stop_retain(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    uint32_t current = atomic_load_explicit(&state->references, memory_order_relaxed);
+    for(;;)
+    {
+        if(current == 0 || current == UINT32_MAX)
+        {
+            set_error("std::stop_token: reference count unavailable");
+            return -1;
+        }
+        if(atomic_compare_exchange_weak_explicit(&state->references, &current, current + 1,
+                                                 memory_order_relaxed, memory_order_relaxed))
+            break;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_stop_source_retain(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    if(__mlang_std_sync_stop_retain(handle) != 0) return -1;
+    uint32_t current = atomic_load_explicit(&state->sources, memory_order_relaxed);
+    for(;;)
+    {
+        if(current == 0 || current == UINT32_MAX)
+        {
+            (void)__mlang_std_sync_stop_release(handle);
+            set_error("std::stop_token: source count unavailable");
+            return -1;
+        }
+        if(atomic_compare_exchange_weak_explicit(&state->sources, &current, current + 1,
+                                                 memory_order_acq_rel, memory_order_relaxed))
+            break;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_stop_release(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    uint32_t current = atomic_load_explicit(&state->references, memory_order_relaxed);
+    for(;;)
+    {
+        if(current == 0)
+        {
+            set_error("std::stop_token: reference count already zero");
+            return -1;
+        }
+        if(atomic_compare_exchange_weak_explicit(&state->references, &current, current - 1,
+                                                 memory_order_acq_rel, memory_order_relaxed))
+            break;
+    }
+    if(current == 1) free(state);
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_stop_source_release(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    uint32_t current = atomic_load_explicit(&state->sources, memory_order_relaxed);
+    for(;;)
+    {
+        if(current == 0)
+        {
+            set_error("std::stop_token: source count already zero");
+            return -1;
+        }
+        if(atomic_compare_exchange_weak_explicit(&state->sources, &current, current - 1,
+                                                 memory_order_acq_rel, memory_order_relaxed))
+            break;
+    }
+    return __mlang_std_sync_stop_release(handle);
+}
+
+int __mlang_std_sync_stop_request(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    int previous = atomic_exchange_explicit(&state->requested, 1, memory_order_acq_rel);
+    clear_error();
+    return previous == 0 ? 1 : 0;
+}
+
+int __mlang_std_sync_stop_requested(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    int requested = atomic_load_explicit(&state->requested, memory_order_acquire);
+    clear_error();
+    return requested ? 1 : 0;
+}
+
+int __mlang_std_sync_stop_possible(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    uint32_t sources = atomic_load_explicit(&state->sources, memory_order_acquire);
+    clear_error();
+    return sources != 0 ? 1 : 0;
 }
 
 int64_t __mlang_std_sync_spsc_new(int64_t capacity, int64_t item_size)

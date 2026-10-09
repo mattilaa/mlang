@@ -2,6 +2,7 @@ mod std::testing;
 mod std::sync;
 mod std::strbuf;
 mod std::thread;
+mod std::stop_token;
 
 use std::strbuf::contains;
 use std::sync::Channel;
@@ -12,6 +13,8 @@ use std::sync::Barrier;
 use std::sync::CountingSemaphore;
 use std::sync::LockFreeQueue;
 use std::sync::Latch;
+use std::stop_token::StopSource;
+use std::stop_token::StopToken;
 use std::sync::mutex;
 use std::testing::verify;
 use std::thread::*;
@@ -56,6 +59,16 @@ fn semaphore_acquire_worker(raw_handle: i64) -> i32 {
     let semaphore: CountingSemaphore = CountingSemaphore { handle: raw_handle };
     let acquired: result<i32, str8> = semaphore.acquire();
     return acquired.is_ok() ? 0 : 1;
+}
+
+fn stop_token_worker(raw_handle: i64) -> i32 {
+    let token: StopToken = StopToken { handle: raw_handle };
+    while true {
+        let requested: result<bool, str8> = token.stop_requested();
+        if requested.is_err() { return 1; }
+        if requested.unwrap() { return 0; }
+    }
+    return 1;
 }
 
 fn test_mutex_lock_unlock_impl() -> i32 {
@@ -265,6 +278,60 @@ fn test_counting_semaphore_blocking_acquire() {
     semaphore.close();
     verify(released.is_ok() && status == 0 && available.is_ok());
     if available.is_ok() { verify(!available.unwrap()); }
+}
+
+#[test]
+fn test_stop_source_and_retained_tokens() {
+    let created: result<StopSource, str8> = StopSource::new();
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let source: StopSource = created.unwrap();
+    let source_clone_result: result<StopSource, str8> = source.clone();
+    verify(source_clone_result.is_ok());
+    if source_clone_result.is_err() { source.close(); return; }
+    let source_clone: StopSource = source_clone_result.unwrap();
+    let token_result: result<StopToken, str8> = source.token();
+    verify(token_result.is_ok());
+    if token_result.is_err() {
+        source_clone.close();
+        source.close();
+        return;
+    }
+    let token: StopToken = token_result.unwrap();
+    let clone_result: result<StopToken, str8> = token.clone();
+    verify(clone_result.is_ok());
+    if clone_result.is_err() {
+        token.close();
+        source_clone.close();
+        source.close();
+        return;
+    }
+    let clone: StopToken = clone_result.unwrap();
+    let initially_requested: result<bool, str8> = token.stop_requested();
+    let initially_possible: bool = token.stop_possible();
+    let worker: std::thread::thread = thread::spawn(stop_token_worker, token.handle);
+    let first_request: result<bool, str8> = source.request_stop();
+    let repeated_request: result<bool, str8> = source_clone.request_stop();
+    let source_closed: i32 = source.close();
+    let still_possible: bool = token.stop_possible();
+    let source_clone_closed: i32 = source_clone.close();
+    let no_longer_possible: bool = token.stop_possible();
+    let worker_status: i32 = join(worker);
+    let token_observed: result<bool, str8> = token.stop_requested();
+    let clone_observed: result<bool, str8> = clone.stop_requested();
+    token.close();
+    clone.close();
+
+    verify(initially_requested.is_ok() && first_request.is_ok() && repeated_request.is_ok());
+    if initially_requested.is_ok() { verify(!initially_requested.unwrap()); }
+    if first_request.is_ok() { verify(first_request.unwrap()); }
+    if repeated_request.is_ok() { verify(!repeated_request.unwrap()); }
+    verify(initially_possible && still_possible && !no_longer_possible);
+    verify(source_closed == 0 && source_clone_closed == 0 && worker_status == 0);
+    verify(token_observed.is_ok() && clone_observed.is_ok());
+    if token_observed.is_ok() && clone_observed.is_ok() {
+        verify(token_observed.unwrap() && clone_observed.unwrap());
+    }
 }
 
 fn test_condvar_wait_timeout_impl() -> i32 {
