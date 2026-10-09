@@ -741,6 +741,51 @@ pub fn zip_transform_projected(
     return transformed;
 }
 
+/// @brief Transform projected values from three ranges in their common prefix.
+/// Output type is inferred from the ternary operation's return value.
+/// @ingroup algorithm_ranges
+generic<T, U, V, Output, Operation, FirstProjection, SecondProjection,
+        ThirdProjection>
+pub fn zip_transform3_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection) -> list<Output> {
+    var transformed: list<Output> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    for i in 0..n {
+        transformed.push(operation(first_projection(first[i]),
+                                   second_projection(second[i]),
+                                   third_projection(third[i])));
+    }
+    return transformed;
+}
+
+/// @brief Transform projected values from four ranges in their common prefix.
+/// Output type is inferred from the four-argument operation.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, Output, Operation, FirstProjection, SecondProjection,
+        ThirdProjection, FourthProjection>
+pub fn zip_transform4_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    operation: Operation, first_projection: FirstProjection,
+    second_projection: SecondProjection, third_projection: ThirdProjection,
+    fourth_projection: FourthProjection) -> list<Output> {
+    var transformed: list<Output> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    for i in 0..n {
+        transformed.push(operation(first_projection(first[i]),
+                                   second_projection(second[i]),
+                                   third_projection(third[i]),
+                                   fourth_projection(fourth[i])));
+    }
+    return transformed;
+}
+
 /// @brief Transform corresponding elements from three ranges into a new list.
 /// Stops at the shortest input; output type comes from the ternary operation.
 /// C++23 `ranges::zip_transform` counterpart for three inputs.

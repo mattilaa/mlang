@@ -257,6 +257,9 @@ fn example() {
 - `transform_projected` applies a projection before its unary operation;
   `zip_transform_projected` applies independent projections to paired inputs
   before the binary operation, stopping at the shorter range.
+- `zip_transform3_projected` and `zip_transform4_projected` apply independent
+  projections to three or four corresponding inputs before invoking the
+  operation; each stops at the shortest input and infers the result type.
 - `zip_transform` applies a binary, ternary, or four-argument operation to
   corresponding values and stops at the shortest input, matching C++23
   [`std::ranges::zip_transform`](Stdlib-Module-API) for those arities.

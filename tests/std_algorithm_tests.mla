@@ -323,6 +323,8 @@ use std::algorithm::ranges::transform;
 use std::algorithm::ranges::transform_projected;
 use std::algorithm::ranges::zip_transform;
 use std::algorithm::ranges::zip_transform_projected;
+use std::algorithm::ranges::zip_transform3_projected;
+use std::algorithm::ranges::zip_transform4_projected;
 use std::algorithm::ranges::chunk_by;
 use std::algorithm::ranges::unique;
 use std::algorithm::ranges::unique_copy;
@@ -2590,6 +2592,37 @@ fn test_algorithm_ranges_zip_transform_four_inputs() {
     let empty: list<i32> = [];
     let none: list<i32> = zip_transform(first, second, third, empty, combine);
     verify(none.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_zip_transform_projected_three_and_four_inputs() {
+    let first: list<i32> = [11, 22, 33];
+    let second: list<i64> = [19, 28];
+    let third: list<i32> = [5, 6, 7, 8];
+    let first_key = |value: i32| { return value / 10; };
+    let second_key = |value: i64| { return i32(value / 10); };
+    let third_key = |value: i32| { return value * 10; };
+    let sum_three = |a: i32, b: i32, c: i32| { return a + b + c; };
+    let sums: list<i32> = zip_transform3_projected(
+        first, second, third, sum_three, first_key, second_key, third_key);
+    verify(sums.len() == 2 && sums[0] == 52 && sums[1] == 64);
+
+    let fourth: list<i32> = [100, 200, 300];
+    let tens = |value: i32| { return value / 10; };
+    let ones = |value: i32| { return value % 10; };
+    let combine_four = |a: i32, b: i32, c: i32, d: i32| {
+        return a + b + c + d;
+    };
+    let combined: list<i32> = zip_transform4_projected(
+        first, third, fourth, first, combine_four,
+        first_key, third_key, tens, ones);
+    verify(combined.len() == 3 && combined[0] == 62 &&
+           combined[1] == 84 && combined[2] == 106);
+
+    let empty: list<i32> = [];
+    let none: list<i32> = zip_transform3_projected(
+        first, second, empty, sum_three, first_key, second_key, third_key);
+    verify(none.len() == 0 && first[0] == 11 && second[0] == 19);
 }
 
 #[test]
