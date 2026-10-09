@@ -93,6 +93,13 @@ fn test_span_size_and_copied_slices() {
     verify(middle.len() == 2 && middle[0] == 20 && middle[1] == 30);
     let rest: Span<i32> = subspan(values, 2, -1);
     verify(rest.len() == 2 && rest[0] == 30 && rest[1] == 40);
+    let rest_default_count: Span<i32> = subspan(values, 2);
+    verify(rest_default_count.len() == 2 && rest_default_count[0] == 30 &&
+           rest_default_count[1] == 40);
+    let empty_tail: Span<i32> = subspan(values, 4);
+    verify(empty(empty_tail));
+    let invalid_tail: Span<i32> = subspan(values, 5);
+    verify(empty(invalid_tail));
     let clamped: Span<i32> = subspan(values, 3, 99);
     verify(clamped.len() == 1 && clamped[0] == 40);
     let invalid: Span<i32> = subspan(values, 5, -1);
@@ -103,9 +110,11 @@ fn test_span_size_and_copied_slices() {
     let empty_prefix: Span<i32> = first(empty_values, 1);
     let empty_suffix: Span<i32> = last(empty_values, 1);
     let empty_rest: Span<i32> = subspan(empty_values, 0, -1);
+    let empty_default_rest: Span<i32> = subspan(empty_values, 0);
     verify(empty_prefix.len() == 0);
     verify(empty_suffix.len() == 0);
     verify(empty_rest.len() == 0);
+    verify(empty_default_rest.len() == 0);
     verify(values[0] == 10 && values[3] == 40);
 }
 

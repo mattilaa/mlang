@@ -20,10 +20,11 @@ Properties:
 - `size_bytes(data)` returns `size(data) * size_of(T)`, matching the C++20
   accessor; `get(data, index)` is a Mlang safe extension returning `Some` for
   an in-bounds element and `None` otherwise
-- `first(data, count)`, `last(data, count)`, and `subspan(data, offset, count)`
+- `first(data, count)`, `last(data, count)`, `subspan(data, offset)`, and
+  `subspan(data, offset, count)`
   return copied lists, not non-owning subviews. Counts are safely clamped;
-  negative `first`/`last` counts return empty, and a negative `subspan` count
-  means through the end.
+  negative `first`/`last` counts return empty, and an omitted or negative
+  `subspan` count means through the end.
 
 Example:
 

@@ -127,3 +127,12 @@ pub fn subspan(data: &Span<T>, offset: i64, count: i64) -> Span<T> {
     }
     return out;
 }
+
+/// @brief Return a copied suffix beginning at `offset`.
+/// This is the dynamic-extent `subspan(offset)` form; invalid offsets return
+/// an empty list.
+/// @ingroup span
+generic<T>
+pub fn subspan(data: &Span<T>, offset: i64) -> Span<T> {
+    return subspan(data, offset, -1);
+}
