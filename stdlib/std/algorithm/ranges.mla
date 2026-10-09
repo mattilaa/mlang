@@ -1005,6 +1005,19 @@ pub fn remove_if(data: &list<T>, predicate: Predicate) -> list<T> {
     return kept;
 }
 
+/// @brief Copy elements rejected by a predicate over projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn remove_if_projected(data: &list<T>, predicate: Predicate,
+                           projection: Projection) -> list<T> {
+    var kept: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if !predicate(projection(data[i])) { kept.push(data[i]); }
+    }
+    return kept;
+}
+
 /// @brief Copy elements accepted by `predicate` into a new list.
 /// C++20 `std::ranges::copy_if` counterpart for eager Mlang lists.
 /// @ingroup algorithm_ranges
@@ -1016,6 +1029,20 @@ pub fn copy_if(data: &list<T>, predicate: Predicate) -> list<T> {
         if predicate(data[i]) {
             copied.push(data[i]);
         }
+    }
+    return copied;
+}
+
+/// @brief Copy elements rejected by a predicate over projected keys.
+/// C++20 `std::ranges::remove_copy_if` projection form.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn remove_copy_if_projected(data: &list<T>, predicate: Predicate,
+                                projection: Projection) -> list<T> {
+    var copied: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if !predicate(projection(data[i])) { copied.push(data[i]); }
     }
     return copied;
 }
@@ -1191,6 +1218,22 @@ pub fn replace_copy_if(data: &list<T>, predicate: Predicate,
     return copied;
 }
 
+/// @brief Replace matching projected-key values in a copied list.
+/// C++20 `std::ranges::replace_copy_if` projection form.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, V, Projection>
+pub fn replace_copy_if_projected(data: &list<T>, predicate: Predicate,
+                                 new_value: V, projection: Projection)
+    -> list<T> {
+    var copied: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(projection(data[i])) { copied.push(new_value); }
+        else { copied.push(data[i]); }
+    }
+    return copied;
+}
+
 /// @brief Replace each element accepted by `predicate` in a copied range.
 /// The original range is unchanged.
 /// @ingroup algorithm_ranges
@@ -1204,6 +1247,22 @@ pub fn replace_if(data: &list<T>, predicate: Predicate, replacement: T) -> list<
         } else {
             replaced.push(data[i]);
         }
+    }
+    return replaced;
+}
+
+/// @brief Replace matching projected-key values in a copied list.
+/// The original range is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, V, Projection>
+pub fn replace_if_projected(data: &list<T>, predicate: Predicate,
+                            replacement: V, projection: Projection)
+    -> list<T> {
+    var replaced: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(projection(data[i])) { replaced.push(replacement); }
+        else { replaced.push(data[i]); }
     }
     return replaced;
 }

@@ -229,6 +229,10 @@ fn example() {
 - `copy_if`, `remove_copy`, `remove_copy_if`, `replace_copy`, and
   `replace_copy_if` provide the corresponding C++20 copying algorithms. Each
   returns a new list in source order and leaves the input unchanged.
+- Projected predicate transforms (`copy_if_projected`,
+  `remove_if_projected`, `remove_copy_if_projected`, `replace_if_projected`,
+  and `replace_copy_if_projected`) apply their predicate to an element's key
+  while copying original values (or the requested replacement).
 - `sample(data, count, choose_index)` selects up to `count` distinct elements
   without replacement and preserves their input order. The supplied selector
   receives the current exclusive bound, allowing a caller-owned random engine

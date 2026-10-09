@@ -230,16 +230,20 @@ use std::algorithm::ranges::find_if_not;
 use std::algorithm::ranges::find_if_not_projected;
 use std::algorithm::ranges::find_last_if_not;
 use std::algorithm::ranges::remove_if;
+use std::algorithm::ranges::remove_if_projected;
 use std::algorithm::ranges::copy_if;
 use std::algorithm::ranges::sample as ranges_sample;
 use std::algorithm::ranges::shuffle as ranges_shuffle;
 use std::algorithm::ranges::remove_copy;
 use std::algorithm::ranges::remove_copy_projected;
 use std::algorithm::ranges::remove_copy_if;
+use std::algorithm::ranges::remove_copy_if_projected;
 use std::algorithm::ranges::replace_copy;
 use std::algorithm::ranges::replace_copy_projected;
 use std::algorithm::ranges::replace_copy_if;
+use std::algorithm::ranges::replace_copy_if_projected;
 use std::algorithm::ranges::replace_if;
+use std::algorithm::ranges::replace_if_projected;
 use std::algorithm::ranges::unique_by;
 use std::algorithm::ranges::unique_copy_by;
 use std::algorithm::ranges::unique_projected;
@@ -1963,6 +1967,38 @@ fn test_algorithm_ranges_projected_remove_replace() {
     verify(replaced_copy.len() == 5 && replaced_copy[1] == 99 &&
            replaced_copy[2] == 99);
     verify(values[1] == 22 && values[2] == 29);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_conditional_transforms() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let project_tens = |value: i32| { return value / 10; };
+    let key_at_least_three = |key: i32| { return key >= 3; };
+
+    let removed: list<i32> = remove_if_projected(
+        values, key_at_least_three, project_tens);
+    let removed_copy: list<i32> = remove_copy_if_projected(
+        values, key_at_least_three, project_tens);
+    verify(removed.len() == 3 && removed[0] == 11 &&
+           removed[1] == 22 && removed[2] == 29);
+    verify(removed_copy.len() == 3 && removed_copy[2] == 29);
+
+    let replaced: list<i32> = replace_if_projected(
+        values, key_at_least_three, 99, project_tens);
+    let replaced_copy: list<i32> = replace_copy_if_projected(
+        values, key_at_least_three, 99, project_tens);
+    verify(replaced.len() == 5 && replaced[0] == 11 &&
+           replaced[2] == 29 && replaced[3] == 99 && replaced[4] == 99);
+    verify(replaced_copy.len() == 5 && replaced_copy[3] == 99 &&
+           replaced_copy[4] == 99);
+    verify(values[3] == 31 && values[4] == 42);
+
+    let empty: list<i32> = [];
+    let empty_removed: list<i32> = remove_if_projected(
+        empty, key_at_least_three, project_tens);
+    let empty_replaced: list<i32> = replace_if_projected(
+        empty, key_at_least_three, 99, project_tens);
+    verify(empty_removed.len() == 0 && empty_replaced.len() == 0);
 }
 
 
