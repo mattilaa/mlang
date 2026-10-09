@@ -4842,6 +4842,31 @@ pub fn clamp(data: &list<T>, low: T, high: T) -> list<T> {
     return out;
 }
 
+/// @brief Clamp a copied list using projected element and bound keys.
+/// `low` and `high` must be ordered by their projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn clamp_projected(data: &list<T>, low: T, high: T,
+                       projection: Projection) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    if n == 0 { return out; }
+    let low_key = projection(low);
+    let high_key = projection(high);
+    for i in 0..n {
+        let item: T = data[i];
+        let item_key = projection(item);
+        if item_key < low_key {
+            out.push(low);
+        } else if high_key < item_key {
+            out.push(high);
+        } else {
+            out.push(item);
+        }
+    }
+    return out;
+}
+
 /// @brief Copy a list with values clamped according to the ordering `less`.
 /// `low` must not follow `high` under the comparator.
 /// @ingroup algorithm_ranges

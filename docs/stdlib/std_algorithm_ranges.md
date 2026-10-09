@@ -301,6 +301,9 @@ fn example() {
   `std::views::single`.
 - `clamp_by(data, low, high, less)` clamps each element using a custom ordering;
   bounds must be ordered according to the comparator.
+- `clamp_projected(data, low, high, projection)` compares projected keys for
+  both elements and bounds, but emits the original value or the corresponding
+  bound value into its copied list.
 - `sorted` returns a stable ascending copy and leaves the input unchanged.
 - `sorted_by(data, less)` returns a stable copied ordering by a strict
   comparator. Equivalent elements retain their original relative order.
