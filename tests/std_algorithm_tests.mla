@@ -1299,6 +1299,24 @@ fn test_algorithm_ranges_cartesian_product() {
     let empty: list<i32> = [];
     let no_pairs: list<tuple<i32, i32>> = cartesian_product(left, empty);
     verify(no_pairs.len() == 0);
+
+    let middle: list<i64> = [10, 20];
+    let last_values: list<i32> = [100, 200];
+    let triples: list<tuple<i32, i64, i32>> =
+        cartesian_product(left, middle, last_values);
+    verify(triples.len() == 8);
+    let first_triple = triples[0];
+    let second_triple = triples[1];
+    let third_triple = triples[2];
+    let last_triple = triples[7];
+    verify(first_triple.0 == 2 && first_triple.1 == 10 && first_triple.2 == 100);
+    verify(second_triple.0 == 2 && second_triple.1 == 10 && second_triple.2 == 200);
+    verify(third_triple.0 == 2 && third_triple.1 == 20 && third_triple.2 == 100);
+    verify(last_triple.0 == 4 && last_triple.1 == 20 && last_triple.2 == 200);
+    let empty_values: list<i32> = [];
+    let no_triples: list<tuple<i32, i64, i32>> =
+        cartesian_product(left, middle, empty_values);
+    verify(no_triples.len() == 0);
 }
 
 #[test]
