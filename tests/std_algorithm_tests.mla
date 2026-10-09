@@ -100,6 +100,8 @@ use std::algorithm::ranges::pop_heap;
 use std::algorithm::ranges::pop_heap_by;
 use std::algorithm::ranges::sort_heap;
 use std::algorithm::ranges::sort_heap_by;
+use std::algorithm::ranges::partial_sort;
+use std::algorithm::ranges::partial_sort_by;
 use std::algorithm::ranges::merged;
 use std::algorithm::ranges::union_sorted;
 use std::algorithm::ranges::intersection_sorted;
@@ -847,6 +849,27 @@ fn test_algorithm_ranges_heap_algorithms() {
     let empty_sorted: list<i32> = sort_heap(empty);
     verify(empty_heap.len() == 0 && empty_pushed.len() == 0);
     verify(empty_popped.len() == 0 && empty_sorted.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_partial_sort() {
+    let values: list<i32> = [9, 1, 7, 3, 6, 2];
+    let smallest: list<i32> = partial_sort(values, 3);
+    verify(smallest.len() == 3 && smallest[0] == 1 &&
+           smallest[1] == 2 && smallest[2] == 3);
+    verify(values[0] == 9 && values[1] == 1);
+
+    let greatest = |a: i32, b: i32| { return a > b; };
+    let largest: list<i32> = partial_sort_by(values, 2, greatest);
+    verify(largest.len() == 2 && largest[0] == 9 && largest[1] == 7);
+
+    let none: list<i32> = partial_sort(values, -4);
+    let all: list<i32> = partial_sort(values, 100);
+    verify(none.len() == 0 && all.len() == 6);
+    verify(all[0] == 1 && all[5] == 9);
+    let empty: list<i32> = [];
+    let empty_sorted: list<i32> = partial_sort(empty, 2);
+    verify(empty_sorted.len() == 0);
 }
 
 #[test]

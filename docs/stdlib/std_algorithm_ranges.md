@@ -117,6 +117,10 @@ fn example() {
   result. All operations preserve the input; push/pop follow the usual heap
   preconditions, and the comparator variants use the same strict ordering as
   the query helpers.
+- `partial_sort(data, count)` uses a bounded heap to return the `count`
+  smallest values in ascending order. `partial_sort_by(data, count, less)`
+  applies a caller-provided order (for example, to select the largest values).
+  Counts clamp to the available range and the source is unchanged.
 - `lower_bound`, `upper_bound`, and `binary_search` perform logarithmic-time
   queries on a list sorted in nondecreasing order. The bounds return insertion
   indices; binary search returns `bool`.
