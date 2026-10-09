@@ -1609,6 +1609,27 @@ pub fn mismatch_by(left: &list<T>, right: &list<U>, equivalent: Equivalent)
     return (n, n);
 }
 
+/// @brief Find the first mismatch after projecting both ranges and comparing
+/// projected values with `equivalent`. Stops at the shorter input.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, LeftProjection, RightProjection>
+pub fn mismatch_by_projected(
+    left: &list<T>, right: &list<U>, equivalent: Equivalent,
+    left_projection: LeftProjection, right_projection: RightProjection)
+    -> tuple<i64, i64> {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var n: i64 = left_len;
+    if right_len < n { n = right_len; }
+    for i in 0..n {
+        if !equivalent(left_projection(left[i]),
+                       right_projection(right[i])) {
+            return (i, i);
+        }
+    }
+    return (n, n);
+}
+
 /// @brief Compare corresponding elements with a caller-supplied equivalence.
 /// The ranges are equal only when they have the same length and every pair
 /// satisfies `equivalent(left[i], right[i])`.
@@ -1622,6 +1643,25 @@ pub fn equal_by(left: &list<T>, right: &list<U>, equivalent: Equivalent)
     }
     for i in 0..n {
         if !equivalent(left[i], right[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// @brief Compare projected ranges elementwise with an equivalence predicate.
+/// The ranges must have equal lengths.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, LeftProjection, RightProjection>
+pub fn equal_by_projected(
+    left: &list<T>, right: &list<U>, equivalent: Equivalent,
+    left_projection: LeftProjection, right_projection: RightProjection)
+    -> bool {
+    let n: i64 = left.len();
+    if n != right.len() { return false; }
+    for i in 0..n {
+        if !equivalent(left_projection(left[i]),
+                       right_projection(right[i])) {
             return false;
         }
     }
@@ -2209,6 +2249,26 @@ pub fn lexicographical_compare_by(left: &list<T>, right: &list<U>, less: Less)
         if less(right[i], left[i]) {
             return false;
         }
+    }
+    return left_len < right_len;
+}
+
+/// @brief Compare ranges lexicographically by projected keys and `less`.
+/// Each range has an independent projection; a matching prefix sorts first.
+/// @ingroup algorithm_ranges
+generic<T, U, Less, LeftProjection, RightProjection>
+pub fn lexicographical_compare_by_projected(
+    left: &list<T>, right: &list<U>, less: Less,
+    left_projection: LeftProjection, right_projection: RightProjection)
+    -> bool {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        let left_key = left_projection(left[i]);
+        let right_key = right_projection(right[i]);
+        if less(left_key, right_key) { return true; }
+        if less(right_key, left_key) { return false; }
     }
     return left_len < right_len;
 }
