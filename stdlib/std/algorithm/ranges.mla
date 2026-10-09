@@ -5666,6 +5666,29 @@ pub fn cartesian_product(first: &list<T>, second: &list<U>, third: &list<V>,
     return out;
 }
 
+/// @brief Materialize every combination from five heterogeneous ranges.
+/// The rightmost input varies fastest; any empty input yields an empty result.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X>
+pub fn cartesian_product(first: &list<T>, second: &list<U>, third: &list<V>,
+                         fourth: &list<W>, fifth: &list<X>)
+    -> list<tuple<T, U, V, W, X>> {
+    var out: list<tuple<T, U, V, W, X>> = [];
+    for i in 0..first.len() {
+        for j in 0..second.len() {
+            for k in 0..third.len() {
+                for m in 0..fourth.len() {
+                    for n in 0..fifth.len() {
+                        out.push((first[i], second[j], third[k], fourth[m],
+                                  fifth[n]));
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
+
 /// @brief Pair each element with its zero-based position.
 /// Eager C++23 `views::enumerate` equivalent; the input remains unchanged.
 /// @ingroup algorithm_ranges

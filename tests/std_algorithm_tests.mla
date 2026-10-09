@@ -2569,6 +2569,30 @@ fn test_algorithm_ranges_cartesian_product() {
            third_quadruple.3 == 1000);
     verify(last_quadruple.0 == 4 && last_quadruple.1 == 20 &&
            last_quadruple.3 == 2000);
+
+    let fifth_values: list<i32> = [10000, 20000];
+    let products: list<tuple<i32, i64, bool, i64, i32>> =
+        cartesian_product(left, middle, third_values, fourth_values,
+                          fifth_values);
+    verify(products.len() == 16);
+    let first_product: tuple<i32, i64, bool, i64, i32> = products[0];
+    let second_product: tuple<i32, i64, bool, i64, i32> = products[1];
+    let third_product: tuple<i32, i64, bool, i64, i32> = products[2];
+    let last_product: tuple<i32, i64, bool, i64, i32> = products[15];
+    verify(first_product.0 == 2 && first_product.1 == 10 &&
+           first_product.2 && first_product.3 == 1000 &&
+           first_product.4 == 10000);
+    verify(second_product.0 == 2 && second_product.1 == 10 &&
+           second_product.2 && second_product.4 == 20000);
+    verify(third_product.0 == 2 && third_product.1 == 10 &&
+           third_product.2 && third_product.3 == 2000 &&
+           third_product.4 == 10000);
+    verify(last_product.0 == 4 && last_product.1 == 20 &&
+           last_product.2 && last_product.4 == 20000);
+    let no_products: list<tuple<i32, i64, bool, i64, i32>> =
+        cartesian_product(left, middle, third_values, fourth_values,
+                          empty_values);
+    verify(no_products.len() == 0);
 }
 
 #[test]
