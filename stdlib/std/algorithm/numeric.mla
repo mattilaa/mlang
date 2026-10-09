@@ -45,6 +45,72 @@ pub fn midpoint_f64(first: f64, second: f64) -> f64 {
     return __mlang_std_midpoint_f64(first, second);
 }
 
+/// @brief Compute the signed 8-bit midpoint without overflow.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_i8(first: i8, second: i8) -> i8 {
+    var middle: i8 = first / 2 + second / 2;
+    let remainder: i8 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == -2 { return middle - 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    if remainder == -1 && first < second { return middle - 1; }
+    return middle;
+}
+
+/// @brief Compute the signed 16-bit midpoint without overflow.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_i16(first: i16, second: i16) -> i16 {
+    var middle: i16 = first / 2 + second / 2;
+    let remainder: i16 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == -2 { return middle - 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    if remainder == -1 && first < second { return middle - 1; }
+    return middle;
+}
+
+/// @brief Compute the signed 32-bit midpoint without overflow.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_i32(first: i32, second: i32) -> i32 {
+    var middle: i32 = first / 2 + second / 2;
+    let remainder: i32 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == -2 { return middle - 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    if remainder == -1 && first < second { return middle - 1; }
+    return middle;
+}
+
+/// @brief Compute the unsigned 8-bit midpoint without overflow.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_u8(first: u8, second: u8) -> u8 {
+    var middle: u8 = first / 2 + second / 2;
+    let remainder: u8 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    return middle;
+}
+
+/// @brief Compute the unsigned 16-bit midpoint without overflow.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_u16(first: u16, second: u16) -> u16 {
+    var middle: u16 = first / 2 + second / 2;
+    let remainder: u16 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    return middle;
+}
+
+/// @brief Compute the unsigned 32-bit midpoint without overflow.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_u32(first: u32, second: u32) -> u32 {
+    var middle: u32 = first / 2 + second / 2;
+    let remainder: u32 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    return middle;
+}
+
 /// @brief Sum all elements with an initial value.
 /// @ingroup algorithm_numeric
 pub fn accumulate_i64(data: &list<i64>, init: i64) -> i64 {
