@@ -88,6 +88,25 @@ pub fn find_first_of(data: &list<T>, candidates: &list<U>) -> i64 {
     return -1;
 }
 
+/// @brief Return the first index in `data` matching a candidate under a
+/// caller-provided binary predicate.
+/// C++20 `std::ranges::find_first_of` predicate overload.
+/// @ingroup algorithm_ranges
+generic<T, U, Predicate>
+pub fn find_first_of_by(data: &list<T>, candidates: &list<U>,
+                        equivalent: Predicate) -> i64 {
+    let n: i64 = data.len();
+    let candidate_count: i64 = candidates.len();
+    for i in 0..n {
+        for j in 0..candidate_count {
+            if equivalent(data[i], candidates[j]) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
 /// @brief Return whether sorted `range` contains sorted `subset`.
 /// Duplicate multiplicities matter; both inputs must be nondecreasing.
 /// C++20 `std::ranges::includes` equivalent.
