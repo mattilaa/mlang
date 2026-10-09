@@ -1992,6 +1992,55 @@ pub fn joined_with(data: &list<list<T>>, separator: &list<T>) -> list<T> {
     return out;
 }
 
+/// @brief Split a range at each non-overlapping occurrence of `delimiter`.
+/// Empty fields are retained between leading, adjacent, and trailing matches.
+/// An empty input produces no fields; an empty delimiter returns the whole
+/// nonempty input as one field. Eager C++20 `views::split` counterpart.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn split(data: &list<T>, delimiter: &list<U>) -> list<list<T>> {
+    var parts: list<list<T>> = [];
+    let data_len: i64 = data.len();
+    let delimiter_len: i64 = delimiter.len();
+    if data_len == 0 {
+        return parts;
+    }
+    if delimiter_len == 0 {
+        var whole: list<T> = [];
+        for i in 0..data_len {
+            whole.push(data[i]);
+        }
+        parts.push(whole);
+        return parts;
+    }
+
+    var segment: list<T> = [];
+    var index: i64 = 0;
+    while index < data_len {
+        var matches: bool = false;
+        if delimiter_len <= data_len - index {
+            matches = true;
+            for offset in 0..delimiter_len {
+                if data[index + offset] != delimiter[offset] {
+                    matches = false;
+                    break;
+                }
+            }
+        }
+
+        if matches {
+            parts.push(segment);
+            segment = [];
+            index = index + delimiter_len;
+        } else {
+            segment.push(data[index]);
+            index = index + 1;
+        }
+    }
+    parts.push(segment);
+    return parts;
+}
+
 /// @brief Concatenate two ranges into a copied list.
 /// Eager-list counterpart to C++23 `views::concat` for two same-typed inputs.
 /// @ingroup algorithm_ranges

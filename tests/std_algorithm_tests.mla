@@ -118,6 +118,7 @@ use std::algorithm::ranges::windows;
 use std::algorithm::ranges::strided;
 use std::algorithm::ranges::joined;
 use std::algorithm::ranges::joined_with;
+use std::algorithm::ranges::split;
 use std::algorithm::ranges::concat;
 use std::algorithm::ranges::zip;
 use std::algorithm::ranges::enumerate;
@@ -1108,6 +1109,48 @@ fn test_algorithm_ranges_generic_joined_with() {
     let without_separator: list<i32> = joined_with(nested, empty_separator);
     verify(without_separator.len() == 5);
     verify(without_separator[2] == 3 && without_separator[4] == 5);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_split() {
+    let values: list<i32> = [1, 0, 0, 2, 0];
+    let delimiter: list<i64> = [0];
+    let fields: list<list<i32>> = split(values, delimiter);
+    verify(fields.len() == 4);
+    let field0: list<i32> = fields[0];
+    let field1: list<i32> = fields[1];
+    let field2: list<i32> = fields[2];
+    let field3: list<i32> = fields[3];
+    verify(field0.len() == 1 && field0[0] == 1);
+    verify(field1.len() == 0);
+    verify(field2.len() == 1 && field2[0] == 2);
+    verify(field3.len() == 0);
+
+    let pair_delimiter: list<i32> = [0, 0];
+    let pair_split: list<list<i32>> = split(values, pair_delimiter);
+    verify(pair_split.len() == 2);
+    let pair0: list<i32> = pair_split[0];
+    let pair1: list<i32> = pair_split[1];
+    verify(pair0.len() == 1 && pair0[0] == 1);
+    verify(pair1.len() == 2);
+    verify(pair1[0] == 2 && pair1[1] == 0);
+
+    let leading: list<i32> = [0, 7];
+    let leading_split: list<list<i32>> = split(leading, delimiter);
+    let leading0: list<i32> = leading_split[0];
+    let leading1: list<i32> = leading_split[1];
+    verify(leading_split.len() == 2 && leading0.len() == 0);
+    verify(leading1.len() == 1 && leading1[0] == 7);
+
+    let empty: list<i32> = [];
+    let no_fields: list<list<i32>> = split(empty, delimiter);
+    verify(no_fields.len() == 0);
+    let empty_delimiter: list<i32> = [];
+    let unsplit: list<list<i32>> = split(values, empty_delimiter);
+    let single_field: list<i32> = unsplit[0];
+    verify(unsplit.len() == 1 && single_field.len() == values.len());
+    verify(single_field[0] == 1 && single_field[4] == 0);
+    verify(values[0] == 1 && values[4] == 0);
 }
 
 #[test]

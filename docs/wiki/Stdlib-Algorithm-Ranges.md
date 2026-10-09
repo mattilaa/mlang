@@ -189,6 +189,10 @@ fn example() {
   separator between each pair of inner lists (C++23 `views::join_with` style).
   Separators are inserted between empty inner lists too; an empty outer list
   produces an empty result.
+- `split(data, delimiter)` eagerly splits at non-overlapping delimiter matches
+  and preserves empty fields around leading, repeated, and trailing matches.
+  Empty input yields no fields; an empty delimiter yields the whole nonempty
+  input as one field.
 - `concat(left, right)` copies two same-typed ranges into one list (C++23
   `views::concat` style).
 - `zip(left, right)` materializes tuple pairs from two ranges, stopping at the
