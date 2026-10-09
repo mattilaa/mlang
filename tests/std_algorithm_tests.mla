@@ -253,6 +253,9 @@ use std::algorithm::ranges::pairwise;
 use std::algorithm::ranges::adjacent_transform;
 use std::algorithm::ranges::adjacent_transform3;
 use std::algorithm::ranges::adjacent_transform4;
+use std::algorithm::ranges::adjacent_transform_projected;
+use std::algorithm::ranges::adjacent_transform3_projected;
+use std::algorithm::ranges::adjacent_transform4_projected;
 use std::algorithm::ranges::replace;
 use std::algorithm::ranges::replace_projected;
 use std::algorithm::ranges::replace_by;
@@ -2549,6 +2552,42 @@ fn test_algorithm_ranges_adjacent_transform_wider_windows() {
     let no_quadruples: list<i32> = adjacent_transform4(short, sum_four);
     verify(no_triples.len() == 0 && no_quadruples.len() == 0);
     verify(values[0] == 2 && values[4] == 10);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_adjacent_transform() {
+    let values: list<i32> = [11, 12, 19, 21, 25, 30];
+    let tens = |value: i32| { return value / 10; };
+    let sum_two = |a: i32, b: i32| { return a + b; };
+    let pairs: list<i32> = adjacent_transform_projected(values, sum_two, tens);
+    verify(pairs.len() == 5 && pairs[0] == 2 && pairs[2] == 3 && pairs[4] == 5);
+    verify(values[0] == 11 && values[5] == 30);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_adjacent_transform3() {
+    let values: list<i32> = [11, 12, 19, 21, 25, 30];
+    let tens = |value: i32| { return value / 10; };
+    let sum_three = |a: i32, b: i32, c: i32| { return a + b + c; };
+    let triples: list<i32> = adjacent_transform3_projected(values, sum_three, tens);
+    verify(triples.len() == 4 && triples[0] == 3 && triples[2] == 5);
+    let short: list<i32> = [11, 21];
+    let no_triples: list<i32> = adjacent_transform3_projected(short, sum_three, tens);
+    verify(no_triples.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_adjacent_transform4() {
+    let values: list<i32> = [11, 12, 19, 21, 25, 30];
+    let tens = |value: i32| { return value / 10; };
+    let sum_four = |a: i32, b: i32, c: i32, d: i32| {
+        return a + b + c + d;
+    };
+    let quadruples: list<i32> = adjacent_transform4_projected(values, sum_four, tens);
+    verify(quadruples.len() == 3 && quadruples[0] == 5 && quadruples[2] == 8);
+    let short: list<i32> = [11, 21];
+    let no_quadruples: list<i32> = adjacent_transform4_projected(short, sum_four, tens);
+    verify(no_quadruples.len() == 0);
 }
 
 #[test]

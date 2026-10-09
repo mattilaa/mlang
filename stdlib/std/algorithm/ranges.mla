@@ -5288,6 +5288,21 @@ pub fn adjacent_transform(data: &list<T>, operation: Operation)
     return out;
 }
 
+/// @brief Apply a binary operation to each adjacent pair's projected keys.
+/// The original list is unchanged; result length is max(len - 1, 0).
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform_projected(data: &list<T>, operation: Operation,
+                                    projection: Projection) -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 2 { return out; }
+    for i in 0..(n - 1) {
+        out.push(operation(projection(data[i]), projection(data[i + 1])));
+    }
+    return out;
+}
+
 /// @brief Apply a ternary operation to each adjacent triple.
 /// Eager C++23 `views::adjacent_transform<3>` counterpart.
 /// @ingroup algorithm_ranges
@@ -5303,6 +5318,21 @@ pub fn adjacent_transform3(data: &list<T>, operation: Operation)
     return out;
 }
 
+/// @brief Apply a ternary operation to each triple of projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform3_projected(data: &list<T>, operation: Operation,
+                                     projection: Projection) -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 3 { return out; }
+    for i in 0..(n - 2) {
+        out.push(operation(projection(data[i]), projection(data[i + 1]),
+                           projection(data[i + 2])));
+    }
+    return out;
+}
+
 /// @brief Apply a four-argument operation to each adjacent group of four.
 /// Eager C++23 `views::adjacent_transform<4>` counterpart.
 /// @ingroup algorithm_ranges
@@ -5314,6 +5344,21 @@ pub fn adjacent_transform4(data: &list<T>, operation: Operation)
     if n < 4 { return out; }
     for i in 0..(n - 3) {
         out.push(operation(data[i], data[i + 1], data[i + 2], data[i + 3]));
+    }
+    return out;
+}
+
+/// @brief Apply a four-argument operation to each group of four projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform4_projected(data: &list<T>, operation: Operation,
+                                     projection: Projection) -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 4 { return out; }
+    for i in 0..(n - 3) {
+        out.push(operation(projection(data[i]), projection(data[i + 1]),
+                           projection(data[i + 2]), projection(data[i + 3])));
     }
     return out;
 }
