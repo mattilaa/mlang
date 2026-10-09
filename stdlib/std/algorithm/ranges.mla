@@ -266,6 +266,27 @@ pub fn generate_n(count: i64, generator: Generator) -> list<T> {
     return generated;
 }
 
+/// @brief Copy at most `count` values from the beginning of `data`.
+/// Negative counts return an empty list and counts larger than the range length
+/// are clamped to its length. C++20 `std::ranges::copy_n` counterpart.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn copy_n(data: &list<T>, count: i64) -> list<T> {
+    var copied: list<T> = [];
+    let data_len: i64 = data.len();
+    var copy_len: i64 = count;
+    if copy_len < 0 {
+        copy_len = 0;
+    }
+    if copy_len > data_len {
+        copy_len = data_len;
+    }
+    for i in 0..copy_len {
+        copied.push(data[i]);
+    }
+    return copied;
+}
+
 /// @brief Return a copied list containing elements accepted by `predicate`.
 /// This is an eager ranges-style filter/copy-if operation.
 /// @ingroup algorithm_ranges

@@ -123,6 +123,9 @@ fn example() {
 - `generate_n(count, generator)` materializes values by invoking a zero-argument
   generator closure `count` times; non-positive counts return an empty list.
   Captured generator state is preserved between invocations.
+- `copy_n(data, count)` copies a bounded prefix; negative counts produce an
+  empty list and oversized counts clamp to the input length. This eager,
+  non-mutating operation is the Mlang counterpart to the C++20 algorithm.
 - `transform(data, operation)` eagerly maps every element into a new list;
   the output element type is inferred from the closure return type and may
   differ from the input element type.
