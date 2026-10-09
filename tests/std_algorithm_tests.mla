@@ -17,6 +17,8 @@ use dsp::fft::forward;
 use dsp::fft::inverse;
 use dsp::fft::is_power_of_two;
 use std::algorithm::numeric::accumulate_i64;
+use std::algorithm::numeric::midpoint_i64;
+use std::algorithm::numeric::midpoint_u64;
 use std::algorithm::numeric::accumulate;
 use std::algorithm::numeric::fold_left;
 use std::algorithm::numeric::fold_right;
@@ -1984,6 +1986,30 @@ fn test_algorithm_numeric_accumulate_and_inner_product() {
     verify(accumulate_i64(a, 0) == 10);
     verify(accumulate_i64(a, 5) == 15);
     verify(inner_product_i64(a, b, 7) == (7 + 10 + 40 + 90));
+}
+
+#[test]
+fn test_cpp20_integral_midpoint() {
+    verify_eq(5, midpoint_i64(4, 6));
+    verify_eq(4, midpoint_i64(5, 2));
+    verify_eq(3, midpoint_i64(2, 5));
+    verify_eq(-3, midpoint_i64(-3, -2));
+    verify_eq(-2, midpoint_i64(-2, -3));
+
+    let minimum: i64 = 0 - 9223372036854775807 - 1;
+    let maximum: i64 = 9223372036854775807;
+    verify_eq(-1, midpoint_i64(minimum, maximum));
+    verify_eq(0, midpoint_i64(maximum, minimum));
+    verify_eq(minimum, midpoint_i64(minimum, minimum));
+    verify_eq(maximum, midpoint_i64(maximum, maximum));
+
+    let unsigned_maximum: u64 = numeric_limits<u64>::max();
+    verify_eq(3, narrow_cast<i64>(midpoint_u64(2, 5)));
+    verify_eq(4, narrow_cast<i64>(midpoint_u64(5, 2)));
+    verify_eq(9223372036854775807, narrow_cast<i64>(midpoint_u64(0, unsigned_maximum)));
+    verify_eq(0 - 9223372036854775807 - 1,
+             narrow_cast<i64>(midpoint_u64(unsigned_maximum, 0)));
+    verify_eq(-1, narrow_cast<i64>(midpoint_u64(unsigned_maximum, unsigned_maximum)));
 }
 
 #[test]
