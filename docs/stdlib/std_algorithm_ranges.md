@@ -179,6 +179,10 @@ fn example() {
 - `find_if` and `count_if` search/count elements accepted by a bound predicate;
   `filter` eagerly copies accepted values to a new list. Predicates may capture
   local values, and captured mutations are visible to the caller.
+- `find_if_projected`, `find_if_not_projected`, `count_if_projected`,
+  `all_of_projected`, `any_of_projected`, and `none_of_projected` apply their
+  predicate to each element's projected key, preserving the corresponding
+  empty-range and not-found results.
 - `for_each(data, operation)` invokes a closure once per element in iteration
   order; captured mutable state can collect side effects or a result.
 - `for_each_n(data, count, operation)` invokes a closure on a bounded prefix
