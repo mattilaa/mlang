@@ -19,6 +19,8 @@ use dsp::fft::is_power_of_two;
 use std::algorithm::numeric::accumulate_i64;
 use std::algorithm::numeric::midpoint_i64;
 use std::algorithm::numeric::midpoint_u64;
+use std::algorithm::numeric::midpoint_f32;
+use std::algorithm::numeric::midpoint_f64;
 use std::algorithm::numeric::accumulate;
 use std::algorithm::numeric::fold_left;
 use std::algorithm::numeric::fold_right;
@@ -3231,6 +3233,25 @@ fn test_cpp20_integral_midpoint() {
     verify_eq(0 - 9223372036854775807 - 1,
              narrow_cast<i64>(midpoint_u64(unsigned_maximum, 0)));
     verify_eq(-1, narrow_cast<i64>(midpoint_u64(unsigned_maximum, unsigned_maximum)));
+}
+
+#[test]
+fn test_cpp20_floating_midpoint() {
+    verify(midpoint_f32(4.0f, 6.0f) == 5.0f);
+    verify(midpoint_f32(-4.0f, 6.0f) == 1.0f);
+    verify(midpoint_f32(6.0f, 4.0f) == 5.0f);
+    verify(midpoint_f32(300000000000000000000000000000000000000.0f,
+                        300000000000000000000000000000000000000.0f) ==
+           300000000000000000000000000000000000000.0f);
+    verify(midpoint_f32(300000000000000000000000000000000000000.0f,
+                        200000000000000000000000000000000000000.0f) >
+           200000000000000000000000000000000000000.0f);
+
+    verify(midpoint_f64(4.0, 6.0) == 5.0);
+    verify(midpoint_f64(-4.0, 6.0) == 1.0);
+    verify(midpoint_f64(6.0, 4.0) == 5.0);
+    verify(midpoint_f64(10000000000000000000.0,
+                        10000000000000000000.0) == 10000000000000000000.0);
 }
 
 #[test]

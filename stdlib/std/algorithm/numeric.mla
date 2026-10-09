@@ -30,6 +30,21 @@ pub fn midpoint_u64(first: u64, second: u64) -> u64 {
     return middle;
 }
 
+extern pub fn __mlang_std_midpoint_f32(first: f32, second: f32) -> f32;
+extern pub fn __mlang_std_midpoint_f64(first: f64, second: f64) -> f64;
+
+/// @brief Compute the floating-point midpoint without overflowing.
+/// Implements the C++20 `std::midpoint` floating overload for `f32`.
+pub fn midpoint_f32(first: f32, second: f32) -> f32 {
+    return __mlang_std_midpoint_f32(first, second);
+}
+
+/// @brief Compute the floating-point midpoint without overflowing.
+/// Implements the C++20 `std::midpoint` floating overload for `f64`.
+pub fn midpoint_f64(first: f64, second: f64) -> f64 {
+    return __mlang_std_midpoint_f64(first, second);
+}
+
 /// @brief Sum all elements with an initial value.
 /// @ingroup algorithm_numeric
 pub fn accumulate_i64(data: &list<i64>, init: i64) -> i64 {
