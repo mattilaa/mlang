@@ -19,7 +19,7 @@ let score: option<str8> = scores.get(20);
 
 The API includes `len`, `is_empty`, `lower_bound`, `upper_bound`, `equal_range`,
 `contains`, `get`, `insert`, `insert_range`, `remove`, `erase_if`, `clear`,
-`replace`, `key_at`, and `value_at`.
+`replace`, `merge`, `key_at`, and `value_at`.
 `equal_range(key)` returns the half-open index pair `(lower_bound, upper_bound)`;
 it is empty for an absent key and contains one entry for a present key because
 keys are unique. `insert` returns true
@@ -33,9 +33,13 @@ retains nonmatching entries in sorted order, and returns the number removed.
 `replace(keys, values)` atomically replaces both ordered sequences after
 checking equal lengths and strictly increasing keys; invalid input returns
 false and leaves the existing contents unchanged.
+`merge(destination, source)` transfers non-colliding entries and returns the
+number transferred. Destination values win on duplicate keys, and the colliding
+entries remain in `source`; both maps stay sorted.
 
 Keys must support ordering (`<`) and equality (`==`). Lookup is O(log n);
-insertion and removal are O(n) due to list reconstruction. `insert_range` is
+insertion and removal are O(n) due to list reconstruction. Merging two maps is
+O(n + m) for `n` destination and `m` source entries. `insert_range` is
 sequential, so inserting `m` entries into an `n`-entry map is O(m(n + m)) in
 the worst case. Prefer this type for small maps or workloads with frequent
 lookup and relatively few updates.

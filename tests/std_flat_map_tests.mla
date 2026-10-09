@@ -5,6 +5,7 @@ use std::testing::verify;
 use std::testing::verify_eq_i32;
 use std::flat_map::FlatMap;
 use std::flat_map::erase_if;
+use std::flat_map::merge;
 use std::algorithm::ranges::zip;
 
 #[test]
@@ -158,4 +159,32 @@ fn test_flat_map_replace_validates_and_preserves_invariants() {
     let no_keys: list<i32> = [];
     let no_values: list<i32> = [];
     verify(values.replace(no_keys, no_values) && values.is_empty());
+}
+
+#[test]
+fn test_flat_map_merge_transfers_only_non_colliding_keys() {
+    var destination: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    destination.insert(1, 10);
+    destination.insert(3, 30);
+    destination.insert(6, 60);
+    var source: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    source.insert(2, 200);
+    source.insert(3, 300);
+    source.insert(4, 400);
+    source.insert(6, 600);
+    source.insert(7, 700);
+
+    verify(merge(&mut destination, &mut source) == 3);
+    verify(destination.len() == 6 && source.len() == 2);
+    verify(destination.key_at(0) == 1 && destination.value_at(0) == 10);
+    verify(destination.key_at(1) == 2 && destination.value_at(1) == 200);
+    verify(destination.key_at(2) == 3 && destination.value_at(2) == 30);
+    verify(destination.key_at(3) == 4 && destination.value_at(3) == 400);
+    verify(destination.key_at(4) == 6 && destination.value_at(4) == 60);
+    verify(destination.key_at(5) == 7 && destination.value_at(5) == 700);
+    verify(source.key_at(0) == 3 && source.value_at(0) == 300);
+    verify(source.key_at(1) == 6 && source.value_at(1) == 600);
+
+    verify(merge(&mut destination, &mut source) == 0);
+    verify(destination.len() == 6 && source.len() == 2);
 }
