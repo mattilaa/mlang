@@ -2527,6 +2527,15 @@ pub fn partial_sort_copy(data: &list<T>, output_capacity: i64) -> list<T> {
     return partial_sort(data, output_capacity);
 }
 
+/// @brief Sort up to `output_capacity` values by projected keys.
+/// The input is unchanged; capacity is clamped to the source length.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn partial_sort_copy_projected(data: &list<T>, output_capacity: i64,
+                                   projection: Projection) -> list<T> {
+    return partial_sort_projected(data, output_capacity, projection);
+}
+
 /// @brief Comparator form of `partial_sort_copy`.
 /// Selects the first values according to `less` and returns them sorted.
 /// @ingroup algorithm_ranges
