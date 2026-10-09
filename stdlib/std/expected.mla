@@ -2,8 +2,9 @@
 /// \brief Monadic transformations for the built-in result<T, E> type.
 ///
 /// Mlang's `result<T, E>` is the native counterpart of C++23 `std::expected`.
-/// These functions preserve the inactive alternative and invoke their
-/// callback only for the active value.
+/// Mapping functions preserve the inactive alternative and invoke their
+/// callback only for the active value. Fallback helpers extract the value
+/// without changing the input result.
 
 /// @brief Transform a successful result value while preserving its error.
 /// The operation is not called for Err; its original error is propagated.
@@ -29,4 +30,29 @@ pub fn transform_error(input: result<T, E>, operation: Operation)
         return Err<T, NewError>(operation(input.unwrap_err()));
     }
     return Ok<T, NewError>(input.unwrap());
+}
+
+/// @brief Return the successful value or the supplied fallback value.
+/// The fallback is evaluated by the caller before this function is entered,
+/// matching C++23 `std::expected::value_or`.
+/// @ingroup expected
+generic<T, E>
+pub fn value_or(input: result<T, E>, fallback: T) -> T {
+    if input.is_ok() {
+        return input.unwrap();
+    }
+    return fallback;
+}
+
+/// @brief Return the successful value or lazily compute a fallback.
+/// The fallback closure is invoked only when the result is an error. This
+/// complements C++23 `expected::value_or` when fallback evaluation is costly
+/// or has side effects.
+/// @ingroup expected
+generic<T, E, Fallback>
+pub fn value_or_else(input: result<T, E>, fallback: Fallback) -> T {
+    if input.is_ok() {
+        return input.unwrap();
+    }
+    return fallback();
 }
