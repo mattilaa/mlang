@@ -49,6 +49,32 @@ impl<K, V> FlatMap {
         return first;
     }
 
+    /// @brief Return the first index whose key is greater than `key`.
+    /// Returns `len()` when no stored key is greater than the query.
+    pub fn upper_bound(self: &FlatMap<K, V>, key: K) -> i64 {
+        var first: i64 = 0;
+        var count: i64 = self.entries.len();
+        while count > 0 {
+            let step: i64 = count / 2;
+            let middle: i64 = first + step;
+            let entry: tuple<K, V> = self.entries[middle];
+            if !(key < entry.0) {
+                first = middle + 1;
+                count = count - step - 1;
+            } else {
+                count = step;
+            }
+        }
+        return first;
+    }
+
+    /// @brief Return the half-open index range containing `key`.
+    /// For this unique-key map, the range is empty when the key is absent and
+    /// contains exactly one entry when it is present.
+    pub fn equal_range(self: &FlatMap<K, V>, key: K) -> tuple<i64, i64> {
+        return (self.lower_bound(key), self.upper_bound(key));
+    }
+
     /// @brief Whether the map contains `key`.
     pub fn contains(self: &FlatMap<K, V>, key: K) -> bool {
         let index: i64 = self.lower_bound(key);
