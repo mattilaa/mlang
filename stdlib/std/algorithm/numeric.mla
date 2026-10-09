@@ -264,6 +264,23 @@ pub fn inclusive_scan(data: &list<T>, operation: Operation) -> list<T> {
     return out;
 }
 
+/// @brief Return seeded inclusive prefix accumulations using `init` and
+/// `operation`. The accumulator/output type may differ from the input type,
+/// matching the seeded C++20 `std::inclusive_scan` overload.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation>
+pub fn inclusive_scan(data: &list<T>, init: U, operation: Operation)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, data[i]);
+        out.push(acc);
+    }
+    return out;
+}
+
 /// @brief Return exclusive prefix accumulations using `init` and `operation`.
 /// Each output is the accumulator before incorporating that position's element.
 /// C++ `std::exclusive_scan` equivalent.

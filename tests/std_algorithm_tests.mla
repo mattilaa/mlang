@@ -3291,6 +3291,7 @@ fn test_cpp20_narrow_integer_midpoint() {
     verify(midpoint_u32(4294967295, 0) == 2147483648);
 }
 
+
 #[test]
 fn test_algorithm_numeric_generic_accumulate() {
     let values: list<i32> = [2, 3, 5];
@@ -3395,6 +3396,12 @@ fn test_algorithm_numeric_scans() {
     verify(inclusive[0] == 1 && inclusive[1] == 3);
     verify(inclusive[2] == 6 && inclusive[3] == 10);
 
+    let add_wide = |acc: f64, value: i32| { return acc + f64(value); };
+    let seeded: list<f64> = inclusive_scan(values, 0.5, add_wide);
+    verify(seeded.len() == 4);
+    verify(seeded[0] == 1.5 && seeded[1] == 3.5);
+    verify(seeded[2] == 6.5 && seeded[3] == 10.5);
+
     let initial: i32 = 10;
     let exclusive: list<i32> = exclusive_scan(values, initial, add);
     verify(exclusive.len() == 4);
@@ -3409,8 +3416,10 @@ fn test_algorithm_numeric_scans() {
     let empty: list<i32> = [];
     let empty_initial: i32 = 7;
     let empty_inclusive: list<i32> = inclusive_scan(empty, add);
+    let empty_seeded: list<f64> = inclusive_scan(empty, 0.5, add_wide);
     let empty_exclusive: list<i32> = exclusive_scan(empty, empty_initial, add);
-    verify(empty_inclusive.len() == 0 && empty_exclusive.len() == 0);
+    verify(empty_inclusive.len() == 0 && empty_seeded.len() == 0 &&
+           empty_exclusive.len() == 0);
     let one: list<i32> = [8];
     let one_inclusive: list<i32> = inclusive_scan(one, add);
     let one_exclusive: list<i32> = exclusive_scan(one, empty_initial, add);
