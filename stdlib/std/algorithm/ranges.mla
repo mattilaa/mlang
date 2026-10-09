@@ -2507,6 +2507,26 @@ pub fn cartesian_product(left: &list<T>, right: &list<U>)
     return out;
 }
 
+/// @brief Materialize every triple from three ranges in nested-loop order.
+/// The third range varies fastest, then the second; inputs are unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U, V>
+pub fn cartesian_product(first: &list<T>, second: &list<U>, third: &list<V>)
+    -> list<tuple<T, U, V>> {
+    var out: list<tuple<T, U, V>> = [];
+    let first_len: i64 = first.len();
+    let second_len: i64 = second.len();
+    let third_len: i64 = third.len();
+    for i in 0..first_len {
+        for j in 0..second_len {
+            for k in 0..third_len {
+                out.push((first[i], second[j], third[k]));
+            }
+        }
+    }
+    return out;
+}
+
 /// @brief Pair each element with its zero-based position.
 /// Eager C++23 `views::enumerate` equivalent; the input remains unchanged.
 /// @ingroup algorithm_ranges
