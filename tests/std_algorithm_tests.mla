@@ -355,12 +355,14 @@ use std::algorithm::ranges::remove_by;
 use std::algorithm::ranges::remove_by_projected;
 use std::algorithm::ranges::remove_projected;
 use std::algorithm::ranges::take;
+use std::algorithm::ranges::take_last;
 use std::algorithm::ranges::iota;
 use std::algorithm::ranges::iota_by;
 use std::algorithm::ranges::iota_range;
 use std::algorithm::ranges::repeat as repeat_range;
 use std::algorithm::ranges::single as single_range;
 use std::algorithm::ranges::drop;
+use std::algorithm::ranges::drop_last;
 use std::algorithm::ranges::take_while;
 use std::algorithm::ranges::drop_while;
 use std::algorithm::ranges::transform;
@@ -3218,6 +3220,19 @@ fn test_algorithm_ranges_find_count_contains_remove_take_drop() {
 
     let drop4: list<i64> = drop_i64(data, 4);
     verify(drop4.len() == 2 && drop4[0] == 8 && drop4[1] == 6);
+
+    let last_three: list<i64> = take_last(data, 3);
+    verify(last_three.len() == 3 && last_three[0] == 7 &&
+           last_three[2] == 6);
+    let without_last_two: list<i64> = drop_last(data, 2);
+    verify(without_last_two.len() == 4 && without_last_two[0] == 5 &&
+           without_last_two[3] == 7);
+    let all_tail: list<i64> = take_last(data, 99);
+    let none_left: list<i64> = drop_last(data, 99);
+    let no_tail: list<i64> = take_last(data, 0);
+    let all_kept: list<i64> = drop_last(data, -2);
+    verify(all_tail.len() == 6 && none_left.len() == 0 && no_tail.len() == 0);
+    verify(all_kept.len() == 6 && all_kept[5] == 6);
 }
 
 #[test]

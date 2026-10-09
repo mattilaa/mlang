@@ -356,6 +356,10 @@ fn example() {
 - `take_while(data, predicate)` copies the initial matching prefix;
   `drop_while(data, predicate)` copies the rest after that prefix, matching the
   eager behavior of C++20 `views::take_while` and `views::drop_while`.
+- `take_last(data, count)` copies a suffix and `drop_last(data, count)` copies
+  the prefix before it (C++23 `views::take_last`/`drop_last` counterparts).
+  Counts are clamped to the range; non-positive counts yield empty/all values,
+  respectively.
 - `iota(start, end)` materializes `[start, end)`; `iota_by(start, end, step)`
   supports positive and negative strides. A zero step or a step pointing away
   from the bound returns an empty list. `iota_range(start, end)` is the generic

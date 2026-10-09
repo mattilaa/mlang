@@ -4382,6 +4382,34 @@ pub fn drop(data: &list<T>, n: i64) -> list<T> {
     return out;
 }
 
+/// @brief Copy the final `count` elements of a list.
+/// C++23 `views::take_last` eager-list counterpart; non-positive counts are
+/// empty and counts at least the size copy the entire input.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn take_last(data: &list<T>, count: i64) -> list<T> {
+    var out: list<T> = [];
+    let len: i64 = data.len();
+    if count <= 0 { return out; }
+    let start: i64 = count >= len ? 0 : len - count;
+    for i in start..len { out.push(data[i]); }
+    return out;
+}
+
+/// @brief Copy all but the final `count` elements of a list.
+/// C++23 `views::drop_last` eager-list counterpart; non-positive counts copy
+/// the entire input and counts at least the size produce an empty list.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn drop_last(data: &list<T>, count: i64) -> list<T> {
+    var out: list<T> = [];
+    let len: i64 = data.len();
+    let end: i64 = count <= 0 ? len : len - count;
+    let bounded_end: i64 = end < 0 ? 0 : end;
+    for i in 0..bounded_end { out.push(data[i]); }
+    return out;
+}
+
 /// @brief Copy the range after skipping its initial predicate-matching prefix.
 /// Eager C++20 `views::drop_while` equivalent.
 /// @ingroup algorithm_ranges
