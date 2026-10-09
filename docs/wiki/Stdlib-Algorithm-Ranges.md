@@ -105,6 +105,8 @@ fn example() {
   each range before lexicographically comparing the resulting keys.
 - `includes_by(range, subset, less)` checks sorted-range containment with a
   comparator, including duplicate multiplicities.
+- `includes_projected` performs the same duplicate-aware containment check
+  after applying a separate projection to each sorted input.
 - `starts_with` and `ends_with` compare prefixes and suffixes, including across
   distinct equality-comparable element types; `starts_with_by` and
   `ends_with_by` accept a binary equivalence predicate for custom matching.

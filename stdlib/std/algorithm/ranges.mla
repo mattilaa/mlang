@@ -206,6 +206,33 @@ pub fn includes(range: &list<T>, subset: &list<U>) -> bool {
     return subset_index == subset_len;
 }
 
+/// @brief Check sorted-range containment after independent key projections.
+/// Duplicate multiplicities matter; both inputs must be sorted by the
+/// corresponding projections.
+/// @ingroup algorithm_ranges
+generic<T, U, RangeProjection, SubsetProjection>
+pub fn includes_projected(range: &list<T>, subset: &list<U>,
+                          range_projection: RangeProjection,
+                          subset_projection: SubsetProjection) -> bool {
+    let range_len: i64 = range.len();
+    let subset_len: i64 = subset.len();
+    var range_index: i64 = 0;
+    var subset_index: i64 = 0;
+    while range_index < range_len && subset_index < subset_len {
+        let range_key = range_projection(range[range_index]);
+        let subset_key = subset_projection(subset[subset_index]);
+        if range_key < subset_key {
+            range_index = range_index + 1;
+        } else if subset_key < range_key {
+            return false;
+        } else {
+            range_index = range_index + 1;
+            subset_index = subset_index + 1;
+        }
+    }
+    return subset_index == subset_len;
+}
+
 /// @brief Check whether sorted `range` contains sorted `subset` under `less`.
 /// Duplicate multiplicities count; both inputs use the same strict ordering.
 /// @ingroup algorithm_ranges
