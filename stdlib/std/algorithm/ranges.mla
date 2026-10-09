@@ -2234,6 +2234,22 @@ pub fn iota(start: i64, end: i64) -> list<i64> {
     return out;
 }
 
+/// @brief Materialize a half-open increasing range while preserving its type.
+/// This is the typed counterpart to `iota(start: i64, end: i64)` and mirrors
+/// C++20 `std::ranges::iota_view` for element types supporting comparison and
+/// addition with one.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn iota_range(start: T, end: T) -> list<T> {
+    var out: list<T> = [];
+    var value: T = start;
+    while value < end {
+        out.push(value);
+        value = value + 1;
+    }
+    return out;
+}
+
 /// @brief Materialize a half-open integer progression using `step`.
 /// Positive steps produce values below `end`; negative steps produce values
 /// above `end`. A zero step or a step directed away from the bound returns an
