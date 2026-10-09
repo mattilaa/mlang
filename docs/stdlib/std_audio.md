@@ -213,6 +213,13 @@ optional `set_sysex` and `sysex` hooks. An `InstrumentSysEx` event (slot in
 with the block-relative offset, and mlacker's VST3 host passes it as a
 `DataEvent::kMidiSysEx` event. Messages are a ring like phrases.
 
+MIDI learn binds a live controller (`channel * 128 + CC`) to an instrument
+parameter: `midi_learn(-1, slot, index)` arms it, and the next live CC on any
+key binds there. `midi_learn_relative(true)` makes live learned knobs
+relative, for endless encoders: `live_control` still learns, but no longer
+sets a learned key's parameter, so the caller can step it from the CC's
+increment. Learned CCs played from a pattern stay absolute.
+
 For selected-track live input, the control thread publishes
 `midi_target(track, instrument)` (`track` 0–63; instrument -1 disables new notes,
 0 routes to preview/master, 1–32 routes to a slot). The MIDI worker calls

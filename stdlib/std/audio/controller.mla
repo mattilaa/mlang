@@ -48,6 +48,7 @@ extern fn __mlang_std_audio_controller_track_peak(handle: i64, track: i64, chann
 extern fn __mlang_std_audio_controller_track_volume(handle: i64, track: i64, slot: i64, percent: i64) -> i32;
 extern fn __mlang_std_audio_controller_midi_learn(handle: i64, key: i64, slot: i64, index: i64) -> i32;
 extern fn __mlang_std_audio_controller_midi_learn_info(handle: i64, key: i64, property: i64) -> i64;
+extern fn __mlang_std_audio_controller_midi_learn_relative(handle: i64, relative: i64) -> i32;
 
 pub enum AudioEventKind { NoteOn, NoteOff, MasterGain, PlaySample, StopSource, InstrumentNoteOn, InstrumentNoteOff, ControlChange, InstrumentControlChange, InstrumentText, InstrumentSysEx };
 pub struct AudioMidiEvent { var channel: i64; var note: i64; var velocity: i64; };
@@ -159,6 +160,11 @@ impl AudioController {
     /// property 0=slot, 1=index, 2=coherent slot+64*index (0 unbound).
     /// key -1 queries armed target.
     pub fn midi_learn_info(self: AudioController, key: i64, property: i64) -> i64 { return __mlang_std_audio_controller_midi_learn_info(self.handle, key, property); }
+    /// Control thread: true makes live learned knobs relative (endless
+    /// encoders). `live_control` still learns, but no longer sets a learned
+    /// key's parameter: the caller steps it from the CC. Learned CCs played
+    /// from a pattern stay absolute. 0 or -1.
+    pub fn midi_learn_relative(self: AudioController, relative: bool) -> i32 { return __mlang_std_audio_controller_midi_learn_relative(self.handle, relative ? 1 : 0); }
     pub fn copy_midi_learn_from(self: AudioController, source: AudioController) -> i32 {
         for key in 0..2048 {
             let destination: i64 = source.midi_learn_info(key, 2);
