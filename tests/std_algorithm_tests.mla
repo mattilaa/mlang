@@ -251,6 +251,8 @@ use std::algorithm::ranges::keys;
 use std::algorithm::ranges::values;
 use std::algorithm::ranges::cartesian_product;
 use std::algorithm::ranges::pairwise;
+use std::algorithm::ranges::adjacent3;
+use std::algorithm::ranges::adjacent4;
 use std::algorithm::ranges::adjacent_transform;
 use std::algorithm::ranges::adjacent_transform3;
 use std::algorithm::ranges::adjacent_transform4;
@@ -2547,6 +2549,22 @@ fn test_algorithm_ranges_pairwise() {
     let adjacent_sums: list<f64> = adjacent_transform(values, sum_as_double);
     verify(adjacent_sums.len() == 2);
     verify(adjacent_sums[0] == 10.0 && adjacent_sums[1] == 15.0);
+
+    let values_four: list<i32> = [4, 6, 9, 13];
+    let triples: list<tuple<i32, i32, i32>> = adjacent3(values_four);
+    verify(triples.len() == 2);
+    let first_triple = triples[0];
+    let second_triple = triples[1];
+    verify(first_triple.0 == 4 && first_triple.1 == 6 && first_triple.2 == 9);
+    verify(second_triple.0 == 6 && second_triple.1 == 9 && second_triple.2 == 13);
+    let quadruples: list<tuple<i32, i32, i32, i32>> = adjacent4(values_four);
+    verify(quadruples.len() == 1);
+    let only_quadruple = quadruples[0];
+    verify(only_quadruple.0 == 4 && only_quadruple.1 == 6 &&
+           only_quadruple.2 == 9 && only_quadruple.3 == 13);
+    let no_triples: list<tuple<i32, i32, i32>> = adjacent3(singleton);
+    let no_quadruples: list<tuple<i32, i32, i32, i32>> = adjacent4(values);
+    verify(no_triples.len() == 0 && no_quadruples.len() == 0);
 }
 
 #[test]

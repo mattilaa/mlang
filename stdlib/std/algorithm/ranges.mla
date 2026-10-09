@@ -5298,6 +5298,34 @@ pub fn pairwise(data: &list<T>) -> list<tuple<T, T>> {
     return out;
 }
 
+/// @brief Materialize a tuple for every adjacent triple.
+/// Eager counterpart to C++23 `views::adjacent<3>`; short inputs are empty.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent3(data: &list<T>) -> list<tuple<T, T, T>> {
+    var out: list<tuple<T, T, T>> = [];
+    let n: i64 = data.len();
+    if n < 3 { return out; }
+    for i in 0..(n - 2) {
+        out.push((data[i], data[i + 1], data[i + 2]));
+    }
+    return out;
+}
+
+/// @brief Materialize a tuple for every adjacent group of four.
+/// Eager counterpart to C++23 `views::adjacent<4>`; short inputs are empty.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent4(data: &list<T>) -> list<tuple<T, T, T, T>> {
+    var out: list<tuple<T, T, T, T>> = [];
+    let n: i64 = data.len();
+    if n < 4 { return out; }
+    for i in 0..(n - 3) {
+        out.push((data[i], data[i + 1], data[i + 2], data[i + 3]));
+    }
+    return out;
+}
+
 /// @brief Apply a binary operation to every adjacent pair of elements.
 /// Eager C++23 `views::adjacent_transform<2>` equivalent; output length is
 /// max(data.len() - 1, 0), and output type follows the operation's result.
