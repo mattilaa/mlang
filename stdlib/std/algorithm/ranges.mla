@@ -1931,6 +1931,33 @@ pub fn search_by(data: &list<T>, pattern: &list<U>,
     return -1;
 }
 
+/// @brief Find the first projected subrange matching under `equivalent`.
+/// The two ranges may have different element types; empty pattern returns 0.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, DataProjection, PatternProjection>
+pub fn search_by_projected(
+    data: &list<T>, pattern: &list<U>, equivalent: Equivalent,
+    data_projection: DataProjection, pattern_projection: PatternProjection)
+    -> i64 {
+    let data_len: i64 = data.len();
+    let pattern_len: i64 = pattern.len();
+    if pattern_len == 0 { return 0; }
+    if pattern_len > data_len { return -1; }
+    let last_start: i64 = data_len - pattern_len;
+    for start in 0..(last_start + 1) {
+        var matched: bool = true;
+        for offset in 0..pattern_len {
+            if !equivalent(data_projection(data[start + offset]),
+                           pattern_projection(pattern[offset])) {
+                matched = false;
+                break;
+            }
+        }
+        if matched { return start; }
+    }
+    return -1;
+}
+
 /// @brief Find the first run of `count` consecutive values equal to `value`.
 /// Returns 0 for a non-positive count and -1 when no run exists.
 /// C++20 `std::ranges::search_n` equivalent.
@@ -2102,6 +2129,34 @@ pub fn find_end_by(data: &list<T>, pattern: &list<U>,
     return found;
 }
 
+/// @brief Find the last projected subrange matching under `equivalent`.
+/// An empty pattern returns `data.len()`; absent patterns return -1.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, DataProjection, PatternProjection>
+pub fn find_end_by_projected(
+    data: &list<T>, pattern: &list<U>, equivalent: Equivalent,
+    data_projection: DataProjection, pattern_projection: PatternProjection)
+    -> i64 {
+    let n: i64 = data.len();
+    let m: i64 = pattern.len();
+    if m == 0 { return n; }
+    if m > n { return -1; }
+    let last_start: i64 = n - m;
+    var found: i64 = -1;
+    for start in 0..(last_start + 1) {
+        var matches: bool = true;
+        for offset in 0..m {
+            if !equivalent(data_projection(data[start + offset]),
+                           pattern_projection(pattern[offset])) {
+                matches = false;
+                break;
+            }
+        }
+        if matches { found = start; }
+    }
+    return found;
+}
+
 /// @brief Return whether `pattern` occurs as a contiguous subsequence.
 /// C++23 ranges-style subrange membership check.
 /// @ingroup algorithm_ranges
@@ -2131,6 +2186,18 @@ generic<T, U, Equivalent>
 pub fn contains_subrange_by(data: &list<T>, pattern: &list<U>,
                             equivalent: Equivalent) -> bool {
     return search_by(data, pattern, equivalent) >= 0;
+}
+
+/// @brief Test for a projected subrange match under `equivalent`.
+/// Empty patterns match every range.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, DataProjection, PatternProjection>
+pub fn contains_subrange_by_projected(
+    data: &list<T>, pattern: &list<U>, equivalent: Equivalent,
+    data_projection: DataProjection, pattern_projection: PatternProjection)
+    -> bool {
+    return search_by_projected(data, pattern, equivalent, data_projection,
+                               pattern_projection) >= 0;
 }
 
 /// @brief Return whether `suffix` matches the end of `data`.

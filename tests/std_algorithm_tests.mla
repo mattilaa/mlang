@@ -95,15 +95,18 @@ use std::algorithm::ranges::starts_with_by;
 use std::algorithm::ranges::search;
 use std::algorithm::ranges::search_projected;
 use std::algorithm::ranges::search_by;
+use std::algorithm::ranges::search_by_projected;
 use std::algorithm::ranges::search_n;
 use std::algorithm::ranges::search_n_projected;
 use std::algorithm::ranges::search_n_by;
 use std::algorithm::ranges::find_end;
 use std::algorithm::ranges::find_end_projected;
 use std::algorithm::ranges::find_end_by;
+use std::algorithm::ranges::find_end_by_projected;
 use std::algorithm::ranges::contains_subrange;
 use std::algorithm::ranges::contains_subrange_projected;
 use std::algorithm::ranges::contains_subrange_by;
+use std::algorithm::ranges::contains_subrange_by_projected;
 use std::algorithm::ranges::ends_with;
 use std::algorithm::ranges::ends_with_projected;
 use std::algorithm::ranges::ends_with_by;
@@ -923,6 +926,40 @@ fn test_algorithm_ranges_contains_subrange_by() {
     verify(!contains_subrange_by(values, absent, same_decade));
     verify(contains_subrange_by(values, empty, same_decade));
     verify(contains_subrange_by(empty, empty, same_decade));
+}
+
+#[test]
+fn test_algorithm_ranges_subrange_search_by_projected() {
+    let data: list<i32> = [11, 22, 23, 34, 21, 29];
+    let pattern: list<i64> = [20, 29];
+    let absent: list<i64> = [45, 44];
+    let too_long: list<i64> = [11, 22, 23, 34, 21, 29, 30];
+    let empty: list<i64> = [];
+    let identity = |value: i32| { return value; };
+    let narrow = |value: i64| { return i32(value); };
+    let same_decade = |left: i32, right: i32| {
+        return left / 10 == right / 10;
+    };
+
+    verify(search_by_projected(data, pattern, same_decade,
+                               identity, narrow) == 1);
+    verify(find_end_by_projected(data, pattern, same_decade,
+                                 identity, narrow) == 4);
+    verify(contains_subrange_by_projected(
+        data, pattern, same_decade, identity, narrow));
+    verify(search_by_projected(data, absent, same_decade,
+                               identity, narrow) == -1);
+    verify(find_end_by_projected(data, too_long, same_decade,
+                                 identity, narrow) == -1);
+    verify(!contains_subrange_by_projected(
+        data, absent, same_decade, identity, narrow));
+    verify(search_by_projected(data, empty, same_decade,
+                               identity, narrow) == 0);
+    verify(find_end_by_projected(data, empty, same_decade,
+                                 identity, narrow) == data.len());
+    verify(contains_subrange_by_projected(
+        empty, empty, same_decade, identity, narrow));
+    verify(data[0] == 11 && data[5] == 29);
 }
 
 #[test]
