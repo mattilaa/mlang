@@ -22,6 +22,20 @@ pub fn find(data: &list<T>, value: U) -> i64 {
     return -1;
 }
 
+/// @brief Find the first element whose projected value equals `value`.
+/// C++20 `std::ranges::find`-style projection support; returns `-1` if absent.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn find_projected(data: &list<T>, value: U, projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if projection(data[i]) == value {
+            return i;
+        }
+    }
+    return -1;
+}
+
 /// @brief Return the last index of a value, or -1 when it is absent.
 /// C++23 ranges-style last-match search.
 /// @ingroup algorithm_ranges
@@ -2209,11 +2223,32 @@ pub fn count(data: &list<T>, value: U) -> i64 {
     return out;
 }
 
+/// @brief Count elements whose projected value equals `value`.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn count_projected(data: &list<T>, value: U, projection: Projection) -> i64 {
+    var count: i64 = 0;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if projection(data[i]) == value {
+            count = count + 1;
+        }
+    }
+    return count;
+}
+
 /// @brief Return true when value exists in the list.
 /// @ingroup algorithm_ranges
 generic<T, U>
 pub fn contains(data: &list<T>, value: U) -> bool {
     return find(data, value) >= 0;
+}
+
+/// @brief Test whether any element's projected value equals `value`.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn contains_projected(data: &list<T>, value: U, projection: Projection) -> bool {
+    return find_projected(data, value, projection) >= 0;
 }
 
 /// @brief Copy a list while excluding values equal to `value`.
