@@ -5027,6 +5027,31 @@ pub fn chunk_by(data: &list<T>, equivalent: Equivalent) -> list<list<T>> {
     return out;
 }
 
+/// @brief Group adjacent elements when their projected keys are equivalent.
+/// Eager-list counterpart to projected C++23 `views::chunk_by`.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent, Projection>
+pub fn chunk_by_projected(data: &list<T>, equivalent: Equivalent,
+                          projection: Projection) -> list<list<T>> {
+    var out: list<list<T>> = [];
+    let n: i64 = data.len();
+    if n == 0 { return out; }
+
+    var chunk: list<T> = [];
+    chunk.push(data[0]);
+    for i in 1..n {
+        if equivalent(projection(data[i - 1]), projection(data[i])) {
+            chunk.push(data[i]);
+        } else {
+            out.push(chunk);
+            chunk = [];
+            chunk.push(data[i]);
+        }
+    }
+    out.push(chunk);
+    return out;
+}
+
 /// @brief Materialize every overlapping window of `window_size` elements.
 /// Eager-list counterpart to C++23 `views::slide`; invalid sizes return empty.
 /// @ingroup algorithm_ranges
