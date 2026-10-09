@@ -120,6 +120,7 @@ use std::algorithm::ranges::prev_permutation;
 use std::algorithm::ranges::prev_permutation_by;
 use std::algorithm::ranges::reversed;
 use std::algorithm::ranges::rotate_left;
+use std::algorithm::ranges::rotate;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::windows;
 use std::algorithm::ranges::strided;
@@ -308,6 +309,24 @@ fn test_algorithm_ranges_unique_variants() {
     let stable: list<i64> = unique_stable_i64(data);
     verify(stable.len() == 4);
     verify(stable[0] == 1 && stable[1] == 2 && stable[2] == 3 && stable[3] == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_rotate_at_middle() {
+    let values: list<i32> = [1, 2, 3, 4, 5];
+    let rotated: list<i32> = rotate(values, 2);
+    verify(rotated.len() == 5 && rotated[0] == 3 && rotated[1] == 4 &&
+           rotated[2] == 5 && rotated[3] == 1 && rotated[4] == 2);
+    let unchanged: list<i32> = rotate(values, 0);
+    verify(unchanged[0] == 1 && unchanged[4] == 5);
+    let end: list<i32> = rotate(values, 5);
+    verify(end[0] == 1 && end[4] == 5);
+    let low: list<i32> = rotate(values, -8);
+    let high: list<i32> = rotate(values, 99);
+    verify(low[0] == 1 && high[4] == 5);
+    let empty: list<i32> = [];
+    let empty_rotated: list<i32> = rotate(empty, 3);
+    verify(empty_rotated.len() == 0);
 }
 
 #[test]
