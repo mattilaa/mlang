@@ -5198,6 +5198,24 @@ TEST_F(MLATest, CexprElseIfSelectsCompileTimeBranchAndIgnoresOtherReturnTypes)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, GenericMutableReferenceInfersElementType)
+{
+    const std::string code = R"(
+        generic<T>
+        fn count_values(values: &mut list<T>) -> i64 {
+            return values.len();
+        }
+
+        fn main() -> i32 {
+            var values: list<i64> = [42];
+            let count: i64 = count_values(&mut values);
+            if count != 1 { return 1; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, GenericCexprFunctionDispatchesOnTypeId)
 {
     std::string code = R"(

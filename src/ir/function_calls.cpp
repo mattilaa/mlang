@@ -452,22 +452,42 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
     for(size_t i = 0; i < arguments.size(); ++i)
     {
         TypeNode* concrete = nullptr;
+        TypeNode* parameterType =
+            functionTemplate->parameters->parameters[i]->type;
+        if(auto* reference = dynamic_cast<ReferenceTypeNode*>(parameterType))
+        {
+            // Address-of expressions infer as pointer types, but generic
+            // reference parameters bind against the referenced value type.
+            // Validate the explicit borrow here just as we do for variadic
+            // generic functions, then infer from its operand.
+            auto* borrow = dynamic_cast<UnaryOpNode*>(arguments[i]);
+            const bool correctBorrow =
+                borrow && (reference->isMutable
+                               ? borrow->op == UnaryOpNode::OP_ADDR_MUT
+                               : borrow->op == UnaryOpNode::OP_ADDR);
+            if(!correctBorrow)
+                return false;
+            concrete = inferExpressionTypeNode(borrow->operand,
+                                               functionTemplate->line);
+        }
         // A named inline closure is not a normal local value: it lives in
         // closureVariables and is expanded into the generic specialization.
         // Resolve it here before ordinary identifier inference, otherwise
         // overload probing can diagnose the closure name as an unknown local.
-        bool isBoundClosure =
-            dynamic_cast<ClosureNode*>(arguments[i]) != nullptr;
-        if(auto* identifier = dynamic_cast<IdentifierNode*>(arguments[i]))
-            isBoundClosure = closureVariables.count(identifier->name) != 0;
-        if(isBoundClosure)
-            concrete = new PointerTypeNode(new TypeNode(TypeNode::TYPE_VOID));
         else
-            concrete = inferExpressionTypeNode(arguments[i],
-                                               functionTemplate->line);
+        {
+            bool isBoundClosure =
+                dynamic_cast<ClosureNode*>(arguments[i]) != nullptr;
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(arguments[i]))
+                isBoundClosure = closureVariables.count(identifier->name) != 0;
+            if(isBoundClosure)
+                concrete = new PointerTypeNode(new TypeNode(TypeNode::TYPE_VOID));
+            else
+                concrete = inferExpressionTypeNode(arguments[i],
+                                                   functionTemplate->line);
+        }
         if(!concrete ||
-           !bindType(functionTemplate->parameters->parameters[i]->type,
-                     concrete))
+           !bindType(parameterType, concrete))
             return false;
     }
 
