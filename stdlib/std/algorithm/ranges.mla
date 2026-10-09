@@ -540,6 +540,20 @@ pub fn filter(data: &list<T>, predicate: Predicate) -> list<T> {
     return selected;
 }
 
+/// @brief Filter elements using a predicate applied to projected keys.
+/// The output retains original elements and order.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn copy_if_projected(data: &list<T>, predicate: Predicate,
+                         projection: Projection) -> list<T> {
+    var selected: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(projection(data[i])) { selected.push(data[i]); }
+    }
+    return selected;
+}
+
 /// @brief Transform every element into a new list using `operation`.
 /// The output element type is inferred from the operation's return type,
 /// so input and output ranges may have different element types.
@@ -679,6 +693,23 @@ pub fn is_partitioned(data: &list<T>, predicate: Predicate) -> bool {
     return true;
 }
 
+/// @brief Check projected keys for a true prefix followed by false values.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn is_partitioned_projected(data: &list<T>, predicate: Predicate,
+                                projection: Projection) -> bool {
+    var saw_nonmatching: bool = false;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(projection(data[i])) {
+            if saw_nonmatching { return false; }
+        } else {
+            saw_nonmatching = true;
+        }
+    }
+    return true;
+}
+
 /// @brief Binary-search the first index not accepted by a partitioned predicate.
 /// Returns `data.len()` if all elements match; requires partitioned input.
 /// Performs O(log(data.len())) predicate calls.
@@ -690,6 +721,26 @@ pub fn partition_point(data: &list<T>, predicate: Predicate) -> i64 {
     while first < last {
         let middle: i64 = first + (last - first) / 2;
         if predicate(data[middle]) {
+            first = middle + 1;
+        } else {
+            last = middle;
+        }
+    }
+    return first;
+}
+
+/// @brief Find the boundary of a partitioned range using projected keys.
+/// Requires the predicate to be true on a prefix and false afterwards.
+/// Performs O(log(data.len())) predicate calls.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn partition_point_projected(data: &list<T>, predicate: Predicate,
+                                 projection: Projection) -> i64 {
+    var first: i64 = 0;
+    var last: i64 = data.len();
+    while first < last {
+        let middle: i64 = first + (last - first) / 2;
+        if predicate(projection(data[middle])) {
             first = middle + 1;
         } else {
             last = middle;
@@ -726,6 +777,28 @@ pub fn stable_partition(data: &list<T>, predicate: Predicate) -> list<T> {
     return partitioned;
 }
 
+/// @brief Return a stable copy partitioned by a predicate over projected keys.
+/// Each projection and predicate is evaluated exactly once per element.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn stable_partition_projected(data: &list<T>, predicate: Predicate,
+                                  projection: Projection) -> list<T> {
+    var matches: list<i32> = [];
+    var partitioned: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(projection(data[i])) { matches.push(1); }
+        else { matches.push(0); }
+    }
+    for i in 0..n {
+        if matches[i] == 1 { partitioned.push(data[i]); }
+    }
+    for i in 0..n {
+        if matches[i] == 0 { partitioned.push(data[i]); }
+    }
+    return partitioned;
+}
+
 /// @brief Return a partitioned copy and the boundary between both groups.
 /// Matching elements precede nonmatching elements; the eager list is left
 /// unchanged and each predicate result is evaluated exactly once. The copy
@@ -755,6 +828,26 @@ pub fn partition(data: &list<T>, predicate: Predicate)
     return (output, boundary);
 }
 
+/// @brief Return a stable partitioned copy and boundary using projected keys.
+/// Each projection and predicate is evaluated exactly once per element.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn partition_projected(data: &list<T>, predicate: Predicate,
+                           projection: Projection) -> tuple<list<T>, i64> {
+    var matching: list<T> = [];
+    var nonmatching: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(projection(data[i])) { matching.push(data[i]); }
+        else { nonmatching.push(data[i]); }
+    }
+    let boundary: i64 = matching.len();
+    var output: list<T> = [];
+    for i in 0..matching.len() { output.push(matching[i]); }
+    for i in 0..nonmatching.len() { output.push(nonmatching[i]); }
+    return (output, boundary);
+}
+
 /// @brief Copy matching and nonmatching elements into separate stable lists.
 /// Each element's predicate is evaluated exactly once; the source is unchanged.
 /// C++20 `std::ranges::partition_copy` equivalent.
@@ -771,6 +864,23 @@ pub fn partition_copy(data: &list<T>, predicate: Predicate)
         } else {
             nonmatching.push(data[i]);
         }
+    }
+    return (matching, nonmatching);
+}
+
+/// @brief Copy matching and nonmatching elements using projected keys.
+/// Each projection and predicate is evaluated once; both outputs are stable.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn partition_copy_projected(data: &list<T>, predicate: Predicate,
+                                projection: Projection)
+    -> tuple<list<T>, list<T>> {
+    var matching: list<T> = [];
+    var nonmatching: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(projection(data[i])) { matching.push(data[i]); }
+        else { nonmatching.push(data[i]); }
     }
     return (matching, nonmatching);
 }

@@ -210,11 +210,17 @@ use std::algorithm::ranges::copy_n;
 use std::algorithm::ranges::copy as ranges_copy;
 use std::algorithm::ranges::swap_ranges;
 use std::algorithm::ranges::filter;
+use std::algorithm::ranges::copy_if_projected;
 use std::algorithm::ranges::is_partitioned;
+use std::algorithm::ranges::is_partitioned_projected;
 use std::algorithm::ranges::partition_point;
+use std::algorithm::ranges::partition_point_projected;
 use std::algorithm::ranges::stable_partition;
+use std::algorithm::ranges::stable_partition_projected;
 use std::algorithm::ranges::partition as ranges_partition;
+use std::algorithm::ranges::partition_projected;
 use std::algorithm::ranges::partition_copy;
+use std::algorithm::ranges::partition_copy_projected;
 use std::algorithm::ranges::find_if_not;
 use std::algorithm::ranges::find_last_if_not;
 use std::algorithm::ranges::remove_if;
@@ -2950,6 +2956,44 @@ fn test_algorithm_ranges_partition_algorithms() {
     };
     verify(partition_point(large, below_midpoint) == 512);
     verify(calls <= 11);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_partition_algorithms() {
+    let values: list<i32> = [11, 21, 29, 31, 34, 42];
+    let project_tens = |value: i32| { return value / 10; };
+    let below_three = |key: i32| { return key < 3; };
+
+    verify(is_partitioned_projected(values, below_three, project_tens));
+    verify(partition_point_projected(values, below_three, project_tens) == 3);
+    let selected: list<i32> = copy_if_projected(
+        values, below_three, project_tens);
+    verify(selected.len() == 3 && selected[0] == 11 &&
+           selected[1] == 21 && selected[2] == 29);
+
+    let stable: list<i32> = stable_partition_projected(
+        values, below_three, project_tens);
+    verify(stable.len() == 6 && stable[0] == 11 && stable[1] == 21 &&
+           stable[2] == 29 && stable[3] == 31 && stable[4] == 34 &&
+           stable[5] == 42);
+    let split: tuple<list<i32>, i64> = partition_projected(
+        values, below_three, project_tens);
+    let split_values: list<i32> = split.0;
+    verify(split.1 == 3 && split_values[0] == 11 && split_values[2] == 29 &&
+           split_values[3] == 31 && split_values[5] == 42);
+    let groups: tuple<list<i32>, list<i32>> = partition_copy_projected(
+        values, below_three, project_tens);
+    let matches: list<i32> = groups.0;
+    let nonmatches: list<i32> = groups.1;
+    verify(matches.len() == 3 && matches[2] == 29);
+    verify(nonmatches.len() == 3 && nonmatches[0] == 31 &&
+           nonmatches[2] == 42);
+
+    let invalid: list<i32> = [11, 31, 21];
+    verify(!is_partitioned_projected(invalid, below_three, project_tens));
+    let empty: list<i32> = [];
+    verify(is_partitioned_projected(empty, below_three, project_tens));
+    verify(partition_point_projected(empty, below_three, project_tens) == 0);
 }
 
 #[test]
