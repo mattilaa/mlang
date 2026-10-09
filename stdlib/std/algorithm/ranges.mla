@@ -2202,6 +2202,26 @@ pub fn rotate_left(data: &list<T>, amount: i64) -> list<T> {
     return out;
 }
 
+/// @brief Rotate a copied range so `middle` becomes its first element.
+/// The split index is clamped to `[0, data.len()]`; unlike the in-place
+/// C++20 algorithm, this eager-list counterpart leaves the input unchanged.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn rotate(data: &list<T>, middle: i64) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    var split: i64 = middle;
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    for i in split..n {
+        out.push(data[i]);
+    }
+    for i in 0..split {
+        out.push(data[i]);
+    }
+    return out;
+}
+
 /// @brief Materialize consecutive chunks of at most `chunk_size` elements.
 /// Eager-list counterpart to C++23 `views::chunk`; non-positive sizes are empty.
 /// @ingroup algorithm_ranges

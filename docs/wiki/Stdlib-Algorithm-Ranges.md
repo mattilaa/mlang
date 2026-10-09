@@ -215,7 +215,9 @@ fn example() {
 - `sorted_by(data, less)` returns a stable copied ordering by a strict
   comparator. Equivalent elements retain their original relative order.
 - `reversed` returns the elements in reverse order; `rotate_left` returns a
-  copy rotated by a normalized signed offset.
+  copy rotated by a normalized signed offset. `rotate(data, middle)` places
+  the suffix beginning at the split before the prefix (C++20 `ranges::rotate`
+  style), clamping the split index and leaving the input unchanged.
 - `chunked(data, size)` materializes consecutive sublists (C++23
   `views::chunk` style); the final chunk can be shorter, and non-positive sizes
   produce an empty list.
