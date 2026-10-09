@@ -558,6 +558,34 @@ pub fn cosh(value: Complex<f64>) -> Complex<f64> {
     };
 }
 
+/// @brief Complex tangent for `f32`, matching `std::tan`.
+pub fn tan(value: Complex<f32>) -> Complex<f32> {
+    var numerator: Complex<f32> = sin(value);
+    let denominator: Complex<f32> = cos(value);
+    return numerator / denominator;
+}
+
+/// @brief Complex tangent for `f64`, matching `std::tan`.
+pub fn tan(value: Complex<f64>) -> Complex<f64> {
+    var numerator: Complex<f64> = sin(value);
+    let denominator: Complex<f64> = cos(value);
+    return numerator / denominator;
+}
+
+/// @brief Complex hyperbolic tangent for `f32`.
+pub fn tanh(value: Complex<f32>) -> Complex<f32> {
+    var numerator: Complex<f32> = sinh(value);
+    let denominator: Complex<f32> = cosh(value);
+    return numerator / denominator;
+}
+
+/// @brief Complex hyperbolic tangent for `f64`.
+pub fn tanh(value: Complex<f64>) -> Complex<f64> {
+    var numerator: Complex<f64> = sinh(value);
+    let denominator: Complex<f64> = cosh(value);
+    return numerator / denominator;
+}
+
 /// @brief Complex exponential for `f32`, matching `std::exp`.
 pub fn exp(value: Complex<f32>) -> Complex<f32> {
     let magnitude: f32 = exp(value.re);
