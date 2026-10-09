@@ -167,6 +167,9 @@ fn example() {
 - `partition_copy(data, predicate)` returns a tuple of stable matching and
   nonmatching lists, evaluating the predicate once per element and preserving
   the input.
+- `partition(data, predicate)` returns `(partitioned_copy, boundary_index)`.
+  Matching elements precede the rest; this eager-list counterpart preserves
+  order within both groups and evaluates the predicate once per element.
 
 ### Transforms and sequence creation
 
