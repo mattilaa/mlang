@@ -92,6 +92,14 @@ use std::algorithm::ranges::is_heap;
 use std::algorithm::ranges::is_heap_until;
 use std::algorithm::ranges::is_heap_by;
 use std::algorithm::ranges::is_heap_until_by;
+use std::algorithm::ranges::make_heap;
+use std::algorithm::ranges::make_heap_by;
+use std::algorithm::ranges::push_heap;
+use std::algorithm::ranges::push_heap_by;
+use std::algorithm::ranges::pop_heap;
+use std::algorithm::ranges::pop_heap_by;
+use std::algorithm::ranges::sort_heap;
+use std::algorithm::ranges::sort_heap_by;
 use std::algorithm::ranges::merged;
 use std::algorithm::ranges::union_sorted;
 use std::algorithm::ranges::intersection_sorted;
@@ -800,6 +808,45 @@ fn test_algorithm_ranges_comparator_heap_queries() {
     verify(is_heap_by(empty, greater));
     verify(is_heap_until_by(empty, greater) == 0);
     verify(is_heap_by(one, greater) && is_heap_until_by(one, greater) == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_heap_algorithms() {
+    let values: list<i32> = [3, 1, 8, 4, 2];
+    let heap: list<i32> = make_heap(values);
+    verify(is_heap(heap) && heap[0] == 8);
+    verify(values[0] == 3 && values[2] == 8);
+
+    var appended: list<i32> = take(heap, heap.len());
+    appended.push(10);
+    let pushed: list<i32> = push_heap(appended);
+    verify(is_heap(pushed) && pushed[0] == 10);
+
+    let popped: list<i32> = pop_heap(pushed);
+    let popped_prefix: list<i32> = take(popped, popped.len() - 1);
+    verify(popped[popped.len() - 1] == 10 && is_heap(popped_prefix));
+    let ordered: list<i32> = sort_heap(heap);
+    verify(ordered.len() == 5 && ordered[0] == 1 && ordered[4] == 8);
+
+    let greater = |a: i32, b: i32| { return a > b; };
+    let min_heap: list<i32> = make_heap_by(values, greater);
+    verify(is_heap_by(min_heap, greater) && min_heap[0] == 1);
+    var min_appended: list<i32> = take(min_heap, min_heap.len());
+    min_appended.push(0);
+    let min_pushed: list<i32> = push_heap_by(min_appended, greater);
+    verify(is_heap_by(min_pushed, greater) && min_pushed[0] == 0);
+    let min_popped: list<i32> = pop_heap_by(min_pushed, greater);
+    verify(min_popped[min_popped.len() - 1] == 0);
+    let descending: list<i32> = sort_heap_by(min_heap, greater);
+    verify(descending[0] == 8 && descending[4] == 1);
+
+    let empty: list<i32> = [];
+    let empty_heap: list<i32> = make_heap(empty);
+    let empty_pushed: list<i32> = push_heap(empty);
+    let empty_popped: list<i32> = pop_heap(empty);
+    let empty_sorted: list<i32> = sort_heap(empty);
+    verify(empty_heap.len() == 0 && empty_pushed.len() == 0);
+    verify(empty_popped.len() == 0 && empty_sorted.len() == 0);
 }
 
 #[test]

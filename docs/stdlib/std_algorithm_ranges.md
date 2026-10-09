@@ -110,6 +110,13 @@ fn example() {
 - `is_heap_by(data, less)` and `is_heap_until_by(data, less)` check heap order
   using a strict comparator; the returned index is the first child for which
   `less(parent, child)` is true.
+- `make_heap` and `make_heap_by` build copied max-heaps (or comparator-defined
+  heaps). `push_heap`/`push_heap_by` restore order after the final element is
+  appended; `pop_heap`/`pop_heap_by` move the top element to the last position
+  and restore the prefix heap. `sort_heap`/`sort_heap_by` return the sorted
+  result. All operations preserve the input; push/pop follow the usual heap
+  preconditions, and the comparator variants use the same strict ordering as
+  the query helpers.
 - `lower_bound`, `upper_bound`, and `binary_search` perform logarithmic-time
   queries on a list sorted in nondecreasing order. The bounds return insertion
   indices; binary search returns `bool`.
