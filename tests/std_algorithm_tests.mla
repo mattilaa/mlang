@@ -221,6 +221,8 @@ use std::algorithm::ranges::replace_copy_if;
 use std::algorithm::ranges::replace_if;
 use std::algorithm::ranges::unique_by;
 use std::algorithm::ranges::unique_copy_by;
+use std::algorithm::ranges::unique_projected;
+use std::algorithm::ranges::unique_copy_projected;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
@@ -2907,4 +2909,23 @@ fn test_algorithm_ranges_predicate_removal_and_unique() {
     verify(find_if_not(empty, is_nonnegative) == -1);
     verify(empty_kept.len() == 0 && empty_replaced.len() == 0);
     verify(empty_unique.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_unique_projected() {
+    let values: list<i32> = [11, 12, 21, 22, 22, 31, 44];
+    let project_tens = |value: i32| { return value / 10; };
+    let unique_keys: list<i32> = unique_projected(values, project_tens);
+    verify(unique_keys.len() == 4);
+    verify(unique_keys[0] == 11 && unique_keys[1] == 21 &&
+           unique_keys[2] == 31 && unique_keys[3] == 44);
+    let copied: list<i32> = unique_copy_projected(values, project_tens);
+    verify(copied.len() == 4 && copied[0] == 11 && copied[1] == 21 &&
+           copied[2] == 31 && copied[3] == 44);
+    verify(values.len() == 7 && values[1] == 12);
+
+    let empty: list<i32> = [];
+    let empty_unique: list<i32> = unique_projected(empty, project_tens);
+    let empty_copy: list<i32> = unique_copy_projected(empty, project_tens);
+    verify(empty_unique.len() == 0 && empty_copy.len() == 0);
 }

@@ -100,6 +100,8 @@ fn example() {
   `ends_with_by` accept a binary equivalence predicate for custom matching.
 - `starts_with_projected` and `ends_with_projected` apply separate projections
   to the data and prefix/suffix before comparing their keys.
+- `unique_projected` and `unique_copy_projected` remove adjacent values with
+  equal projected keys while preserving the first original value in each run.
 - `lexicographical_compare`, `is_sorted`, `min_element_index`, and
   `max_element_index` provide ordering queries. The min/max index functions
   return `-1` on an empty list and keep the first index on ties.
