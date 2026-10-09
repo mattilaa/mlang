@@ -364,8 +364,9 @@ fn example() {
   bounds are clamped to `[0, len]`, while empty/reversed intervals are empty.
 - `iota(start, end)` materializes `[start, end)`; `iota_by(start, end, step)`
   supports positive and negative strides. A zero step or a step pointing away
-  from the bound returns an empty list. `iota_range(start, end)` is the generic
-  typed counterpart for comparable, incrementable element types.
+  from the bound returns an empty list. `iota_range(start, end)` and
+  `iota_range_by(start, end, step)` provide generic typed progressions; the
+  stepped form also terminates if arithmetic stops making progress.
 - `repeat(value, count)` eagerly materializes `count` copies of a value, the
   list counterpart to the C++23 `std::views::repeat`; non-positive counts are
   empty.

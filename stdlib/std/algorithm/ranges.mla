@@ -4304,6 +4304,41 @@ pub fn iota_range(start: T, end: T) -> list<T> {
     return out;
 }
 
+/// @brief Materialize a typed half-open progression using `step`.
+/// Positive and negative steps follow the direction of the bounds. A zero
+/// step, a step directed away from the bound, or arithmetic that stops making
+/// progress yields an empty or safely terminated list.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn iota_range_by(start: T, end: T, step: T) -> list<T> {
+    var out: list<T> = [];
+    if step == 0 {
+        return out;
+    }
+
+    var value: T = start;
+    if step > 0 {
+        while value < end {
+            out.push(value);
+            let next: T = value + step;
+            if next <= value {
+                break;
+            }
+            value = next;
+        }
+    } else {
+        while value > end {
+            out.push(value);
+            let next: T = value + step;
+            if next >= value {
+                break;
+            }
+            value = next;
+        }
+    }
+    return out;
+}
+
 /// @brief Materialize a half-open integer progression using `step`.
 /// Positive steps produce values below `end`; negative steps produce values
 /// above `end`. A zero step or a step directed away from the bound returns an
