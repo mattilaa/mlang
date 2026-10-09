@@ -56,6 +56,10 @@ use std::bits::byteswap_i64;
 use std::bits::byteswap_i32;
 use std::bits::byteswap_i16;
 use std::bits::byteswap_i8;
+use std::bits::Endian;
+use std::bits::native_endian;
+use std::bits::is_little_endian;
+use std::bits::is_big_endian;
 use std::bits::bit_cast_u32_from_f32;
 use std::bits::bit_cast_f32_from_u32;
 use std::bits::bit_cast_u64_from_f64;
@@ -165,6 +169,18 @@ fn test_cpp20_unsigned_bit_utilities() {
     verify(rotl_u64(one, 1) == two);
     verify(rotr_u64(two, 1) == one);
     verify(rotl_u64(two, -1) == one);
+}
+
+#[test]
+fn test_cpp20_native_endian() {
+    let endian: Endian = native_endian();
+    let little: bool = endian == Endian::Little;
+    let big: bool = endian == Endian::Big;
+    let mixed: bool = endian == Endian::Mixed;
+    verify(little || big || mixed);
+    verify(is_little_endian() == little);
+    verify(is_big_endian() == big);
+    verify(!(is_little_endian() && is_big_endian()));
 }
 
 #[test]

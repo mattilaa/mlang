@@ -2,6 +2,18 @@
 #include <stdint.h>
 #include <string.h>
 
+int32_t __mlang_std_bits_native_endian(void)
+{
+    const uint32_t marker = UINT32_C(1);
+    unsigned char representation[sizeof(marker)];
+    memcpy(representation, &marker, sizeof(marker));
+    if(representation[0] == 1)
+        return 0;
+    if(representation[sizeof(marker) - 1] == 1)
+        return 1;
+    return 2;
+}
+
 _Static_assert(sizeof(float) == sizeof(uint32_t) && FLT_RADIX == 2 &&
                    FLT_MANT_DIG == 24 && FLT_MAX_EXP == 128,
                "f32 bit_cast requires IEEE-754 binary32");

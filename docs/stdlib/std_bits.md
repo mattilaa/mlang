@@ -6,6 +6,14 @@ The module provides constructors for Mlang's logical `bit` type and C++20–23
 inspired operations on unsigned integers and IEEE-754 floating-point
 representations. Packed collections remain available in `std::bitset`.
 
+### Native byte order
+
+- `Endian` classifies the host as `Little`, `Big`, or `Mixed`.
+- `native_endian()` returns that classification; `is_little_endian()` and
+  `is_big_endian()` are convenient boolean checks.
+- These helpers correspond to C++20 `std::endian` and preserve the possibility
+  of a mixed-endian target.
+
 ### Logical bit values
 
 - `on()` / `ON()` return `bit(1)`.
