@@ -16,7 +16,8 @@ Numeric sequence helpers for integer lists, including generic list folds.
 - `accumulate_i64(data: &list<i64>, init: i64) -> i64`
 - `accumulate_by(data, init, operation)` folds with a caller-supplied
   `operation(accumulator, element)`; the accumulator type may differ from the
-  list element type, and empty input returns `init`.
+  list element type, and empty input returns `init`. The C++-style overload
+  `accumulate(data, init, operation)` is available as well.
 - `reduce(data, init)` and `reduce(data, init, operation)` provide seeded
   C++ `std::reduce` forms. The eager Mlang implementation is sequential, while
   callers should still use associative, commutative operations for portable
