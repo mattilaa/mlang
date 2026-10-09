@@ -149,6 +149,31 @@ pub fn accumulate_by(data: &list<T>, init: U, operation: Operation) -> U {
     return acc;
 }
 
+/// @brief Reduce a list with addition and a caller-supplied initial value.
+/// C++ `std::reduce` equivalent. This eager Mlang implementation evaluates
+/// elements sequentially; unlike `accumulate`, callers should use an
+/// associative, commutative operation when relying on C++ reduce semantics.
+/// @ingroup algorithm_numeric
+generic<T, U>
+pub fn reduce(data: &list<T>, init: U) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n { acc = acc + data[i]; }
+    return acc;
+}
+
+/// @brief Reduce a list with a caller-supplied binary operation.
+/// The implementation is sequential, but the operation should be associative
+/// and commutative to retain the general `std::reduce` contract.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation>
+pub fn reduce(data: &list<T>, init: U, operation: Operation) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n { acc = operation(acc, data[i]); }
+    return acc;
+}
+
 /// @brief Fold a list from left to right with a caller-supplied operation.
 /// `operation(accumulator, element)` returns the next accumulator.
 /// C++23 `std::ranges::fold_left` equivalent.

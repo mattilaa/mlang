@@ -17,6 +17,10 @@ Numeric sequence helpers for integer lists, including generic list folds.
 - `accumulate_by(data, init, operation)` folds with a caller-supplied
   `operation(accumulator, element)`; the accumulator type may differ from the
   list element type, and empty input returns `init`.
+- `reduce(data, init)` and `reduce(data, init, operation)` provide seeded
+  C++ `std::reduce` forms. The eager Mlang implementation is sequential, while
+  callers should still use associative, commutative operations for portable
+  C++ reduce semantics.
 - `fold_left(data, init, operation)` applies `operation(accumulator, element)`
   from the first element to the last; it returns `init` for empty input.
 - `fold_right(data, init, operation)` applies `operation(element, accumulator)`
