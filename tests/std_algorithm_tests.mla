@@ -382,6 +382,11 @@ use std::strbuf::sub;
 use std::testing::verify;
 use std::testing::verify_eq_i32;
 
+struct AlgorithmRangeItem {
+    var key: i32;
+    var payload: i32;
+};
+
 #[test]
 fn test_algorithm_fuzzy_match_and_score() {
     verify(is_match("tracker_ui_demo.mla", "trui") == 1);
@@ -3812,6 +3817,20 @@ fn test_algorithm_ranges_sample_without_replacement() {
     let empty: list<i32> = [];
     let sampled_empty: list<i32> = ranges_sample(empty, 3, choose_last);
     verify(sampled_empty.len() == 0);
+
+    let records: list<AlgorithmRangeItem> = [
+        AlgorithmRangeItem { key: 1, payload: 10 },
+        AlgorithmRangeItem { key: 2, payload: 20 },
+        AlgorithmRangeItem { key: 3, payload: 30 },
+        AlgorithmRangeItem { key: 4, payload: 40 }
+    ];
+    let sampled_records: list<AlgorithmRangeItem> =
+        ranges_sample(records, 2, choose_last);
+    let first_record: AlgorithmRangeItem = sampled_records[0];
+    let second_record: AlgorithmRangeItem = sampled_records[1];
+    verify(sampled_records.len() == 2 && first_record.key == 3 &&
+           first_record.payload == 30 && second_record.key == 4 &&
+           second_record.payload == 40);
 }
 
 #[test]
