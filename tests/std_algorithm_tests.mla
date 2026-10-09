@@ -58,10 +58,13 @@ use std::algorithm::ranges::unique_stable_i64;
 use std::algorithm::ranges::clamp_i64;
 use std::algorithm::ranges::contains;
 use std::algorithm::ranges::contains_by;
+use std::algorithm::ranges::contains_by_projected;
 use std::algorithm::ranges::count;
 use std::algorithm::ranges::count_by;
+use std::algorithm::ranges::count_by_projected;
 use std::algorithm::ranges::find;
 use std::algorithm::ranges::find_by;
+use std::algorithm::ranges::find_by_projected;
 use std::algorithm::ranges::find_projected;
 use std::algorithm::ranges::find_last_projected;
 use std::algorithm::ranges::adjacent_find_projected;
@@ -290,6 +293,7 @@ use std::algorithm::ranges::sample as ranges_sample;
 use std::algorithm::ranges::shuffle as ranges_shuffle;
 use std::algorithm::ranges::remove_copy;
 use std::algorithm::ranges::remove_copy_by;
+use std::algorithm::ranges::remove_copy_by_projected;
 use std::algorithm::ranges::remove_copy_projected;
 use std::algorithm::ranges::remove_copy_if;
 use std::algorithm::ranges::remove_copy_if_projected;
@@ -334,6 +338,7 @@ use std::algorithm::ranges::max_element_value_by_projected;
 use std::algorithm::ranges::minmax_element_value_by_projected;
 use std::algorithm::ranges::remove;
 use std::algorithm::ranges::remove_by;
+use std::algorithm::ranges::remove_by_projected;
 use std::algorithm::ranges::remove_projected;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::iota;
@@ -568,6 +573,32 @@ fn test_algorithm_ranges_equivalence_lookup_and_removal() {
     verify(count_by(empty, 20, same_decade) == 0);
     let empty_removed: list<i32> = remove_by(empty, 20, same_decade);
     verify(empty_removed.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_equivalence_lookup_and_removal() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let project_tens = |value: i32| { return value / 10; };
+    let same_residue = |left: i32, right: i32| {
+        return left % 3 == right % 3;
+    };
+    verify(find_by_projected(values, 5, same_residue, project_tens) == 1);
+    verify(count_by_projected(values, 5, same_residue, project_tens) == 2);
+    verify(contains_by_projected(values, 8, same_residue, project_tens));
+    verify(contains_by_projected(values, 9, same_residue, project_tens));
+
+    let removed: list<i32> = remove_by_projected(
+        values, 5, same_residue, project_tens);
+    let removed_copy: list<i32> = remove_copy_by_projected(
+        values, 5, same_residue, project_tens);
+    verify(removed.len() == 3 && removed[0] == 11 && removed[1] == 31 &&
+           removed[2] == 42);
+    verify(removed_copy.len() == 3 && removed_copy[0] == 11 &&
+           removed_copy[1] == 31 && removed_copy[2] == 42);
+    verify(values.len() == 5 && values[1] == 22 && values[4] == 42);
+    let empty: list<i32> = [];
+    verify(!contains_by_projected(empty, 9, same_residue, project_tens));
+    verify(find_by_projected(empty, 9, same_residue, project_tens) == -1);
 }
 
 #[test]
