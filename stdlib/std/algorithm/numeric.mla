@@ -178,6 +178,62 @@ pub fn exclusive_scan(data: &list<T>, init: U, operation: Operation)
     return out;
 }
 
+/// @brief Project each input and return its inclusive accumulated prefixes.
+/// The first projected value initializes the accumulator; empty input returns
+/// an empty list. C++ `std::transform_inclusive_scan` without an initial value.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation, Projection>
+pub fn transform_inclusive_scan(data: &list<T>, operation: Operation,
+                                project: Projection) -> list<U> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return [];
+    }
+    var out: list<U> = [];
+    var acc: U = project(data[0]);
+    out.push(acc);
+    for i in 1..n {
+        acc = operation(acc, project(data[i]));
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Project inputs and return inclusive accumulated prefixes beginning
+/// with `init`. Empty input returns an empty list.
+/// C++ `std::transform_inclusive_scan` with an initial value.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation, Projection>
+pub fn transform_inclusive_scan(data: &list<T>, init: U,
+                                operation: Operation, project: Projection)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, project(data[i]));
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Project each input after emitting the current accumulator.
+/// C++ `std::transform_exclusive_scan` eager-list counterpart.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation, Projection>
+pub fn transform_exclusive_scan(data: &list<T>, init: U,
+                                operation: Operation, project: Projection)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        out.push(acc);
+        acc = operation(acc, project(data[i]));
+    }
+    return out;
+}
+
 /// @brief Generic prefix sums with an initial value.
 /// Returns `[init + d0, init + d0 + d1, ...]`.
 /// @ingroup algorithm_numeric
