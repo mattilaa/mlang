@@ -383,6 +383,8 @@ use std::algorithm::ranges::drop;
 use std::algorithm::ranges::drop_last;
 use std::algorithm::ranges::take_while;
 use std::algorithm::ranges::drop_while;
+use std::algorithm::ranges::take_while_projected;
+use std::algorithm::ranges::drop_while_projected;
 use std::algorithm::ranges::transform;
 use std::algorithm::ranges::transform_projected;
 use std::algorithm::ranges::zip_transform;
@@ -3053,6 +3055,34 @@ fn test_algorithm_ranges_take_drop_while() {
     let empty_prefix2: list<i32> = take_while(empty, below_three);
     let empty_suffix2: list<i32> = drop_while(empty, below_three);
     verify(empty_prefix2.len() == 0 && empty_suffix2.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_take_drop_while() {
+    let values: list<i32> = [11, 12, 19, 21, 25, 30];
+    let below_two = |key: i32| { return key < 2; };
+    let tens = |value: i32| { return value / 10; };
+    let prefix: list<i32> = take_while_projected(values, below_two, tens);
+    let suffix: list<i32> = drop_while_projected(values, below_two, tens);
+    verify(prefix.len() == 3 && prefix[0] == 11 && prefix[1] == 12 &&
+           prefix[2] == 19);
+    verify(suffix.len() == 3 && suffix[0] == 21 && suffix[1] == 25 &&
+           suffix[2] == 30);
+
+    let starts_rejected: list<i32> = [21, 11, 12];
+    let no_prefix: list<i32> =
+        take_while_projected(starts_rejected, below_two, tens);
+    let unchanged: list<i32> =
+        drop_while_projected(starts_rejected, below_two, tens);
+    verify(no_prefix.len() == 0 && unchanged.len() == 3 &&
+           unchanged[0] == 21 && unchanged[2] == 12);
+
+    let empty: list<i32> = [];
+    let empty_prefix: list<i32> =
+        take_while_projected(empty, below_two, tens);
+    let empty_suffix: list<i32> =
+        drop_while_projected(empty, below_two, tens);
+    verify(empty_prefix.len() == 0 && empty_suffix.len() == 0);
 }
 
 #[test]
