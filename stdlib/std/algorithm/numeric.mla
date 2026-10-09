@@ -311,6 +311,16 @@ pub fn inner_product_by(left: &list<T>, right: &list<V>, init: U,
     return acc;
 }
 
+/// @brief C++-style custom-operation overload of `inner_product`.
+/// `product(left, right)` forms each term; `reduce(accumulator, term)` folds
+/// it into the result. Inputs may have different element types.
+/// @ingroup algorithm_numeric
+generic<T, V, U, Reduce, Product>
+pub fn inner_product(left: &list<T>, right: &list<V>, init: U,
+                     reduce: Reduce, product: Product) -> U {
+    return inner_product_by(left, right, init, reduce, product);
+}
+
 /// @brief Return all inclusive prefix accumulations using `operation`.
 /// The first output is the first input element; empty input produces an empty list.
 /// C++ `std::inclusive_scan` equivalent.
