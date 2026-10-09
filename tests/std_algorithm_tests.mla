@@ -266,6 +266,12 @@ use std::algorithm::ranges::minmax_element_index_by;
 use std::algorithm::ranges::min_element_value_by;
 use std::algorithm::ranges::max_element_value_by;
 use std::algorithm::ranges::minmax_element_value_by;
+use std::algorithm::ranges::min_element_index_projected;
+use std::algorithm::ranges::max_element_index_projected;
+use std::algorithm::ranges::minmax_element_index_projected;
+use std::algorithm::ranges::min_element_value_projected;
+use std::algorithm::ranges::max_element_value_projected;
+use std::algorithm::ranges::minmax_element_value_projected;
 use std::algorithm::ranges::remove;
 use std::algorithm::ranges::remove_projected;
 use std::algorithm::ranges::take;
@@ -2093,6 +2099,30 @@ fn test_algorithm_ranges_comparator_element_extrema() {
     let descending = |a: i32, b: i32| { return a > b; };
     verify(min_element_index_by(values, descending) == 0);
     verify(max_element_index_by(values, descending) == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_element_extrema() {
+    let values: list<i32> = [23, 11, 19, 32, 38];
+    let empty: list<i32> = [];
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(min_element_index_projected(values, project_tens) == 1);
+    verify(max_element_index_projected(values, project_tens) == 3);
+    let indices: tuple<i64, i64> = minmax_element_index_projected(
+        values, project_tens);
+    verify(indices.0 == 1 && indices.1 == 4);
+    verify(min_element_index_projected(empty, project_tens) == -1);
+    verify(max_element_index_projected(empty, project_tens) == -1);
+    let empty_indices: tuple<i64, i64> = minmax_element_index_projected(
+        empty, project_tens);
+    verify(empty_indices.0 == -1 && empty_indices.1 == -1);
+
+    verify(min_element_value_projected(values, project_tens) == 11);
+    verify(max_element_value_projected(values, project_tens) == 32);
+    let extrema: tuple<i32, i32> = minmax_element_value_projected(
+        values, project_tens);
+    verify(extrema.0 == 11 && extrema.1 == 38);
 }
 
 #[test]

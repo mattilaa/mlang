@@ -3121,6 +3121,100 @@ pub fn minmax_element_value_by(data: &list<T>, less: Less)
     return (minimum, maximum);
 }
 
+/// @brief Return the first minimum index under projected-key ordering.
+/// Returns -1 for an empty range.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn min_element_index_projected(data: &list<T>,
+                                   projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 { return -1; }
+    var best: i64 = 0;
+    for i in 1..n {
+        if projection(data[i]) < projection(data[best]) { best = i; }
+    }
+    return best;
+}
+
+/// @brief Return the first maximum index under projected-key ordering.
+/// Returns -1 for an empty range.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn max_element_index_projected(data: &list<T>,
+                                   projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 { return -1; }
+    var best: i64 = 0;
+    for i in 1..n {
+        if projection(data[best]) < projection(data[i]) { best = i; }
+    }
+    return best;
+}
+
+/// @brief Return first-minimum and last-maximum indices by projected keys.
+/// Empty input returns `(-1, -1)`.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn minmax_element_index_projected(data: &list<T>,
+                                      projection: Projection)
+    -> tuple<i64, i64> {
+    let n: i64 = data.len();
+    if n == 0 { return (-1, -1); }
+    var minimum: i64 = 0;
+    var maximum: i64 = 0;
+    for i in 1..n {
+        if projection(data[i]) < projection(data[minimum]) { minimum = i; }
+        if !(projection(data[i]) < projection(data[maximum])) { maximum = i; }
+    }
+    return (minimum, maximum);
+}
+
+/// @brief Return the first value with a minimum projected key.
+/// Requires a nonempty input.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn min_element_value_projected(data: &list<T>,
+                                  projection: Projection) -> T {
+    var best: T = data[0];
+    let n: i64 = data.len();
+    for i in 1..n {
+        if projection(data[i]) < projection(best) { best = data[i]; }
+    }
+    return best;
+}
+
+/// @brief Return the first value with a maximum projected key.
+/// Requires a nonempty input.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn max_element_value_projected(data: &list<T>,
+                                  projection: Projection) -> T {
+    var best: T = data[0];
+    let n: i64 = data.len();
+    for i in 1..n {
+        if projection(best) < projection(data[i]) { best = data[i]; }
+    }
+    return best;
+}
+
+/// @brief Return first-minimum and last-maximum values by projected keys.
+/// Requires nonempty input, matching C++20 ranges minmax tie behavior.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn minmax_element_value_projected(data: &list<T>,
+                                      projection: Projection)
+    -> tuple<T, T> {
+    var minimum: T = data[0];
+    var maximum: T = data[0];
+    let n: i64 = data.len();
+    for i in 1..n {
+        let value: T = data[i];
+        if projection(value) < projection(minimum) { minimum = value; }
+        if !(projection(value) < projection(maximum)) { maximum = value; }
+    }
+    return (minimum, maximum);
+}
+
 /// @brief Return count of elements equal to value.
 /// @ingroup algorithm_ranges
 generic<T, U>
