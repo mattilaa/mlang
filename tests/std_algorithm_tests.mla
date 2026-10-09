@@ -38,6 +38,7 @@ use std::algorithm::ranges::fold_left as ranges_fold_left;
 use std::algorithm::ranges::fold_right as ranges_fold_right;
 use std::algorithm::ranges::fold_left_with_iter as ranges_fold_left_with_iter;
 use std::algorithm::ranges::fold_left_first as ranges_fold_left_first;
+use std::algorithm::ranges::fold_left_first_with_iter as ranges_fold_left_first_with_iter;
 use std::algorithm::ranges::fold_right_last as ranges_fold_right_last;
 use std::algorithm::numeric::transform_reduce;
 use std::algorithm::numeric::inclusive_scan;
@@ -3555,6 +3556,11 @@ fn test_algorithm_ranges_folds() {
 
     let left: option<i32> = ranges_fold_left_first(values, encode_left);
     let right: option<i32> = ranges_fold_right_last(values, encode_right);
+    let left_with_iter: option<tuple<i64, i32>> =
+        ranges_fold_left_first_with_iter(values, encode_left);
+    verify(left_with_iter.is_some());
+    let left_result: tuple<i64, i32> = left_with_iter.unwrap();
+    verify(left_result.0 == 3 && left_result.1 == 123);
     let left_value: i32 = match left { Some(value) => value, None => 0 };
     let right_value: i32 = match right { Some(value) => value, None => 0 };
     verify(left_value == 123 && right_value == 321);
@@ -3565,7 +3571,15 @@ fn test_algorithm_ranges_folds() {
     let empty_with_iter: tuple<i64, i32> = ranges_fold_left_with_iter(empty, 29, encode_left);
     verify(empty_with_iter.0 == 0 && empty_with_iter.1 == 29);
     verify(ranges_fold_left_first(empty, encode_left).is_none());
+    verify(ranges_fold_left_first_with_iter(empty, encode_left).is_none());
     verify(ranges_fold_right_last(empty, encode_right).is_none());
+
+    let singleton: list<i32> = [7];
+    let singleton_result: option<tuple<i64, i32>> =
+        ranges_fold_left_first_with_iter(singleton, encode_left);
+    verify(singleton_result.is_some());
+    let singleton_fold: tuple<i64, i32> = singleton_result.unwrap();
+    verify(singleton_fold.0 == 1 && singleton_fold.1 == 7);
 }
 
 #[test]
