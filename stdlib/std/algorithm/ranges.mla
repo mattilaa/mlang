@@ -6026,6 +6026,31 @@ pub fn clamp_by(data: &list<T>, low: T, high: T, less: Less) -> list<T> {
     return out;
 }
 
+/// @brief Clamp values using a comparator over projected element and bound keys.
+/// `low` must not follow `high` under the combined ordering.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn clamp_by_projected(data: &list<T>, low: T, high: T, less: Less,
+                          projection: Projection) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    if n == 0 { return out; }
+    let low_key = projection(low);
+    let high_key = projection(high);
+    for i in 0..n {
+        let item: T = data[i];
+        let item_key = projection(item);
+        if less(item_key, low_key) {
+            out.push(low);
+        } else if less(high_key, item_key) {
+            out.push(high);
+        } else {
+            out.push(item);
+        }
+    }
+    return out;
+}
+
 /// @brief Return first index of an i64 value, or -1 when not found.
 /// @ingroup algorithm_ranges
 pub fn find_i64(data: &list<i64>, value: i64) -> i64 {
