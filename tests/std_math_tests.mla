@@ -178,6 +178,21 @@ fn test_fma_fused_multiply_add() {
 }
 
 #[test]
+fn test_cpp_math_float_classification_and_nextafter() {
+    let next_f32: f32 = nextafter(1.0f, 2.0f);
+    let next_f64: f64 = nextafter(1.0, 2.0);
+    verify(next_f32 > 1.0f && next_f32 < 2.0f);
+    verify(next_f64 > 1.0 && next_f64 < 2.0);
+
+    verify(isfinite(next_f32) && isfinite(next_f64));
+    let infinity: f64 = exp(1000.0);
+    verify(isinf(infinity) && !isfinite(infinity));
+    let nan: f64 = sqrt(0.0 - 1.0);
+    verify(isnan(nan) && !isfinite(nan));
+    verify(signbit(0.0f - 1.0f) && !signbit(1.0));
+}
+
+#[test]
 fn test_cpp20_midpoint() {
     verify(midpoint(0, 1) == 0);
     verify(midpoint(1, 0) == 1);
