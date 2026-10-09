@@ -1,0 +1,128 @@
+/// \file flat_map.mla
+/// \brief Sorted list-backed associative map inspired by C++23 std::flat_map.
+///
+/// Entries are stored as a sorted `list<tuple<K, V>>`. Updates mutate the
+/// container through `&mut self`; reads use binary search. This eager Mlang
+/// container intentionally exposes key/value snapshots instead of C++ proxy
+/// iterators.
+
+/// @brief Sorted associative map with unique keys.
+pub struct FlatMap<K, V> {
+    var entries: list<tuple<K, V>>;
+};
+
+/// @brief Lowercase stdlib spelling for `FlatMap<K, V>`.
+alias flat_map<K, V> = FlatMap<K, V>;
+
+impl<K, V> FlatMap {
+    /// @brief Construct an empty flat map.
+    pub fn new() -> FlatMap<K, V> {
+        return FlatMap<K, V> { entries: [] };
+    }
+
+    /// @brief Number of key/value pairs.
+    pub fn len(self: &FlatMap<K, V>) -> i64 {
+        return self.entries.len();
+    }
+
+    /// @brief Whether the map has no entries.
+    pub fn is_empty(self: &FlatMap<K, V>) -> bool {
+        return self.entries.len() == 0;
+    }
+
+    /// @brief Return the first index whose key is not less than `key`.
+    /// Returns `len()` if every stored key is less than the query.
+    pub fn lower_bound(self: &FlatMap<K, V>, key: K) -> i64 {
+        var first: i64 = 0;
+        var count: i64 = self.entries.len();
+        while count > 0 {
+            let step: i64 = count / 2;
+            let middle: i64 = first + step;
+            let entry: tuple<K, V> = self.entries[middle];
+            if entry.0 < key {
+                first = middle + 1;
+                count = count - step - 1;
+            } else {
+                count = step;
+            }
+        }
+        return first;
+    }
+
+    /// @brief Whether the map contains `key`.
+    pub fn contains(self: &FlatMap<K, V>, key: K) -> bool {
+        let index: i64 = self.lower_bound(key);
+        if index >= self.entries.len() { return false; }
+        let entry: tuple<K, V> = self.entries[index];
+        return entry.0 == key;
+    }
+
+    /// @brief Find a value, returning `None` when the key is absent.
+    pub fn get(self: &FlatMap<K, V>, key: K) -> option<V> {
+        let index: i64 = self.lower_bound(key);
+        if index >= self.entries.len() { return None<V>(); }
+        let entry: tuple<K, V> = self.entries[index];
+        if entry.0 == key { return Some<V>(entry.1); }
+        return None<V>();
+    }
+
+    /// @brief Insert a new key or replace its existing value.
+    /// Returns `true` only when a new key was inserted.
+    pub fn insert(self: &mut FlatMap<K, V>, key: K, value: V) -> bool {
+        var updated: list<tuple<K, V>> = [];
+        var inserted: bool = true;
+        var placed: bool = false;
+        let count: i64 = self.entries.len();
+        for i in 0..count {
+            let entry: tuple<K, V> = self.entries[i];
+            if entry.0 == key {
+                updated.push((key, value));
+                inserted = false;
+                placed = true;
+            } else {
+                if !placed && key < entry.0 {
+                    updated.push((key, value));
+                    placed = true;
+                }
+                updated.push(entry);
+            }
+        }
+        if !placed { updated.push((key, value)); }
+        self.entries = updated;
+        return inserted;
+    }
+
+    /// @brief Erase a key, returning whether it was present.
+    pub fn remove(self: &mut FlatMap<K, V>, key: K) -> bool {
+        var updated: list<tuple<K, V>> = [];
+        var removed: bool = false;
+        let count: i64 = self.entries.len();
+        for i in 0..count {
+            let entry: tuple<K, V> = self.entries[i];
+            if entry.0 == key {
+                removed = true;
+            } else {
+                updated.push(entry);
+            }
+        }
+        self.entries = updated;
+        return removed;
+    }
+
+    /// @brief Remove every entry.
+    pub fn clear(self: &mut FlatMap<K, V>) -> void {
+        self.entries = [];
+    }
+
+    /// @brief Return the key at sorted position `index`.
+    pub fn key_at(self: &FlatMap<K, V>, index: i64) -> K {
+        let entry: tuple<K, V> = self.entries[index];
+        return entry.0;
+    }
+
+    /// @brief Return the value at sorted position `index`.
+    pub fn value_at(self: &FlatMap<K, V>, index: i64) -> V {
+        let entry: tuple<K, V> = self.entries[index];
+        return entry.1;
+    }
+}

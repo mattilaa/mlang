@@ -54,6 +54,8 @@ mod std_esc_tests;
 use std_esc_tests::*;
 mod std_math_tests;
 use std_math_tests::*;
+mod std_flat_map_tests;
+use std_flat_map_tests::*;
 mod test_sample;
 use test_sample::*;
 mod type_alias_tests;

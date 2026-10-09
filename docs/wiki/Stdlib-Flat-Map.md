@@ -1,0 +1,7 @@
+# `std::flat_map`
+
+See [`std::flat_map` API documentation](../stdlib/std_flat_map.md).
+
+This sorted, list-backed associative map has unique keys, binary-search lookup,
+and index-based access in key order. Insertions and removals rebuild the list,
+so it best fits small maps and read-heavy workloads.
