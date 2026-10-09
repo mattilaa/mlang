@@ -72,6 +72,7 @@ use std::algorithm::ranges::adjacent_find_by;
 use std::algorithm::ranges::find_first_of;
 use std::algorithm::ranges::find_first_of_by;
 use std::algorithm::ranges::includes;
+use std::algorithm::ranges::includes_projected;
 use std::algorithm::ranges::includes_by;
 use std::algorithm::ranges::size;
 use std::algorithm::ranges::empty;
@@ -584,6 +585,22 @@ fn test_algorithm_ranges_includes_by_comparator() {
     verify(includes_by(range, subset, greater));
     verify(!includes_by(range, too_many, greater));
     verify(includes_by(range, empty, greater));
+}
+
+#[test]
+fn test_algorithm_ranges_includes_projected() {
+    let range: list<i32> = [11, 21, 22, 41];
+    let subset: list<i32> = [19, 28];
+    let too_many: list<i32> = [12, 29, 27, 28];
+    let absent: list<i32> = [18, 39];
+    let empty: list<i32> = [];
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(includes_projected(range, subset, project_tens, project_tens));
+    verify(!includes_projected(range, too_many, project_tens, project_tens));
+    verify(!includes_projected(range, absent, project_tens, project_tens));
+    verify(includes_projected(range, empty, project_tens, project_tens));
+    verify(range[0] == 11 && range[2] == 22);
 }
 
 #[test]
