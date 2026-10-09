@@ -79,6 +79,9 @@ fn example() {
 - `equal` compares lists in order, including across distinct equality-comparable
   element types; `is_permutation` compares element multiplicities without
   considering order.
+- `equal_projected` and `mismatch_projected` apply independent projections
+  before comparing elements; `is_permutation_projected` compares projected
+  multisets while preserving duplicate counts.
 - `mismatch(left, right)` returns a tuple of the first unequal indices,
   stopping at the shorter range; an equal prefix returns its shared length for
   both indices. `mismatch_by` accepts a binary equivalence predicate.
@@ -95,6 +98,8 @@ fn example() {
 - `starts_with` and `ends_with` compare prefixes and suffixes, including across
   distinct equality-comparable element types; `starts_with_by` and
   `ends_with_by` accept a binary equivalence predicate for custom matching.
+- `starts_with_projected` and `ends_with_projected` apply separate projections
+  to the data and prefix/suffix before comparing their keys.
 - `lexicographical_compare`, `is_sorted`, `min_element_index`, and
   `max_element_index` provide ordering queries. The min/max index functions
   return `-1` on an empty list and keep the first index on ties.

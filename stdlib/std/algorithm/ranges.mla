@@ -991,6 +991,25 @@ pub fn equal(left: &list<T>, right: &list<U>) -> bool {
     return true;
 }
 
+/// @brief Compare ranges for equality after applying a projection to each.
+/// The two projections may return distinct equality-comparable types.
+/// @ingroup algorithm_ranges
+generic<T, U, LeftProjection, RightProjection>
+pub fn equal_projected(left: &list<T>, right: &list<U>,
+                       left_projection: LeftProjection,
+                       right_projection: RightProjection) -> bool {
+    let n: i64 = left.len();
+    if n != right.len() {
+        return false;
+    }
+    for i in 0..n {
+        if left_projection(left[i]) != right_projection(right[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// @brief Return indices of the first unequal elements in two ranges.
 /// Comparison stops when either range ends; equal prefixes return the shared
 /// prefix length for both indices, matching C++20 `std::ranges::mismatch`.
@@ -1005,6 +1024,26 @@ pub fn mismatch(left: &list<T>, right: &list<U>) -> tuple<i64, i64> {
     }
     for i in 0..n {
         if left[i] != right[i] {
+            return (i, i);
+        }
+    }
+    return (n, n);
+}
+
+/// @brief Find the first mismatch between ranges after projecting each value.
+/// Stops at the shorter range; an equal prefix returns its shared length.
+/// @ingroup algorithm_ranges
+generic<T, U, LeftProjection, RightProjection>
+pub fn mismatch_projected(left: &list<T>, right: &list<U>,
+                          left_projection: LeftProjection,
+                          right_projection: RightProjection)
+    -> tuple<i64, i64> {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var n: i64 = left_len;
+    if right_len < n { n = right_len; }
+    for i in 0..n {
+        if left_projection(left[i]) != right_projection(right[i]) {
             return (i, i);
         }
     }
@@ -1113,6 +1152,36 @@ pub fn is_permutation_by(left: &list<T>, right: &list<T>,
     return true;
 }
 
+/// @brief Compare projected values as multisets, including duplicate counts.
+/// The two projections may map different element types to a common comparable
+/// key type.
+/// @ingroup algorithm_ranges
+generic<T, U, LeftProjection, RightProjection>
+pub fn is_permutation_projected(left: &list<T>, right: &list<U>,
+                                left_projection: LeftProjection,
+                                right_projection: RightProjection) -> bool {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    if left_len != right_len { return false; }
+    for i in 0..left_len {
+        let key = left_projection(left[i]);
+        var left_count: i64 = 0;
+        var right_count: i64 = 0;
+        for j in 0..left_len {
+            if left_projection(left[j]) == key {
+                left_count = left_count + 1;
+            }
+        }
+        for j in 0..right_len {
+            if right_projection(right[j]) == key {
+                right_count = right_count + 1;
+            }
+        }
+        if left_count != right_count { return false; }
+    }
+    return true;
+}
+
 /// @brief Return whether `prefix` matches the beginning of `data`.
 /// The two ranges may have different, equality-comparable element types.
 /// @ingroup algorithm_ranges
@@ -1124,6 +1193,22 @@ pub fn starts_with(data: &list<T>, prefix: &list<U>) -> bool {
     }
     for i in 0..prefix_len {
         if data[i] != prefix[i] {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// @brief Check whether projected prefix keys match the range's initial keys.
+/// @ingroup algorithm_ranges
+generic<T, U, DataProjection, PrefixProjection>
+pub fn starts_with_projected(data: &list<T>, prefix: &list<U>,
+                             data_projection: DataProjection,
+                             prefix_projection: PrefixProjection) -> bool {
+    let prefix_len: i64 = prefix.len();
+    if prefix_len > data.len() { return false; }
+    for i in 0..prefix_len {
+        if data_projection(data[i]) != prefix_projection(prefix[i]) {
             return false;
         }
     }
@@ -1360,6 +1445,24 @@ pub fn ends_with(data: &list<T>, suffix: &list<U>) -> bool {
     let offset: i64 = data_len - suffix_len;
     for i in 0..suffix_len {
         if data[offset + i] != suffix[i] {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// @brief Check whether projected suffix keys match the range's final keys.
+/// @ingroup algorithm_ranges
+generic<T, U, DataProjection, SuffixProjection>
+pub fn ends_with_projected(data: &list<T>, suffix: &list<U>,
+                           data_projection: DataProjection,
+                           suffix_projection: SuffixProjection) -> bool {
+    let suffix_len: i64 = suffix.len();
+    let data_len: i64 = data.len();
+    if suffix_len > data_len { return false; }
+    let offset: i64 = data_len - suffix_len;
+    for i in 0..suffix_len {
+        if data_projection(data[offset + i]) != suffix_projection(suffix[i]) {
             return false;
         }
     }
