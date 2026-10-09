@@ -194,6 +194,9 @@ fn example() {
 - `for_each_n(data, count, operation)` invokes a closure on a bounded prefix
   in iteration order. Negative counts perform no calls and oversized counts
   clamp to the input length.
+- `for_each_projected` and `for_each_n_projected` invoke the operation on each
+  element's projected value, preserving traversal order and bounded-count
+  behavior.
 - `generate_n(count, generator)` materializes values by invoking a zero-argument
   generator closure `count` times; non-positive counts return an empty list.
   Captured generator state is preserved between invocations.
