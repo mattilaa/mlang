@@ -3673,6 +3673,30 @@ fn merge_projected_runs(left: &list<T>, right: &list<T>,
     return out;
 }
 
+generic<T, Less, Projection>
+fn merge_by_projected_runs(left: &list<T>, right: &list<T>, less: Less,
+                           projection: Projection) -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    while i < left_len && j < right_len {
+        let right_key = projection(right[j]);
+        let left_key = projection(left[i]);
+        if less(right_key, left_key) {
+            out.push(right[j]);
+            j = j + 1;
+        } else {
+            out.push(left[i]);
+            i = i + 1;
+        }
+    }
+    while i < left_len { out.push(left[i]); i = i + 1; }
+    while j < right_len { out.push(right[j]); j = j + 1; }
+    return out;
+}
+
 /// @brief Return a stable copy ordered by each element's projected key.
 /// Equal projected keys retain their input order; the input is unchanged.
 /// C++20 `std::ranges::stable_sort` projection counterpart.
@@ -3687,6 +3711,22 @@ pub fn sorted_projected(data: &list<T>, projection: Projection) -> list<T> {
     let left: list<T> = sorted_projected(take(data, middle), projection);
     let right: list<T> = sorted_projected(drop(data, middle), projection);
     return merge_projected_runs(left, right, projection);
+}
+
+/// @brief Return a stable copy sorted by comparator over projected keys.
+/// Equivalent projected keys retain their input order; the input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn sorted_by_projected(data: &list<T>, less: Less,
+                           projection: Projection) -> list<T> {
+    let n: i64 = data.len();
+    if n < 2 { return take(data, n); }
+    let middle: i64 = n / 2;
+    let left: list<T> = sorted_by_projected(
+        take(data, middle), less, projection);
+    let right: list<T> = sorted_by_projected(
+        drop(data, middle), less, projection);
+    return merge_by_projected_runs(left, right, less, projection);
 }
 
 /// @brief Return the next lexicographic permutation and whether it exists.

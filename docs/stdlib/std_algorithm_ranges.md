@@ -319,6 +319,8 @@ fn example() {
   comparator. Equivalent elements retain their original relative order.
 - `sorted_projected(data, projection)` returns a stable copy ordered by the
   projected key, preserving input order among equivalent keys.
+- `sorted_by_projected(data, less, projection)` combines projected keys with a
+  custom strict ordering and preserves input order among equivalent keys.
 - `reversed` returns the elements in reverse order; `rotate_left` returns a
   copy rotated by a normalized signed offset. `rotate(data, middle)` places
   the suffix beginning at the split before the prefix (C++20 `ranges::rotate`
