@@ -53,6 +53,10 @@ extern pub fn __mlang_std_bits_byteswap_u64(value: u64) -> u64;
 extern pub fn __mlang_std_bits_byteswap_u32(value: u32) -> u32;
 extern pub fn __mlang_std_bits_byteswap_u16(value: u16) -> u16;
 extern pub fn __mlang_std_bits_byteswap_u8(value: u8) -> u8;
+extern pub fn __mlang_std_bits_byteswap_i64(value: i64) -> i64;
+extern pub fn __mlang_std_bits_byteswap_i32(value: i32) -> i32;
+extern pub fn __mlang_std_bits_byteswap_i16(value: i16) -> i16;
+extern pub fn __mlang_std_bits_byteswap_i8(value: i8) -> i8;
 extern pub fn __mlang_std_bits_f32_to_u32(value: f32) -> u32;
 extern pub fn __mlang_std_bits_u32_to_f32(value: u32) -> f32;
 extern pub fn __mlang_std_bits_f64_to_u64(value: f64) -> u64;
@@ -204,6 +208,27 @@ pub fn byteswap_u16(value: u16) -> u16 {
 /// @brief Reverse the byte order of an 8-bit integer (no-op byte swap).
 pub fn byteswap_u8(value: u8) -> u8 {
     return __mlang_std_bits_byteswap_u8(value);
+}
+
+/// @brief Reverse the byte order of a signed 64-bit integer.
+/// C++23 equivalent of `std::byteswap` for signed integral types.
+pub fn byteswap_i64(value: i64) -> i64 {
+    return __mlang_std_bits_byteswap_i64(value);
+}
+
+/// @brief Reverse the byte order of a signed 32-bit integer.
+pub fn byteswap_i32(value: i32) -> i32 {
+    return __mlang_std_bits_byteswap_i32(value);
+}
+
+/// @brief Reverse the byte order of a signed 16-bit integer.
+pub fn byteswap_i16(value: i16) -> i16 {
+    return __mlang_std_bits_byteswap_i16(value);
+}
+
+/// @brief Reverse the byte order of a signed 8-bit integer (a no-op).
+pub fn byteswap_i8(value: i8) -> i8 {
+    return __mlang_std_bits_byteswap_i8(value);
 }
 
 /// @brief Reinterpret an IEEE-754 `f32` representation as `u32` bits.

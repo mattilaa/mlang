@@ -52,6 +52,10 @@ use std::bits::byteswap_u64;
 use std::bits::byteswap_u32;
 use std::bits::byteswap_u16;
 use std::bits::byteswap_u8;
+use std::bits::byteswap_i64;
+use std::bits::byteswap_i32;
+use std::bits::byteswap_i16;
+use std::bits::byteswap_i8;
 use std::bits::bit_cast_u32_from_f32;
 use std::bits::bit_cast_f32_from_u32;
 use std::bits::bit_cast_u64_from_f64;
@@ -216,6 +220,25 @@ fn test_cpp23_byteswap_unsigned_widths() {
     verify(byteswap_u16(v16) == r16);
     verify(byteswap_u16(r16) == v16);
     verify(byteswap_u8(v8) == v8);
+}
+
+#[test]
+fn test_cpp23_byteswap_signed_widths() {
+    let positive_i64: i64 = 72623859790382856;
+    let negative_i64: i64 = -2;
+    let positive_i32: i32 = 16909060;
+    let negative_i32: i32 = -2;
+    let positive_i16: i16 = 4660;
+    let negative_i16: i16 = -2;
+    let negative_i8: i8 = -42;
+
+    verify(byteswap_i64(positive_i64) == 578437695752307201);
+    verify(byteswap_i64(negative_i64) == -72057594037927937);
+    verify(byteswap_i32(positive_i32) == 67305985);
+    verify(byteswap_i32(negative_i32) == -16777217);
+    verify(byteswap_i16(positive_i16) == 13330);
+    verify(byteswap_i16(negative_i16) == -257);
+    verify(byteswap_i8(negative_i8) == negative_i8);
 }
 
 #[test]

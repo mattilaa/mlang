@@ -296,6 +296,23 @@ uint8_t __mlang_std_bits_byteswap_u8(uint8_t value)
     return value;
 }
 
+#define DEFINE_SIGNED_BYTESWAP(suffix, signed_type, unsigned_type, unsigned_suffix) \
+    signed_type __mlang_std_bits_byteswap_##suffix(signed_type value)            \
+    {                                                                            \
+        unsigned_type bits;                                                      \
+        memcpy(&bits, &value, sizeof(bits));                                     \
+        bits = __mlang_std_bits_byteswap_u##unsigned_suffix(bits);               \
+        memcpy(&value, &bits, sizeof(value));                                    \
+        return value;                                                            \
+    }
+
+DEFINE_SIGNED_BYTESWAP(i64, int64_t, uint64_t, 64)
+DEFINE_SIGNED_BYTESWAP(i32, int32_t, uint32_t, 32)
+DEFINE_SIGNED_BYTESWAP(i16, int16_t, uint16_t, 16)
+DEFINE_SIGNED_BYTESWAP(i8, int8_t, uint8_t, 8)
+
+#undef DEFINE_SIGNED_BYTESWAP
+
 uint32_t __mlang_std_bits_f32_to_u32(float value)
 {
     uint32_t bits;

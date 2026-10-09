@@ -24,7 +24,9 @@ representations. Packed collections remain available in [`std::bitset`](Stdlib-B
   rotations normalize counts by the value width and negative counts reverse
   direction.
 - `byteswap_u8`, `byteswap_u16`, `byteswap_u32`, and `byteswap_u64` reverse
-  byte order (the 8-bit operation is a no-op).
+  unsigned integer byte order; `byteswap_i8`, `byteswap_i16`, `byteswap_i32`,
+  and `byteswap_i64` do the same for signed integer representations. The 8-bit
+  operations are no-ops.
 
 The original 64-bit API names remain available for source compatibility.
 
