@@ -146,6 +146,7 @@ use std::algorithm::ranges::for_each_n;
 use std::algorithm::ranges::generate_n;
 use std::algorithm::ranges::copy_n;
 use std::algorithm::ranges::copy as ranges_copy;
+use std::algorithm::ranges::swap_ranges;
 use std::algorithm::ranges::filter;
 use std::algorithm::ranges::is_partitioned;
 use std::algorithm::ranges::partition_point;
@@ -2163,6 +2164,26 @@ fn test_algorithm_ranges_copy_n() {
     let empty: list<i32> = [];
     let empty_copy: list<i32> = ranges_copy(empty);
     verify(empty_copy.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_swap_ranges_copy() {
+    let left: list<i32> = [1, 2, 3, 4];
+    let right: list<i32> = [8, 9];
+    let swapped: tuple<list<i32>, list<i32>> = swap_ranges(left, right);
+    let new_left: list<i32> = swapped.0;
+    let new_right: list<i32> = swapped.1;
+    verify(new_left.len() == 4 && new_left[0] == 8 &&
+           new_left[1] == 9 && new_left[2] == 3 && new_left[3] == 4);
+    verify(new_right.len() == 2 && new_right[0] == 1 && new_right[1] == 2);
+    verify(left[0] == 1 && left[3] == 4 && right[0] == 8 && right[1] == 9);
+
+    let empty: list<i32> = [];
+    let swapped_empty: tuple<list<i32>, list<i32>> = swap_ranges(empty, right);
+    let empty_left: list<i32> = swapped_empty.0;
+    let unchanged_right: list<i32> = swapped_empty.1;
+    verify(empty_left.len() == 0 && unchanged_right.len() == right.len());
+    verify(unchanged_right[0] == 8 && unchanged_right[1] == 9);
 }
 
 #[test]

@@ -151,6 +151,9 @@ fn example() {
   non-mutating operation is the Mlang counterpart to the C++20 algorithm.
 - `copy(data)` materializes a full list copy, the eager-list counterpart to
   `std::ranges::copy`; the source remains unchanged.
+- `swap_ranges(left, right)` returns two copied lists with corresponding
+  elements in the common prefix exchanged; an unmatched tail is preserved.
+  Both inputs remain unchanged.
 - `transform(data, operation)` eagerly maps every element into a new list;
   the output element type is inferred from the closure return type and may
   differ from the input element type.
