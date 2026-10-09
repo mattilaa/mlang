@@ -158,9 +158,11 @@ use std::algorithm::ranges::difference_sorted_projected;
 use std::algorithm::ranges::symmetric_difference_sorted;
 use std::algorithm::ranges::symmetric_difference_sorted_projected;
 use std::algorithm::ranges::merged_by;
+use std::algorithm::ranges::merged_by_projected;
 use std::algorithm::ranges::inplace_merge;
 use std::algorithm::ranges::inplace_merge_by;
 use std::algorithm::ranges::inplace_merge_projected;
+use std::algorithm::ranges::inplace_merge_by_projected;
 use std::algorithm::ranges::union_sorted_by;
 use std::algorithm::ranges::intersection_sorted_by;
 use std::algorithm::ranges::difference_sorted_by;
@@ -1653,6 +1655,33 @@ fn test_algorithm_ranges_comparator_merged() {
     verify(merged_values[5] == 4 && merged_values[6] == 3);
     verify(merged_values[7] == 3 && merged_values[8] == 3);
     verify(merged_values[9] == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_projected_merge() {
+    let left: list<i32> = [29, 22, 11];
+    let right: list<i32> = [28, 24, 19];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let project_tens = |value: i32| { return value / 10; };
+
+    let merged_values: list<i32> = merged_by_projected(
+        left, right, greater, project_tens);
+    verify(merged_values.len() == 6 && merged_values[0] == 29 &&
+           merged_values[1] == 22 && merged_values[2] == 28 &&
+           merged_values[3] == 24 && merged_values[4] == 11 &&
+           merged_values[5] == 19);
+    verify(is_sorted_by_projected(merged_values, greater, project_tens));
+
+    let halves: list<i32> = [29, 22, 28, 24, 19, 11];
+    let inplace: list<i32> = inplace_merge_by_projected(
+        halves, 3, greater, project_tens);
+    verify(inplace.len() == 6 && inplace[0] == 29 && inplace[1] == 22 &&
+           inplace[2] == 28 && inplace[3] == 24 && inplace[4] == 19 &&
+           inplace[5] == 11);
+    verify(halves[0] == 29 && halves[3] == 24);
+    let clamped: list<i32> = inplace_merge_by_projected(
+        left, 99, greater, project_tens);
+    verify(clamped.len() == left.len() && clamped[0] == 29);
 }
 
 #[test]

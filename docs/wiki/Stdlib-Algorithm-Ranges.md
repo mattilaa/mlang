@@ -393,6 +393,9 @@ fn example() {
 - `inplace_merge_projected` merges halves sorted by the same projected key,
   retaining the original values and taking equivalent keys from the left half
   first.
+- `merged_by_projected` and `inplace_merge_by_projected` combine a strict
+  comparator with a projection for stable ordering. Equal projected keys keep
+  left-range precedence, and the split index is clamped for the half-merge.
 - `union_sorted(left, right)` returns the sorted multiset union, keeping the
   maximum duplicate count for every value.
 - `intersection_sorted(left, right)` returns the sorted multiset intersection,
