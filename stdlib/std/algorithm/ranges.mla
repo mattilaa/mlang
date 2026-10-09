@@ -2852,6 +2852,60 @@ pub fn binary_search_projected(data: &list<T>, value: U, projection: Projection)
     return projected == value;
 }
 
+/// @brief Comparator-and-projection lower bound for an ordered range.
+/// `less` receives projected element keys and the lookup value.
+/// @ingroup algorithm_ranges
+generic<T, U, Less, Projection>
+pub fn lower_bound_by_projected(data: &list<T>, value: U, less: Less,
+                                projection: Projection) -> i64 {
+    var lo: i64 = 0;
+    var hi: i64 = data.len();
+    while lo < hi {
+        let mid: i64 = lo + (hi - lo) / 2;
+        if less(projection(data[mid]), value) { lo = mid + 1; }
+        else { hi = mid; }
+    }
+    return lo;
+}
+
+/// @brief Comparator-and-projection upper bound for an ordered range.
+/// `less` receives the lookup value and projected element keys.
+/// @ingroup algorithm_ranges
+generic<T, U, Less, Projection>
+pub fn upper_bound_by_projected(data: &list<T>, value: U, less: Less,
+                                projection: Projection) -> i64 {
+    var lo: i64 = 0;
+    var hi: i64 = data.len();
+    while lo < hi {
+        let mid: i64 = lo + (hi - lo) / 2;
+        if less(value, projection(data[mid])) { hi = mid; }
+        else { lo = mid + 1; }
+    }
+    return lo;
+}
+
+/// @brief Return the comparator-and-projection matching half-open range.
+/// @ingroup algorithm_ranges
+generic<T, U, Less, Projection>
+pub fn equal_range_by_projected(data: &list<T>, value: U, less: Less,
+                                projection: Projection) -> tuple<i64, i64> {
+    let first: i64 = lower_bound_by_projected(data, value, less, projection);
+    let last: i64 = upper_bound_by_projected(data, value, less, projection);
+    return (first, last);
+}
+
+/// @brief Search for a value using comparator-and-projection ordering.
+/// @ingroup algorithm_ranges
+generic<T, U, Less, Projection>
+pub fn binary_search_by_projected(data: &list<T>, value: U, less: Less,
+                                  projection: Projection) -> bool {
+    let position: i64 = lower_bound_by_projected(
+        data, value, less, projection);
+    if position >= data.len() { return false; }
+    let key = projection(data[position]);
+    return !less(key, value) && !less(value, key);
+}
+
 /// @brief Check sorted order using `less` as the strict ordering comparator.
 /// @ingroup algorithm_ranges
 generic<T, Less>
@@ -2874,6 +2928,32 @@ pub fn is_sorted_until_by(data: &list<T>, less: Less) -> i64 {
         if less(data[i], data[i - 1]) {
             return i;
         }
+    }
+    return n;
+}
+
+/// @brief Check comparator order on projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn is_sorted_by_projected(data: &list<T>, less: Less,
+                              projection: Projection) -> bool {
+    let n: i64 = data.len();
+    for i in 1..n {
+        if less(projection(data[i]), projection(data[i - 1])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// @brief Return the first projected comparator-order violation, or length.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn is_sorted_until_by_projected(data: &list<T>, less: Less,
+                                   projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    for i in 1..n {
+        if less(projection(data[i]), projection(data[i - 1])) { return i; }
     }
     return n;
 }
