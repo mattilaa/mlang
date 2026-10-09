@@ -30,7 +30,9 @@ The original 64-bit API names remain available for source compatibility.
 
 - `bit_cast_u32_from_f32` and `bit_cast_f32_from_u32`
 - `bit_cast_u64_from_f64` and `bit_cast_f64_from_u64`
+- `bit_cast_u32_from_i32` and `bit_cast_i32_from_u32`
+- `bit_cast_u64_from_i64` and `bit_cast_i64_from_u64`
 
-These reinterpret IEEE-754 bits without performing a numeric conversion. The
-native implementation verifies that the target platform uses binary32 and
-binary64 layouts.
+These reinterpret bits without performing a numeric conversion. Float pairs
+reinterpret IEEE-754 binary32/binary64 layouts; signed/unsigned integer pairs
+preserve the same-width two's-complement bit pattern.
