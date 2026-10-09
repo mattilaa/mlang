@@ -1477,6 +1477,22 @@ fn test_algorithm_ranges_zip_transform() {
 }
 
 #[test]
+fn test_algorithm_ranges_zip_transform_three_inputs() {
+    let first: list<i32> = [1, 2, 3];
+    let second: list<i64> = [10, 20];
+    let third: list<i32> = [100, 200, 300, 400];
+    let sum_three = |a: i32, b: i64, c: i32| { return a + i32(b) + c; };
+    let sums: list<i32> = zip_transform(first, second, third, sum_three);
+    verify(sums.len() == 2);
+    verify(sums[0] == 111 && sums[1] == 222);
+    verify(first.len() == 3 && second.len() == 2 && third.len() == 4);
+
+    let empty: list<i32> = [];
+    let no_sums: list<i32> = zip_transform(first, second, empty, sum_three);
+    verify(no_sums.len() == 0);
+}
+
+#[test]
 fn test_algorithm_ranges_chunk_by() {
     let values: list<i32> = [1, 2, 5, 6, 7, 10];
     let consecutive = |left: i32, right: i32| { return right == left + 1; };

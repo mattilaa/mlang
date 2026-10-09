@@ -132,9 +132,9 @@ fn example() {
 - `transform(data, operation)` eagerly maps every element into a new list;
   the output element type is inferred from the closure return type and may
   differ from the input element type.
-- `zip_transform(left, right, operation)` applies a binary operation to
-  corresponding values and stops at the shorter input, matching C++23
-  [`std::ranges::zip_transform`](Stdlib-Module-API).
+- `zip_transform` applies a binary or ternary operation to corresponding
+  values and stops at the shortest input, matching C++23
+  [`std::ranges::zip_transform`](Stdlib-Module-API) for those arities.
 - `find_if_not` returns the first rejected element's index; `remove_if` returns
   a copy without accepted elements, and `replace_if` substitutes a value for
   every accepted element. These transforms leave their input unchanged.
