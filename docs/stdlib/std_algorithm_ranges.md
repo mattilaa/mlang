@@ -71,6 +71,8 @@ fn example() {
   matches at index zero.
 - `search_n_projected` finds a consecutive run by comparing each element's
   projected key with the search value; non-positive counts also return zero.
+- `search_n_by_projected` applies an equivalence predicate to projected keys
+  and the search value, retaining the same count and no-match semantics.
 - `find_end` returns the last matching subrange start (`data.len()` for an
   empty pattern, `-1` if absent).
 - `search_by` and `find_end_by` find the first or last contiguous subrange
