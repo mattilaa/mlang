@@ -54,6 +54,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::event_loop", "std_event_loop.md"),
     ("std::exceptions", "std_exceptions.md"),
     ("std::expected", "std_expected.md"),
+    ("std::optional", "std_optional.md"),
     ("std::fs", "std_fs.md"),
     ("std::gps", "std_gps.md"),
     ("std::hash", "std_hash.md"),
