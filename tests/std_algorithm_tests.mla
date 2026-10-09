@@ -2452,6 +2452,33 @@ fn test_algorithm_ranges_zip_four_ranges() {
 }
 
 #[test]
+fn test_algorithm_ranges_zip_five_ranges() {
+    let first_values: list<i32> = [1, 2, 3];
+    let second_values: list<i64> = [10, 20];
+    let third_values: list<bool> = [true, false, true];
+    let fourth_values: list<str8> = ["a", "b", "c"];
+    let fifth_values: list<i32> = [100, 200, 300, 400];
+    let rows: list<tuple<i32, i64, bool, str8, i32>> =
+        zip(first_values, second_values, third_values, fourth_values,
+            fifth_values);
+    verify(rows.len() == 2);
+    let first_row: tuple<i32, i64, bool, str8, i32> = rows[0];
+    verify(first_row.0 == 1 && first_row.1 == 10 && first_row.2 &&
+           eq(first_row.3, "a") == 1 && first_row.4 == 100);
+
+    let a: list<i32> = [1, 2, 3];
+    let b: list<i32> = [10, 20];
+    let c: list<i32> = [100, 200, 300];
+    let d: list<i32> = [1000, 2000, 3000];
+    let e: list<i32> = [10000, 20000, 30000];
+    let sum_five = |x: i32, y: i32, z: i32, w: i32, v: i32| {
+        return x + y + z + w + v;
+    };
+    let sums: list<i32> = zip_transform(a, b, c, d, e, sum_five);
+    verify(sums.len() == 2 && sums[0] == 11111 && sums[1] == 22222);
+}
+
+#[test]
 fn test_algorithm_ranges_enumerate() {
     let values: list<i32> = [7, 3, 9];
     let indexed: list<tuple<i64, i32>> = enumerate(values);

@@ -302,9 +302,11 @@ fn example() {
 - `zip_transform3_projected` and `zip_transform4_projected` apply independent
   projections to three or four corresponding inputs before invoking the
   operation; each stops at the shortest input and infers the result type.
-- `zip_transform` applies a binary, ternary, or four-argument operation to
-  corresponding values and stops at the shortest input, matching C++23
-  [`std::ranges::zip_transform`](Stdlib-Module-API) for those arities.
+- `zip_transform` applies an operation to corresponding values across two to
+  five ranges, stopping at the shortest input. This eager-list API mirrors
+  the C++23 `std::ranges::zip_transform` shape for those arities.
+- `zip` materializes heterogeneous tuples from two through five input ranges,
+  stopping at the shortest input.
 - `find_if_not` returns the first rejected element's index; `remove_if` returns
   a copy without accepted elements, and `replace_if` substitutes a value for
   every accepted element. These transforms leave their input unchanged.
