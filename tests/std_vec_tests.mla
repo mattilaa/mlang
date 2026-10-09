@@ -3,6 +3,9 @@ mod std::testing;
 
 use std::vec::erase;
 use std::vec::erase_if;
+use std::vec::append_range;
+use std::vec::assign_range;
+use std::vec::insert_range;
 use std::testing::verify;
 
 #[test]
@@ -29,4 +32,31 @@ fn test_vec_erase_if_preserves_order() {
     verify(erase_if(&mut values, always) == 3 && values.is_empty());
     var empty: list<i32> = [];
     verify(erase_if(&mut empty, is_even) == 0 && empty.is_empty());
+}
+
+#[test]
+fn test_vec_range_modifiers() {
+    var values: list<i32> = [1, 2];
+    let appended: list<i32> = [3, 4];
+    verify(append_range(&mut values, appended) == 2);
+    verify(values.len() == 4 && values[0] == 1 && values[3] == 4);
+    let empty: list<i32> = [];
+    verify(append_range(&mut values, empty) == 0 && values.len() == 4);
+
+    let replacement: list<i32> = [7, 8, 9];
+    verify(assign_range(&mut values, replacement) == 3);
+    verify(values.len() == 3 && values[0] == 7 && values[2] == 9);
+    verify(assign_range(&mut values, empty) == 0 && values.is_empty());
+
+    var insertion_values: list<i32> = [1, 4];
+    let middle: list<i32> = [2, 3];
+    verify(insert_range(&mut insertion_values, 1, middle) == 1);
+    verify(insertion_values.len() == 4 && insertion_values[0] == 1 &&
+           insertion_values[1] == 2 && insertion_values[2] == 3 &&
+           insertion_values[3] == 4);
+    verify(insert_range(&mut insertion_values, -5, empty) == 0 &&
+           insertion_values.len() == 4);
+    verify(insert_range(&mut insertion_values, 99, middle) == 4);
+    verify(insertion_values.len() == 6 && insertion_values[4] == 2 &&
+           insertion_values[5] == 3);
 }

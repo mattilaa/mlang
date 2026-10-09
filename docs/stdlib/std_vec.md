@@ -5,8 +5,8 @@ Module file: `stdlib/std/vec.mla`
 `Vec<T>` is a type alias for `list<T>`. The two are interchangeable in all
 contexts. Methods listed below are compiler intrinsics backed by `libmlang_std`
 and are also summarized in "Built-in Collection Methods (Compiler Intrinsics)"
-above. The free `erase` helpers are generic library operations that mutate a
-Vec by retaining the surviving elements in order.
+above. The free `erase` and range-modifier helpers are generic library
+operations for in-place Vec updates.
 
 ### Constructors
 
@@ -33,6 +33,12 @@ Vec by retaining the surviving elements in order.
 - `erase_if(v, predicate) -> i64` — remove values accepted by a predicate
   (C++20 `std::erase_if(vector, predicate)`); preserves survivor order and
   returns the number removed
+- `append_range(&mut v, source) -> i64` — append a snapshot of `source`
+  (C++23 `vector::append_range`); returns the appended count
+- `assign_range(&mut v, source) -> i64` — replace all values from a snapshot
+  (C++23 `vector::assign_range`); returns the assigned count
+- `insert_range(&mut v, index, source) -> i64` — insert a snapshot at a
+  clamped index (C++23 `vector::insert_range`); returns the actual index
 - `set_f32(values, index, value) -> i32` — replace one `f32` element without
   changing list length or allocating; returns `-1` for an invalid index
 
