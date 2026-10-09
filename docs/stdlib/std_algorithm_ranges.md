@@ -121,6 +121,11 @@ fn example() {
   smallest values in ascending order. `partial_sort_by(data, count, less)`
   applies a caller-provided order (for example, to select the largest values).
   Counts clamp to the available range and the source is unchanged.
+- `nth_element(data, nth)` returns a copied partitioned list with its selected
+  value at `nth`; under ascending order, preceding values are no greater and
+  following values are no smaller. The two partitions are not otherwise
+  sorted. `nth_element_by` applies the same partition guarantee under `less`;
+  an invalid index returns an empty list.
 - `lower_bound`, `upper_bound`, and `binary_search` perform logarithmic-time
   queries on a list sorted in nondecreasing order. The bounds return insertion
   indices; binary search returns `bool`.

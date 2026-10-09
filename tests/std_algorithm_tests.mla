@@ -102,6 +102,8 @@ use std::algorithm::ranges::sort_heap;
 use std::algorithm::ranges::sort_heap_by;
 use std::algorithm::ranges::partial_sort;
 use std::algorithm::ranges::partial_sort_by;
+use std::algorithm::ranges::nth_element;
+use std::algorithm::ranges::nth_element_by;
 use std::algorithm::ranges::merged;
 use std::algorithm::ranges::union_sorted;
 use std::algorithm::ranges::intersection_sorted;
@@ -872,6 +874,35 @@ fn test_algorithm_ranges_partial_sort() {
     let empty: list<i32> = [];
     let empty_sorted: list<i32> = partial_sort(empty, 2);
     verify(empty_sorted.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_nth_element() {
+    let values: list<i32> = [7, 2, 9, 1, 5, 3];
+    let partitioned: list<i32> = nth_element(values, 2);
+    verify(partitioned.len() == 6 && partitioned[2] == 3);
+    for i in 0..2 { verify(partitioned[i] <= partitioned[2]); }
+    for i in 3..6 { verify(partitioned[i] >= partitioned[2]); }
+    verify(values[0] == 7 && values[1] == 2);
+
+    let greater = |left: i32, right: i32| { return left > right; };
+    let reverse_partition: list<i32> = nth_element_by(values, 1, greater);
+    verify(reverse_partition[1] == 7);
+    for i in 0..1 { verify(reverse_partition[i] >= reverse_partition[1]); }
+    for i in 2..6 { verify(reverse_partition[i] <= reverse_partition[1]); }
+
+    let invalid_low: list<i32> = nth_element(values, -1);
+    let invalid_high: list<i32> = nth_element(values, 6);
+    let empty: list<i32> = [];
+    let invalid_empty: list<i32> = nth_element(empty, 0);
+    verify(invalid_low.len() == 0 && invalid_high.len() == 0 &&
+           invalid_empty.len() == 0);
+
+    let repeated: list<i32> = [5, 1, 5, 2, 5];
+    let repeated_partition: list<i32> = nth_element(repeated, 3);
+    verify(repeated_partition[3] == 5);
+    for i in 0..3 { verify(repeated_partition[i] <= 5); }
+    verify(repeated_partition[4] >= 5);
 }
 
 #[test]
