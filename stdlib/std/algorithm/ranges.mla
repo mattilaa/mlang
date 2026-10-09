@@ -1685,6 +1685,25 @@ pub fn iota_by(start: i64, end: i64, step: i64) -> list<i64> {
     return out;
 }
 
+/// @brief Materialize `count` copies of `value`.
+/// Eager-list counterpart to the C++23 `std::views::repeat` view.
+/// Non-positive counts return an empty list.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn repeat(value: T, count: i64) -> list<T> {
+    var out: list<T> = [];
+    if count <= 0 {
+        return out;
+    }
+    out.push(value);
+    var i: i64 = 1;
+    while i < count {
+        out.push(out[0]);
+        i = i + 1;
+    }
+    return out;
+}
+
 /// @brief Copy all elements after skipping the first `n`.
 /// @ingroup algorithm_ranges
 generic<T>

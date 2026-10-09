@@ -173,6 +173,7 @@ use std::algorithm::ranges::remove;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::iota;
 use std::algorithm::ranges::iota_by;
+use std::algorithm::ranges::repeat as repeat_range;
 use std::algorithm::ranges::drop;
 use std::algorithm::ranges::take_while;
 use std::algorithm::ranges::drop_while;
@@ -200,6 +201,7 @@ use std::strbuf::eq;
 use std::strbuf::free;
 use std::strbuf::sub;
 use std::testing::verify;
+use std::testing::verify_eq_i32;
 
 #[test]
 fn test_algorithm_fuzzy_match_and_score() {
@@ -1544,6 +1546,30 @@ fn test_algorithm_ranges_iota() {
     let near_max: list<i64> = iota_by(9223372036854775806,
                                       9223372036854775807, 4);
     verify(near_max.len() == 1 && near_max[0] == 9223372036854775806);
+
+}
+
+#[test]
+fn test_algorithm_ranges_repeat_len() {
+    let seven: i32 = 7;
+    let repeated: list<i32> = repeat_range(seven, 4);
+    verify(repeated.len() == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_repeat_contents() {
+    let seven: i32 = 7;
+    let repeated: list<i32> = repeat_range(seven, 4);
+    verify_eq_i32(7, repeated[0]);
+    verify_eq_i32(7, repeated[3]);
+}
+
+#[test]
+fn test_algorithm_ranges_repeat_nonpositive_count() {
+    let nine: i32 = 9;
+    let none: list<i32> = repeat_range(nine, 0);
+    let negative: list<i32> = repeat_range(nine, -3);
+    verify(none.len() == 0 && negative.len() == 0);
 }
 
 #[test]

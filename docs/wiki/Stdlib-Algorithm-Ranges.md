@@ -184,6 +184,9 @@ fn example() {
 - `iota(start, end)` materializes `[start, end)`; `iota_by(start, end, step)`
   supports positive and negative strides. A zero step or a step pointing away
   from the bound returns an empty list.
+- `repeat(value, count)` eagerly materializes `count` copies of a value, the
+  list counterpart to the C++23 `std::views::repeat`; non-positive counts are
+  empty.
 - `clamp_by(data, low, high, less)` clamps each element using a custom ordering;
   bounds must be ordered according to the comparator.
 - `sorted` returns a stable ascending copy and leaves the input unchanged.
