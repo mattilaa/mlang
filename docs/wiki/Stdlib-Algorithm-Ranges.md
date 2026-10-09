@@ -148,6 +148,9 @@ fn example() {
 - `take_while(data, predicate)` copies the initial matching prefix;
   `drop_while(data, predicate)` copies the rest after that prefix, matching the
   eager behavior of C++20 `views::take_while` and `views::drop_while`.
+- `iota(start, end)` materializes `[start, end)`; `iota_by(start, end, step)`
+  supports positive and negative strides. A zero step or a step pointing away
+  from the bound returns an empty list.
 - `clamp_by(data, low, high, less)` clamps each element using a custom ordering;
   bounds must be ordered according to the comparator.
 - `sorted` returns a stable ascending copy and leaves the input unchanged.

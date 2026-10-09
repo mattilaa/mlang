@@ -148,6 +148,7 @@ use std::algorithm::ranges::max_element_value_by;
 use std::algorithm::ranges::remove;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::iota;
+use std::algorithm::ranges::iota_by;
 use std::algorithm::ranges::drop;
 use std::algorithm::ranges::take_while;
 use std::algorithm::ranges::drop_while;
@@ -1256,6 +1257,23 @@ fn test_algorithm_ranges_iota() {
     let empty: list<i64> = iota(4, 4);
     let reversed: list<i64> = iota(5, 1);
     verify(empty.len() == 0 && reversed.len() == 0);
+
+    let stepped: list<i64> = iota_by(1, 10, 3);
+    verify(stepped.len() == 3);
+    verify(stepped[0] == 1 && stepped[1] == 4 && stepped[2] == 7);
+
+    let descending: list<i64> = iota_by(9, 0, -2);
+    verify(descending.len() == 5);
+    verify(descending[0] == 9 && descending[1] == 7 &&
+           descending[2] == 5 && descending[3] == 3 && descending[4] == 1);
+
+    let zero_step: list<i64> = iota_by(1, 10, 0);
+    let wrong_direction: list<i64> = iota_by(1, 10, -1);
+    verify(zero_step.len() == 0 && wrong_direction.len() == 0);
+
+    let near_max: list<i64> = iota_by(9223372036854775806,
+                                      9223372036854775807, 4);
+    verify(near_max.len() == 1 && near_max[0] == 9223372036854775806);
 }
 
 #[test]
