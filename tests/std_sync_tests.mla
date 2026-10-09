@@ -9,6 +9,7 @@ use std::sync::Condvar;
 use std::sync::AtomicI64;
 use std::sync::AtomicOrder;
 use std::sync::LockFreeQueue;
+use std::sync::Latch;
 use std::sync::mutex;
 use std::testing::verify;
 use std::thread::*;
@@ -22,6 +23,12 @@ fn atomic_i64_increment_worker(raw_handle: i64, iterations: i64) -> i32 {
         index = index + 1;
     }
     return 0;
+}
+
+fn latch_arrive_worker(raw_handle: i64) -> i32 {
+    let latch: Latch = Latch { handle: raw_handle };
+    let waited: result<i32, str8> = latch.arrive_and_wait();
+    return waited.is_ok() ? 0 : 1;
 }
 
 fn test_mutex_lock_unlock_impl() -> i32 {
@@ -110,6 +117,45 @@ fn test_atomic_i64_parallel_increment() {
     verify(r1 == 0 && r2 == 0 && r3 == 0 && r4 == 0);
     verify(observed.is_ok());
     if observed.is_ok() { verify(observed.unwrap() == 40000); }
+}
+
+#[test]
+fn test_latch_count_down_and_wait() {
+    let created: result<Latch, str8> = Latch::new(2);
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let latch: Latch = created.unwrap();
+    let initially_ready: result<bool, str8> = latch.try_wait();
+    verify(initially_ready.is_ok());
+    if initially_ready.is_ok() { verify(!initially_ready.unwrap()); }
+
+    let h1: std::thread::thread = thread::spawn(latch_arrive_worker, latch.handle);
+    let h2: std::thread::thread = thread::spawn(latch_arrive_worker, latch.handle);
+    let r1: i32 = join(h1);
+    let r2: i32 = join(h2);
+    let ready: result<bool, str8> = latch.try_wait();
+    let too_many: result<i32, str8> = latch.count_down();
+    let bad_update: result<i32, str8> = latch.count_down_by(0);
+    latch.close();
+
+    verify(r1 == 0 && r2 == 0);
+    verify(ready.is_ok());
+    if ready.is_ok() { verify(ready.unwrap()); }
+    verify(too_many.is_err());
+    verify(bad_update.is_err());
+}
+
+#[test]
+fn test_latch_zero_count_is_ready() {
+    let created: result<Latch, str8> = Latch::new(0);
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let latch: Latch = created.unwrap();
+    let ready: result<bool, str8> = latch.try_wait();
+    let waited: result<i32, str8> = latch.wait();
+    latch.close();
+    verify(ready.is_ok() && waited.is_ok());
+    if ready.is_ok() { verify(ready.unwrap()); }
 }
 
 fn test_condvar_wait_timeout_impl() -> i32 {

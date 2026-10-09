@@ -8,6 +8,7 @@ Module file: `stdlib/std/sync.mla`
 - `channel`
 - `lock_free_queue` (SPSC str8 queue)
 - `AtomicI64` (shared 64-bit atomic integer)
+- `Latch` (one-shot countdown latch)
 
 ### mutex
 - `mutex::new() -> result<mutex, str8>`
@@ -132,3 +133,28 @@ handle, not the underlying integer. Share the handle between threads, and call
 with all atomics, relaxed ordering makes the atomic value race-free but does
 not publish unrelated data; use acquire/release or sequential consistency for
 that synchronization.
+
+### Latch
+
+`Latch` is a one-shot C++20-style countdown latch. Construct it with the number
+of arrivals to wait for; zero starts ready. Each participant calls
+`count_down()` or `count_down_by(n)`, while waiters call `wait()`. `try_wait()`
+checks readiness without blocking, and `arrive_and_wait()` records one arrival
+before waiting. Invalid or excessive decrements return an error instead of
+underflowing the count. Reaching zero wakes every waiter. Call `close()` only
+after all participants and waiters have finished.
+
+```mlang
+mod std::sync;
+use std::sync::Latch;
+
+fn main() -> i32 {
+    let created: result<Latch, str8> = Latch::new(1);
+    if created.is_err() { return 1; }
+    let latch: Latch = created.unwrap();
+    let arrived: result<i32, str8> = latch.count_down();
+    let waited: result<i32, str8> = latch.wait();
+    latch.close();
+    return arrived.is_ok() && waited.is_ok() ? 0 : 1;
+}
+```

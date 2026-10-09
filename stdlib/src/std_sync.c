@@ -55,6 +55,13 @@ typedef struct
     _Atomic int64_t value;
 } mlang_sync_atomic_i64_t;
 
+typedef struct
+{
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    int64_t count;
+} mlang_sync_latch_t;
+
 static void set_error(const char* msg)
 {
     if(!msg)
@@ -274,6 +281,169 @@ int __mlang_std_sync_atomic_i64_free(int64_t handle)
         return -1;
     }
     free(value);
+    clear_error();
+    return 0;
+}
+
+int64_t __mlang_std_sync_latch_new(int64_t expected)
+{
+    if(expected < 0)
+    {
+        set_error("std::sync Latch: expected count must be non-negative");
+        return 0;
+    }
+    mlang_sync_latch_t* latch = calloc(1, sizeof(*latch));
+    if(!latch)
+    {
+        set_error("std::sync Latch: out of memory");
+        return 0;
+    }
+    int rc = pthread_mutex_init(&latch->mu, NULL);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: mutex init failed: %s", strerror(rc));
+        free(latch);
+        return 0;
+    }
+    rc = pthread_cond_init(&latch->cv, NULL);
+    if(rc != 0)
+    {
+        (void)pthread_mutex_destroy(&latch->mu);
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: condition init failed: %s", strerror(rc));
+        free(latch);
+        return 0;
+    }
+    latch->count = expected;
+    clear_error();
+    return (int64_t)(intptr_t)latch;
+}
+
+int __mlang_std_sync_latch_count_down(int64_t handle, int64_t update)
+{
+    mlang_sync_latch_t* latch = (mlang_sync_latch_t*)(intptr_t)handle;
+    if(!latch)
+    {
+        set_error("std::sync Latch: invalid handle");
+        return -1;
+    }
+    if(update <= 0)
+    {
+        set_error("std::sync Latch: update must be positive");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    if(update > latch->count)
+    {
+        (void)pthread_mutex_unlock(&latch->mu);
+        set_error("std::sync Latch: update exceeds remaining count");
+        return -1;
+    }
+    latch->count -= update;
+    if(latch->count == 0)
+    {
+        rc = pthread_cond_broadcast(&latch->cv);
+        if(rc != 0)
+        {
+            (void)pthread_mutex_unlock(&latch->mu);
+            (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: broadcast failed: %s", strerror(rc));
+            return -1;
+        }
+    }
+    rc = pthread_mutex_unlock(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_latch_try_wait(int64_t handle)
+{
+    mlang_sync_latch_t* latch = (mlang_sync_latch_t*)(intptr_t)handle;
+    if(!latch)
+    {
+        set_error("std::sync Latch: invalid handle");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    int ready = latch->count == 0;
+    rc = pthread_mutex_unlock(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return ready ? 1 : 0;
+}
+
+int __mlang_std_sync_latch_wait(int64_t handle)
+{
+    mlang_sync_latch_t* latch = (mlang_sync_latch_t*)(intptr_t)handle;
+    if(!latch)
+    {
+        set_error("std::sync Latch: invalid handle");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    while(latch->count > 0)
+    {
+        rc = pthread_cond_wait(&latch->cv, &latch->mu);
+        if(rc != 0)
+        {
+            (void)pthread_mutex_unlock(&latch->mu);
+            (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: wait failed: %s", strerror(rc));
+            return -1;
+        }
+    }
+    rc = pthread_mutex_unlock(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_latch_free(int64_t handle)
+{
+    mlang_sync_latch_t* latch = (mlang_sync_latch_t*)(intptr_t)handle;
+    if(!latch)
+    {
+        set_error("std::sync Latch: invalid handle");
+        return -1;
+    }
+    int rc = pthread_cond_destroy(&latch->cv);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: condition destroy failed: %s", strerror(rc));
+        return -1;
+    }
+    rc = pthread_mutex_destroy(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: mutex destroy failed: %s", strerror(rc));
+        return -1;
+    }
+    free(latch);
     clear_error();
     return 0;
 }
