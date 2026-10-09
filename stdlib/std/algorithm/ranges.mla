@@ -4670,6 +4670,36 @@ pub fn adjacent_transform(data: &list<T>, operation: Operation)
     return out;
 }
 
+/// @brief Apply a ternary operation to each adjacent triple.
+/// Eager C++23 `views::adjacent_transform<3>` counterpart.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform3(data: &list<T>, operation: Operation)
+    -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 3 { return out; }
+    for i in 0..(n - 2) {
+        out.push(operation(data[i], data[i + 1], data[i + 2]));
+    }
+    return out;
+}
+
+/// @brief Apply a four-argument operation to each adjacent group of four.
+/// Eager C++23 `views::adjacent_transform<4>` counterpart.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform4(data: &list<T>, operation: Operation)
+    -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 4 { return out; }
+    for i in 0..(n - 3) {
+        out.push(operation(data[i], data[i + 1], data[i + 2], data[i + 3]));
+    }
+    return out;
+}
+
 /// @brief Materialize every pair from two ranges in nested-loop order.
 /// The right range varies fastest; equivalent to C++23 `views::cartesian_product`.
 /// @ingroup algorithm_ranges

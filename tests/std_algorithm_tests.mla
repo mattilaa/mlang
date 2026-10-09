@@ -222,6 +222,8 @@ use std::algorithm::ranges::values;
 use std::algorithm::ranges::cartesian_product;
 use std::algorithm::ranges::pairwise;
 use std::algorithm::ranges::adjacent_transform;
+use std::algorithm::ranges::adjacent_transform3;
+use std::algorithm::ranges::adjacent_transform4;
 use std::algorithm::ranges::replace;
 use std::algorithm::ranges::replace_projected;
 use std::algorithm::ranges::all_of;
@@ -2212,6 +2214,27 @@ fn test_algorithm_ranges_pairwise() {
     let adjacent_sums: list<f64> = adjacent_transform(values, sum_as_double);
     verify(adjacent_sums.len() == 2);
     verify(adjacent_sums[0] == 10.0 && adjacent_sums[1] == 15.0);
+}
+
+#[test]
+fn test_algorithm_ranges_adjacent_transform_wider_windows() {
+    let values: list<i32> = [2, 4, 6, 8, 10];
+    let sum_three = |a: i32, b: i32, c: i32| { return a + b + c; };
+    let sum_four = |a: i32, b: i32, c: i32, d: i32| {
+        return a + b + c + d;
+    };
+    let triples: list<i32> = adjacent_transform3(values, sum_three);
+    verify(triples.len() == 3 && triples[0] == 12 && triples[1] == 18 &&
+           triples[2] == 24);
+    let quadruples: list<i32> = adjacent_transform4(values, sum_four);
+    verify(quadruples.len() == 2 && quadruples[0] == 20 &&
+           quadruples[1] == 28);
+
+    let short: list<i32> = [7, 9];
+    let no_triples: list<i32> = adjacent_transform3(short, sum_three);
+    let no_quadruples: list<i32> = adjacent_transform4(short, sum_four);
+    verify(no_triples.len() == 0 && no_quadruples.len() == 0);
+    verify(values[0] == 2 && values[4] == 10);
 }
 
 #[test]
