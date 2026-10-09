@@ -2836,6 +2836,23 @@ pub fn zip(first: &list<T>, second: &list<U>, third: &list<V>)
     return out;
 }
 
+/// @brief Zip four heterogeneous ranges, stopping at the shortest input.
+/// C++23 `views::zip` eager-list counterpart.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W>
+pub fn zip(first: &list<T>, second: &list<U>, third: &list<V>,
+          fourth: &list<W>) -> list<tuple<T, U, V, W>> {
+    var out: list<tuple<T, U, V, W>> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    for i in 0..n {
+        out.push((first[i], second[i], third[i], fourth[i]));
+    }
+    return out;
+}
+
 /// @brief Materialize tuples for each pair of adjacent elements.
 /// Eager C++23 `views::pairwise` equivalent; fewer than two elements yield
 /// an empty list and the input is unchanged.
@@ -2902,6 +2919,25 @@ pub fn cartesian_product(first: &list<T>, second: &list<U>, third: &list<V>)
         for j in 0..second_len {
             for k in 0..third_len {
                 out.push((first[i], second[j], third[k]));
+            }
+        }
+    }
+    return out;
+}
+
+/// @brief Materialize every quadruple from four ranges in nested-loop order.
+/// The rightmost range varies fastest; inputs remain unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W>
+pub fn cartesian_product(first: &list<T>, second: &list<U>, third: &list<V>,
+                         fourth: &list<W>) -> list<tuple<T, U, V, W>> {
+    var out: list<tuple<T, U, V, W>> = [];
+    for i in 0..first.len() {
+        for j in 0..second.len() {
+            for k in 0..third.len() {
+                for m in 0..fourth.len() {
+                    out.push((first[i], second[j], third[k], fourth[m]));
+                }
             }
         }
     }
