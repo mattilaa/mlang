@@ -73,6 +73,9 @@ fn example() {
 - `search_by` and `find_end_by` find the first or last contiguous subrange
   matching under a caller-provided equivalence predicate, including when the
   two ranges have different element types.
+- `search_projected` and `find_end_projected` compare independent projections
+  of the data and pattern; `contains_subrange_projected` provides the matching
+  membership query. Empty-pattern behavior matches the non-projected forms.
 - `contains_subrange_by(data, pattern, equivalent)` returns whether a
   contiguous pattern exists under a binary equivalence predicate, including
   for different element types. An empty pattern matches every range.

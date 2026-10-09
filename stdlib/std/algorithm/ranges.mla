@@ -1293,6 +1293,32 @@ pub fn search(data: &list<T>, pattern: &list<U>) -> i64 {
     return -1;
 }
 
+/// @brief Find the first subrange matching after independent projections.
+/// Returns 0 for an empty pattern and -1 when no match exists.
+/// @ingroup algorithm_ranges
+generic<T, U, DataProjection, PatternProjection>
+pub fn search_projected(data: &list<T>, pattern: &list<U>,
+                        data_projection: DataProjection,
+                        pattern_projection: PatternProjection) -> i64 {
+    let data_len: i64 = data.len();
+    let pattern_len: i64 = pattern.len();
+    if pattern_len == 0 { return 0; }
+    if pattern_len > data_len { return -1; }
+    let last_start: i64 = data_len - pattern_len;
+    for start in 0..(last_start + 1) {
+        var matched: bool = true;
+        for offset in 0..pattern_len {
+            if data_projection(data[start + offset]) !=
+               pattern_projection(pattern[offset]) {
+                matched = false;
+                break;
+            }
+        }
+        if matched { return start; }
+    }
+    return -1;
+}
+
 /// @brief Find the first subrange matching with a binary equivalence predicate.
 /// Returns 0 for an empty pattern and -1 when no match exists.
 /// @ingroup algorithm_ranges
@@ -1412,6 +1438,33 @@ pub fn find_end(data: &list<T>, pattern: &list<U>) -> i64 {
     return found;
 }
 
+/// @brief Find the last subrange matching after independent projections.
+/// Returns `data.len()` for an empty pattern and -1 when absent.
+/// @ingroup algorithm_ranges
+generic<T, U, DataProjection, PatternProjection>
+pub fn find_end_projected(data: &list<T>, pattern: &list<U>,
+                          data_projection: DataProjection,
+                          pattern_projection: PatternProjection) -> i64 {
+    let n: i64 = data.len();
+    let m: i64 = pattern.len();
+    if m == 0 { return n; }
+    if m > n { return -1; }
+    let last_start: i64 = n - m;
+    var found: i64 = -1;
+    for start in 0..(last_start + 1) {
+        var matches: bool = true;
+        for offset in 0..m {
+            if data_projection(data[start + offset]) !=
+               pattern_projection(pattern[offset]) {
+                matches = false;
+                break;
+            }
+        }
+        if matches { found = start; }
+    }
+    return found;
+}
+
 /// @brief Return the last matching subrange index using `equivalent`.
 /// Returns `data.len()` for an empty pattern and -1 when absent.
 /// @ingroup algorithm_ranges
@@ -1449,6 +1502,18 @@ pub fn find_end_by(data: &list<T>, pattern: &list<U>,
 generic<T, U>
 pub fn contains_subrange(data: &list<T>, pattern: &list<U>) -> bool {
     return search(data, pattern) >= 0;
+}
+
+/// @brief Test for a contiguous match after independent projections.
+/// An empty pattern matches every range.
+/// @ingroup algorithm_ranges
+generic<T, U, DataProjection, PatternProjection>
+pub fn contains_subrange_projected(
+    data: &list<T>, pattern: &list<U>,
+    data_projection: DataProjection,
+    pattern_projection: PatternProjection) -> bool {
+    return search_projected(data, pattern, data_projection,
+                            pattern_projection) >= 0;
 }
 
 /// @brief Return whether `pattern` occurs contiguously under `equivalent`.

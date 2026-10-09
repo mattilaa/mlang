@@ -85,12 +85,15 @@ use std::algorithm::ranges::starts_with;
 use std::algorithm::ranges::starts_with_projected;
 use std::algorithm::ranges::starts_with_by;
 use std::algorithm::ranges::search;
+use std::algorithm::ranges::search_projected;
 use std::algorithm::ranges::search_by;
 use std::algorithm::ranges::search_n;
 use std::algorithm::ranges::search_n_by;
 use std::algorithm::ranges::find_end;
+use std::algorithm::ranges::find_end_projected;
 use std::algorithm::ranges::find_end_by;
 use std::algorithm::ranges::contains_subrange;
+use std::algorithm::ranges::contains_subrange_projected;
 use std::algorithm::ranges::contains_subrange_by;
 use std::algorithm::ranges::ends_with;
 use std::algorithm::ranges::ends_with_projected;
@@ -684,6 +687,29 @@ fn test_algorithm_ranges_generic_find_end() {
     verify(find_end(data, pattern) == 2);
     verify(find_end(data, missing) == -1);
     verify(find_end(data, empty) == 5);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_pattern_search() {
+    let data: list<i32> = [11, 22, 19, 28, 31, 14, 26];
+    let pattern: list<i32> = [15, 29];
+    let one_key: list<i32> = [18];
+    let absent: list<i32> = [18, 49];
+    let empty: list<i32> = [];
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(search_projected(data, pattern, project_tens, project_tens) == 0);
+    verify(find_end_projected(data, pattern, project_tens, project_tens) == 5);
+    verify(contains_subrange_projected(
+        data, pattern, project_tens, project_tens));
+    verify(find_end_projected(data, one_key, project_tens, project_tens) == 5);
+    verify(search_projected(data, absent, project_tens, project_tens) == -1);
+    verify(!contains_subrange_projected(
+        data, absent, project_tens, project_tens));
+    verify(search_projected(data, empty, project_tens, project_tens) == 0);
+    verify(find_end_projected(data, empty, project_tens, project_tens) == 7);
+    verify(contains_subrange_projected(
+        empty, empty, project_tens, project_tens));
 }
 
 #[test]
