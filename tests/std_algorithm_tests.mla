@@ -94,6 +94,8 @@ use std::algorithm::ranges::lexicographical_compare;
 use std::algorithm::ranges::lexicographical_compare_by;
 use std::algorithm::ranges::is_sorted;
 use std::algorithm::ranges::is_sorted_until;
+use std::algorithm::ranges::is_sorted_projected;
+use std::algorithm::ranges::is_sorted_until_projected;
 use std::algorithm::ranges::is_heap;
 use std::algorithm::ranges::is_heap_until;
 use std::algorithm::ranges::is_heap_by;
@@ -125,9 +127,13 @@ use std::algorithm::ranges::intersection_sorted_by;
 use std::algorithm::ranges::difference_sorted_by;
 use std::algorithm::ranges::symmetric_difference_sorted_by;
 use std::algorithm::ranges::lower_bound;
+use std::algorithm::ranges::lower_bound_projected;
 use std::algorithm::ranges::upper_bound;
+use std::algorithm::ranges::upper_bound_projected;
 use std::algorithm::ranges::equal_range;
+use std::algorithm::ranges::equal_range_projected;
 use std::algorithm::ranges::binary_search;
+use std::algorithm::ranges::binary_search_projected;
 use std::algorithm::ranges::is_sorted_by;
 use std::algorithm::ranges::is_sorted_until_by;
 use std::algorithm::ranges::lower_bound_by;
@@ -1092,6 +1098,28 @@ fn test_algorithm_ranges_generic_binary_search() {
     let words: list<str8> = ["ant", "bee", "fox"];
     verify(binary_search(words, "bee"));
     verify(binary_search(words, "cat") == false);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_order_queries() {
+    let records: list<i32> = [11, 19, 20, 28, 31];
+    let project_tens = |value: i32| { return value / 10; };
+    verify(is_sorted_projected(records, project_tens));
+    verify(is_sorted_until_projected(records, project_tens) == 5);
+    verify(lower_bound_projected(records, 2, project_tens) == 2);
+    verify(upper_bound_projected(records, 2, project_tens) == 4);
+    let twos: tuple<i64, i64> =
+        equal_range_projected(records, 2, project_tens);
+    verify(twos.0 == 2 && twos.1 == 4);
+    verify(binary_search_projected(records, 2, project_tens));
+    verify(!binary_search_projected(records, 4, project_tens));
+
+    let broken: list<i32> = [11, 21, 19, 30];
+    let empty_values: list<i32> = [];
+    verify(!is_sorted_projected(broken, project_tens));
+    verify(is_sorted_until_projected(broken, project_tens) == 2);
+    verify(is_sorted_projected(empty_values, project_tens));
+    verify(is_sorted_until_projected(empty_values, project_tens) == 0);
 }
 
 #[test]
