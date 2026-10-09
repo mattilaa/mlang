@@ -3,6 +3,8 @@ mod std::expected;
 use std::testing::verify;
 use std::expected::transform;
 use std::expected::transform_error;
+use std::expected::value_or;
+use std::expected::value_or_else;
 
 var generic_closure_call_count: i32 = 0;
 
@@ -187,5 +189,25 @@ fn test_expected_transform_error_and_value_propagation() {
     let success: result<i32, str8> = Ok<i32, str8>(17);
     let preserved: result<i32, bool> = transform_error(success, is_broken);
     verify(preserved.is_ok() && preserved.unwrap() == 17);
+    verify(calls == 1);
+}
+
+#[test]
+fn test_expected_value_or_fallbacks() {
+    let success: result<i32, str8> = Ok<i32, str8>(23);
+    let failure: result<i32, str8> = Err<i32, str8>("missing");
+    let zero: i32 = 0;
+    let fallback_value: i32 = 19;
+    verify(value_or(success, zero) == 23);
+    verify(value_or(failure, fallback_value) == 19);
+
+    var calls: i32 = 0;
+    let fallback = || {
+        calls = calls + 1;
+        return i32(31);
+    };
+    verify(value_or_else(success, fallback) == 23);
+    verify(calls == 0);
+    verify(value_or_else(failure, fallback) == 31);
     verify(calls == 1);
 }
