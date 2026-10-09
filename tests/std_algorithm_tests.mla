@@ -204,6 +204,7 @@ use std::algorithm::ranges::none_of_projected;
 use std::algorithm::ranges::find_if;
 use std::algorithm::ranges::find_if_projected;
 use std::algorithm::ranges::find_last_if;
+use std::algorithm::ranges::find_last_if_projected;
 use std::algorithm::ranges::count_if;
 use std::algorithm::ranges::count_if_projected;
 use std::algorithm::ranges::for_each;
@@ -229,6 +230,7 @@ use std::algorithm::ranges::partition_copy_projected;
 use std::algorithm::ranges::find_if_not;
 use std::algorithm::ranges::find_if_not_projected;
 use std::algorithm::ranges::find_last_if_not;
+use std::algorithm::ranges::find_last_if_not_projected;
 use std::algorithm::ranges::remove_if;
 use std::algorithm::ranges::remove_if_projected;
 use std::algorithm::ranges::copy_if;
@@ -2793,6 +2795,22 @@ fn test_algorithm_ranges_projected_predicate_queries() {
     verify(find_if_projected(empty, is_even, project_tens) == -1);
     verify(find_if_not_projected(empty, is_even, project_tens) == -1);
     verify(count_if_projected(empty, is_even, project_tens) == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_reverse_predicate_search() {
+    let values: list<i32> = [11, 22, 29, 31, 44];
+    let project_tens = |value: i32| { return value / 10; };
+    let is_even = |key: i32| { return key % 2 == 0; };
+    let below_four = |key: i32| { return key < 4; };
+
+    verify(find_last_if_projected(values, is_even, project_tens) == 4);
+    verify(find_last_if_not_projected(values, below_four, project_tens) == 4);
+    verify(find_last_if_projected(values, below_four, project_tens) == 3);
+
+    let empty: list<i32> = [];
+    verify(find_last_if_projected(empty, is_even, project_tens) == -1);
+    verify(find_last_if_not_projected(empty, below_four, project_tens) == -1);
 }
 
 #[test]

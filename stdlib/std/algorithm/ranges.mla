@@ -313,6 +313,20 @@ pub fn find_last_if(data: &list<T>, predicate: Predicate) -> i64 {
     return -1;
 }
 
+/// @brief Find the last element accepted after projection, or -1.
+/// C++23 `std::ranges::find_last_if` projection form.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn find_last_if_projected(data: &list<T>, predicate: Predicate,
+                              projection: Projection) -> i64 {
+    var i: i64 = data.len();
+    while i > 0 {
+        i = i - 1;
+        if predicate(projection(data[i])) { return i; }
+    }
+    return -1;
+}
+
 /// @brief Count elements accepted by `predicate` (C++20 `ranges::count_if`).
 /// @ingroup algorithm_ranges
 generic<T, Predicate>
@@ -986,6 +1000,20 @@ pub fn find_last_if_not(data: &list<T>, predicate: Predicate) -> i64 {
         if !predicate(data[i]) {
             return i;
         }
+    }
+    return -1;
+}
+
+/// @brief Find the last element rejected after projection, or -1.
+/// C++23 `std::ranges::find_last_if_not` projection form.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn find_last_if_not_projected(data: &list<T>, predicate: Predicate,
+                                  projection: Projection) -> i64 {
+    var i: i64 = data.len();
+    while i > 0 {
+        i = i - 1;
+        if !predicate(projection(data[i])) { return i; }
     }
     return -1;
 }

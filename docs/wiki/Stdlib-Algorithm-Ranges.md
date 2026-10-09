@@ -185,6 +185,8 @@ fn example() {
   `all_of_projected`, `any_of_projected`, and `none_of_projected` apply their
   predicate to each element's projected key, preserving the corresponding
   empty-range and not-found results.
+- `find_last_if_projected` and `find_last_if_not_projected` search from the
+  end for the final element accepted or rejected by a predicate on its key.
 - `for_each(data, operation)` invokes a closure once per element in iteration
   order; captured mutable state can collect side effects or a result.
 - `for_each_n(data, count, operation)` invokes a closure on a bounded prefix
