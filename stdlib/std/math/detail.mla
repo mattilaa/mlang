@@ -51,6 +51,8 @@ extern fn __mlang_std_math_isnan_f32(x: f32) -> i32;
 extern fn __mlang_std_math_isnan_f64(x: f64) -> i32;
 extern fn __mlang_std_math_signbit_f32(x: f32) -> i32;
 extern fn __mlang_std_math_signbit_f64(x: f64) -> i32;
+extern fn __mlang_std_math_atan2_f32(y: f32, x: f32) -> f32;
+extern fn __mlang_std_math_atan2_f64(y: f64, x: f64) -> f64;
 extern fn __mlang_std_math_sin_i32(x: i32) -> i32;
 extern fn __mlang_std_math_sin_f32(x: f32) -> f32;
 extern fn __mlang_std_math_sin_f64(x: f64) -> f64;

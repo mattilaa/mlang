@@ -260,6 +260,16 @@ int32_t __mlang_std_math_isnan_f64(double x) { return isnan(x); }
 int32_t __mlang_std_math_signbit_f32(float x) { return signbit(x); }
 int32_t __mlang_std_math_signbit_f64(double x) { return signbit(x); }
 
+float __mlang_std_math_atan2_f32(float y, float x)
+{
+    return atan2f(y, x);
+}
+
+double __mlang_std_math_atan2_f64(double y, double x)
+{
+    return atan2(y, x);
+}
+
 int32_t __mlang_std_math_sin_i32(int32_t x)
 {
     return (int32_t)sin((double)x);
