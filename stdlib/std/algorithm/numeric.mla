@@ -165,11 +165,11 @@ pub fn inclusive_scan(data: &list<T>, operation: Operation) -> list<T> {
 /// Each output is the accumulator before incorporating that position's element.
 /// C++ `std::exclusive_scan` equivalent.
 /// @ingroup algorithm_numeric
-generic<T, Operation>
-pub fn exclusive_scan(data: &list<T>, init: T, operation: Operation)
-    -> list<T> {
-    var out: list<T> = [];
-    var acc: T = init;
+generic<T, U, Operation>
+pub fn exclusive_scan(data: &list<T>, init: U, operation: Operation)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
     let n: i64 = data.len();
     for i in 0..n {
         out.push(acc);
