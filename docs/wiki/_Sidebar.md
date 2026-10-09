@@ -77,6 +77,7 @@
 - [[std::sed|Stdlib-Sed]]
 - [[std::serde|Stdlib-Serde]]
 - [[std::span|Stdlib-Span]]
+- [[std::stop_token|Stdlib-Stop-Token]]
 - [[std::strbuf|Stdlib-Strbuf]]
 - [[std::sync|Stdlib-Sync]]
 - [[std::term|Stdlib-Term]]

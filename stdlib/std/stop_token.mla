@@ -1,0 +1,99 @@
+/// \file stop_token.mla
+/// \brief Cooperative cancellation source and token types.
+///
+/// C++20 `std::stop_source` / `std::stop_token` inspired primitives. A source
+/// requests cancellation; workers poll tokens and decide how to stop. Tokens
+/// keep the shared state alive after their source has been closed.
+
+/// \cond INTERNAL_IMPORTS
+mod std::sync::detail;
+use std::sync::detail::*;
+/// \endcond
+
+/// @brief Owner of a shared, one-shot cancellation state.
+pub struct StopSource {
+    var handle: i64;
+};
+
+/// @brief Retained, read-only view of a cancellation state.
+pub struct StopToken {
+    var handle: i64;
+};
+
+/// @brief Return the most recent native synchronization error.
+fn stop_error() -> str8 {
+    return __mlang_std_sync_last_error();
+}
+
+impl StopSource {
+    /// @brief Create a fresh cancellation state with no stop request pending.
+    pub fn new() -> result<StopSource, str8> {
+        let handle: i64 = __mlang_std_sync_stop_new();
+        if handle == 0 { return Err<StopSource, str8>(stop_error()); }
+        return Ok<StopSource, str8>(StopSource { handle: handle });
+    }
+
+    /// @brief Clone ownership of the same stop state.
+    pub fn clone(self: StopSource) -> result<StopSource, str8> {
+        let rc: i32 = __mlang_std_sync_stop_source_retain(self.handle);
+        if rc != 0 { return Err<StopSource, str8>(stop_error()); }
+        return Ok<StopSource, str8>(StopSource { handle: self.handle });
+    }
+
+    /// @brief Create a retained token that observes this source's state.
+    pub fn token(self: StopSource) -> result<StopToken, str8> {
+        let rc: i32 = __mlang_std_sync_stop_retain(self.handle);
+        if rc != 0 { return Err<StopToken, str8>(stop_error()); }
+        return Ok<StopToken, str8>(StopToken { handle: self.handle });
+    }
+
+    /// @brief Request cancellation. True only for the call that first requests it.
+    pub fn request_stop(self: StopSource) -> result<bool, str8> {
+        let rc: i32 = __mlang_std_sync_stop_request(self.handle);
+        if rc < 0 { return Err<bool, str8>(stop_error()); }
+        return Ok<bool, str8>(rc == 1);
+    }
+
+    /// @brief Check whether this shared state has received a stop request.
+    pub fn stop_requested(self: StopSource) -> result<bool, str8> {
+        let rc: i32 = __mlang_std_sync_stop_requested(self.handle);
+        if rc < 0 { return Err<bool, str8>(stop_error()); }
+        return Ok<bool, str8>(rc == 1);
+    }
+
+    /// @brief Whether this source still owns a cancellation state.
+    pub fn stop_possible(self: StopSource) -> bool {
+        return self.handle != 0;
+    }
+
+    /// @brief Release this source's ownership; retained tokens remain valid.
+    pub fn close(self: StopSource) -> i32 {
+        return __mlang_std_sync_stop_source_release(self.handle);
+    }
+}
+
+impl StopToken {
+    /// @brief Clone this token and retain the shared cancellation state.
+    pub fn clone(self: StopToken) -> result<StopToken, str8> {
+        let rc: i32 = __mlang_std_sync_stop_retain(self.handle);
+        if rc != 0 { return Err<StopToken, str8>(stop_error()); }
+        return Ok<StopToken, str8>(StopToken { handle: self.handle });
+    }
+
+    /// @brief Poll the cancellation flag with acquire ordering.
+    pub fn stop_requested(self: StopToken) -> result<bool, str8> {
+        let rc: i32 = __mlang_std_sync_stop_requested(self.handle);
+        if rc < 0 { return Err<bool, str8>(stop_error()); }
+        return Ok<bool, str8>(rc == 1);
+    }
+
+    /// @brief Whether this token refers to a valid cancellation state.
+    pub fn stop_possible(self: StopToken) -> bool {
+        return __mlang_std_sync_stop_possible(self.handle) == 1;
+    }
+
+    /// @brief Release this token's retained reference.
+    pub fn close(self: StopToken) -> i32 {
+        return __mlang_std_sync_stop_release(self.handle);
+    }
+}

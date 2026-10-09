@@ -80,6 +80,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::serde", "std_serde.md"),
     ("std::simd", "std_simd.md"),
     ("std::span", "std_span.md"),
+    ("std::stop_token", "std_stop_token.md"),
     ("std::strbuf", "std_strbuf.md"),
     ("std::sync", "std_sync.md"),
     ("std::term", "std_term.md"),
