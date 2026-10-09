@@ -429,6 +429,8 @@ fn example() {
 - `adjacent_transform3` and `adjacent_transform4` apply ternary or four-argument
   operations to each neighboring triple or group of four, inferring the output
   type and returning an empty list when the input is too short.
+- The `_projected` adjacent-transform forms apply those operations to projected
+  keys while preserving the original source values.
 - `enumerate(data)` materializes `(index, value)` tuples with zero-based indices
   (C++23 `views::enumerate` style).
 - `keys(data)` and `values(data)` project the first or second member of each
