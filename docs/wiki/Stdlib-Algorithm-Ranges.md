@@ -411,6 +411,11 @@ fn example() {
   operations define equivalent values as neither being less than the other.
   They preserve the same stability and duplicate-count rules as their default
   ordering counterparts.
+- The `_by_projected` set-operation forms combine a strict comparator with a
+  unary projection: `includes_by_projected`, `union_sorted_by_projected`,
+  `intersection_sorted_by_projected`, `difference_sorted_by_projected`, and
+  `symmetric_difference_sorted_by_projected`. Both inputs must be sorted by
+  that combined ordering, and output values retain their original elements.
 - `replace(data, old, new)` copies a range while replacing every value equal
   to `old`; the original range is unchanged.
 - `remove_projected` and `remove_copy_projected` filter out elements whose

@@ -74,6 +74,7 @@ use std::algorithm::ranges::find_first_of_by;
 use std::algorithm::ranges::includes;
 use std::algorithm::ranges::includes_projected;
 use std::algorithm::ranges::includes_by;
+use std::algorithm::ranges::includes_by_projected;
 use std::algorithm::ranges::size;
 use std::algorithm::ranges::empty;
 use std::algorithm::ranges::equal;
@@ -164,6 +165,10 @@ use std::algorithm::ranges::union_sorted_by;
 use std::algorithm::ranges::intersection_sorted_by;
 use std::algorithm::ranges::difference_sorted_by;
 use std::algorithm::ranges::symmetric_difference_sorted_by;
+use std::algorithm::ranges::union_sorted_by_projected;
+use std::algorithm::ranges::intersection_sorted_by_projected;
+use std::algorithm::ranges::difference_sorted_by_projected;
+use std::algorithm::ranges::symmetric_difference_sorted_by_projected;
 use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::lower_bound_projected;
 use std::algorithm::ranges::lower_bound_by_projected;
@@ -1460,6 +1465,44 @@ fn test_algorithm_ranges_projected_merge_and_set_operations() {
     verify(symmetric_values.len() == 3);
     verify(symmetric_values[0] == 12 && symmetric_values[1] == 31 &&
            symmetric_values[2] == 42);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_projected_set_operations() {
+    let left: list<i32> = [59, 52, 41, 28, 24];
+    let right: list<i32> = [58, 53, 42, 33, 22];
+    let subset: list<i32> = [59, 41, 28];
+    let too_many: list<i32> = [59, 52, 51];
+    let empty: list<i32> = [];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(includes_by_projected(left, subset, greater, project_tens));
+    verify(!includes_by_projected(left, too_many, greater, project_tens));
+    verify(includes_by_projected(left, empty, greater, project_tens));
+
+    let union_values: list<i32> = union_sorted_by_projected(
+        left, right, greater, project_tens);
+    verify(union_values.len() == 6 && union_values[0] == 59 &&
+           union_values[1] == 52 && union_values[2] == 41 &&
+           union_values[3] == 33 && union_values[4] == 28 &&
+           union_values[5] == 24);
+    verify(is_sorted_by_projected(union_values, greater, project_tens));
+
+    let intersection_values: list<i32> = intersection_sorted_by_projected(
+        left, right, greater, project_tens);
+    verify(intersection_values.len() == 4 && intersection_values[0] == 59 &&
+           intersection_values[1] == 52 && intersection_values[2] == 41 &&
+           intersection_values[3] == 28);
+    let difference_values: list<i32> = difference_sorted_by_projected(
+        left, right, greater, project_tens);
+    verify(difference_values.len() == 1 && difference_values[0] == 24);
+    let symmetric_values: list<i32> =
+        symmetric_difference_sorted_by_projected(
+            left, right, greater, project_tens);
+    verify(symmetric_values.len() == 2 && symmetric_values[0] == 33 &&
+           symmetric_values[1] == 24);
+    verify(left[0] == 59 && right[0] == 58);
 }
 
 #[test]
