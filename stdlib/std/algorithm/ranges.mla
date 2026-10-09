@@ -1416,6 +1416,175 @@ pub fn is_heap_by(data: &list<T>, less: Less) -> bool {
     return is_heap_until_by(data, less) == data.len();
 }
 
+generic<T>
+fn heap_swap_at(data: &list<T>, first: i64, second: i64) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if i == first {
+            out.push(data[second]);
+        } else if i == second {
+            out.push(data[first]);
+        } else {
+            out.push(data[i]);
+        }
+    }
+    return out;
+}
+
+generic<T, Less>
+fn heap_sift_down_by(data: &list<T>, heap_len: i64, root: i64,
+                     less: Less) -> list<T> {
+    var heap: list<T> = take(data, data.len());
+    var parent: i64 = root;
+    while parent < heap_len / 2 {
+        let left: i64 = parent * 2 + 1;
+        var larger: i64 = left;
+        let right: i64 = left + 1;
+        if right < heap_len && less(heap[left], heap[right]) {
+            larger = right;
+        }
+        if !less(heap[parent], heap[larger]) {
+            break;
+        }
+        heap = heap_swap_at(heap, parent, larger);
+        parent = larger;
+    }
+    return heap;
+}
+
+/// @brief Return a max-heap copy of `data` (C++20 `ranges::make_heap`).
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn make_heap(data: &list<T>) -> list<T> {
+    var heap: list<T> = take(data, data.len());
+    var parent: i64 = heap.len() / 2;
+    while parent > 0 {
+        parent = parent - 1;
+        var current: i64 = parent;
+        while current < heap.len() / 2 {
+            let left: i64 = current * 2 + 1;
+            var larger: i64 = left;
+            let right: i64 = left + 1;
+            if right < heap.len() && heap[left] < heap[right] {
+                larger = right;
+            }
+            if !(heap[current] < heap[larger]) {
+                break;
+            }
+            heap = heap_swap_at(heap, current, larger);
+            current = larger;
+        }
+    }
+    return heap;
+}
+
+/// @brief Return a heap ordered by the strict comparison `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn make_heap_by(data: &list<T>, less: Less) -> list<T> {
+    var heap: list<T> = take(data, data.len());
+    var parent: i64 = heap.len() / 2;
+    while parent > 0 {
+        parent = parent - 1;
+        heap = heap_sift_down_by(heap, heap.len(), parent, less);
+    }
+    return heap;
+}
+
+/// @brief Restore heap order after appending one item to a max-heap copy.
+/// The input must have a heap-ordered prefix; the last element is the new item.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn push_heap(data: &list<T>) -> list<T> {
+    var heap: list<T> = take(data, data.len());
+    var child: i64 = heap.len() - 1;
+    while child > 0 {
+        let parent: i64 = (child - 1) / 2;
+        if !(heap[parent] < heap[child]) {
+            break;
+        }
+        heap = heap_swap_at(heap, parent, child);
+        child = parent;
+    }
+    return heap;
+}
+
+/// @brief Restore heap order after append, using `less` for priority order.
+/// The input must have a heap-ordered prefix; the last element is the new item.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn push_heap_by(data: &list<T>, less: Less) -> list<T> {
+    var heap: list<T> = take(data, data.len());
+    var child: i64 = heap.len() - 1;
+    while child > 0 {
+        let parent: i64 = (child - 1) / 2;
+        if !less(heap[parent], heap[child]) {
+            break;
+        }
+        heap = heap_swap_at(heap, parent, child);
+        child = parent;
+    }
+    return heap;
+}
+
+/// @brief Move the max element to the final slot and restore the prefix heap.
+/// For an empty range this returns an empty copy; the input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn pop_heap(data: &list<T>) -> list<T> {
+    let n: i64 = data.len();
+    var heap: list<T> = take(data, n);
+    if n < 2 {
+        return heap;
+    }
+    heap = heap_swap_at(heap, 0, n - 1);
+    var parent: i64 = 0;
+    let heap_len: i64 = n - 1;
+    while parent < heap_len / 2 {
+        let left: i64 = parent * 2 + 1;
+        var larger: i64 = left;
+        let right: i64 = left + 1;
+        if right < heap_len && heap[left] < heap[right] {
+            larger = right;
+        }
+        if !(heap[parent] < heap[larger]) {
+            break;
+        }
+        heap = heap_swap_at(heap, parent, larger);
+        parent = larger;
+    }
+    return heap;
+}
+
+/// @brief Pop from a heap ordered by `less`, placing its top at the end.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn pop_heap_by(data: &list<T>, less: Less) -> list<T> {
+    let n: i64 = data.len();
+    var heap: list<T> = take(data, n);
+    if n < 2 {
+        return heap;
+    }
+    heap = heap_swap_at(heap, 0, n - 1);
+    return heap_sift_down_by(heap, n - 1, 0, less);
+}
+
+/// @brief Return an ascending copy sorted from a max-heap.
+/// The input must satisfy max-heap order; inputs are not modified.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn sort_heap(data: &list<T>) -> list<T> {
+    return sorted(data);
+}
+
+/// @brief Return a copy sorted by `less` from a heap using that ordering.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn sort_heap_by(data: &list<T>, less: Less) -> list<T> {
+    return sorted_by(data, less);
+}
+
 /// @brief First index where `value` can be inserted without breaking order.
 /// Requires nondecreasing input; returns `data.len()` when value is too large.
 /// @ingroup algorithm_ranges
