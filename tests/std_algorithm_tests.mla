@@ -131,6 +131,7 @@ use std::algorithm::ranges::partial_sort;
 use std::algorithm::ranges::partial_sort_by;
 use std::algorithm::ranges::partial_sort_projected;
 use std::algorithm::ranges::partial_sort_copy;
+use std::algorithm::ranges::partial_sort_copy_projected;
 use std::algorithm::ranges::partial_sort_copy_by;
 use std::algorithm::ranges::nth_element;
 use std::algorithm::ranges::nth_element_by;
@@ -1142,6 +1143,23 @@ fn test_algorithm_ranges_partial_sort_copy_capacity() {
     let no_input: list<i32> = partial_sort_copy(empty_input, 4);
     verify(no_output.len() == 0 && no_input.len() == 0);
     verify(input[0] == 8 && input[3] == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_partial_sort_copy_projected() {
+    let input: list<i32> = [38, 12, 56, 21, 49];
+    let project_tens = |value: i32| { return value / 10; };
+    let selected: list<i32> = partial_sort_copy_projected(
+        input, 3, project_tens);
+    verify(selected.len() == 3 && selected[0] == 12 &&
+           selected[1] == 21 && selected[2] == 38);
+    let all: list<i32> = partial_sort_copy_projected(
+        input, 9, project_tens);
+    verify(all.len() == 5 && all[0] == 12 && all[1] == 21 &&
+           all[2] == 38 && all[3] == 49 && all[4] == 56);
+    let none: list<i32> = partial_sort_copy_projected(
+        input, -2, project_tens);
+    verify(none.len() == 0 && input[0] == 38);
 }
 
 #[test]

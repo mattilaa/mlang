@@ -168,6 +168,8 @@ fn example() {
 - `partial_sort_copy(data, output_capacity)` and its `_by` comparator form
   use the destination capacity to select and sort a prefix into a new list;
   this eager counterpart leaves the source unchanged.
+- `partial_sort_copy_projected` selects and sorts the output-capacity prefix
+  according to projected keys while retaining original values.
 - `nth_element(data, nth)` returns a copied partitioned list with its selected
   value at `nth`; under ascending order, preceding values are no greater and
   following values are no smaller. The two partitions are not otherwise
