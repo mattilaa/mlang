@@ -271,6 +271,10 @@ fn example() {
   `views::cartesian_product` style). An empty input produces an empty result.
 - `merged(left, right)` stably merges two sorted same-typed ranges into a new
   sorted list; equal elements from the left range come first.
+- `inplace_merge(data, middle)` stably merges the two sorted halves around
+  `middle` into a new list; `inplace_merge_by` accepts a strict comparator.
+  Despite the C++ name, these eager-list forms preserve the source and clamp
+  the split index to the range bounds.
 - `union_sorted(left, right)` returns the sorted multiset union, keeping the
   maximum duplicate count for every value.
 - `intersection_sorted(left, right)` returns the sorted multiset intersection,
