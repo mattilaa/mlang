@@ -134,6 +134,21 @@ pub fn accumulate(data: &list<T>, init: U) -> U {
     return acc;
 }
 
+/// @brief Fold a list into an accumulator using a caller-defined operation.
+/// `operation(accumulator, element)` returns the next accumulator, which may
+/// have a different type from the list elements. C++ `std::accumulate` binary
+/// operation overload equivalent.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation>
+pub fn accumulate_by(data: &list<T>, init: U, operation: Operation) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, data[i]);
+    }
+    return acc;
+}
+
 /// @brief Fold a list from left to right with a caller-supplied operation.
 /// `operation(accumulator, element)` returns the next accumulator.
 /// C++23 `std::ranges::fold_left` equivalent.
