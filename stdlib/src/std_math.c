@@ -221,6 +221,16 @@ double __mlang_std_math_sqrt_f64(double x)
     return sqrt(x);
 }
 
+float __mlang_std_math_hypot_f32(float x, float y)
+{
+    return hypotf(x, y);
+}
+
+double __mlang_std_math_hypot_f64(double x, double y)
+{
+    return hypot(x, y);
+}
+
 int32_t __mlang_std_math_sin_i32(int32_t x)
 {
     return (int32_t)sin((double)x);

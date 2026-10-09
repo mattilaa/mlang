@@ -15,6 +15,7 @@ Module file: `stdlib/std/math.mla`
 - `clamp(x, low, high)`
 - `pow(a, b)`
 - `sqrt(x)`
+- `hypot(x, y)` for [`f32`](Quick-Guide#types) and [`f64`](Quick-Guide#types), computing a stable Euclidean norm without squaring large or tiny arguments directly (C++20 [`std::hypot`](Stdlib-Module-API))
 - `sin(x)`
 - `cos(x)`
 - `tan(x)`
