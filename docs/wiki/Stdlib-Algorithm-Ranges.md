@@ -372,6 +372,9 @@ fn example() {
   `middle` into a new list; `inplace_merge_by` accepts a strict comparator.
   Despite the C++ name, these eager-list forms preserve the source and clamp
   the split index to the range bounds.
+- `inplace_merge_projected` merges halves sorted by the same projected key,
+  retaining the original values and taking equivalent keys from the left half
+  first.
 - `union_sorted(left, right)` returns the sorted multiset union, keeping the
   maximum duplicate count for every value.
 - `intersection_sorted(left, right)` returns the sorted multiset intersection,
