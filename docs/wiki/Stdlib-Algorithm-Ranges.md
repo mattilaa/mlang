@@ -164,16 +164,22 @@ fn example() {
   `is_heap_projected`, `make_heap_projected`, `push_heap_projected`,
   `pop_heap_projected`, and `sort_heap_projected`) apply a unary key projection
   while preserving the same copied-list behavior and heap preconditions.
+- The `_by_projected` heap forms combine a strict comparator with a unary key
+  projection for heap queries and make/push/pop/sort operations.
 - `partial_sort(data, count)` uses a bounded heap to return the `count`
   smallest values in ascending order. `partial_sort_by(data, count, less)`
   applies a caller-provided order (for example, to select the largest values).
   `partial_sort_projected(data, count, projection)` orders by projected keys.
-  Counts clamp to the available range and the source is unchanged.
+  `partial_sort_by_projected(data, count, less, projection)` combines both
+  ordering controls. Counts clamp to the available range and the source is
+  unchanged.
 - `partial_sort_copy(data, output_capacity)` and its `_by` comparator form
   use the destination capacity to select and sort a prefix into a new list;
   this eager counterpart leaves the source unchanged.
 - `partial_sort_copy_projected` selects and sorts the output-capacity prefix
   according to projected keys while retaining original values.
+- `partial_sort_copy_by_projected` applies both a comparator and a projection
+  while returning the selected original values in comparator order.
 - `nth_element(data, nth)` returns a copied partitioned list with its selected
   value at `nth`; under ascending order, preceding values are no greater and
   following values are no smaller. The two partitions are not otherwise
