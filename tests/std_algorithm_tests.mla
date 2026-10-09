@@ -28,6 +28,7 @@ use std::algorithm::numeric::midpoint_u8;
 use std::algorithm::numeric::midpoint_u16;
 use std::algorithm::numeric::midpoint_u32;
 use std::algorithm::numeric::accumulate;
+use std::algorithm::numeric::accumulate_by;
 use std::algorithm::numeric::fold_left;
 use std::algorithm::numeric::fold_right;
 use std::algorithm::numeric::fold_left_first;
@@ -3431,6 +3432,12 @@ fn test_algorithm_numeric_generic_accumulate() {
     verify(sum == 20);
     let zero_initial: i64 = 0;
     verify(accumulate(values, zero_initial) == 10);
+
+    let subtract = |acc: i64, value: i32| { return acc - value; };
+    let initial_difference: i64 = 20;
+    verify(accumulate_by(values, initial_difference, subtract) == 10);
+    let empty: list<i32> = [];
+    verify(accumulate_by(empty, initial_difference, subtract) == 20);
 }
 
 #[test]

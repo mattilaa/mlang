@@ -12,6 +12,9 @@ Numeric sequence helpers for integer lists, including generic list folds.
   `midpoint_i8/i16/i32` and `midpoint_u8/u16/u32` cover the remaining integer
   widths with the same tie behavior.
 - `accumulate_i64(data: &list<i64>, init: i64) -> i64`
+- `accumulate_by(data, init, operation)` folds with a caller-supplied
+  `operation(accumulator, element)`; the accumulator type may differ from the
+  list element type, and empty input returns `init`.
 - `fold_left(data, init, operation)` applies `operation(accumulator, element)`
   from the first element to the last; it returns `init` for empty input.
 - `fold_right(data, init, operation)` applies `operation(element, accumulator)`
