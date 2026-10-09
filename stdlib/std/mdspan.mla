@@ -9,6 +9,7 @@
 pub struct Mdspan<T> {
     var data: list<T>;
     var extents: list<i64>;
+    var layout_left: bool;
 };
 
 /// @brief Lowercase C++-style alias for `Mdspan<T>`.
@@ -56,8 +57,24 @@ pub fn from_extents(data: &list<T>, extents: &list<i64>) -> option<Mdspan<T>> {
     for i in 0..rank { copied_extents.push(extents[i]); }
     return Some<Mdspan<T>>(Mdspan<T> {
         data: copied_data,
-        extents: copied_extents
+        extents: copied_extents,
+        layout_left: false
     });
+}
+
+/// @brief Build a column-major descriptor using C++23 `layout_left` indexing.
+/// The data and extents use the same validation and copy behavior as
+/// `from_extents`; only multidimensional index mapping changes.
+generic<T>
+pub fn from_extents_left(data: &list<T>, extents: &list<i64>)
+    -> option<Mdspan<T>> {
+    let validated: option<Mdspan<T>> = from_extents(data, extents);
+    if validated.is_none() {
+        return None<Mdspan<T>>();
+    }
+    var view: Mdspan<T> = validated.unwrap();
+    view.layout_left = true;
+    return Some<Mdspan<T>>(view);
 }
 
 impl<T> Mdspan {
@@ -92,13 +109,26 @@ impl<T> Mdspan {
             return None<T>();
         }
         var flat_index: i64 = 0;
-        for dimension in 0..rank {
-            let index: i64 = indices[dimension];
-            let extent_value: i64 = self.extents[dimension];
-            if index < 0 || index >= extent_value {
-                return None<T>();
+        if self.layout_left {
+            var stride: i64 = 1;
+            for dimension in 0..rank {
+                let index: i64 = indices[dimension];
+                let extent_value: i64 = self.extents[dimension];
+                if index < 0 || index >= extent_value {
+                    return None<T>();
+                }
+                flat_index = flat_index + index * stride;
+                stride = stride * extent_value;
             }
-            flat_index = flat_index * extent_value + index;
+        } else {
+            for dimension in 0..rank {
+                let index: i64 = indices[dimension];
+                let extent_value: i64 = self.extents[dimension];
+                if index < 0 || index >= extent_value {
+                    return None<T>();
+                }
+                flat_index = flat_index * extent_value + index;
+            }
         }
         if flat_index < 0 || flat_index >= self.data.len() {
             return None<T>();

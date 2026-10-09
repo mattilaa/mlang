@@ -2,10 +2,11 @@
 
 Module file: `stdlib/std/mdspan.mla`
 
-`Mdspan<T>` is a checked, runtime-rank, row-major multidimensional descriptor
+`Mdspan<T>` is a checked, runtime-rank multidimensional descriptor
 inspired by C++23 `std::mdspan`. Mlang currently stores its own copy of the
 input data and extents; it is not a zero-copy view and does not implement C++
-layout or accessor policies.
+accessor policies. `from_extents` uses C++ `layout_right` (row-major) mapping;
+`from_extents_left` uses C++ `layout_left` (column-major) mapping.
 
 Use `from_extents(data, extents)` to construct a descriptor. Both arguments
 are borrowed and copied, so the caller retains its lists. It returns
@@ -17,6 +18,8 @@ single scalar element.
 - `extent(dimension)` returns an optional extent.
 - `get(indices)` requires exactly one index per dimension and returns `None`
   for invalid rank or out-of-bounds indices.
+- `from_extents_left(data, extents)` validates and copies the same inputs but
+  maps the leftmost extent contiguously, following C++23 `layout_left`.
 - `mdspan<T>` is a lowercase type alias for `Mdspan<T>`.
 
 Example:

@@ -3,6 +3,7 @@ mod std::testing;
 
 use std::mdspan::Mdspan;
 use std::mdspan::from_extents;
+use std::mdspan::from_extents_left;
 use std::testing::verify;
 use std::testing::verify_eq_i32;
 use std::testing::verify_eq_i64;
@@ -75,4 +76,27 @@ fn test_mdspan_rank_zero_scalar() {
     verify(scalar.rank() == 0 && scalar.size() == 1);
     verify(value.is_some());
     verify_eq_i32(42, value.unwrap());
+}
+
+#[test]
+fn test_mdspan_layout_left_column_major_access() {
+    let data: list<i32> = [10, 20, 30, 40, 50, 60];
+    let shape: list<i64> = [2, 3];
+    let maybe_left: option<Mdspan<i32>> = from_extents_left(data, shape);
+    verify(maybe_left.is_some());
+    let left: Mdspan<i32> = maybe_left.unwrap();
+    let first_column_second_row: list<i64> = [1, 0];
+    let second_column_first_row: list<i64> = [0, 1];
+    let last: list<i64> = [1, 2];
+    let a: option<i32> = left.get(first_column_second_row);
+    let b: option<i32> = left.get(second_column_first_row);
+    let c: option<i32> = left.get(last);
+    verify(a.is_some() && a.unwrap() == 20);
+    verify(b.is_some() && b.unwrap() == 30);
+    verify(c.is_some() && c.unwrap() == 60);
+    verify(data[0] == 10 && data[1] == 20 && data[2] == 30);
+
+    let bad_shape: list<i64> = [2, 4];
+    let invalid: option<Mdspan<i32>> = from_extents_left(data, bad_shape);
+    verify(invalid.is_none());
 }
