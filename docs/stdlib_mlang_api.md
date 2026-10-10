@@ -64,6 +64,7 @@ mod std::span;
 mod std::mdspan;
 mod std::flat_map;
 mod std::flat_set;
+mod std::flat_multiset;
 mod std::strbuf;
 mod std::sync;
 mod std::term;
@@ -164,6 +165,7 @@ The source-of-truth implementation files are:
 - [std::mdspan](stdlib/std_mdspan.md)
 - [std::flat_map](stdlib/std_flat_map.md)
 - [std::flat_set](stdlib/std_flat_set.md)
+- [std::flat_multiset](stdlib/std_flat_multiset.md)
 - [std::strbuf](stdlib/std_strbuf.md)
 - [std::unordered](stdlib/std_unordered.md)
 - [std::vec](stdlib/std_vec.md)
