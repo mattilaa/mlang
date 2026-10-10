@@ -9,6 +9,7 @@ use std::strbuf::contains;
 use std::sync::Channel;
 use std::sync::Condvar;
 use std::sync::AtomicI64;
+use std::sync::AtomicU64;
 use std::sync::AtomicBool;
 use std::sync::AtomicFlag;
 use std::sync::AtomicOrder;
@@ -50,6 +51,15 @@ fn atomic_i64_wait_for_one_worker(raw_handle: i64) -> i32 {
     let current: result<i64, str8> = counter.load();
     if current.is_err() { return 2; }
     return current.unwrap() == 2 ? 0 : 3;
+}
+
+fn atomic_u64_wait_worker(raw_handle: i64) -> i32 {
+    let value: AtomicU64 = AtomicU64 { handle: raw_handle };
+    let waited: result<i32, str8> = value.wait(0);
+    if waited.is_err() { return 1; }
+    let current: result<u64, str8> = value.load();
+    if current.is_err() { return 2; }
+    return current.unwrap() == 1 ? 0 : 3;
 }
 
 fn atomic_bool_wait_worker(raw_handle: i64) -> i32 {
@@ -263,6 +273,63 @@ fn test_atomic_bool_wait_notify() {
     let worker: std::thread::thread =
         thread::spawn(atomic_bool_wait_worker, value.handle);
     let stored: result<i32, str8> = value.store(true);
+    let notified: result<i32, str8> = value.notify_all();
+    let worker_status: i32 = join(worker);
+    let closed: i32 = value.close();
+    verify(stored.is_ok() && notified.is_ok() && worker_status == 0);
+    verify(closed == 0);
+}
+
+#[test]
+fn test_atomic_u64_full_width_operations() {
+    let max: u64 = 18446744073709551615;
+    let created: result<AtomicU64, str8> = AtomicU64::new(max);
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let value: AtomicU64 = created.unwrap();
+
+    let initial: result<u64, str8> = value.load_with_order(AtomicOrder::Acquire);
+    let wrapped_add: result<u64, str8> = value.fetch_add_with_order(
+        1, AtomicOrder::Relaxed);
+    let wrapped_value: result<u64, str8> = value.load();
+    let subtract: result<u64, str8> = value.fetch_sub(1);
+    let and_old: result<u64, str8> = value.fetch_and(15);
+    let or_old: result<u64, str8> = value.fetch_or(16);
+    let xor_old: result<u64, str8> = value.fetch_xor(3);
+    let exchange_old: result<u64, str8> = value.exchange(1);
+    let success: result<tuple<bool, u64>, str8> =
+        value.compare_exchange(1, max);
+    let failure: result<tuple<bool, u64>, str8> =
+        value.compare_exchange(1, 2);
+    let invalid_store: result<i32, str8> =
+        value.store_with_order(5, AtomicOrder::Acquire);
+    let stored: result<i32, str8> = value.store_with_order(42, AtomicOrder::Release);
+    let loaded: result<u64, str8> = value.load_with_order(AtomicOrder::Acquire);
+    let closed: i32 = value.close();
+
+    verify(initial.is_ok() && initial.unwrap() == max);
+    verify(wrapped_add.is_ok() && wrapped_add.unwrap() == max);
+    verify(wrapped_value.is_ok() && wrapped_value.unwrap() == 0);
+    verify(subtract.is_ok() && subtract.unwrap() == 0);
+    verify(and_old.is_ok() && and_old.unwrap() == max);
+    verify(or_old.is_ok() && or_old.unwrap() == 15);
+    verify(xor_old.is_ok() && xor_old.unwrap() == 31);
+    verify(exchange_old.is_ok() && exchange_old.unwrap() == 28);
+    verify(success.is_ok() && success.unwrap().0 && success.unwrap().1 == 1);
+    verify(failure.is_ok() && !failure.unwrap().0 && failure.unwrap().1 == max);
+    verify(invalid_store.is_err() && stored.is_ok());
+    verify(loaded.is_ok() && loaded.unwrap() == 42 && closed == 0);
+}
+
+#[test]
+fn test_atomic_u64_wait_notify() {
+    let created: result<AtomicU64, str8> = AtomicU64::new(0);
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let value: AtomicU64 = created.unwrap();
+    let worker: std::thread::thread =
+        thread::spawn(atomic_u64_wait_worker, value.handle);
+    let stored: result<i32, str8> = value.store(1);
     let notified: result<i32, str8> = value.notify_all();
     let worker_status: i32 = join(worker);
     let closed: i32 = value.close();

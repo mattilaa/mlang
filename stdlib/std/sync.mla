@@ -7,7 +7,7 @@
 /// - Channel (string message queue)
 /// - LockFreeQueue (string SPSC lock-free queue)
 /// - SpscQueue<T> (preallocated, fixed-size event queue)
-/// - AtomicI64, AtomicBool, and AtomicFlag
+/// - AtomicI64, AtomicU64, AtomicBool, and AtomicFlag
 
 
 /// \cond INTERNAL_IMPORTS
@@ -69,6 +69,12 @@ pub enum AtomicOrder : i32 {
 /// Handle copies share the same atomic object. Call close exactly once after
 /// all threads have stopped using it.
 pub struct AtomicI64 {
+    var handle: i64;
+};
+
+/// @brief Shared, ordered atomic unsigned 64-bit integer.
+/// Arithmetic read-modify-write operations wrap modulo 2^64.
+pub struct AtomicU64 {
     var handle: i64;
 };
 
@@ -258,6 +264,170 @@ impl AtomicI64 {
 
     /// @brief Free this shared atomic after all users have stopped.
     pub fn close(self: AtomicI64) -> i32 {
+        return __mlang_std_sync_atomic_i64_free(self.handle);
+    }
+}
+
+impl AtomicU64 {
+    /// @brief Create an atomic u64, or return the backend error.
+    pub fn new(initial: u64) -> result<AtomicU64, str8> {
+        let handle: i64 = __mlang_std_sync_atomic_i64_new(i64(initial));
+        if handle == 0 { return Err<AtomicU64, str8>(last_error()); }
+        return Ok<AtomicU64, str8>(AtomicU64 { handle: handle });
+    }
+
+    pub fn is_valid(self: AtomicU64) -> bool {
+        return self.handle != 0;
+    }
+
+    pub fn load(self: AtomicU64) -> result<u64, str8> {
+        return self.load_with_order(AtomicOrder::SeqCst);
+    }
+
+    pub fn load_with_order(self: AtomicU64, order: AtomicOrder)
+        -> result<u64, str8> {
+        var output: i64 = 0;
+        let rc: i32 = __mlang_std_sync_atomic_i64_load(
+            self.handle, atomic_order_value(order), &output);
+        if rc != 0 { return Err<u64, str8>(last_error()); }
+        return Ok<u64, str8>(u64(output));
+    }
+
+    pub fn store(self: AtomicU64, value: u64) -> result<i32, str8> {
+        return self.store_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn store_with_order(self: AtomicU64, value: u64, order: AtomicOrder)
+        -> result<i32, str8> {
+        let rc: i32 = __mlang_std_sync_atomic_i64_store(
+            self.handle, i64(value), atomic_order_value(order));
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn wait(self: AtomicU64, old_value: u64) -> result<i32, str8> {
+        return self.wait_with_order(old_value, AtomicOrder::SeqCst);
+    }
+
+    pub fn wait_with_order(self: AtomicU64, old_value: u64,
+                           order: AtomicOrder) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_sync_atomic_i64_wait(
+            self.handle, i64(old_value), atomic_order_value(order));
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn notify_one(self: AtomicU64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_sync_atomic_i64_notify_one(self.handle);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn notify_all(self: AtomicU64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_sync_atomic_i64_notify_all(self.handle);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn exchange(self: AtomicU64, value: u64) -> result<u64, str8> {
+        return self.exchange_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn exchange_with_order(self: AtomicU64, value: u64,
+                               order: AtomicOrder) -> result<u64, str8> {
+        var output: i64 = 0;
+        let rc: i32 = __mlang_std_sync_atomic_i64_exchange(
+            self.handle, i64(value), atomic_order_value(order), &output);
+        if rc != 0 { return Err<u64, str8>(last_error()); }
+        return Ok<u64, str8>(u64(output));
+    }
+
+    pub fn fetch_add(self: AtomicU64, value: u64) -> result<u64, str8> {
+        return self.fetch_add_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_add_with_order(self: AtomicU64, value: u64,
+                                order: AtomicOrder) -> result<u64, str8> {
+        var output: i64 = 0;
+        let rc: i32 = __mlang_std_sync_atomic_i64_fetch_add(
+            self.handle, i64(value), atomic_order_value(order), &output);
+        if rc != 0 { return Err<u64, str8>(last_error()); }
+        return Ok<u64, str8>(u64(output));
+    }
+
+    pub fn fetch_sub(self: AtomicU64, value: u64) -> result<u64, str8> {
+        return self.fetch_sub_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_sub_with_order(self: AtomicU64, value: u64,
+                                order: AtomicOrder) -> result<u64, str8> {
+        var output: i64 = 0;
+        let rc: i32 = __mlang_std_sync_atomic_i64_fetch_sub(
+            self.handle, i64(value), atomic_order_value(order), &output);
+        if rc != 0 { return Err<u64, str8>(last_error()); }
+        return Ok<u64, str8>(u64(output));
+    }
+
+    pub fn fetch_and(self: AtomicU64, value: u64) -> result<u64, str8> {
+        return self.fetch_and_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_and_with_order(self: AtomicU64, value: u64,
+                                order: AtomicOrder) -> result<u64, str8> {
+        var output: i64 = 0;
+        let rc: i32 = __mlang_std_sync_atomic_i64_fetch_and(
+            self.handle, i64(value), atomic_order_value(order), &output);
+        if rc != 0 { return Err<u64, str8>(last_error()); }
+        return Ok<u64, str8>(u64(output));
+    }
+
+    pub fn fetch_or(self: AtomicU64, value: u64) -> result<u64, str8> {
+        return self.fetch_or_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_or_with_order(self: AtomicU64, value: u64,
+                               order: AtomicOrder) -> result<u64, str8> {
+        var output: i64 = 0;
+        let rc: i32 = __mlang_std_sync_atomic_i64_fetch_or(
+            self.handle, i64(value), atomic_order_value(order), &output);
+        if rc != 0 { return Err<u64, str8>(last_error()); }
+        return Ok<u64, str8>(u64(output));
+    }
+
+    pub fn fetch_xor(self: AtomicU64, value: u64) -> result<u64, str8> {
+        return self.fetch_xor_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_xor_with_order(self: AtomicU64, value: u64,
+                                order: AtomicOrder) -> result<u64, str8> {
+        var output: i64 = 0;
+        let rc: i32 = __mlang_std_sync_atomic_i64_fetch_xor(
+            self.handle, i64(value), atomic_order_value(order), &output);
+        if rc != 0 { return Err<u64, str8>(last_error()); }
+        return Ok<u64, str8>(u64(output));
+    }
+
+    /// @brief Strong CAS; returns `(exchanged, expected_after)`.
+    pub fn compare_exchange(self: AtomicU64, expected: u64, desired: u64)
+        -> result<tuple<bool, u64>, str8> {
+        return self.compare_exchange_with_order(
+            expected, desired, AtomicOrder::SeqCst);
+    }
+
+    pub fn compare_exchange_with_order(self: AtomicU64, expected: u64,
+                                       desired: u64, order: AtomicOrder)
+        -> result<tuple<bool, u64>, str8> {
+        var expected_value: i64 = i64(expected);
+        let rc: i32 = __mlang_std_sync_atomic_i64_compare_exchange(
+            self.handle, &expected_value, i64(desired),
+            atomic_order_value(order));
+        if rc < 0 {
+            return Err<tuple<bool, u64>, str8>(last_error());
+        }
+        return Ok<tuple<bool, u64>, str8>((rc == 1, u64(expected_value)));
+    }
+
+    pub fn close(self: AtomicU64) -> i32 {
         return __mlang_std_sync_atomic_i64_free(self.handle);
     }
 }

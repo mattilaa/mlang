@@ -8,6 +8,7 @@ Module file: `stdlib/std/sync.mla`
 - `channel`
 - `lock_free_queue` (SPSC str8 queue)
 - `AtomicI64` (shared 64-bit atomic integer)
+- `AtomicU64` (shared 64-bit unsigned atomic integer)
 - `AtomicBool` (shared atomic boolean value)
 - `AtomicFlag` (guaranteed lock-free boolean flag)
 - `Latch` (one-shot countdown latch)
@@ -142,6 +143,22 @@ handle, not the underlying integer. Share the handle between threads, and call
 with all atomics, relaxed ordering makes the atomic value race-free but does
 not publish unrelated data; use acquire/release or sequential consistency for
 that synchronization.
+
+### AtomicU64
+
+`AtomicU64` is the unsigned counterpart to `AtomicI64` and maps to C++20
+`std::atomic<std::uint64_t>` semantics. It provides ordered `load`, `store`,
+`exchange`, `fetch_add`, `fetch_sub`, `fetch_and`, `fetch_or`, `fetch_xor`,
+strong `compare_exchange`, `wait`, and notifications. Arithmetic read-modify-
+write operations wrap modulo 2^64, including across the signed boundary.
+`compare_exchange(expected, desired)` returns
+`result<tuple<bool, u64>, str8>` as `(exchanged, expected_after)` so a failed
+operation exposes the newly observed value without an in/out pointer.
+
+The current implementation uses the existing 64-bit atomic runtime storage;
+it does not promise lock-free behavior. As with `AtomicI64`, use explicit
+acquire/release ordering when publishing other data, notify after changing a
+waited-on value, and close only after every thread has stopped using it.
 
 ### AtomicBool
 
