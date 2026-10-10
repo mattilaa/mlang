@@ -290,6 +290,8 @@ fn example() {
 - `copy_n(data, count)` copies a bounded prefix; negative counts produce an
   empty list and oversized counts clamp to the input length. This eager,
   non-mutating operation is the Mlang counterpart to the C++20 algorithm.
+- `copy_n_with_count(data, count)` returns `(consumed, copied)` so callers can
+  observe the actual bounded progress alongside the copied prefix.
 - `copy(data)` materializes a full list copy, the eager-list counterpart to
   `std::ranges::copy`; the source remains unchanged.
 - `swap_ranges(left, right)` returns two copied lists with corresponding
