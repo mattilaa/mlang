@@ -4,12 +4,14 @@ mod std::strbuf;
 
 use std::date::DateTime;
 use std::date::CivilDate;
+use std::date::YearMonthDay;
 use std::date::YearMonth;
 use std::date::MonthDay;
 use std::date::MonthDayLast;
 use std::date::Month;
 use std::date::Year;
 use std::date::Day;
+use std::date::YearMonthDayLast;
 use std::date::IsoWeekDate;
 use std::date::Weekday;
 use std::date::YearMonthWeekday;
@@ -84,6 +86,9 @@ use std::date::make_day;
 use std::date::day_number;
 use std::date::add_days_to_day;
 use std::date::make_civil_date_from_parts;
+use std::date::make_year_month_day_last;
+use std::date::year_month_day_last_day;
+use std::date::resolve_year_month_day_last;
 use std::date::nth_weekday_of_month;
 use std::date::last_weekday_of_month;
 use std::date::to_iso_week_date;
@@ -402,6 +407,32 @@ fn test_typed_chrono_day_values() {
         make_year(2023).unwrap(), february, make_day(29).unwrap()).is_none());
     verify(make_civil_date_from_parts(
         year, Month::April, make_day(31).unwrap()).is_none());
+}
+
+#[test]
+fn test_year_month_day_last_values() {
+    let leap_year: Year = make_year(2024).unwrap();
+    let common_year: Year = make_year(2023).unwrap();
+    let february: Month = Month::February;
+    let leap_last: YearMonthDayLast = make_year_month_day_last(
+        leap_year, february).unwrap();
+    let leap_day: Day = year_month_day_last_day(leap_last).unwrap();
+    verify(day_number(leap_day) == 29);
+    let leap_date: YearMonthDay = resolve_year_month_day_last(leap_last).unwrap();
+    verify(leap_date.year == 2024 && leap_date.month == 2 &&
+           leap_date.day == 29);
+
+    let common_last: YearMonthDayLast = make_year_month_day_last(
+        common_year, february).unwrap();
+    verify(day_number(year_month_day_last_day(common_last).unwrap()) == 28);
+    verify(resolve_year_month_day_last(common_last).unwrap().day == 28);
+    let april: YearMonthDayLast = make_year_month_day_last(
+        leap_year, Month::April).unwrap();
+    verify(resolve_year_month_day_last(april).unwrap().day == 30);
+    verify(make_year_month_day_last(leap_year, Month::February).is_some());
+    verify(year_month_day_last_day(YearMonthDayLast {
+        year: Year { value: 50000 }, month: february
+    }).is_none());
 }
 
 #[test]

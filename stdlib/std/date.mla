@@ -25,6 +25,9 @@ pub struct CivilDate {
     var day: i32;
 };
 
+/// @brief C++20-style name for the civil `year_month_day` calendar value.
+alias YearMonthDay = CivilDate;
+
 /// @brief Year and month without a day, like C++20 `std::chrono::year_month`.
 pub struct YearMonth {
     var year: i32;
@@ -103,6 +106,13 @@ pub struct YearMonthWeekdayLast {
     var year: i32;
     var month: i32;
     var weekday: Weekday;
+};
+
+/// @brief Year/month combined with a final day-of-month specification.
+/// C++20 `std::chrono::year_month_day_last` counterpart.
+pub struct YearMonthDayLast {
+    var year: Year;
+    var month: Month;
 };
 
 /// @brief Fixed UTC offset in seconds, for example `+02:00` is `7200`.
@@ -284,6 +294,33 @@ pub fn make_civil_date_from_parts(year: Year, month: Month, day: Day)
     return Some<CivilDate>(CivilDate {
         year: year.value, month: numeric_month, day: day.value
     });
+}
+
+/// @brief Construct a checked year/month/last-day calendar value.
+pub fn make_year_month_day_last(year: Year, month: Month)
+    -> option<YearMonthDayLast> {
+    if !is_valid_year(year.value) || !is_valid_month(month) {
+        return None<YearMonthDayLast>();
+    }
+    return Some<YearMonthDayLast>(YearMonthDayLast {
+        year: year, month: month
+    });
+}
+
+/// @brief Return the final day component described by a valid value.
+pub fn year_month_day_last_day(value: YearMonthDayLast) -> option<Day> {
+    if !is_valid_year(value.year.value) || !is_valid_month(value.month) {
+        return None<Day>();
+    }
+    return make_day(month_days(value.month, value.year.value));
+}
+
+/// @brief Resolve a year/month/last-day value to a civil date.
+pub fn resolve_year_month_day_last(value: YearMonthDayLast)
+    -> option<CivilDate> {
+    let day: option<Day> = year_month_day_last_day(value);
+    if day.is_none() { return None<CivilDate>(); }
+    return make_civil_date_from_parts(value.year, value.month, day.unwrap());
 }
 
 /// @brief Return whether the fields form a valid proleptic Gregorian date.

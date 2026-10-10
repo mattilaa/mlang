@@ -7,6 +7,7 @@ Module file: `stdlib/std/date.mla`
 ### Types
 - `date_time`
 - `civil_date`
+- `YearMonthDay` (alias of `CivilDate`)
 - `YearMonth` (checked year/month without a day)
 - `Year` (checked proleptic Gregorian year in `-32767..32767`)
 - `Day` (checked day-of-month component)
@@ -14,6 +15,7 @@ Module file: `stdlib/std/date.mla`
 - `Weekday` (`Sunday` through `Saturday`, with Sunday=`0`)
 - `Month` (`January` through `December`, numbered `1..12`)
 - `YearMonthWeekday` and `YearMonthWeekdayLast`
+- `YearMonthDayLast`
 - `utc_offset`
 - `time_zone`
 
@@ -57,6 +59,10 @@ Module file: `stdlib/std/date.mla`
 - `make_civil_date_from_parts(year, month, day)` combines typed `Year`,
   `Month`, and `Day`, returning `None` for invalid combinations such as April
   31 or February 29 in a common year.
+- `make_year_month_day_last(year, month)` creates a checked
+  `YearMonthDayLast`; `year_month_day_last_day` returns its leap-aware `Day`
+  component, and `resolve_year_month_day_last` produces the corresponding
+  `YearMonthDay`/`CivilDate`.
 - `is_valid_civil_date(year: i32, month: i32, day: i32) -> bool`
 - `make_year_month(year, month) -> option<YearMonth>` constructs a checked
   month value; `is_valid_year_month` validates one directly.
