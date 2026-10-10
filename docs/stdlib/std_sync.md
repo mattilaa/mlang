@@ -8,6 +8,14 @@ Module file: `stdlib/std/sync.mla`
 - `channel`
 - `lock_free_queue` (SPSC str8 queue)
 - `AtomicI64` (shared 64-bit atomic integer)
+- `AtomicU64` (shared 64-bit unsigned atomic integer)
+- `AtomicU32` (native-width 32-bit unsigned atomic integer)
+- `AtomicU16` (16-bit unsigned atomic integer)
+- `AtomicU8` (8-bit unsigned atomic integer)
+- `AtomicI16` (16-bit signed atomic integer)
+- `AtomicI8` (8-bit signed atomic integer)
+- `AtomicI32` (native-width 32-bit signed atomic integer)
+- `AtomicBool` (shared atomic boolean value)
 - `AtomicFlag` (guaranteed lock-free boolean flag)
 - `Latch` (one-shot countdown latch)
 - `Barrier` (reusable phase barrier)
@@ -141,6 +149,125 @@ handle, not the underlying integer. Share the handle between threads, and call
 with all atomics, relaxed ordering makes the atomic value race-free but does
 not publish unrelated data; use acquire/release or sequential consistency for
 that synchronization.
+
+### AtomicU64
+
+`AtomicU64` is the unsigned counterpart to `AtomicI64` and maps to C++20
+`std::atomic<std::uint64_t>` semantics. It provides ordered `load`, `store`,
+`exchange`, `fetch_add`, `fetch_sub`, `fetch_and`, `fetch_or`, `fetch_xor`,
+strong `compare_exchange`, `wait`, and notifications. Arithmetic read-modify-
+write operations wrap modulo 2^64, including across the signed boundary.
+`compare_exchange(expected, desired)` returns
+`result<tuple<bool, u64>, str8>` as `(exchanged, expected_after)` so a failed
+operation exposes the newly observed value without an in/out pointer.
+
+The current implementation uses the existing 64-bit atomic runtime storage;
+it does not promise lock-free behavior. As with `AtomicI64`, use explicit
+acquire/release ordering when publishing other data, notify after changing a
+waited-on value, and close only after every thread has stopped using it.
+
+### AtomicU32
+
+`AtomicU32` is a native-width C11 atomic unsigned 32-bit integer and follows
+C++20 `std::atomic<std::uint32_t>` semantics. It supports ordered `load`,
+`store`, `exchange`, `fetch_add`, `fetch_sub`, `fetch_and`, `fetch_or`,
+`fetch_xor`, strong `compare_exchange`, `wait`, and notifications. Arithmetic
+read-modify-write operations wrap modulo 2^32. Compare-exchange returns
+`result<tuple<bool, u32>, str8>` as `(exchanged, expected_after)`, exposing the
+observed value after a failed comparison. The backend uses native-width atomic
+storage but does not promise lock-free operations. Notify after changing a
+waited-on value and close only after every thread has stopped using it.
+
+### AtomicU16
+
+`AtomicU16` provides C++20 `std::atomic<std::uint16_t>` value semantics with
+ordered load/store/exchange, arithmetic and bitwise read-modify-write,
+compare-exchange, wait, and notifications. Arithmetic wraps modulo 2^16.
+`compare_exchange` returns `(exchanged, expected_after)` in a
+`result<tuple<bool, u16>, str8>`. The current opaque implementation uses the
+existing 32-bit atomic storage and a compare-exchange loop for 16-bit wrapping
+arithmetic; this gives atomic semantics but does not promise a lock-free
+16-bit object. Notify after changing a waited-on value and close only after
+all threads have stopped using it.
+
+### AtomicU8
+
+`AtomicU8` provides C++20 `std::atomic<std::uint8_t>` value semantics with
+ordered load/store/exchange, arithmetic and bitwise read-modify-write,
+compare-exchange, wait, and notifications. Arithmetic wraps modulo 2^8.
+Compare-exchange returns `result<tuple<bool, u8>, str8>` as
+`(exchanged, expected_after)`. The opaque implementation uses a compare-exchange
+loop over the existing 16-bit atomic storage for wrapping arithmetic, so it
+does not promise a lock-free 8-bit object. Notify after changing a waited-on
+value and close only after all threads have stopped using it.
+
+### AtomicI8
+
+`AtomicI8` provides C++20 `std::atomic<std::int8_t>` value semantics with
+ordered load/store/exchange, arithmetic and bitwise read-modify-write,
+compare-exchange, wait, and notifications. Signed arithmetic wraps at the
+8-bit two's-complement representation boundary. Compare-exchange returns
+`result<tuple<bool, i8>, str8>` as `(exchanged, expected_after)`. It reuses the
+unsigned 8-bit value semantics and does not promise a lock-free 8-bit object.
+
+### AtomicI16
+
+`AtomicI16` provides C++20 `std::atomic<std::int16_t>` value semantics with
+ordered load/store/exchange, arithmetic and bitwise read-modify-write,
+compare-exchange, wait, and notifications. Signed arithmetic wraps at the
+16-bit two's-complement representation boundary. Compare-exchange returns
+`result<tuple<bool, i16>, str8>` as `(exchanged, expected_after)`. It reuses
+the unsigned 16-bit API and exposes identical bits as signed values; the
+implementation does not promise a lock-free 16-bit object.
+
+### AtomicI32
+
+`AtomicI32` provides a native-width signed counterpart to C++20
+`std::atomic<std::int32_t>`. It supports ordered `load`, `store`, `exchange`,
+`fetch_add`, `fetch_sub`, `fetch_and`, `fetch_or`, `fetch_xor`, strong
+`compare_exchange`, `wait`, and notifications. Arithmetic read-modify-write
+operations wrap at the 32-bit representation boundary. Compare-exchange
+returns `result<tuple<bool, i32>, str8>` as `(exchanged, expected_after)`.
+The implementation reuses the native 32-bit atomic storage and exposes the
+same bits as a signed value, so no wider signed arithmetic or overflow is
+involved. It does not promise lock-free behavior.
+
+### AtomicBool
+
+`AtomicBool` provides a typed boolean counterpart to C++20 `std::atomic<bool>`.
+It supports `load`, `store`, `exchange`, `compare_exchange`, `wait`,
+`notify_one`, and `notify_all`, including explicit memory-order overloads for
+load/store/exchange/wait/CAS. Operations without an order use sequential
+consistency. The `store` methods return `result<i32, str8>` for invalid handles
+or memory orders. `compare_exchange` returns
+`result<tuple<bool, bool>, str8>` containing `(exchanged, expected_after)`;
+the second value is updated to the observed value on failure, matching the
+C++ compare-exchange rule without requiring an in/out boolean pointer.
+
+The implementation currently stores the boolean as an atomic integer, so
+lock-free behavior is not promised. A notification does not itself change the
+value; update it before notifying, and keep rechecking the application-level
+condition after `wait` returns. Close exactly once after every shared handle
+and waiter is finished.
+
+```mlang
+mod std::sync;
+use std::sync::AtomicBool;
+use std::sync::AtomicOrder;
+
+fn main() -> i32 {
+    let created: result<AtomicBool, str8> = AtomicBool::new(false);
+    if created.is_err() { return 1; }
+    let ready: AtomicBool = created.unwrap();
+    let stored: result<i32, str8> =
+        ready.store_with_order(true, AtomicOrder::Release);
+    let observed: result<bool, str8> =
+        ready.load_with_order(AtomicOrder::Acquire);
+    ready.close();
+    if stored.is_err() || observed.is_err() { return 1; }
+    return observed.unwrap() ? 0 : 1;
+}
+```
 
 ### AtomicFlag
 

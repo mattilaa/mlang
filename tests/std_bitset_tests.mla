@@ -257,3 +257,35 @@ fn test_bitset_value_returning_bitwise_ops() {
     a.close();
     b.close();
 }
+
+#[test]
+fn test_bitset_u64_conversion_and_overflow_check() {
+    let zero_result: result<BitSet, str8> = BitSet::from_u64(0);
+    let max_result: result<BitSet, str8> = BitSet::from_u64(18446744073709551615);
+    verify(zero_result.is_ok() && max_result.is_ok());
+    let zero: BitSet = zero_result.unwrap();
+    let max_bits: BitSet = max_result.unwrap();
+    verify(zero.len() == 64 && zero.none() && zero.fits_u64());
+    verify(max_bits.len() == 64 && max_bits.all() && max_bits.fits_u64());
+    let zero_value: result<u64, str8> = zero.to_u64();
+    let max_value: result<u64, str8> = max_bits.to_u64();
+    verify(zero_value.is_ok() && zero_value.unwrap() == 0);
+    verify(max_value.is_ok() && max_value.unwrap() == 18446744073709551615);
+
+    let wide_result: result<BitSet, str8> = BitSet::new(130);
+    verify(wide_result.is_ok());
+    let wide: BitSet = wide_result.unwrap();
+    verify(wide.resize(130, false) == 0);
+    verify(wide.set(63, true) == 0);
+    verify(wide.fits_u64());
+    let wide_value: result<u64, str8> = wide.to_u64();
+    verify(wide_value.is_ok() && wide_value.unwrap() == 9223372036854775808);
+
+    verify(wide.set(64, true) == 0);
+    verify(!wide.fits_u64());
+    verify(wide.to_u64().is_err());
+
+    zero.close();
+    max_bits.close();
+    wide.close();
+}

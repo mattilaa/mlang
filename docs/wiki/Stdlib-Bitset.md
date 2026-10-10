@@ -20,6 +20,7 @@ Examples:
 ### API
 - `last_error() -> str8`
 - `bit_set::new(bit_capacity: i64) -> result<bit_set, str8>`
+- `bit_set::from_u64(value: u64) -> result<bit_set, str8>`
 - `bit_set::len(self: bit_set) -> i64`
 - `bit_set::capacity(self: bit_set) -> i64`
 - `bit_set::clear(self: bit_set) -> i32`
@@ -32,6 +33,8 @@ Examples:
 - `bit_set::push(self: bit_set, value: bool) -> i32`
 - `bit_set::pop(self: bit_set) -> result<bool, str8>`
 - `bit_set::count_ones(self: bit_set) -> i64`
+- `bit_set::fits_u64(self: bit_set) -> bool`
+- `bit_set::to_u64(self: bit_set) -> result<u64, str8>`
 - `bit_set::count(self: bit_set) -> i64` (alias for `count_ones`)
 - `bit_set::set_all(self: bit_set) -> i32`
 - `bit_set::reset(self: bit_set) -> i32` (preserves length; unlike `clear`)
@@ -58,5 +61,8 @@ Examples:
   Negative shift amounts return `-1`; amounts at least `len()` clear all bits.
 - Value-returning bitwise operations allocate an independent bitset and leave
   both inputs unchanged. Binary operations require equal lengths.
+- `from_u64()` creates a 64-bit bitset. `to_u64()` accepts wider bitsets if
+  all bits above index 63 are zero, and reports an error rather than truncating
+  when any higher bit is set.
 - [`list<bool>`](Quick-Guide#types) is a normal list container, not a packed specialization.
 - [`std::simd`](Stdlib-Simd) provides packed bitset reductions and in-place bitwise helpers.

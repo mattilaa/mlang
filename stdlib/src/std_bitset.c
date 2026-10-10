@@ -329,6 +329,44 @@ int32_t __mlang_std_bitset_reset(int64_t handle)
     return 0;
 }
 
+int32_t __mlang_std_bitset_fits_u64(int64_t handle)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b)
+        return 0;
+    size_t words = words_for_bits(b->len_bits);
+    for(size_t i = 1u; i < words; ++i)
+    {
+        if(b->words[i] != 0u)
+            return 0;
+    }
+    return 1;
+}
+
+uint64_t __mlang_std_bitset_to_u64(int64_t handle)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b || __mlang_std_bitset_fits_u64(handle) == 0)
+    {
+        bitset_set_error("bitset value does not fit in u64");
+        return 0u;
+    }
+    if(words_for_bits(b->len_bits) == 0u)
+        return 0u;
+    return b->words[0];
+}
+
+int64_t __mlang_std_bitset_from_u64(uint64_t value)
+{
+    int64_t handle = __mlang_std_bitset_new(64);
+    if(handle == 0)
+        return 0;
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    b->len_bits = 64u;
+    b->words[0] = value;
+    return handle;
+}
+
 int64_t __mlang_std_bitset_life_step_toroidal(int64_t current_handle, int64_t next_handle,
                                               int64_t width, int64_t height)
 {
