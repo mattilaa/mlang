@@ -7,6 +7,7 @@ Module file: `stdlib/std/date.mla`
 ### Types
 - `date_time`
 - `civil_date`
+- `Weekday` (`Sunday` through `Saturday`, with Sunday=`0`)
 - `utc_offset`
 - `time_zone`
 
@@ -41,6 +42,15 @@ Module file: `stdlib/std/date.mla`
   returns `None` when the year is outside the representable [`i32`](Quick-Guide#types) range.
 - `weekday_from_sys_days(days: i64) -> i32` returns Sunday as `0` through
   Saturday as `6`.
+- `weekday_of(date: civil_date) -> option<Weekday>` returns a typed weekday for
+  a valid date. `weekday_from_sys_days_typed` gives the typed form for a day
+  count.
+- `weekday_c_encoding` and `weekday_iso_encoding` convert a typed weekday to
+  Sunday-based `0..6` or ISO Monday-based `1..7` numbering. The corresponding
+  `weekday_from_c_encoding` and `weekday_from_iso_encoding` functions validate
+  and convert those encodings, returning `None` when out of range.
+- `add_weekdays(day, offset)` adds a signed number of days modulo seven,
+  including negative offsets and very large [`i64`](Quick-Guide#types) values.
 - `nth_weekday_of_month(year, month, weekday, occurrence)` returns an optional
   date for the first through fifth occurrence of a weekday
   (`year_month_weekday` style); nonexistent fifth occurrences return `None`.

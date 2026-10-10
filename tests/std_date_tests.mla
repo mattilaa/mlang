@@ -5,6 +5,7 @@ mod std::strbuf;
 use std::date::DateTime;
 use std::date::CivilDate;
 use std::date::IsoWeekDate;
+use std::date::Weekday;
 use std::date::TimeZone;
 use std::date::UtcOffset;
 use std::date::format_date;
@@ -32,6 +33,13 @@ use std::date::is_valid_civil_date;
 use std::date::to_sys_days;
 use std::date::from_sys_days;
 use std::date::weekday_from_sys_days;
+use std::date::weekday_from_c_encoding;
+use std::date::weekday_from_iso_encoding;
+use std::date::weekday_c_encoding;
+use std::date::weekday_iso_encoding;
+use std::date::weekday_from_sys_days_typed;
+use std::date::weekday_of;
+use std::date::add_weekdays;
 use std::date::add_civil_days;
 use std::date::days_between;
 use std::date::add_civil_years;
@@ -228,6 +236,31 @@ fn test_civil_date_year_arithmetic() {
     };
     verify(add_civil_years(max_date, 1).is_none());
     verify(add_civil_years(min_date, -1).is_none());
+}
+
+#[test]
+fn test_typed_weekday_encodings_and_arithmetic() {
+    verify(weekday_from_c_encoding(-1).is_none());
+    verify(weekday_from_c_encoding(7).is_none());
+    verify(weekday_from_iso_encoding(0).is_none());
+    verify(weekday_from_iso_encoding(8).is_none());
+    verify(weekday_from_c_encoding(0).unwrap() == Weekday::Sunday);
+    verify(weekday_from_iso_encoding(1).unwrap() == Weekday::Monday);
+    verify(weekday_from_iso_encoding(7).unwrap() == Weekday::Sunday);
+    verify(weekday_c_encoding(Weekday::Saturday) == 6);
+    verify(weekday_iso_encoding(Weekday::Sunday) == 7);
+
+    let epoch: CivilDate = CivilDate { year: 1970, month: 1, day: 1 };
+    verify(weekday_of(epoch).unwrap() == Weekday::Thursday);
+    verify(weekday_from_sys_days_typed(-1) == Weekday::Wednesday);
+    let invalid: CivilDate = CivilDate { year: 2023, month: 2, day: 29 };
+    verify(weekday_of(invalid).is_none());
+
+    verify(add_weekdays(Weekday::Friday, 9) == Weekday::Sunday);
+    verify(add_weekdays(Weekday::Monday, -2) == Weekday::Saturday);
+    verify(add_weekdays(Weekday::Sunday, 0) == Weekday::Sunday);
+    verify(add_weekdays(Weekday::Wednesday, 9223372036854775807) ==
+           Weekday::Wednesday);
 }
 
 #[test]

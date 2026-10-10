@@ -32,6 +32,17 @@ pub struct IsoWeekDate {
     var weekday: i32;
 };
 
+/// @brief Sunday-based weekday used by the C++20 `std::chrono::weekday` API.
+pub enum Weekday : i32 {
+    Sunday = 0,
+    Monday = 1,
+    Tuesday = 2,
+    Wednesday = 3,
+    Thursday = 4,
+    Friday = 5,
+    Saturday = 6
+};
+
 /// @brief Fixed UTC offset in seconds, for example `+02:00` is `7200`.
 pub struct UtcOffset {
     var seconds: i32;
@@ -131,6 +142,66 @@ pub fn weekday_from_sys_days(days: i64) -> i32 {
     var weekday: i64 = (days % 7 + 4) % 7;
     if weekday < 0 { weekday = weekday + 7; }
     return i32(weekday);
+}
+
+/// @brief Convert a Sunday-based weekday encoding to a typed weekday.
+/// Values outside 0 through 6 return `None`.
+pub fn weekday_from_c_encoding(encoding: i32) -> option<Weekday> {
+    if encoding == 0 { return Some<Weekday>(Weekday::Sunday); }
+    if encoding == 1 { return Some<Weekday>(Weekday::Monday); }
+    if encoding == 2 { return Some<Weekday>(Weekday::Tuesday); }
+    if encoding == 3 { return Some<Weekday>(Weekday::Wednesday); }
+    if encoding == 4 { return Some<Weekday>(Weekday::Thursday); }
+    if encoding == 5 { return Some<Weekday>(Weekday::Friday); }
+    if encoding == 6 { return Some<Weekday>(Weekday::Saturday); }
+    return None<Weekday>();
+}
+
+/// @brief Convert a Monday-based ISO weekday encoding to a typed weekday.
+/// ISO values use Monday=1 through Sunday=7; other values return `None`.
+pub fn weekday_from_iso_encoding(encoding: i32) -> option<Weekday> {
+    if encoding < 1 || encoding > 7 { return None<Weekday>(); }
+    if encoding == 7 { return Some<Weekday>(Weekday::Sunday); }
+    return weekday_from_c_encoding(encoding);
+}
+
+/// @brief Return the C-compatible Sunday=0 through Saturday=6 encoding.
+pub fn weekday_c_encoding(day: Weekday) -> i32 {
+    if day == Weekday::Sunday { return 0; }
+    if day == Weekday::Monday { return 1; }
+    if day == Weekday::Tuesday { return 2; }
+    if day == Weekday::Wednesday { return 3; }
+    if day == Weekday::Thursday { return 4; }
+    if day == Weekday::Friday { return 5; }
+    return 6;
+}
+
+/// @brief Return the ISO Monday=1 through Sunday=7 encoding.
+pub fn weekday_iso_encoding(day: Weekday) -> i32 {
+    let encoding: i32 = weekday_c_encoding(day);
+    return encoding == 0 ? 7 : encoding;
+}
+
+/// @brief Return the typed weekday for a day count since the Unix epoch.
+pub fn weekday_from_sys_days_typed(days: i64) -> Weekday {
+    return weekday_from_c_encoding(weekday_from_sys_days(days)).unwrap();
+}
+
+/// @brief Return the typed weekday for a valid civil date, or `None`.
+pub fn weekday_of(date: CivilDate) -> option<Weekday> {
+    let days: option<i64> = to_sys_days(date.year, date.month, date.day);
+    if days.is_none() { return None<Weekday>(); }
+    return Some<Weekday>(weekday_from_sys_days_typed(days.unwrap()));
+}
+
+/// @brief Add a signed number of days to a weekday.
+/// The offset is reduced modulo seven first, avoiding overflow for large days.
+pub fn add_weekdays(day: Weekday, offset: i64) -> Weekday {
+    let current: i64 = i64(weekday_c_encoding(day));
+    let delta: i64 = offset % 7;
+    var result: i64 = (current + delta) % 7;
+    if result < 0 { result = result + 7; }
+    return weekday_from_c_encoding(i32(result)).unwrap();
 }
 
 /// @brief Convert a civil date to an ISO week date.
