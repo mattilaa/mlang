@@ -18,8 +18,8 @@ let score: option<str8> = scores.get(20);
 ```
 
 The API includes `len`, `is_empty`, `lower_bound`, `upper_bound`, `equal_range`,
-`contains`, `get`, `insert`, `insert_range`, `remove`, `erase_if`, `clear`,
-`replace`, `merge`, `key_at`, and `value_at`.
+`contains`, `get`, `insert`, `try_emplace`, `insert_or_assign`, `insert_range`,
+`remove`, `erase_if`, `clear`, `replace`, `merge`, `key_at`, and `value_at`.
 `equal_range(key)` returns the half-open index pair `(lower_bound, upper_bound)`;
 it is empty for an absent key and contains one entry for a present key because
 keys are unique. `insert` returns true
@@ -28,6 +28,11 @@ returns whether the key existed. Index access requires `0 <= index < len()`.
 `insert_range(entries)` processes entries in order, returns the count of newly
 created distinct keys, and lets the last occurrence of a repeated key determine
 its value.
+`try_emplace(key, value)` inserts only when absent and returns
+`(sorted_index, inserted)`; an existing mapped value remains unchanged.
+`insert_or_assign(key, value)` returns the same shape but replaces the value
+when present. Since Mlang receives values directly, `try_emplace` cannot defer
+construction of its value argument.
 `erase_if(map, predicate)` evaluates the predicate with each key and value,
 retains nonmatching entries in sorted order, and returns the number removed.
 `replace(keys, values)` atomically replaces both ordered sequences after

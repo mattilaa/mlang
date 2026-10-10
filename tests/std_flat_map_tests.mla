@@ -56,6 +56,26 @@ fn test_flat_map_remove_and_clear() {
 }
 
 #[test]
+fn test_flat_map_try_emplace_and_insert_or_assign() {
+    var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    values.insert(2, 20);
+    values.insert(4, 40);
+
+    let inserted: tuple<i64, bool> = values.try_emplace(3, 30);
+    let unchanged: tuple<i64, bool> = values.try_emplace(3, 300);
+    verify(inserted.0 == 1 && inserted.1);
+    verify(unchanged.0 == 1 && !unchanged.1);
+    verify(values.key_at(1) == 3 && values.value_at(1) == 30);
+
+    let assigned: tuple<i64, bool> = values.insert_or_assign(3, 31);
+    let newly_inserted: tuple<i64, bool> = values.insert_or_assign(1, 10);
+    verify(assigned.0 == 1 && !assigned.1);
+    verify(newly_inserted.0 == 0 && newly_inserted.1);
+    verify(values.len() == 4 && values.key_at(0) == 1 &&
+           values.value_at(2) == 31 && values.key_at(3) == 4);
+}
+
+#[test]
 fn test_flat_map_insert_range_counts_new_keys() {
     var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
     values.insert(2, 20);

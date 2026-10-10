@@ -118,6 +118,55 @@ impl<K, V> FlatMap {
         return inserted;
     }
 
+    /// @brief Insert only when `key` is absent; preserve an existing value.
+    /// Returns `(sorted_index, inserted)`. The value argument is evaluated by
+    /// the caller even when the key already exists (unlike lazy C++ arguments).
+    pub fn try_emplace(self: &mut FlatMap<K, V>, key: K, value: V)
+        -> tuple<i64, bool> {
+        let index: i64 = self.lower_bound(key);
+        let count: i64 = self.entries.len();
+        if index < count {
+            let entry: tuple<K, V> = self.entries[index];
+            if !(entry.0 < key) && !(key < entry.0) {
+                return (index, false);
+            }
+        }
+        var updated: list<tuple<K, V>> = [];
+        for i in 0..index { updated.push(self.entries[i]); }
+        updated.push((key, value));
+        for i in index..count { updated.push(self.entries[i]); }
+        self.entries = updated;
+        return (index, true);
+    }
+
+    /// @brief Insert `key` or replace its value and report its sorted position.
+    /// Returns `(sorted_index, inserted)`, where inserted is false when an
+    /// existing value was assigned.
+    pub fn insert_or_assign(self: &mut FlatMap<K, V>, key: K, value: V)
+        -> tuple<i64, bool> {
+        let index: i64 = self.lower_bound(key);
+        let count: i64 = self.entries.len();
+        if index < count {
+            let existing: tuple<K, V> = self.entries[index];
+            if !(existing.0 < key) && !(key < existing.0) {
+                var updated: list<tuple<K, V>> = [];
+                for i in 0..index { updated.push(self.entries[i]); }
+                updated.push((key, value));
+                for i in (index + 1)..count {
+                    updated.push(self.entries[i]);
+                }
+                self.entries = updated;
+                return (index, false);
+            }
+        }
+        var updated: list<tuple<K, V>> = [];
+        for i in 0..index { updated.push(self.entries[i]); }
+        updated.push((key, value));
+        for i in index..count { updated.push(self.entries[i]); }
+        self.entries = updated;
+        return (index, true);
+    }
+
     /// @brief Insert or assign every key/value pair in `range`.
     /// Entries are processed in input order, so the last occurrence of a
     /// duplicate key supplies its final value. Return the number of distinct
