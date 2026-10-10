@@ -47,8 +47,23 @@ fn example() {
 
 - `find`, `find_last`, `adjacent_find`, `count`, and `contains` search for a
   value; `adjacent_find` returns the first index of equal neighbors or `-1`.
+- `find_option`, `find_projected_option`, `find_by_option`,
+  `find_by_projected_option`, `find_if_option`, `find_if_projected_option`,
+  `find_if_not_option`, and `find_if_not_projected_option` return
+  matching indices as `option<i64>`, providing an explicit `None` result
+  instead of the `-1` sentinel used by the compatibility APIs.
+- `adjacent_find_option`, `adjacent_find_projected_option`,
+  `adjacent_find_by_option`, and `adjacent_find_by_projected_option` return
+  the first matching adjacent index as `option<i64>`; short ranges or no
+  matching pair return `None`.
+- `find_last_option`, `find_last_projected_option`, `find_last_by_option`,
+  `find_last_by_projected_option`, and the two `find_last_if_*_option` forms
+  provide the same explicit absence state for last-match searches.
 - `find_last_if` and `find_last_if_not` return the last index accepted or
   rejected by a predicate, respectively, or `-1` when no element matches.
+- `find_last_if_not_option` and `find_last_if_not_projected_option` return the
+  last predicate-rejected index as `option<i64>`, using `None` when no element
+  is rejected (including an empty range).
 - `find_last_by(data, key, equivalent)` searches backward and returns the last
   index whose element matches a separate key under the supplied binary
   predicate, or `-1` when none matches.
@@ -68,6 +83,10 @@ fn example() {
   binary equivalence predicate and supports different element types.
 - `find_first_of_by_projected` adds independent projections for the data and
   candidate ranges before applying the binary equivalence predicate.
+- `find_first_of_option`, `find_first_of_projected_option`,
+  `find_first_of_by_option`, and `find_first_of_by_projected_option` return
+  the first candidate match as `option<i64>`, using `None` when no candidate
+  matches (including an empty candidate range).
 - `find_projected`, `count_projected`, and `contains_projected` apply a unary
   projection before comparing with the search value, covering the common
   C++20 ranges projection use case without requiring a custom predicate.
@@ -86,6 +105,9 @@ fn example() {
   projected key with the search value; non-positive counts also return zero.
 - `search_n_by_projected` applies an equivalence predicate to projected keys
   and the search value, retaining the same count and no-match semantics.
+- `search_n_option`, `search_n_projected_option`, `search_n_by_option`, and
+  `search_n_by_projected_option` return `option<i64>` instead of the `-1`
+  sentinel. Non-positive counts remain successful matches at `Some(0)`.
 - `find_end` returns the last matching subrange start (`data.len()` for an
   empty pattern, `-1` if absent).
 - `search_by` and `find_end_by` find the first or last contiguous subrange
@@ -101,6 +123,9 @@ fn example() {
   `contains_subrange_by_projected` apply independent projections before their
   binary equivalence predicate, with the same empty-pattern and absent-pattern
   behavior as the corresponding non-projected functions.
+- `search_option` / `find_end_option` and their projected/equivalence variants
+  return `option<i64>` indices instead of `-1`. A successful empty-pattern
+  match remains a `Some` (`0` for first search, `data.len()` for last search).
 - `equal` compares lists in order, including across distinct equality-comparable
   element types; `is_permutation` compares element multiplicities without
   considering order.
@@ -165,6 +190,11 @@ fn example() {
   pass, or `(-1, -1)` for empty input. The comparator form
   `minmax_element_index_by(data, less)` applies the same tie rules under a
   strict ordering.
+- `min_element_index_option`, `max_element_index_option`, and
+  `minmax_element_index_option` return `Some(index)` or `Some((min, max))`,
+  using `None` for empty input. `_by_option`, `_projected_option`, and
+  `_by_projected_option` forms preserve the corresponding comparator and
+  projection ordering and tie behavior.
 - `minmax_element_value(data)` and `minmax_element_value_by(data, less)` return
   both selected values in one traversal; like the individual value forms, they
   require nonempty input.
@@ -289,6 +319,24 @@ fn example() {
   `Some((consumed, accumulator))` for nonempty input and `None` for empty
   input. The output accumulator can differ from the input element type, which
   is useful for widening reductions.
+- `transform_reduce(data, init, reduce, project)` applies a projection to each
+  element and folds each projected term into an accumulator in one pass. Its
+  paired-range overload takes two lists and stops at the shorter one. Both
+  forms allow heterogeneous input, projected-term, and accumulator types and
+  return `init` unchanged when no elements are consumed.
+- `reduce(data, init)` sums into the initial value; the operation overload
+  accepts a caller-defined fold. Both traverse sequentially in input order for
+  deterministic Mlang behavior (unlike [`std::reduce`](Stdlib-Module-API), no reordering occurs),
+  and support an accumulator type different from the input element type.
+- `inner_product(left, right, init)` sums pairwise products over the shared
+  prefix, and its custom-operation overload accepts `reduce` and `product`
+  closures. `inner_product_by` names the custom form explicitly. Inputs can be
+  heterogeneous and traversal stops at the shorter list.
+- `inclusive_scan` and `exclusive_scan` materialize prefix results, with seeded
+  overloads supporting an accumulator/output type different from the input.
+  `transform_inclusive_scan` and `transform_exclusive_scan` additionally
+  project each input before folding. Empty inputs produce empty outputs, and
+  exclusive scans emit the seed before consuming each element.
 - `fill(data, value)` returns a new list of the same length with every item set
   to `value`; the source list is unchanged, matching the result of applying
   C++20 [`std::ranges::fill`](Stdlib-Module-API) to an equal-sized destination range.
@@ -319,13 +367,13 @@ fn example() {
   before the binary operation, stopping at the shorter range.
 - `transform_projected_with_count` combines unary projection and transform
   while also returning the input element count.
-- `zip_transform3_projected` through `zip_transform6_projected` apply
+- `zip_transform3_projected` through `zip_transform8_projected` apply
   independent projections to each corresponding input before invoking the
   operation; each stops at the shortest input and infers the result type.
 - `zip_transform` applies operations to corresponding values from two through
-  six inputs, stopping at the shortest input and inferring the output type.
+  eight inputs, stopping at the shortest input and inferring the output type.
   This eager-list API mirrors the C++23 [`std::ranges::zip_transform`](Stdlib-Module-API) shape.
-- `zip` materializes heterogeneous tuples from two through six input ranges,
+- `zip` materializes heterogeneous tuples from two through eight input ranges,
   stopping at the shortest input.
 - `find_if_not` returns the first rejected element's index; `remove_if` returns
   a copy without accepted elements, and `replace_if` substitutes a value for
@@ -378,6 +426,10 @@ fn example() {
 
 ### Transforms and sequence creation
 
+- `filter_transform(data, predicate, operation)` eagerly composes filter and
+  transform in one pass, without allocating an intermediate selected list.
+  The output type may differ from the input type. The projected form tests a
+  projected key while transforming the original selected element.
 - `remove`, `take`, `drop`, `unique`, `unique_stable`, and `clamp` return a
   transformed copy. `unique` removes only adjacent duplicates;
   `unique_stable` keeps the first occurrence of each value.
@@ -457,12 +509,12 @@ fn example() {
   input as one field.
 - `concat(left, right)` copies two same-typed ranges into one list (C++23
   `views::concat` style).
-- `zip` overloads for two through six ranges materialize heterogeneous
+- `zip` overloads for two through eight ranges materialize heterogeneous
   tuples, stopping at the shortest input (C++23 `views::zip` style).
 - `pairwise(data)` materializes tuples of each adjacent pair (C++23
   `views::pairwise` style); inputs shorter than two elements produce an empty
   list.
-- `adjacent3(data)`, `adjacent4(data)`, and `adjacent5(data)` materialize typed
+- `adjacent3(data)` through `adjacent8(data)` materialize typed
   tuples for each overlapping fixed-width window, analogous to C++23
   `views::adjacent<N>`; short inputs produce empty lists.
 - `adjacent_transform(data, operation)` applies a binary operation to each
@@ -472,18 +524,18 @@ fn example() {
 - `adjacent_transform3` and `adjacent_transform4` apply ternary or four-argument
   operations to each neighboring triple or group of four, inferring the output
   type and returning an empty list when the input is too short.
-- `adjacent_transform5` applies a five-argument operation to each neighboring
-  group of five. The `_projected` forms apply these operations to projected
-  keys while preserving the original source values.
-- The `_projected` adjacent-transform forms apply those operations to projected
-  keys while preserving the original source values.
+- `adjacent_transform5` through `adjacent_transform8` apply five- through
+  eight-argument operations to neighboring windows; each infers the output
+  type and returns an empty list when the input is too short. The `_projected`
+  adjacent-transform forms currently cover widths two through eight and apply
+  operations to projected keys while preserving the original source values.
 - `enumerate(data)` materializes `(index, value)` tuples with zero-based indices
   (C++23 `views::enumerate` style).
 - `enumerate_from(data, first_index)` provides the same eager pairing with a
   caller-selected starting index, including negative offsets.
 - `keys(data)` and `values(data)` project the first or second member of each
   `tuple<K, V>` (eager counterparts to C++20 `views::keys` and `views::values`).
-- `cartesian_product` overloads for two through six ranges materialize
+- `cartesian_product` overloads for two through eight ranges materialize
   every value combination in nested-loop order; the rightmost input varies
   fastest (C++23 `views::cartesian_product` style). Any empty input produces
   an empty result.

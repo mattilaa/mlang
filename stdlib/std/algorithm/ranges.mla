@@ -22,6 +22,19 @@ pub fn find(data: &list<T>, value: U) -> i64 {
     return -1;
 }
 
+/// @brief Return the first matching index as an option instead of a sentinel.
+/// This preserves the familiar C++20 `ranges::find` result while making the
+/// no-match state explicit in Mlang. The input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn find_option(data: &list<T>, value: U) -> option<i64> {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if data[i] == value { return Some<i64>(i); }
+    }
+    return None<i64>();
+}
+
 /// @brief Find the first element equivalent to `value` under `equivalent`.
 /// Returns -1 if no element matches.
 /// @ingroup algorithm_ranges
@@ -59,6 +72,37 @@ pub fn find_projected(data: &list<T>, value: U, projection: Projection) -> i64 {
         }
     }
     return -1;
+}
+
+/// @brief Return the first projected value match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn find_projected_option(data: &list<T>, value: U,
+                             projection: Projection) -> option<i64> {
+    let index: i64 = find_projected(data, value, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first equivalent value match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn find_by_option(data: &list<T>, value: U,
+                      equivalent: Equivalent) -> option<i64> {
+    let index: i64 = find_by(data, value, equivalent);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected equivalent match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, Projection>
+pub fn find_by_projected_option(data: &list<T>, value: U,
+                                equivalent: Equivalent,
+                                projection: Projection) -> option<i64> {
+    let index: i64 = find_by_projected(data, value, equivalent, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
 }
 
 /// @brief Find the last element whose projected value equals `value`.
@@ -122,6 +166,47 @@ pub fn find_last_by_projected(data: &list<T>, value: U,
     return -1;
 }
 
+/// @brief Return the last matching index as an option instead of a sentinel.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn find_last_option(data: &list<T>, value: U) -> option<i64> {
+    let index: i64 = find_last(data, value);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last projected matching index as an option.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn find_last_projected_option(data: &list<T>, value: U,
+                                  projection: Projection) -> option<i64> {
+    let index: i64 = find_last_projected(data, value, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last equivalent index as an option.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn find_last_by_option(data: &list<T>, value: U,
+                           equivalent: Equivalent) -> option<i64> {
+    let index: i64 = find_last_by(data, value, equivalent);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last projected equivalent index as an option.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, Projection>
+pub fn find_last_by_projected_option(data: &list<T>, value: U,
+                                     equivalent: Equivalent,
+                                     projection: Projection) -> option<i64> {
+    let index: i64 = find_last_by_projected(data, value, equivalent,
+                                            projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
 /// @brief Return the first index whose value equals its immediate successor.
 /// Returns -1 when the range has fewer than two elements or no adjacent match.
 /// C++20 ranges-style `adjacent_find`.
@@ -183,6 +268,46 @@ pub fn adjacent_find_by_projected(data: &list<T>, equivalent: Equivalent,
         }
     }
     return -1;
+}
+
+/// @brief Return the first equal adjacent index as an option.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent_find_option(data: &list<T>) -> option<i64> {
+    let index: i64 = adjacent_find(data);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected-equal adjacent index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn adjacent_find_projected_option(data: &list<T>,
+                                      projection: Projection) -> option<i64> {
+    let index: i64 = adjacent_find_projected(data, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first equivalent adjacent index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent>
+pub fn adjacent_find_by_option(data: &list<T>, equivalent: Equivalent)
+    -> option<i64> {
+    let index: i64 = adjacent_find_by(data, equivalent);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected-equivalent adjacent index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent, Projection>
+pub fn adjacent_find_by_projected_option(
+    data: &list<T>, equivalent: Equivalent, projection: Projection)
+    -> option<i64> {
+    let index: i64 = adjacent_find_by_projected(data, equivalent, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
 }
 
 /// @brief Return the first index in `data` matching any value in `candidates`.
@@ -259,6 +384,52 @@ pub fn find_first_of_by_projected(
         }
     }
     return -1;
+}
+
+/// @brief Return the first candidate match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn find_first_of_option(data: &list<T>, candidates: &list<U>)
+    -> option<i64> {
+    let index: i64 = find_first_of(data, candidates);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected candidate match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, DataProjection, CandidateProjection>
+pub fn find_first_of_projected_option(
+    data: &list<T>, candidates: &list<U>,
+    data_projection: DataProjection,
+    candidate_projection: CandidateProjection) -> option<i64> {
+    let index: i64 = find_first_of_projected(
+        data, candidates, data_projection, candidate_projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first equivalent candidate match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn find_first_of_by_option(data: &list<T>, candidates: &list<U>,
+                               equivalent: Equivalent) -> option<i64> {
+    let index: i64 = find_first_of_by(data, candidates, equivalent);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected equivalent candidate match as an option.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, DataProjection, CandidateProjection>
+pub fn find_first_of_by_projected_option(
+    data: &list<T>, candidates: &list<U>, equivalent: Equivalent,
+    data_projection: DataProjection, candidate_projection: CandidateProjection)
+    -> option<i64> {
+    let index: i64 = find_first_of_by_projected(
+        data, candidates, equivalent, data_projection, candidate_projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
 }
 
 /// @brief Return whether sorted `range` contains sorted `subset`.
@@ -428,6 +599,29 @@ pub fn find_if_projected(data: &list<T>, predicate: Predicate,
     return -1;
 }
 
+/// @brief Return the first predicate-matching index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn find_if_option(data: &list<T>, predicate: Predicate) -> option<i64> {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) { return Some<i64>(i); }
+    }
+    return None<i64>();
+}
+
+/// @brief Return the first projected predicate-matching index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn find_if_projected_option(data: &list<T>, predicate: Predicate,
+                                projection: Projection) -> option<i64> {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(projection(data[i])) { return Some<i64>(i); }
+    }
+    return None<i64>();
+}
+
 /// @brief Return the last index accepted by `predicate`, or -1.
 /// C++23 `std::ranges::find_last_if` semantics.
 /// @ingroup algorithm_ranges
@@ -455,6 +649,48 @@ pub fn find_last_if_projected(data: &list<T>, predicate: Predicate,
         if predicate(projection(data[i])) { return i; }
     }
     return -1;
+}
+
+/// @brief Return the last predicate-matching index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn find_last_if_option(data: &list<T>, predicate: Predicate)
+    -> option<i64> {
+    let index: i64 = find_last_if(data, predicate);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last projected predicate-matching index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn find_last_if_projected_option(data: &list<T>, predicate: Predicate,
+                                     projection: Projection) -> option<i64> {
+    let index: i64 = find_last_if_projected(data, predicate, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last predicate-rejected index as an option.
+/// C++23 `std::ranges::find_last_if_not` with an explicit absence state.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn find_last_if_not_option(data: &list<T>, predicate: Predicate)
+    -> option<i64> {
+    let index: i64 = find_last_if_not(data, predicate);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last projected predicate-rejected index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn find_last_if_not_projected_option(data: &list<T>, predicate: Predicate,
+                                         projection: Projection)
+    -> option<i64> {
+    let index: i64 = find_last_if_not_projected(data, predicate, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
 }
 
 /// @brief Count elements accepted by `predicate` (C++20 `ranges::count_if`).
@@ -589,6 +825,209 @@ pub fn fold_left(data: &list<T>, init: U, operation: Operation) -> U {
         acc = operation(acc, data[i]);
     }
     return acc;
+}
+
+/// @brief Project each range element before folding it into the accumulator.
+/// The accumulator type may differ from the input and projected element types.
+/// This eager ranges counterpart to `std::transform_reduce` visits each value
+/// once in input order.
+/// @ingroup algorithm_ranges
+generic<T, U, Reduce, Project>
+pub fn transform_reduce(data: &list<T>, init: U, reduce: Reduce,
+                        project: Project) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = reduce(acc, project(data[i]));
+    }
+    return acc;
+}
+
+/// @brief Project paired elements from two ranges and fold each projected term.
+/// Stops at the shorter input; input and accumulator types may differ.
+/// @ingroup algorithm_ranges
+///
+/// `project(left, right)` creates a term and `reduce(accumulator, term)` folds
+/// it into the result.
+generic<T, V, U, Reduce, Project>
+pub fn transform_reduce(left: &list<T>, right: &list<V>, init: U,
+                        reduce: Reduce, project: Project) -> U {
+    var acc: U = init;
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        acc = reduce(acc, project(left[i], right[i]));
+    }
+    return acc;
+}
+
+/// @brief Reduce a range into `init` using addition in input order.
+/// Mlang uses a deterministic sequential traversal; unlike a parallel
+/// `std::reduce`, operations are never reordered. The accumulator may differ
+/// from the input element type.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn reduce(data: &list<T>, init: U) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = acc + data[i];
+    }
+    return acc;
+}
+
+/// @brief Reduce a range with a caller-provided operation in input order.
+/// Empty input returns `init` unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation>
+pub fn reduce(data: &list<T>, init: U, operation: Operation) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, data[i]);
+    }
+    return acc;
+}
+
+/// @brief Compute the sum of pairwise products over the shared range prefix.
+/// The accumulator may use a different type from either input element type.
+/// This eager-list counterpart to `std::inner_product` stops at the shorter
+/// input and returns `init` when either input is empty.
+/// @ingroup algorithm_ranges
+generic<T, V, U>
+pub fn inner_product(left: &list<T>, right: &list<V>, init: U) -> U {
+    var acc: U = init;
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        acc = acc + (left[i] * right[i]);
+    }
+    return acc;
+}
+
+/// @brief Compute a paired-range inner product with custom operations.
+/// `product(left, right)` creates each term, and `reduce(acc, term)` folds it
+/// into the accumulator. Inputs may have different element types.
+/// @ingroup algorithm_ranges
+generic<T, V, U, Reduce, Product>
+pub fn inner_product_by(left: &list<T>, right: &list<V>, init: U,
+                        reduce: Reduce, product: Product) -> U {
+    var acc: U = init;
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        acc = reduce(acc, product(left[i], right[i]));
+    }
+    return acc;
+}
+
+/// @brief C++-style custom-operation overload of `inner_product`.
+/// @ingroup algorithm_ranges
+generic<T, V, U, Reduce, Product>
+pub fn inner_product(left: &list<T>, right: &list<V>, init: U,
+                     reduce: Reduce, product: Product) -> U {
+    return inner_product_by(left, right, init, reduce, product);
+}
+
+/// @brief Materialize an inclusive prefix scan using `operation`.
+/// The first input value seeds the output; empty input produces an empty list.
+/// @ingroup algorithm_ranges
+generic<T, Operation>
+pub fn inclusive_scan(data: &list<T>, operation: Operation) -> list<T> {
+    let n: i64 = data.len();
+    if n == 0 { return []; }
+    var out: list<T> = [];
+    var acc: T = data[0];
+    out.push(acc);
+    for i in 1..n {
+        acc = operation(acc, data[i]);
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Materialize seeded inclusive prefixes; output type may differ from T.
+/// Each output incorporates the corresponding input element before emission.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation>
+pub fn inclusive_scan(data: &list<T>, init: U, operation: Operation)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, data[i]);
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Emit the accumulator before incorporating each element.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation>
+pub fn exclusive_scan(data: &list<T>, init: U, operation: Operation)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        out.push(acc);
+        acc = operation(acc, data[i]);
+    }
+    return out;
+}
+
+/// @brief Project values and materialize inclusive accumulated prefixes.
+/// Without an initial value, the first projected element seeds the result.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation, Projection>
+pub fn transform_inclusive_scan(data: &list<T>, operation: Operation,
+                                project: Projection) -> list<U> {
+    let n: i64 = data.len();
+    if n == 0 { return []; }
+    var out: list<U> = [];
+    var acc: U = project(data[0]);
+    out.push(acc);
+    for i in 1..n {
+        acc = operation(acc, project(data[i]));
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Project values into seeded inclusive accumulated prefixes.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation, Projection>
+pub fn transform_inclusive_scan(data: &list<T>, init: U,
+                                operation: Operation, project: Projection)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, project(data[i]));
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Emit each accumulator before folding in the projected input value.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation, Projection>
+pub fn transform_exclusive_scan(data: &list<T>, init: U,
+                                operation: Operation, project: Projection)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        out.push(acc);
+        acc = operation(acc, project(data[i]));
+    }
+    return out;
 }
 
 /// @brief Fold a range from right to left with an explicit initial value.
@@ -857,6 +1296,42 @@ pub fn copy_if_projected(data: &list<T>, predicate: Predicate,
     return selected;
 }
 
+/// @brief Filter and transform in one pass, preserving the selected order.
+/// Eager equivalent of composing C++20 `views::filter` and
+/// `views::transform`, without materializing an intermediate list.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Operation>
+pub fn filter_transform(data: &list<T>, predicate: Predicate,
+                        operation: Operation) -> list<Output> {
+    var transformed: list<Output> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            transformed.push(operation(data[i]));
+        }
+    }
+    return transformed;
+}
+
+/// @brief Filter by projected keys and transform selected original elements.
+/// Predicate and operation each run at most once per element; the projection
+/// runs exactly once per element.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Operation, Projection>
+pub fn filter_transform_projected(data: &list<T>, predicate: Predicate,
+                                  operation: Operation,
+                                  projection: Projection) -> list<Output> {
+    var transformed: list<Output> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let key = projection(data[i]);
+        if predicate(key) {
+            transformed.push(operation(data[i]));
+        }
+    }
+    return transformed;
+}
+
 /// @brief Transform every element into a new list using `operation`.
 /// The output element type is inferred from the operation's return type,
 /// so input and output ranges may have different element types.
@@ -1075,6 +1550,73 @@ pub fn zip_transform6_projected(
     return transformed;
 }
 
+/// @brief Transform projected values from seven ranges over their common prefix.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, Output, Operation, FirstProjection,
+        SecondProjection, ThirdProjection, FourthProjection,
+        FifthProjection, SixthProjection, SeventhProjection>
+pub fn zip_transform7_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, sixth: &list<Y>, seventh: &list<Z>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection, fourth_projection: FourthProjection,
+    fifth_projection: FifthProjection, sixth_projection: SixthProjection,
+    seventh_projection: SeventhProjection) -> list<Output> {
+    var transformed: list<Output> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    if seventh.len() < n { n = seventh.len(); }
+    for i in 0..n {
+        transformed.push(operation(first_projection(first[i]),
+                                   second_projection(second[i]),
+                                   third_projection(third[i]),
+                                   fourth_projection(fourth[i]),
+                                   fifth_projection(fifth[i]),
+                                   sixth_projection(sixth[i]),
+                                   seventh_projection(seventh[i])));
+    }
+    return transformed;
+}
+
+/// @brief Transform projected values from eight ranges over their common prefix.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A, Output, Operation, FirstProjection,
+        SecondProjection, ThirdProjection, FourthProjection,
+        FifthProjection, SixthProjection, SeventhProjection, EighthProjection>
+pub fn zip_transform8_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, sixth: &list<Y>, seventh: &list<Z>, eighth: &list<A>,
+    operation: Operation, first_projection: FirstProjection,
+    second_projection: SecondProjection, third_projection: ThirdProjection,
+    fourth_projection: FourthProjection, fifth_projection: FifthProjection,
+    sixth_projection: SixthProjection, seventh_projection: SeventhProjection,
+    eighth_projection: EighthProjection) -> list<Output> {
+    var transformed: list<Output> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    if seventh.len() < n { n = seventh.len(); }
+    if eighth.len() < n { n = eighth.len(); }
+    for i in 0..n {
+        transformed.push(operation(first_projection(first[i]),
+                                   second_projection(second[i]),
+                                   third_projection(third[i]),
+                                   fourth_projection(fourth[i]),
+                                   fifth_projection(fifth[i]),
+                                   sixth_projection(sixth[i]),
+                                   seventh_projection(seventh[i]),
+                                   eighth_projection(eighth[i])));
+    }
+    return transformed;
+}
+
 /// @brief Transform corresponding elements from three ranges into a new list.
 /// Stops at the shortest input; output type comes from the ternary operation.
 /// C++23 `ranges::zip_transform` counterpart for three inputs.
@@ -1154,6 +1696,51 @@ pub fn zip_transform(first: &list<T>, second: &list<U>, third: &list<V>,
     for i in 0..n {
         transformed.push(operation(first[i], second[i], third[i], fourth[i],
                                    fifth[i], sixth[i]));
+    }
+    return transformed;
+}
+
+/// @brief Transform corresponding values from seven ranges over their common prefix.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, Output, Operation>
+pub fn zip_transform(first: &list<T>, second: &list<U>, third: &list<V>,
+                     fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+                     seventh: &list<Z>, operation: Operation)
+    -> list<Output> {
+    var transformed: list<Output> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    if seventh.len() < n { n = seventh.len(); }
+    for i in 0..n {
+        transformed.push(operation(first[i], second[i], third[i], fourth[i],
+                                   fifth[i], sixth[i], seventh[i]));
+    }
+    return transformed;
+}
+
+/// @brief Transform corresponding values from eight ranges over their common prefix.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A, Output, Operation>
+pub fn zip_transform(first: &list<T>, second: &list<U>, third: &list<V>,
+                     fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+                     seventh: &list<Z>, eighth: &list<A>,
+                     operation: Operation) -> list<Output> {
+    var transformed: list<Output> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    if seventh.len() < n { n = seventh.len(); }
+    if eighth.len() < n { n = eighth.len(); }
+    for i in 0..n {
+        transformed.push(operation(first[i], second[i], third[i], fourth[i],
+                                   fifth[i], sixth[i], seventh[i], eighth[i]));
     }
     return transformed;
 }
@@ -1474,6 +2061,26 @@ pub fn find_if_not_projected(data: &list<T>, predicate: Predicate,
         if !predicate(projection(data[i])) { return i; }
     }
     return -1;
+}
+
+/// @brief Return the first predicate-rejected index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn find_if_not_option(data: &list<T>, predicate: Predicate)
+    -> option<i64> {
+    let index: i64 = find_if_not(data, predicate);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected predicate-rejected index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn find_if_not_projected_option(data: &list<T>, predicate: Predicate,
+                                    projection: Projection) -> option<i64> {
+    let index: i64 = find_if_not_projected(data, predicate, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
 }
 
 /// @brief Return the last index rejected by `predicate`, or -1.
@@ -2491,6 +3098,48 @@ pub fn search_n_by_projected(data: &list<T>, count: i64, value: U,
     return -1;
 }
 
+/// @brief Return the first repeated-value run as an option index.
+/// A non-positive count is a successful empty run at index zero.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn search_n_option(data: &list<T>, count: i64, value: U) -> option<i64> {
+    let index: i64 = search_n(data, count, value);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected repeated-value run as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn search_n_projected_option(data: &list<T>, count: i64, value: U,
+                                 projection: Projection) -> option<i64> {
+    let index: i64 = search_n_projected(data, count, value, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first equivalent repeated-value run as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn search_n_by_option(data: &list<T>, count: i64, value: U,
+                          equivalent: Equivalent) -> option<i64> {
+    let index: i64 = search_n_by(data, count, value, equivalent);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected equivalent run as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, Projection>
+pub fn search_n_by_projected_option(data: &list<T>, count: i64, value: U,
+                                    equivalent: Equivalent,
+                                    projection: Projection) -> option<i64> {
+    let index: i64 = search_n_by_projected(
+        data, count, value, equivalent, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
 /// @brief Return the start index of the last matching subrange.
 /// Returns the range length for an empty pattern and -1 when absent.
 /// C++20 `std::ranges::find_end` equivalent.
@@ -2606,6 +3255,96 @@ pub fn find_end_by_projected(
         if matches { found = start; }
     }
     return found;
+}
+
+/// @brief Return the first subrange match as an option index.
+/// Empty patterns match at index zero; absence is `None`.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn search_option(data: &list<T>, pattern: &list<U>) -> option<i64> {
+    let index: i64 = search(data, pattern);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected subrange match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, DataProjection, PatternProjection>
+pub fn search_projected_option(
+    data: &list<T>, pattern: &list<U>, data_projection: DataProjection,
+    pattern_projection: PatternProjection) -> option<i64> {
+    let index: i64 = search_projected(data, pattern, data_projection,
+                                      pattern_projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first equivalent subrange match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn search_by_option(data: &list<T>, pattern: &list<U>,
+                        equivalent: Equivalent) -> option<i64> {
+    let index: i64 = search_by(data, pattern, equivalent);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected-equivalent subrange match as an option.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, DataProjection, PatternProjection>
+pub fn search_by_projected_option(
+    data: &list<T>, pattern: &list<U>, equivalent: Equivalent,
+    data_projection: DataProjection, pattern_projection: PatternProjection)
+    -> option<i64> {
+    let index: i64 = search_by_projected(
+        data, pattern, equivalent, data_projection, pattern_projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last subrange match as an option index.
+/// An empty pattern matches at `data.len()`; absence is `None`.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn find_end_option(data: &list<T>, pattern: &list<U>) -> option<i64> {
+    let index: i64 = find_end(data, pattern);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last projected subrange match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, DataProjection, PatternProjection>
+pub fn find_end_projected_option(
+    data: &list<T>, pattern: &list<U>, data_projection: DataProjection,
+    pattern_projection: PatternProjection) -> option<i64> {
+    let index: i64 = find_end_projected(
+        data, pattern, data_projection, pattern_projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last equivalent subrange match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn find_end_by_option(data: &list<T>, pattern: &list<U>,
+                          equivalent: Equivalent) -> option<i64> {
+    let index: i64 = find_end_by(data, pattern, equivalent);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last projected-equivalent match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, DataProjection, PatternProjection>
+pub fn find_end_by_projected_option(
+    data: &list<T>, pattern: &list<U>, equivalent: Equivalent,
+    data_projection: DataProjection, pattern_projection: PatternProjection)
+    -> option<i64> {
+    let index: i64 = find_end_by_projected(
+        data, pattern, equivalent, data_projection, pattern_projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
 }
 
 /// @brief Return whether `pattern` occurs as a contiguous subsequence.
@@ -4473,6 +5212,130 @@ pub fn minmax_element_index_by_projected(data: &list<T>, less: Less,
     return (minimum, maximum);
 }
 
+/// @brief Return the minimum element index, or `None` for an empty range.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn min_element_index_option(data: &list<T>) -> option<i64> {
+    let index: i64 = min_element_index(data);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the maximum element index, or `None` for an empty range.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn max_element_index_option(data: &list<T>) -> option<i64> {
+    let index: i64 = max_element_index(data);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first-minimum and last-maximum indices as an option.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn minmax_element_index_option(data: &list<T>)
+    -> option<tuple<i64, i64>> {
+    let indices: tuple<i64, i64> = minmax_element_index(data);
+    if indices.0 < 0 { return None<tuple<i64, i64>>(); }
+    return Some<tuple<i64, i64>>(indices);
+}
+
+/// @brief Return the minimum index under `less`, or `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn min_element_index_by_option(data: &list<T>, less: Less)
+    -> option<i64> {
+    let index: i64 = min_element_index_by(data, less);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the maximum index under `less`, or `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn max_element_index_by_option(data: &list<T>, less: Less)
+    -> option<i64> {
+    let index: i64 = max_element_index_by(data, less);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return comparator-based extrema indices as an option.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn minmax_element_index_by_option(data: &list<T>, less: Less)
+    -> option<tuple<i64, i64>> {
+    let indices: tuple<i64, i64> = minmax_element_index_by(data, less);
+    if indices.0 < 0 { return None<tuple<i64, i64>>(); }
+    return Some<tuple<i64, i64>>(indices);
+}
+
+/// @brief Return the projected minimum index, or `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn min_element_index_projected_option(data: &list<T>,
+                                          projection: Projection)
+    -> option<i64> {
+    let index: i64 = min_element_index_projected(data, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the projected maximum index, or `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn max_element_index_projected_option(data: &list<T>,
+                                          projection: Projection)
+    -> option<i64> {
+    let index: i64 = max_element_index_projected(data, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return projected extrema indices as an option.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn minmax_element_index_projected_option(data: &list<T>,
+                                             projection: Projection)
+    -> option<tuple<i64, i64>> {
+    let indices: tuple<i64, i64> =
+        minmax_element_index_projected(data, projection);
+    if indices.0 < 0 { return None<tuple<i64, i64>>(); }
+    return Some<tuple<i64, i64>>(indices);
+}
+
+/// @brief Return comparator-projected minimum index, or `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn min_element_index_by_projected_option(
+    data: &list<T>, less: Less, projection: Projection) -> option<i64> {
+    let index: i64 = min_element_index_by_projected(data, less, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return comparator-projected maximum index, or `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn max_element_index_by_projected_option(
+    data: &list<T>, less: Less, projection: Projection) -> option<i64> {
+    let index: i64 = max_element_index_by_projected(data, less, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return comparator-projected extrema indices as an option.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn minmax_element_index_by_projected_option(
+    data: &list<T>, less: Less, projection: Projection)
+    -> option<tuple<i64, i64>> {
+    let indices: tuple<i64, i64> =
+        minmax_element_index_by_projected(data, less, projection);
+    if indices.0 < 0 { return None<tuple<i64, i64>>(); }
+    return Some<tuple<i64, i64>>(indices);
+}
+
 /// @brief Return the first value with a minimum comparator-projected key.
 /// Requires a nonempty input.
 /// @ingroup algorithm_ranges
@@ -5857,6 +6720,50 @@ pub fn zip(first: &list<T>, second: &list<U>, third: &list<V>,
     return out;
 }
 
+/// @brief Zip seven heterogeneous ranges, stopping at the shortest input.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z>
+pub fn zip(first: &list<T>, second: &list<U>, third: &list<V>,
+          fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+          seventh: &list<Z>) -> list<tuple<T, U, V, W, X, Y, Z>> {
+    var out: list<tuple<T, U, V, W, X, Y, Z>> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    if seventh.len() < n { n = seventh.len(); }
+    for i in 0..n {
+        out.push((first[i], second[i], third[i], fourth[i], fifth[i],
+                  sixth[i], seventh[i]));
+    }
+    return out;
+}
+
+/// @brief Zip eight heterogeneous ranges, stopping at the shortest input.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A>
+pub fn zip(first: &list<T>, second: &list<U>, third: &list<V>,
+          fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+          seventh: &list<Z>, eighth: &list<A>)
+    -> list<tuple<T, U, V, W, X, Y, Z, A>> {
+    var out: list<tuple<T, U, V, W, X, Y, Z, A>> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    if seventh.len() < n { n = seventh.len(); }
+    if eighth.len() < n { n = eighth.len(); }
+    for i in 0..n {
+        out.push((first[i], second[i], third[i], fourth[i], fifth[i],
+                  sixth[i], seventh[i], eighth[i]));
+    }
+    return out;
+}
+
 /// @brief Materialize tuples for each pair of adjacent elements.
 /// Eager C++23 `views::pairwise` equivalent; fewer than two elements yield
 /// an empty list and the input is unchanged.
@@ -5913,6 +6820,51 @@ pub fn adjacent5(data: &list<T>) -> list<tuple<T, T, T, T, T>> {
     for i in 0..(n - 4) {
         out.push((data[i], data[i + 1], data[i + 2], data[i + 3],
                   data[i + 4]));
+    }
+    return out;
+}
+
+/// @brief Materialize every adjacent group of six as a typed tuple.
+/// Eager counterpart to C++23 `views::adjacent<6>`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent6(data: &list<T>) -> list<tuple<T, T, T, T, T, T>> {
+    var out: list<tuple<T, T, T, T, T, T>> = [];
+    let n: i64 = data.len();
+    if n < 6 { return out; }
+    for i in 0..(n - 5) {
+        out.push((data[i], data[i + 1], data[i + 2], data[i + 3],
+                  data[i + 4], data[i + 5]));
+    }
+    return out;
+}
+
+/// @brief Materialize every adjacent group of seven as a typed tuple.
+/// Eager counterpart to C++23 `views::adjacent<7>`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent7(data: &list<T>) -> list<tuple<T, T, T, T, T, T, T>> {
+    var out: list<tuple<T, T, T, T, T, T, T>> = [];
+    let n: i64 = data.len();
+    if n < 7 { return out; }
+    for i in 0..(n - 6) {
+        out.push((data[i], data[i + 1], data[i + 2], data[i + 3],
+                  data[i + 4], data[i + 5], data[i + 6]));
+    }
+    return out;
+}
+
+/// @brief Materialize every adjacent group of eight as a typed tuple.
+/// Eager counterpart to C++23 `views::adjacent<8>`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent8(data: &list<T>) -> list<tuple<T, T, T, T, T, T, T, T>> {
+    var out: list<tuple<T, T, T, T, T, T, T, T>> = [];
+    let n: i64 = data.len();
+    if n < 8 { return out; }
+    for i in 0..(n - 7) {
+        out.push((data[i], data[i + 1], data[i + 2], data[i + 3],
+                  data[i + 4], data[i + 5], data[i + 6], data[i + 7]));
     }
     return out;
 }
@@ -6042,6 +6994,105 @@ pub fn adjacent_transform5_projected(data: &list<T>, operation: Operation,
     return out;
 }
 
+/// @brief Apply a six-argument operation to each adjacent group of six.
+/// Eager C++23 `views::adjacent_transform<6>` counterpart.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform6(data: &list<T>, operation: Operation)
+    -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 6 { return out; }
+    for i in 0..(n - 5) {
+        out.push(operation(data[i], data[i + 1], data[i + 2], data[i + 3],
+                           data[i + 4], data[i + 5]));
+    }
+    return out;
+}
+
+/// @brief Apply a seven-argument operation to each adjacent group of seven.
+/// Eager C++23 `views::adjacent_transform<7>` counterpart.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform7(data: &list<T>, operation: Operation)
+    -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 7 { return out; }
+    for i in 0..(n - 6) {
+        out.push(operation(data[i], data[i + 1], data[i + 2], data[i + 3],
+                           data[i + 4], data[i + 5], data[i + 6]));
+    }
+    return out;
+}
+
+/// @brief Apply an eight-argument operation to each adjacent group of eight.
+/// Eager C++23 `views::adjacent_transform<8>` counterpart.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform8(data: &list<T>, operation: Operation)
+    -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 8 { return out; }
+    for i in 0..(n - 7) {
+        out.push(operation(data[i], data[i + 1], data[i + 2], data[i + 3],
+                           data[i + 4], data[i + 5], data[i + 6],
+                           data[i + 7]));
+    }
+    return out;
+}
+
+/// @brief Apply a six-argument operation to each window of projected values.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform6_projected(data: &list<T>, operation: Operation,
+                                     projection: Projection) -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 6 { return out; }
+    for i in 0..(n - 5) {
+        out.push(operation(projection(data[i]), projection(data[i + 1]),
+                           projection(data[i + 2]), projection(data[i + 3]),
+                           projection(data[i + 4]), projection(data[i + 5])));
+    }
+    return out;
+}
+
+/// @brief Apply a seven-argument operation to each window of projected values.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform7_projected(data: &list<T>, operation: Operation,
+                                     projection: Projection) -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 7 { return out; }
+    for i in 0..(n - 6) {
+        out.push(operation(projection(data[i]), projection(data[i + 1]),
+                           projection(data[i + 2]), projection(data[i + 3]),
+                           projection(data[i + 4]), projection(data[i + 5]),
+                           projection(data[i + 6])));
+    }
+    return out;
+}
+
+/// @brief Apply an eight-argument operation to each window of projected values.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform8_projected(data: &list<T>, operation: Operation,
+                                     projection: Projection) -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 8 { return out; }
+    for i in 0..(n - 7) {
+        out.push(operation(projection(data[i]), projection(data[i + 1]),
+                           projection(data[i + 2]), projection(data[i + 3]),
+                           projection(data[i + 4]), projection(data[i + 5]),
+                           projection(data[i + 6]), projection(data[i + 7])));
+    }
+    return out;
+}
+
 /// @brief Materialize every pair from two ranges in nested-loop order.
 /// The right range varies fastest; equivalent to C++23 `views::cartesian_product`.
 /// @ingroup algorithm_ranges
@@ -6138,6 +7189,67 @@ pub fn cartesian_product(first: &list<T>, second: &list<U>, third: &list<V>,
                         for p in 0..sixth.len() {
                             out.push((first[i], second[j], third[k], fourth[m],
                                       fifth[n], sixth[p]));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
+
+/// @brief Materialize every combination from seven heterogeneous ranges.
+/// The rightmost range varies fastest; any empty input yields an empty result.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z>
+pub fn cartesian_product(first: &list<T>, second: &list<U>, third: &list<V>,
+                         fourth: &list<W>, fifth: &list<X>,
+                         sixth: &list<Y>, seventh: &list<Z>)
+    -> list<tuple<T, U, V, W, X, Y, Z>> {
+    var out: list<tuple<T, U, V, W, X, Y, Z>> = [];
+    for i in 0..first.len() {
+        for j in 0..second.len() {
+            for k in 0..third.len() {
+                for m in 0..fourth.len() {
+                    for n in 0..fifth.len() {
+                        for p in 0..sixth.len() {
+                            for q in 0..seventh.len() {
+                                out.push((first[i], second[j], third[k],
+                                          fourth[m], fifth[n], sixth[p],
+                                          seventh[q]));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
+
+/// @brief Materialize every combination from eight heterogeneous ranges.
+/// The rightmost range varies fastest; any empty input yields an empty result.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A>
+pub fn cartesian_product(first: &list<T>, second: &list<U>, third: &list<V>,
+                         fourth: &list<W>, fifth: &list<X>,
+                         sixth: &list<Y>, seventh: &list<Z>,
+                         eighth: &list<A>)
+    -> list<tuple<T, U, V, W, X, Y, Z, A>> {
+    var out: list<tuple<T, U, V, W, X, Y, Z, A>> = [];
+    for i in 0..first.len() {
+        for j in 0..second.len() {
+            for k in 0..third.len() {
+                for m in 0..fourth.len() {
+                    for n in 0..fifth.len() {
+                        for p in 0..sixth.len() {
+                            for q in 0..seventh.len() {
+                                for r in 0..eighth.len() {
+                                    out.push((first[i], second[j], third[k],
+                                              fourth[m], fifth[n], sixth[p],
+                                              seventh[q], eighth[r]));
+                                }
+                            }
                         }
                     }
                 }

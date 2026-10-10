@@ -3,6 +3,8 @@ mod std::date;
 mod std::strbuf;
 
 use std::date::DateTime;
+use std::date::CivilDate;
+use std::date::IsoWeekDate;
 use std::date::TimeZone;
 use std::date::UtcOffset;
 use std::date::format_date;
@@ -24,6 +26,20 @@ use std::date::to_unix_utc;
 use std::date::from_unix_tz;
 use std::date::timezone_offset_at;
 use std::date::utc;
+use std::date::is_leap_year;
+use std::date::days_in_month;
+use std::date::is_valid_civil_date;
+use std::date::to_sys_days;
+use std::date::from_sys_days;
+use std::date::weekday_from_sys_days;
+use std::date::add_civil_days;
+use std::date::days_between;
+use std::date::add_civil_years;
+use std::date::add_civil_months;
+use std::date::nth_weekday_of_month;
+use std::date::last_weekday_of_month;
+use std::date::to_iso_week_date;
+use std::date::from_iso_week_date;
 use std::strbuf::eq;
 use std::strbuf::len;
 use std::testing::verify;
@@ -85,6 +101,192 @@ fn test_unix_epoch_utc_roundtrip() {
     verify(dt.second == 0);
     verify(to_unix_utc(dt) == 0);
     verify(eq(format_iso8601_offset(dt, utc()), "1970-01-01T00:00:00Z") == 1);
+}
+
+#[test]
+fn test_civil_calendar_and_sys_days() {
+    verify(is_leap_year(2000));
+    verify(!is_leap_year(1900));
+    verify(!is_leap_year(2100));
+    verify(is_leap_year(0));
+    verify(is_leap_year(2024));
+    verify(!is_leap_year(2023));
+    verify(days_in_month(2024, 2) == 29);
+    verify(days_in_month(2023, 2) == 28);
+    verify(days_in_month(2024, 13) == 0);
+    verify(is_valid_civil_date(2024, 2, 29));
+    verify(!is_valid_civil_date(1900, 2, 29));
+    verify(!is_valid_civil_date(2024, 4, 31));
+
+    let epoch_days: option<i64> = to_sys_days(1970, 1, 1);
+    verify(epoch_days.is_some() && epoch_days.unwrap() == 0);
+    verify(to_sys_days(1900, 2, 29).is_none());
+    verify(to_sys_days(2024, 2, 29).unwrap() == 19782);
+    let year_zero_leap_day: i64 = to_sys_days(0, 2, 29).unwrap();
+    verify(weekday_from_sys_days(0) == 4);
+    verify(weekday_from_sys_days(2) == 6);
+    verify(weekday_from_sys_days(-1) == 3);
+    verify(weekday_from_sys_days(-4) == 0);
+
+    let leap_day: CivilDate = from_sys_days(19782).unwrap();
+    verify(leap_day.year == 2024 && leap_day.month == 2 &&
+           leap_day.day == 29);
+    let before_epoch: CivilDate = from_sys_days(-1).unwrap();
+    verify(before_epoch.year == 1969 && before_epoch.month == 12 &&
+           before_epoch.day == 31);
+    let year_zero_date: CivilDate = from_sys_days(year_zero_leap_day).unwrap();
+    verify(year_zero_date.year == 0 && year_zero_date.month == 2 &&
+           year_zero_date.day == 29);
+}
+
+#[test]
+fn test_civil_date_day_arithmetic() {
+    let leap_day: CivilDate = CivilDate { year: 2024, month: 2, day: 29 };
+    let following: CivilDate = add_civil_days(leap_day, 1).unwrap();
+    verify(following.year == 2024 && following.month == 3 &&
+           following.day == 1);
+    let preceding: CivilDate = add_civil_days(leap_day, -1).unwrap();
+    verify(preceding.year == 2024 && preceding.month == 2 &&
+           preceding.day == 28);
+
+    let epoch: CivilDate = CivilDate { year: 1970, month: 1, day: 1 };
+    let before_epoch: CivilDate = add_civil_days(epoch, -1).unwrap();
+    verify(before_epoch.year == 1969 && before_epoch.month == 12 &&
+           before_epoch.day == 31);
+    verify(days_between(before_epoch, epoch).unwrap() == 1);
+    verify(days_between(epoch, before_epoch).unwrap() == -1);
+
+    let invalid: CivilDate = CivilDate { year: 2023, month: 2, day: 29 };
+    verify(add_civil_days(invalid, 0).is_none());
+    verify(days_between(invalid, epoch).is_none());
+
+    let last_supported: CivilDate = CivilDate {
+        year: 2147483647, month: 12, day: 31
+    };
+    let first_supported: CivilDate = CivilDate {
+        year: -2147483648, month: 1, day: 1
+    };
+    verify(add_civil_days(last_supported, 1).is_none());
+    verify(add_civil_days(first_supported, -1).is_none());
+}
+
+#[test]
+fn test_civil_date_month_arithmetic() {
+    let middle_of_month: CivilDate =
+        CivilDate { year: 2024, month: 1, day: 15 };
+    let next_month: CivilDate = add_civil_months(middle_of_month, 1).unwrap();
+    verify(next_month.year == 2024 && next_month.month == 2 &&
+           next_month.day == 15);
+    let previous_year: CivilDate = add_civil_months(middle_of_month, -13).unwrap();
+    verify(previous_year.year == 2022 && previous_year.month == 12 &&
+           previous_year.day == 15);
+
+    let month_end: CivilDate = CivilDate { year: 2024, month: 1, day: 31 };
+    let invalid_february: CivilDate = add_civil_months(month_end, 1).unwrap();
+    verify(invalid_february.year == 2024 && invalid_february.month == 2 &&
+           invalid_february.day == 31);
+    verify(!is_valid_civil_date(invalid_february.year,
+                                invalid_february.month,
+                                invalid_february.day));
+    let leap_day: CivilDate = CivilDate { year: 2024, month: 2, day: 29 };
+    let next_year: CivilDate = add_civil_months(leap_day, 12).unwrap();
+    verify(next_year.year == 2025 && next_year.month == 2 &&
+           next_year.day == 29);
+    verify(!is_valid_civil_date(next_year.year, next_year.month, next_year.day));
+
+    let invalid: CivilDate = CivilDate { year: 2023, month: 2, day: 29 };
+    verify(add_civil_months(invalid, 1).is_none());
+    let max_date: CivilDate = CivilDate {
+        year: 2147483647, month: 12, day: 31
+    };
+    let min_date: CivilDate = CivilDate {
+        year: -2147483648, month: 1, day: 1
+    };
+    verify(add_civil_months(max_date, 1).is_none());
+    verify(add_civil_months(min_date, -1).is_none());
+}
+
+#[test]
+fn test_civil_date_year_arithmetic() {
+    let leap_day: CivilDate = CivilDate { year: 2024, month: 2, day: 29 };
+    let common_year: CivilDate = add_civil_years(leap_day, 1).unwrap();
+    verify(common_year.year == 2025 && common_year.month == 2 &&
+           common_year.day == 29);
+    verify(!is_valid_civil_date(common_year.year, common_year.month,
+                                common_year.day));
+    let leap_year: CivilDate = add_civil_years(leap_day, -4).unwrap();
+    verify(leap_year.year == 2020 &&
+           is_valid_civil_date(leap_year.year, leap_year.month, leap_year.day));
+
+    let invalid: CivilDate = CivilDate { year: 2023, month: 2, day: 29 };
+    verify(add_civil_years(invalid, 1).is_none());
+    let max_date: CivilDate = CivilDate {
+        year: 2147483647, month: 12, day: 31
+    };
+    let min_date: CivilDate = CivilDate {
+        year: -2147483648, month: 1, day: 1
+    };
+    verify(add_civil_years(max_date, 1).is_none());
+    verify(add_civil_years(min_date, -1).is_none());
+}
+
+#[test]
+fn test_civil_weekday_of_month() {
+    let second_tuesday: CivilDate = nth_weekday_of_month(2024, 7, 2, 2).unwrap();
+    verify(second_tuesday.year == 2024 && second_tuesday.month == 7 &&
+           second_tuesday.day == 9);
+    let last_friday: CivilDate = last_weekday_of_month(2024, 7, 5).unwrap();
+    verify(last_friday.day == 26);
+
+    let fifth_thursday: CivilDate =
+        nth_weekday_of_month(2024, 2, 4, 5).unwrap();
+    verify(fifth_thursday.day == 29);
+    verify(nth_weekday_of_month(2021, 2, 1, 5).is_none());
+    let leap_february_last_sunday: CivilDate =
+        last_weekday_of_month(2024, 2, 0).unwrap();
+    verify(leap_february_last_sunday.day == 25);
+
+    verify(nth_weekday_of_month(2024, 13, 1, 1).is_none());
+    verify(nth_weekday_of_month(2024, 1, 7, 1).is_none());
+    verify(nth_weekday_of_month(2024, 1, 1, 0).is_none());
+    verify(last_weekday_of_month(2024, 1, -1).is_none());
+}
+
+#[test]
+fn test_iso_week_date_conversion() {
+    let new_year_eve: CivilDate = CivilDate {
+        year: 2020, month: 12, day: 31
+    };
+    let iso_new_year_eve: IsoWeekDate =
+        to_iso_week_date(new_year_eve).unwrap();
+    verify(iso_new_year_eve.year == 2020 && iso_new_year_eve.week == 53 &&
+           iso_new_year_eve.weekday == 4);
+
+    let friday: CivilDate = CivilDate { year: 2021, month: 1, day: 1 };
+    let iso_friday: IsoWeekDate = to_iso_week_date(friday).unwrap();
+    verify(iso_friday.year == 2020 && iso_friday.week == 53 &&
+           iso_friday.weekday == 5);
+    let round_trip: CivilDate = from_iso_week_date(iso_friday).unwrap();
+    verify(round_trip.year == 2021 && round_trip.month == 1 &&
+           round_trip.day == 1);
+
+    let first_monday: IsoWeekDate = IsoWeekDate {
+        year: 2021, week: 1, weekday: 1
+    };
+    let monday: CivilDate = from_iso_week_date(first_monday).unwrap();
+    verify(monday.year == 2021 && monday.month == 1 && monday.day == 4);
+    let invalid_week: IsoWeekDate = IsoWeekDate {
+        year: 2021, week: 53, weekday: 1
+    };
+    let invalid_weekday: IsoWeekDate = IsoWeekDate {
+        year: 2024, week: 1, weekday: 0
+    };
+    verify(from_iso_week_date(invalid_week).is_none());
+    verify(from_iso_week_date(invalid_weekday).is_none());
+    let invalid_civil: CivilDate = CivilDate {
+        year: 2023, month: 2, day: 29
+    };
+    verify(to_iso_week_date(invalid_civil).is_none());
 }
 
 #[test]

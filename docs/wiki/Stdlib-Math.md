@@ -33,8 +33,9 @@ Module file: `stdlib/std/math.mla`
 - `modulo(a, b)`
 - `lerp(a, b, t)` for [`f32`](Quick-Guide#types) and [`f64`](Quick-Guide#types), with exact endpoint results and
   overflow-aware interpolation across opposite-sign endpoints (C++20 [`std::lerp`](Stdlib-Module-API))
-- `midpoint(a, b)` for [`i32`](Quick-Guide#types), [`i64`](Quick-Guide#types), [`f32`](Quick-Guide#types), and [`f64`](Quick-Guide#types); integer results round
-  toward the first argument without signed overflow (C++20 [`std::midpoint`](Stdlib-Module-API))
+- `midpoint(a, b)` for all fixed-width integers ([`i8`](Quick-Guide#types) through [`i64`](Quick-Guide#types), [`u8`](Quick-Guide#types)
+  through [`u64`](Quick-Guide#types)) and [`f32`](Quick-Guide#types)/[`f64`](Quick-Guide#types); integer results round toward the first
+  argument without overflow (C++20 [`std::midpoint`](Stdlib-Module-API))
 
 ### Integer-specific
 - `sum_range(start: i32, end: i32) -> i32`

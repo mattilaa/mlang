@@ -29,6 +29,14 @@ use std::limits::i32_min as limits_i32_min;
 use std::limits::i32_max as limits_i32_max;
 use std::limits::i64_min as limits_i64_min;
 use std::limits::i64_max as limits_i64_max;
+use std::limits::i8_min as limits_i8_min;
+use std::limits::i8_max as limits_i8_max;
+use std::limits::i16_min as limits_i16_min;
+use std::limits::i16_max as limits_i16_max;
+use std::limits::u8_max as limits_u8_max;
+use std::limits::u16_max as limits_u16_max;
+use std::limits::u32_max as limits_u32_max;
+use std::limits::u64_max as limits_u64_max;
 
 fn approx_float(a: f32, b: f32, eps: f32) -> bool {
     var diff: f32 = a - b;
@@ -212,6 +220,18 @@ fn test_cpp20_midpoint() {
     verify(midpoint(-1, -2) == -1);
     verify(midpoint(limits_i32_min(), limits_i32_max()) == -1);
     verify(midpoint(limits_i64_min(), limits_i64_max()) == -1);
+    verify(midpoint(limits_i8_min(), limits_i8_max()) == -1);
+    verify(midpoint(limits_i8_max(), limits_i8_min()) == 0);
+    verify(midpoint(limits_i16_min(), limits_i16_max()) == -1);
+    verify(midpoint(limits_i16_max(), limits_i16_min()) == 0);
+    verify(midpoint(0u8, limits_u8_max()) == 127u8);
+    verify(midpoint(limits_u8_max(), 0u8) == 128u8);
+    verify(midpoint(0u16, limits_u16_max()) == 32767u16);
+    verify(midpoint(limits_u16_max(), 0u16) == 32768u16);
+    verify(midpoint(0u32, limits_u32_max()) == 2147483647u32);
+    verify(midpoint(limits_u32_max(), 0u32) == 2147483648u32);
+    verify(midpoint(0u64, limits_u64_max()) == 9223372036854775807u64);
+    verify(midpoint(limits_u64_max(), 0u64) == 9223372036854775808u64);
     verify(midpoint(2.0f, 6.0f) == 4.0f);
     verify(midpoint(-1000000000000.0, 1000000000000.0) == 0.0);
 }

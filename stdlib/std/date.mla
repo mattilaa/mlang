@@ -17,6 +17,21 @@ pub struct DateTime {
     var second: i32;
 };
 
+/// @brief Civil calendar date, independent of a timezone or time of day.
+/// The Gregorian year/month/day model corresponds to C++20 `year_month_day`.
+pub struct CivilDate {
+    var year: i32;
+    var month: i32;
+    var day: i32;
+};
+
+/// @brief ISO-8601 week date (week-year, week number, Monday-based weekday).
+pub struct IsoWeekDate {
+    var year: i32;
+    var week: i32;
+    var weekday: i32;
+};
+
 /// @brief Fixed UTC offset in seconds, for example `+02:00` is `7200`.
 pub struct UtcOffset {
     var seconds: i32;
@@ -34,11 +49,251 @@ pub struct TimeZone {
 /// @brief Lowercase stdlib type alias for `DateTime`.
 alias date_time = DateTime;
 
+/// @brief Lowercase stdlib type alias for `CivilDate`.
+alias civil_date = CivilDate;
+
+/// @brief Lowercase stdlib type alias for `IsoWeekDate`.
+alias iso_week_date = IsoWeekDate;
+
 /// @brief Lowercase stdlib type alias for `UtcOffset`.
 alias utc_offset = UtcOffset;
 
 /// @brief Lowercase stdlib type alias for `TimeZone`.
 alias time_zone = TimeZone;
+
+/// @brief Return whether `year` is a Gregorian leap year.
+pub fn is_leap_year(year: i32) -> bool {
+    return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+}
+
+/// @brief Return days in a month, or zero when `month` is outside 1..12.
+pub fn days_in_month(year: i32, month: i32) -> i32 {
+    if month < 1 || month > 12 { return 0; }
+    if month == 2 { return is_leap_year(year) ? 29 : 28; }
+    if month == 4 || month == 6 || month == 9 || month == 11 { return 30; }
+    return 31;
+}
+
+/// @brief Return whether the fields form a valid proleptic Gregorian date.
+pub fn is_valid_civil_date(year: i32, month: i32, day: i32) -> bool {
+    return day >= 1 && day <= days_in_month(year, month);
+}
+
+/// @brief Convert a valid civil date to days since 1970-01-01.
+/// Invalid dates return `None`; day zero is the Unix epoch's calendar date.
+/// C++20 `std::chrono::sys_days` counterpart.
+pub fn to_sys_days(year: i32, month: i32, day: i32) -> option<i64> {
+    if !is_valid_civil_date(year, month, day) { return None<i64>(); }
+    var adjusted_year: i64 = i64(year);
+    let m: i64 = i64(month);
+    let d: i64 = i64(day);
+    if m <= 2 { adjusted_year = adjusted_year - 1; }
+    var era: i64 = adjusted_year / 400;
+    if adjusted_year < 0 && adjusted_year % 400 != 0 {
+        era = era - 1;
+    }
+    let year_of_era: i64 = adjusted_year - era * 400;
+    let adjusted_month: i64 = m + (m > 2 ? 0 - 3 : 9);
+    let day_of_year: i64 = (153 * adjusted_month + 2) / 5 + d - 1;
+    let day_of_era: i64 = year_of_era * 365 + year_of_era / 4 -
+                          year_of_era / 100 + day_of_year;
+    return Some<i64>(era * 146097 + day_of_era - 719468);
+}
+
+/// @brief Convert days since 1970-01-01 to a civil date.
+/// Returns `None` if the resulting year does not fit in `i32`.
+/// C++20 `std::chrono::year_month_day` counterpart of `sys_days` conversion.
+pub fn from_sys_days(days: i64) -> option<CivilDate> {
+    let first_day: i64 = to_sys_days(-2147483648, 1, 1).unwrap();
+    let last_day: i64 = to_sys_days(2147483647, 12, 31).unwrap();
+    if days < first_day || days > last_day { return None<CivilDate>(); }
+
+    let shifted: i64 = days + 719468;
+    var era: i64 = shifted / 146097;
+    if shifted < 0 && shifted % 146097 != 0 { era = era - 1; }
+    let day_of_era: i64 = shifted - era * 146097;
+    let year_of_era: i64 = (day_of_era - day_of_era / 1460 +
+                            day_of_era / 36524 - day_of_era / 146096) / 365;
+    var year: i64 = year_of_era + era * 400;
+    let day_of_year: i64 = day_of_era -
+        (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime: i64 = (5 * day_of_year + 2) / 153;
+    let day: i64 = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month: i64 = month_prime + (month_prime < 10 ? 3 : 0 - 9);
+    if month <= 2 { year = year + 1; }
+    return Some<CivilDate>(CivilDate {
+        year: i32(year), month: i32(month), day: i32(day)
+    });
+}
+
+/// @brief Return the weekday for a day count (`0` Sunday through `6` Saturday).
+pub fn weekday_from_sys_days(days: i64) -> i32 {
+    var weekday: i64 = (days % 7 + 4) % 7;
+    if weekday < 0 { weekday = weekday + 7; }
+    return i32(weekday);
+}
+
+/// @brief Convert a civil date to an ISO week date.
+/// ISO weekdays use Monday=1 through Sunday=7. Invalid dates and edge dates
+/// whose ISO week-year does not fit in `i32` return `None`.
+pub fn to_iso_week_date(date: CivilDate) -> option<IsoWeekDate> {
+    let day_count: option<i64> = to_sys_days(date.year, date.month, date.day);
+    if day_count.is_none() { return None<IsoWeekDate>(); }
+    let days: i64 = day_count.unwrap();
+    let sunday_based: i32 = weekday_from_sys_days(days);
+    let weekday: i32 = sunday_based == 0 ? 7 : sunday_based;
+    let thursday: option<CivilDate> =
+        from_sys_days(days + i64(4 - weekday));
+    if thursday.is_none() { return None<IsoWeekDate>(); }
+    let iso_year: i32 = thursday.unwrap().year;
+    let jan_fourth: i64 = to_sys_days(iso_year, 1, 4).unwrap();
+    let jan_fourth_sunday_based: i32 = weekday_from_sys_days(jan_fourth);
+    let jan_fourth_weekday: i32 =
+        jan_fourth_sunday_based == 0 ? 7 : jan_fourth_sunday_based;
+    let first_monday: i64 = jan_fourth - i64(jan_fourth_weekday - 1);
+    let week: i32 = i32((days - first_monday) / 7 + 1);
+    return Some<IsoWeekDate>(IsoWeekDate {
+        year: iso_year, week: week, weekday: weekday
+    });
+}
+
+/// @brief Convert an ISO week date to a civil date.
+/// Returns `None` for invalid weekdays/weeks, including nonexistent week 53.
+pub fn from_iso_week_date(iso: IsoWeekDate) -> option<CivilDate> {
+    if iso.week < 1 || iso.week > 53 || iso.weekday < 1 || iso.weekday > 7 {
+        return None<CivilDate>();
+    }
+    let jan_fourth: i64 = to_sys_days(iso.year, 1, 4).unwrap();
+    let jan_fourth_sunday_based: i32 = weekday_from_sys_days(jan_fourth);
+    let jan_fourth_weekday: i32 =
+        jan_fourth_sunday_based == 0 ? 7 : jan_fourth_sunday_based;
+    let first_monday: i64 = jan_fourth - i64(jan_fourth_weekday - 1);
+    let target_day: i64 = first_monday + i64((iso.week - 1) * 7 +
+                                              iso.weekday - 1);
+    let civil: option<CivilDate> = from_sys_days(target_day);
+    if civil.is_none() { return None<CivilDate>(); }
+    let round_trip: option<IsoWeekDate> = to_iso_week_date(civil.unwrap());
+    if round_trip.is_none() { return None<CivilDate>(); }
+    let actual: IsoWeekDate = round_trip.unwrap();
+    if actual.year != iso.year || actual.week != iso.week ||
+       actual.weekday != iso.weekday {
+        return None<CivilDate>();
+    }
+    return civil;
+}
+
+/// @brief Find the `occurrence`th weekday in a month.
+/// `weekday` uses Sunday=0 through Saturday=6; occurrence is 1 through 5.
+/// Returns `None` when the occurrence does not exist.
+/// C++20 `year_month_weekday` counterpart.
+pub fn nth_weekday_of_month(year: i32, month: i32, weekday: i32,
+                            occurrence: i32) -> option<CivilDate> {
+    if month < 1 || month > 12 || weekday < 0 || weekday > 6 ||
+       occurrence < 1 || occurrence > 5 {
+        return None<CivilDate>();
+    }
+    let first_day: i64 = to_sys_days(year, month, 1).unwrap();
+    let first_weekday: i32 = weekday_from_sys_days(first_day);
+    let offset: i32 = (weekday - first_weekday + 7) % 7;
+    let day: i32 = 1 + offset + 7 * (occurrence - 1);
+    if day > days_in_month(year, month) { return None<CivilDate>(); }
+    return Some<CivilDate>(CivilDate { year: year, month: month, day: day });
+}
+
+/// @brief Find the last occurrence of `weekday` in a month.
+/// `weekday` uses Sunday=0 through Saturday=6.
+/// C++20 `year_month_weekday_last` counterpart.
+pub fn last_weekday_of_month(year: i32, month: i32,
+                             weekday: i32) -> option<CivilDate> {
+    if month < 1 || month > 12 || weekday < 0 || weekday > 6 {
+        return None<CivilDate>();
+    }
+    let last_day: i32 = days_in_month(year, month);
+    let day_count: i64 = to_sys_days(year, month, last_day).unwrap();
+    let last_weekday: i32 = weekday_from_sys_days(day_count);
+    let distance: i32 = (last_weekday - weekday + 7) % 7;
+    return Some<CivilDate>(CivilDate {
+        year: year, month: month, day: last_day - distance
+    });
+}
+
+/// @brief Add a signed day offset to a civil date.
+/// Returns `None` for an invalid date or when the resulting year does not fit
+/// in `i32`. This is civil-date arithmetic equivalent to adding `days` to
+/// C++20 `std::chrono::sys_days`.
+pub fn add_civil_days(date: CivilDate, offset: i64) -> option<CivilDate> {
+    let start: option<i64> = to_sys_days(date.year, date.month, date.day);
+    if start.is_none() { return None<CivilDate>(); }
+    let current_day: i64 = start.unwrap();
+    let minimum_day: i64 = to_sys_days(-2147483648, 1, 1).unwrap();
+    let maximum_day: i64 = to_sys_days(2147483647, 12, 31).unwrap();
+    if offset > 0 && current_day > maximum_day - offset {
+        return None<CivilDate>();
+    }
+    if offset < 0 && current_day < minimum_day - offset {
+        return None<CivilDate>();
+    }
+    return from_sys_days(current_day + offset);
+}
+
+/// @brief Return elapsed civil days from `first` to `last`.
+/// Invalid input dates return `None`.
+pub fn days_between(first: CivilDate, last: CivilDate) -> option<i64> {
+    let first_day: option<i64> = to_sys_days(first.year, first.month, first.day);
+    let last_day: option<i64> = to_sys_days(last.year, last.month, last.day);
+    if first_day.is_none() || last_day.is_none() { return None<i64>(); }
+    return Some<i64>(last_day.unwrap() - first_day.unwrap());
+}
+
+/// @brief Add calendar years while preserving the month and day fields.
+/// Invalid input or a year outside `i32` returns `None`. Like C++20
+/// `year_month_day + years`, a leap day may become invalid in a common year;
+/// validate the returned date with `is_valid_civil_date`.
+pub fn add_civil_years(date: CivilDate, offset: i64) -> option<CivilDate> {
+    if !is_valid_civil_date(date.year, date.month, date.day) {
+        return None<CivilDate>();
+    }
+    let current_year: i64 = i64(date.year);
+    let minimum_year: i64 = -2147483648;
+    let maximum_year: i64 = 2147483647;
+    if offset > 0 && current_year > maximum_year - offset {
+        return None<CivilDate>();
+    }
+    if offset < 0 && current_year < minimum_year - offset {
+        return None<CivilDate>();
+    }
+    return Some<CivilDate>(CivilDate {
+        year: i32(current_year + offset), month: date.month, day: date.day
+    });
+}
+
+/// @brief Add calendar months while preserving the day field.
+/// Invalid input or a year outside `i32` returns `None`. As with C++20
+/// `year_month_day + months`, the returned date can be invalid when the target
+/// month is shorter; check it with `is_valid_civil_date` before conversion.
+pub fn add_civil_months(date: CivilDate, offset: i64) -> option<CivilDate> {
+    if !is_valid_civil_date(date.year, date.month, date.day) {
+        return None<CivilDate>();
+    }
+    let current_month: i64 = i64(date.year) * 12 + i64(date.month) - 1;
+    let minimum_month: i64 = i64(-2147483648) * 12;
+    let maximum_month: i64 = i64(2147483647) * 12 + 11;
+    if offset > 0 && current_month > maximum_month - offset {
+        return None<CivilDate>();
+    }
+    if offset < 0 && current_month < minimum_month - offset {
+        return None<CivilDate>();
+    }
+    let target_month: i64 = current_month + offset;
+    var target_year: i64 = target_month / 12;
+    if target_month < 0 && target_month % 12 != 0 {
+        target_year = target_year - 1;
+    }
+    let target_month_of_year: i64 = target_month - target_year * 12 + 1;
+    return Some<CivilDate>(CivilDate {
+        year: i32(target_year), month: i32(target_month_of_year), day: date.day
+    });
+}
 
 
 /// @brief Return current local date-time.

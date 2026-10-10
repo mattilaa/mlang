@@ -4,6 +4,7 @@ Module file: `stdlib/std/date.mla`
 
 ### Types
 - `date_time`
+- `civil_date`
 - `utc_offset`
 - `time_zone`
 
@@ -29,12 +30,47 @@ Module file: `stdlib/std/date.mla`
 - `format_offset(offset: utc_offset) -> str8`
 - `format_date(dt: date_time) -> str8`
 - `format_time(dt: date_time) -> str8`
+- `is_leap_year(year: i32) -> bool`
+- `days_in_month(year: i32, month: i32) -> i32`
+- `is_valid_civil_date(year: i32, month: i32, day: i32) -> bool`
+- `to_sys_days(year, month, day) -> option<i64>` converts a valid Gregorian
+  date to days since 1970-01-01, following C++20 `std::chrono::sys_days`.
+- `from_sys_days(days: i64) -> option<civil_date>` performs the inverse and
+  returns `None` when the year is outside the representable `i32` range.
+- `weekday_from_sys_days(days: i64) -> i32` returns Sunday as `0` through
+  Saturday as `6`.
+- `nth_weekday_of_month(year, month, weekday, occurrence)` returns an optional
+  date for the first through fifth occurrence of a weekday
+  (`year_month_weekday` style); nonexistent fifth occurrences return `None`.
+- `last_weekday_of_month(year, month, weekday)` returns the final occurrence
+  of a weekday (`year_month_weekday_last` style). Weekday numbers use
+  Sunday=`0` through Saturday=`6`.
+- `to_iso_week_date(date)` and `from_iso_week_date(iso)` convert between civil
+  dates and ISO week dates (Monday=`1` through Sunday=`7`), including week-year
+  rollover at New Year. Invalid dates and nonexistent week 53 values return
+  `None`.
+- `add_civil_days(date: civil_date, offset: i64) -> option<civil_date>` adds
+  days using calendar arithmetic and returns `None` when the date is invalid or
+  the resulting year is outside `i32`.
+- `days_between(first, last) -> option<i64>` returns the signed day distance
+  from the first valid date to the second.
+- `add_civil_months(date, offset) -> option<civil_date>` adds calendar months
+  while preserving the day field, like C++20 `year_month_day + months`. The
+  result may be invalid when the destination month is shorter; validate it
+  with `is_valid_civil_date` before converting it to epoch days.
+- `add_civil_years(date, offset) -> option<civil_date>` adds years while
+  preserving month and day, like C++20 `year_month_day + years`. Moving a leap
+  day to a common year can produce an invalid date, which must be checked.
 
 `std::date` supports Unix UTC timestamps in whole seconds. Timezone support is
 provided as fixed UTC offsets (`utc_offset`), system-local conversions, and named
 system timezones (`time_zone`). Unix-like platforms load IANA/zoneinfo names such
 as `Europe/Helsinki` from the OS timezone database. Windows uses Windows system
 timezone IDs such as `FLE Standard Time`.
+
+Civil calendar helpers use the proleptic Gregorian calendar and are independent
+of time zones. Invalid month/day combinations are rejected by `to_sys_days`;
+leap years follow the divisible-by-4, century, and 400-year rules.
 
 Example:
 
