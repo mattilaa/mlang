@@ -114,6 +114,114 @@ pub fn cmp_greater_equal_unsigned_signed(unsigned: Unsigned, signed: Signed)
     return !cmp_less_unsigned_signed(unsigned, signed);
 }
 
+
+/// @brief Compare heterogeneous signed integer operands in a common domain.
+generic<Left, Right>
+pub fn cmp_equal_signed_signed(left: Left, right: Right) -> bool {
+    let left_wide: i64 = i64(left);
+    let right_wide: i64 = i64(right);
+    return left_wide == right_wide;
+}
+
+
+/// @brief Compare heterogeneous signed integer operands in a common domain.
+generic<Left, Right>
+pub fn cmp_not_equal_signed_signed(left: Left, right: Right) -> bool {
+    let left_wide: i64 = i64(left);
+    let right_wide: i64 = i64(right);
+    return left_wide != right_wide;
+}
+
+
+/// @brief Compare heterogeneous signed integer operands in a common domain.
+generic<Left, Right>
+pub fn cmp_less_signed_signed(left: Left, right: Right) -> bool {
+    let left_wide: i64 = i64(left);
+    let right_wide: i64 = i64(right);
+    return left_wide < right_wide;
+}
+
+
+/// @brief Compare heterogeneous signed integer operands in a common domain.
+generic<Left, Right>
+pub fn cmp_greater_signed_signed(left: Left, right: Right) -> bool {
+    let left_wide: i64 = i64(left);
+    let right_wide: i64 = i64(right);
+    return left_wide > right_wide;
+}
+
+
+/// @brief Compare heterogeneous signed integer operands in a common domain.
+generic<Left, Right>
+pub fn cmp_less_equal_signed_signed(left: Left, right: Right) -> bool {
+    let left_wide: i64 = i64(left);
+    let right_wide: i64 = i64(right);
+    return left_wide <= right_wide;
+}
+
+
+/// @brief Compare heterogeneous signed integer operands in a common domain.
+generic<Left, Right>
+pub fn cmp_greater_equal_signed_signed(left: Left, right: Right) -> bool {
+    let left_wide: i64 = i64(left);
+    let right_wide: i64 = i64(right);
+    return left_wide >= right_wide;
+}
+
+
+/// @brief Compare heterogeneous unsigned integer operands in a common domain.
+generic<Left, Right>
+pub fn cmp_equal_unsigned_unsigned(left: Left, right: Right) -> bool {
+    let left_wide: u64 = u64(left);
+    let right_wide: u64 = u64(right);
+    return left_wide == right_wide;
+}
+
+
+/// @brief Compare heterogeneous unsigned integer operands in a common domain.
+generic<Left, Right>
+pub fn cmp_not_equal_unsigned_unsigned(left: Left, right: Right) -> bool {
+    let left_wide: u64 = u64(left);
+    let right_wide: u64 = u64(right);
+    return left_wide != right_wide;
+}
+
+
+/// @brief Compare heterogeneous unsigned integer operands in a common domain.
+generic<Left, Right>
+pub fn cmp_less_unsigned_unsigned(left: Left, right: Right) -> bool {
+    let left_wide: u64 = u64(left);
+    let right_wide: u64 = u64(right);
+    return left_wide < right_wide;
+}
+
+
+/// @brief Compare heterogeneous unsigned integer operands in a common domain.
+generic<Left, Right>
+pub fn cmp_greater_unsigned_unsigned(left: Left, right: Right) -> bool {
+    let left_wide: u64 = u64(left);
+    let right_wide: u64 = u64(right);
+    return left_wide > right_wide;
+}
+
+
+/// @brief Compare heterogeneous unsigned integer operands in a common domain.
+generic<Left, Right>
+pub fn cmp_less_equal_unsigned_unsigned(left: Left, right: Right) -> bool {
+    let left_wide: u64 = u64(left);
+    let right_wide: u64 = u64(right);
+    return left_wide <= right_wide;
+}
+
+
+/// @brief Compare heterogeneous unsigned integer operands in a common domain.
+generic<Left, Right>
+pub fn cmp_greater_equal_unsigned_unsigned(left: Left, right: Right) -> bool {
+    let left_wide: u64 = u64(left);
+    let right_wide: u64 = u64(right);
+    return left_wide >= right_wide;
+}
+
 /// @brief Check conversion from `i64` to a narrower or unsigned integer type.
 pub fn in_range_i64_from_i64(value: i64) -> bool { return true; }
 pub fn in_range_i8_from_i64(value: i64) -> bool {

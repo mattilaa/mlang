@@ -29,8 +29,9 @@ let previous: i32 = exchange(current, 20); // previous = 12, current = 20
   `cmp_less_equal_*`, and `cmp_greater_equal_*` compare signed and unsigned
   integer operands without converting a negative signed value or a large
   unsigned value through the wrong domain. The suffix identifies operand
-  order: `_signed_unsigned` or `_unsigned_signed`. Inputs are widened losslessly
-  to [`i64`](Quick-Guide#types) and [`u64`](Quick-Guide#types), so smaller integer types are supported too.
+  signedness and order: `_signed_unsigned`, `_unsigned_signed`,
+  `_signed_signed`, or `_unsigned_unsigned`. Same-signedness operands of
+  different widths are widened losslessly to [`i64`](Quick-Guide#types) or [`u64`](Quick-Guide#types) before comparison.
 - `in_range_<target>_from_<source>(value)` checks whether a value can be
   represented by the named integer target ([`i8`](Quick-Guide#types), [`i16`](Quick-Guide#types), [`i32`](Quick-Guide#types), [`i64`](Quick-Guide#types), [`u8`](Quick-Guide#types),
   [`u16`](Quick-Guide#types), [`u32`](Quick-Guide#types), or [`u64`](Quick-Guide#types)) before a cast. All eight source widths are supported;
