@@ -12,6 +12,7 @@ Module file: `stdlib/std/sync.mla`
 - `AtomicI64` (shared 64-bit atomic integer)
 - `AtomicU64` (shared 64-bit unsigned atomic integer)
 - `AtomicU32` (native-width 32-bit unsigned atomic integer)
+- `AtomicI32` (native-width 32-bit signed atomic integer)
 - `AtomicBool` (shared atomic boolean value)
 - `AtomicFlag` (guaranteed lock-free boolean flag)
 - `Latch` (one-shot countdown latch)
@@ -174,6 +175,18 @@ read-modify-write operations wrap modulo 2^32. Compare-exchange returns
 observed value after a failed comparison. The backend uses native-width atomic
 storage but does not promise lock-free operations. Notify after changing a
 waited-on value and close only after every thread has stopped using it.
+
+### AtomicI32
+
+`AtomicI32` provides a native-width signed counterpart to C++20
+[`std::atomic<std::int32_t>`](Stdlib-Module-API). It supports ordered `load`, `store`, `exchange`,
+`fetch_add`, `fetch_sub`, `fetch_and`, `fetch_or`, `fetch_xor`, strong
+`compare_exchange`, `wait`, and notifications. Arithmetic read-modify-write
+operations wrap at the 32-bit representation boundary. Compare-exchange
+returns `result<tuple<bool, i32>, str8>` as `(exchanged, expected_after)`.
+The implementation reuses the native 32-bit atomic storage and exposes the
+same bits as a signed value, so no wider signed arithmetic or overflow is
+involved. It does not promise lock-free behavior.
 
 ### AtomicBool
 

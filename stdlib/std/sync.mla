@@ -7,7 +7,7 @@
 /// - Channel (string message queue)
 /// - LockFreeQueue (string SPSC lock-free queue)
 /// - SpscQueue<T> (preallocated, fixed-size event queue)
-/// - AtomicI64, AtomicU64, AtomicU32, AtomicBool, and AtomicFlag
+/// - AtomicI64, AtomicU64, AtomicU32, AtomicI32, AtomicBool, and AtomicFlag
 
 
 /// \cond INTERNAL_IMPORTS
@@ -81,6 +81,12 @@ pub struct AtomicU64 {
 /// @brief Shared native-width atomic unsigned 32-bit integer.
 /// Arithmetic read-modify-write operations wrap modulo 2^32.
 pub struct AtomicU32 {
+    var handle: i64;
+};
+
+/// @brief Shared native-width atomic signed 32-bit integer.
+/// Signed read-modify-write arithmetic wraps using the 32-bit representation.
+pub struct AtomicI32 {
     var handle: i64;
 };
 
@@ -598,6 +604,156 @@ impl AtomicU32 {
 
     pub fn close(self: AtomicU32) -> i32 {
         return __mlang_std_sync_atomic_u32_free(self.handle);
+    }
+}
+
+fn atomic_i32_from_u32_result(input: result<u32, str8>) -> result<i32, str8> {
+    if input.is_err() { return Err<i32, str8>(input.unwrap_err()); }
+    return Ok<i32, str8>(i32(input.unwrap()));
+}
+
+impl AtomicI32 {
+    /// @brief Create an atomic i32, or return the backend error.
+    pub fn new(initial: i32) -> result<AtomicI32, str8> {
+        let created: result<AtomicU32, str8> = AtomicU32::new(u32(initial));
+        if created.is_err() { return Err<AtomicI32, str8>(created.unwrap_err()); }
+        let storage: AtomicU32 = created.unwrap();
+        return Ok<AtomicI32, str8>(AtomicI32 { handle: storage.handle });
+    }
+
+    pub fn is_valid(self: AtomicI32) -> bool {
+        return self.handle != 0;
+    }
+
+    pub fn load(self: AtomicI32) -> result<i32, str8> {
+        return self.load_with_order(AtomicOrder::SeqCst);
+    }
+
+    pub fn load_with_order(self: AtomicI32, order: AtomicOrder)
+        -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return atomic_i32_from_u32_result(storage.load_with_order(order));
+    }
+
+    pub fn store(self: AtomicI32, value: i32) -> result<i32, str8> {
+        return self.store_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn store_with_order(self: AtomicI32, value: i32, order: AtomicOrder)
+        -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return storage.store_with_order(u32(value), order);
+    }
+
+    pub fn wait(self: AtomicI32, old_value: i32) -> result<i32, str8> {
+        return self.wait_with_order(old_value, AtomicOrder::SeqCst);
+    }
+
+    pub fn wait_with_order(self: AtomicI32, old_value: i32,
+                           order: AtomicOrder) -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return storage.wait_with_order(u32(old_value), order);
+    }
+
+    pub fn notify_one(self: AtomicI32) -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return storage.notify_one();
+    }
+
+    pub fn notify_all(self: AtomicI32) -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return storage.notify_all();
+    }
+
+    pub fn exchange(self: AtomicI32, value: i32) -> result<i32, str8> {
+        return self.exchange_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn exchange_with_order(self: AtomicI32, value: i32,
+                               order: AtomicOrder) -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return atomic_i32_from_u32_result(
+            storage.exchange_with_order(u32(value), order));
+    }
+
+    pub fn fetch_add(self: AtomicI32, value: i32) -> result<i32, str8> {
+        return self.fetch_add_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_add_with_order(self: AtomicI32, value: i32,
+                                order: AtomicOrder) -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return atomic_i32_from_u32_result(
+            storage.fetch_add_with_order(u32(value), order));
+    }
+
+    pub fn fetch_sub(self: AtomicI32, value: i32) -> result<i32, str8> {
+        return self.fetch_sub_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_sub_with_order(self: AtomicI32, value: i32,
+                                order: AtomicOrder) -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return atomic_i32_from_u32_result(
+            storage.fetch_sub_with_order(u32(value), order));
+    }
+
+    pub fn fetch_and(self: AtomicI32, value: i32) -> result<i32, str8> {
+        return self.fetch_and_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_and_with_order(self: AtomicI32, value: i32,
+                                order: AtomicOrder) -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return atomic_i32_from_u32_result(
+            storage.fetch_and_with_order(u32(value), order));
+    }
+
+    pub fn fetch_or(self: AtomicI32, value: i32) -> result<i32, str8> {
+        return self.fetch_or_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_or_with_order(self: AtomicI32, value: i32,
+                               order: AtomicOrder) -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return atomic_i32_from_u32_result(
+            storage.fetch_or_with_order(u32(value), order));
+    }
+
+    pub fn fetch_xor(self: AtomicI32, value: i32) -> result<i32, str8> {
+        return self.fetch_xor_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_xor_with_order(self: AtomicI32, value: i32,
+                                order: AtomicOrder) -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return atomic_i32_from_u32_result(
+            storage.fetch_xor_with_order(u32(value), order));
+    }
+
+    /// @brief Strong CAS; returns `(exchanged, expected_after)`.
+    pub fn compare_exchange(self: AtomicI32, expected: i32, desired: i32)
+        -> result<tuple<bool, i32>, str8> {
+        return self.compare_exchange_with_order(
+            expected, desired, AtomicOrder::SeqCst);
+    }
+
+    pub fn compare_exchange_with_order(self: AtomicI32, expected: i32,
+                                       desired: i32, order: AtomicOrder)
+        -> result<tuple<bool, i32>, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        let exchanged: result<tuple<bool, u32>, str8> =
+            storage.compare_exchange_with_order(u32(expected), u32(desired), order);
+        if exchanged.is_err() {
+            return Err<tuple<bool, i32>, str8>(exchanged.unwrap_err());
+        }
+        let outcome: tuple<bool, u32> = exchanged.unwrap();
+        return Ok<tuple<bool, i32>, str8>((outcome.0, i32(outcome.1)));
+    }
+
+    pub fn close(self: AtomicI32) -> i32 {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return storage.close();
     }
 }
 
