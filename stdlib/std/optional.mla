@@ -40,8 +40,8 @@ pub fn or_else(input: option<T>, fallback: Fallback) -> option<T> {
 /// @brief Extract the contained value or use the supplied fallback.
 /// C++23 `std::optional::value_or` equivalent.
 /// @ingroup optional
-generic<T>
-pub fn value_or(input: option<T>, fallback: T) -> T {
+generic<T, U>
+pub fn value_or(input: option<T>, fallback: U) -> T {
     if input.is_some() {
         return input.unwrap();
     }
