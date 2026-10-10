@@ -8,6 +8,7 @@ use std::date::YearMonth;
 use std::date::MonthDay;
 use std::date::MonthDayLast;
 use std::date::Month;
+use std::date::Year;
 use std::date::IsoWeekDate;
 use std::date::Weekday;
 use std::date::YearMonthWeekday;
@@ -70,6 +71,13 @@ use std::date::month_number;
 use std::date::month_from_number;
 use std::date::add_months_to_month;
 use std::date::month_days;
+use std::date::is_valid_year;
+use std::date::make_year;
+use std::date::year_number;
+use std::date::add_years;
+use std::date::year_is_leap;
+use std::date::days_in_year;
+use std::date::make_year_month_from_parts;
 use std::date::nth_weekday_of_month;
 use std::date::last_weekday_of_month;
 use std::date::to_iso_week_date;
@@ -328,6 +336,39 @@ fn test_typed_month_conversion_and_arithmetic() {
 
     verify(month_days(Month::February, 2024) == 29);
     verify(month_days(Month::February, 2023) == 28);
+}
+
+#[test]
+fn test_typed_chrono_year_values() {
+    verify(!is_valid_year(-32768));
+    verify(is_valid_year(-32767));
+    verify(is_valid_year(0));
+    verify(is_valid_year(32767));
+    verify(!is_valid_year(32768));
+    verify(make_year(-32768).is_none());
+    verify(make_year(32768).is_none());
+
+    let leap: Year = make_year(2000).unwrap();
+    let common: Year = make_year(1900).unwrap();
+    let year_zero: Year = make_year(0).unwrap();
+    verify(year_number(leap) == 2000);
+    verify(year_is_leap(leap));
+    verify(!year_is_leap(common));
+    verify(year_is_leap(year_zero));
+    verify(days_in_year(leap) == 366);
+    verify(days_in_year(common) == 365);
+
+    verify(year_number(add_years(leap, -4).unwrap()) == 1996);
+    verify(add_years(make_year(32767).unwrap(), 1).is_none());
+    verify(add_years(make_year(-32767).unwrap(), -1).is_none());
+    verify(add_years(leap, 9223372036854775807).is_none());
+    verify(add_years(leap, -9223372036854775807 - 1).is_none());
+
+    let february: YearMonth = make_year_month_from_parts(
+        leap, Month::February).unwrap();
+    verify(february.year == 2000 && february.month == 2);
+    verify(make_year_month_from_parts(
+        Year { value: 50000 }, Month::February).is_none());
 }
 
 #[test]

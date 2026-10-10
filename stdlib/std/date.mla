@@ -31,6 +31,12 @@ pub struct YearMonth {
     var month: i32;
 };
 
+/// @brief Checked proleptic Gregorian year like C++20 `std::chrono::year`.
+/// The valid numeric range is -32767 through 32767, including year zero.
+pub struct Year {
+    var value: i32;
+};
+
 /// @brief Recurring month/day pair, like C++20 `std::chrono::month_day`.
 /// February 29 is representable and resolves only in leap years.
 pub struct MonthDay {
@@ -125,6 +131,44 @@ alias time_zone = TimeZone;
 /// @brief Return whether `year` is a Gregorian leap year.
 pub fn is_leap_year(year: i32) -> bool {
     return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+}
+
+/// @brief Whether an integer is in the representable chrono year range.
+pub fn is_valid_year(year: i32) -> bool {
+    return year >= -32767 && year <= 32767;
+}
+
+/// @brief Construct a checked chrono year.
+pub fn make_year(value: i32) -> option<Year> {
+    if !is_valid_year(value) { return None<Year>(); }
+    return Some<Year>(Year { value: value });
+}
+
+/// @brief Return a chrono year's numeric value.
+pub fn year_number(value: Year) -> i32 {
+    return value.value;
+}
+
+/// @brief Shift a chrono year by signed years, returning `None` on overflow.
+pub fn add_years(value: Year, offset: i64) -> option<Year> {
+    if !is_valid_year(value.value) { return None<Year>(); }
+    let current: i64 = i64(value.value);
+    let minimum: i64 = -32767;
+    let maximum: i64 = 32767;
+    if offset > 0 && current > maximum - offset { return None<Year>(); }
+    if offset < 0 && current < minimum - offset { return None<Year>(); }
+    return Some<Year>(Year { value: i32(current + offset) });
+}
+
+/// @brief Whether a chrono year is a Gregorian leap year.
+pub fn year_is_leap(value: Year) -> bool {
+    return is_valid_year(value.value) && is_leap_year(value.value);
+}
+
+/// @brief Return 365 or 366 days for a chrono year.
+pub fn days_in_year(value: Year) -> i32 {
+    if !is_valid_year(value.value) { return 0; }
+    return year_is_leap(value) ? 366 : 365;
 }
 
 /// @brief Return days in a month, or zero when `month` is outside 1..12.
@@ -249,6 +293,17 @@ pub fn is_valid_year_month(value: YearMonth) -> bool {
 pub fn make_year_month(year: i32, month: i32) -> option<YearMonth> {
     if month < 1 || month > 12 { return None<YearMonth>(); }
     return Some<YearMonth>(YearMonth { year: year, month: month });
+}
+
+/// @brief Construct a year/month from checked chrono calendar fields.
+pub fn make_year_month_from_parts(year: Year, month: Month)
+    -> option<YearMonth> {
+    if !is_valid_year(year.value) || !is_valid_month(month) {
+        return None<YearMonth>();
+    }
+    return Some<YearMonth>(YearMonth {
+        year: year_number(year), month: month_number(month)
+    });
 }
 
 /// @brief Add calendar months, normalizing across year boundaries.

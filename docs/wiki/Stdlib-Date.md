@@ -8,6 +8,7 @@ Module file: `stdlib/std/date.mla`
 - `date_time`
 - `civil_date`
 - `YearMonth` (checked year/month without a day)
+- `Year` (checked proleptic Gregorian year in `-32767..32767`)
 - `MonthDay` and `MonthDayLast` (recurring month/day calendar values)
 - `Weekday` (`Sunday` through `Saturday`, with Sunday=`0`)
 - `Month` (`January` through `December`, numbered `1..12`)
@@ -38,6 +39,11 @@ Module file: `stdlib/std/date.mla`
 - `format_date(dt: date_time) -> str8`
 - `format_time(dt: date_time) -> str8`
 - `is_leap_year(year: i32) -> bool`
+- `make_year(value) -> option<Year>` validates the C++20 chrono year range;
+  `year_number`, `is_valid_year`, `add_years`, `year_is_leap`, and
+  `days_in_year` provide checked conversion, arithmetic, and calendar queries.
+- `make_year_month_from_parts(year, month)` combines typed `Year` and `Month`
+  values into a `YearMonth`.
 - `days_in_month(year: i32, month: i32) -> i32`
 - `month_from_number(value)` and `month_number(value)` convert between a
   checked numeric month and the typed `Month`; `is_valid_month` validates a
