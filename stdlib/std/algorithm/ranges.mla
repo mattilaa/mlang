@@ -1081,6 +1081,27 @@ pub fn zip_transform(first: &list<T>, second: &list<U>, third: &list<V>,
     return transformed;
 }
 
+/// @brief Transform corresponding elements from six ranges.
+/// Stops at the shortest input; the output type comes from the operation.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Output, Operation>
+pub fn zip_transform(first: &list<T>, second: &list<U>, third: &list<V>,
+                     fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+                     operation: Operation) -> list<Output> {
+    var transformed: list<Output> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    for i in 0..n {
+        transformed.push(operation(first[i], second[i], third[i], fourth[i],
+                                   fifth[i], sixth[i]));
+    }
+    return transformed;
+}
+
 /// @brief Return whether every element is accepted by `predicate`.
 /// Empty ranges return true, matching C++20 `std::ranges::all_of`.
 /// @ingroup algorithm_ranges

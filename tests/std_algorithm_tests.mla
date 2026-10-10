@@ -2488,6 +2488,14 @@ fn test_algorithm_ranges_zip_five_ranges() {
     let sums: list<i32> = zip_transform(a, b, c, d, e, sum_five);
     verify(sums.len() == 2 && sums[0] == 11111 && sums[1] == 22222);
 
+    let f: list<i32> = [100000, 200000, 300000];
+    let sum_six = |x: i32, y: i32, z: i32, w: i32, v: i32, u: i32| {
+        return x + y + z + w + v + u;
+    };
+    let six_sums: list<i32> = zip_transform(a, b, c, d, e, f, sum_six);
+    verify(six_sums.len() == 2 && six_sums[0] == 111111 &&
+           six_sums[1] == 222222);
+
     let sixth_values: list<i64> = [100000, 200000];
     let six_rows: list<tuple<i32, i64, bool, str8, i32, i64>> =
         zip(first_values, second_values, third_values, fourth_values,
