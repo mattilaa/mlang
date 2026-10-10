@@ -31,6 +31,18 @@ pub struct YearMonth {
     var month: i32;
 };
 
+/// @brief Recurring month/day pair, like C++20 `std::chrono::month_day`.
+/// February 29 is representable and resolves only in leap years.
+pub struct MonthDay {
+    var month: i32;
+    var day: i32;
+};
+
+/// @brief Recurring final day of a month, like C++20 `month_day_last`.
+pub struct MonthDayLast {
+    var month: i32;
+};
+
 /// @brief ISO-8601 week date (week-year, week number, Monday-based weekday).
 pub struct IsoWeekDate {
     var year: i32;
@@ -110,6 +122,47 @@ pub fn days_in_month(year: i32, month: i32) -> i32 {
 /// @brief Return whether the fields form a valid proleptic Gregorian date.
 pub fn is_valid_civil_date(year: i32, month: i32, day: i32) -> bool {
     return day >= 1 && day <= days_in_month(year, month);
+}
+
+/// @brief Whether a month/day pair is valid for at least one Gregorian year.
+/// February 29 is valid as a recurring date even though it needs a leap year.
+pub fn is_valid_month_day(value: MonthDay) -> bool {
+    return value.day >= 1 && value.day <= days_in_month(2000, value.month);
+}
+
+/// @brief Construct a checked recurring month/day value.
+pub fn make_month_day(month: i32, day: i32) -> option<MonthDay> {
+    let value: MonthDay = MonthDay { month: month, day: day };
+    if !is_valid_month_day(value) { return None<MonthDay>(); }
+    return Some<MonthDay>(value);
+}
+
+/// @brief Resolve a recurring month/day pair in a specific year.
+/// February 29 returns `None` in common years.
+pub fn resolve_month_day(value: MonthDay, year: i32) -> option<CivilDate> {
+    if !is_valid_month_day(value) ||
+       !is_valid_civil_date(year, value.month, value.day) {
+        return None<CivilDate>();
+    }
+    return Some<CivilDate>(CivilDate {
+        year: year, month: value.month, day: value.day
+    });
+}
+
+/// @brief Construct a checked recurring final-day-of-month value.
+pub fn make_month_day_last(month: i32) -> option<MonthDayLast> {
+    if month < 1 || month > 12 { return None<MonthDayLast>(); }
+    return Some<MonthDayLast>(MonthDayLast { month: month });
+}
+
+/// @brief Resolve the final date of a month in a specific year.
+pub fn resolve_month_day_last(value: MonthDayLast, year: i32)
+    -> option<CivilDate> {
+    let day: i32 = days_in_month(year, value.month);
+    if day == 0 { return None<CivilDate>(); }
+    return Some<CivilDate>(CivilDate {
+        year: year, month: value.month, day: day
+    });
 }
 
 /// @brief Return whether the year/month fields form a valid Gregorian month.

@@ -5,6 +5,8 @@ mod std::strbuf;
 use std::date::DateTime;
 use std::date::CivilDate;
 use std::date::YearMonth;
+use std::date::MonthDay;
+use std::date::MonthDayLast;
 use std::date::IsoWeekDate;
 use std::date::Weekday;
 use std::date::YearMonthWeekday;
@@ -57,6 +59,11 @@ use std::date::add_year_month_months;
 use std::date::add_year_month_years;
 use std::date::year_month_first_day;
 use std::date::year_month_last_day;
+use std::date::is_valid_month_day;
+use std::date::make_month_day;
+use std::date::resolve_month_day;
+use std::date::make_month_day_last;
+use std::date::resolve_month_day_last;
 use std::date::nth_weekday_of_month;
 use std::date::last_weekday_of_month;
 use std::date::to_iso_week_date;
@@ -261,6 +268,36 @@ fn test_year_month_value_and_arithmetic() {
     verify(!is_valid_year_month(YearMonth { year: 2024, month: 13 }));
     verify(make_year_month(2024, 0).is_none());
     verify(year_month_first_day(YearMonth { year: 2024, month: 13 }).is_none());
+}
+
+#[test]
+fn test_recurring_month_day_calendar_values() {
+    let leap_day_option: option<MonthDay> = make_month_day(2, 29);
+    verify(leap_day_option.is_some());
+    let leap_day: MonthDay = leap_day_option.unwrap();
+    verify(is_valid_month_day(leap_day));
+    let leap_date: CivilDate = resolve_month_day(leap_day, 2024).unwrap();
+    verify(leap_date.year == 2024 && leap_date.month == 2 && leap_date.day == 29);
+    verify(resolve_month_day(leap_day, 2023).is_none());
+
+    let christmas: MonthDay = make_month_day(12, 25).unwrap();
+    let date: CivilDate = resolve_month_day(christmas, 2025).unwrap();
+    verify(date.year == 2025 && date.month == 12 && date.day == 25);
+    verify(make_month_day(2, 30).is_none());
+    verify(make_month_day(13, 1).is_none());
+    verify(!is_valid_month_day(MonthDay { month: 0, day: 1 }));
+
+    let february_last_option: option<MonthDayLast> = make_month_day_last(2);
+    verify(february_last_option.is_some());
+    let february_last: CivilDate =
+        resolve_month_day_last(february_last_option.unwrap(), 2024).unwrap();
+    verify(february_last.year == 2024 && february_last.month == 2 &&
+           february_last.day == 29);
+    let common_february_last: CivilDate =
+        resolve_month_day_last(MonthDayLast { month: 2 }, 2023).unwrap();
+    verify(common_february_last.day == 28);
+    verify(make_month_day_last(0).is_none());
+    verify(resolve_month_day_last(MonthDayLast { month: 13 }, 2024).is_none());
 }
 
 #[test]

@@ -8,6 +8,7 @@ Module file: `stdlib/std/date.mla`
 - `date_time`
 - `civil_date`
 - `YearMonth` (checked year/month without a day)
+- `MonthDay` and `MonthDayLast` (recurring month/day calendar values)
 - `Weekday` (`Sunday` through `Saturday`, with Sunday=`0`)
 - `YearMonthWeekday` and `YearMonthWeekdayLast`
 - `utc_offset`
@@ -46,6 +47,11 @@ Module file: `stdlib/std/date.mla`
   `None`.
 - `year_month_first_day(value)` and `year_month_last_day(value)` return the
   first or final `CivilDate` of a valid month, including leap-year February.
+- `make_month_day(month, day)` validates a recurring month/day pair; February
+  29 is allowed and resolves only in leap years through
+  `resolve_month_day(value, year)`. `make_month_day_last(month)` and
+  `resolve_month_day_last(value, year)` represent and resolve the final day of
+  a month, accounting for leap years.
 - `to_sys_days(year, month, day) -> option<i64>` converts a valid Gregorian
   date to days since 1970-01-01, following C++20 [`std::chrono::sys_days`](Stdlib-Module-API).
 - `from_sys_days(days: i64) -> option<civil_date>` performs the inverse and
