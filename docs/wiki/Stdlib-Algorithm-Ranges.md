@@ -269,6 +269,9 @@ fn example() {
 - `fold_left_with_iter(data, init, operation)` returns `(consumed, accumulator)`;
   `consumed` is the eager list length (zero for empty input), standing in for
   the final iterator in C++23 `std::ranges::fold_left_with_iter`.
+- `fold_right_with_iter(data, init, operation)` provides the corresponding
+  reverse-order eager-list fold and returns `(consumed, accumulator)`. Since
+  lists do not expose iterators, `consumed` is the number of elements visited.
 - `fold_left_first(data, operation)` and `fold_right_last(data, operation)`
   seed the reduction from the first or last element. They return
   `option<T>`—`None` for empty input and `Some(result)` otherwise. These are
