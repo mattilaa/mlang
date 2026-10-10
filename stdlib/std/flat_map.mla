@@ -259,6 +259,100 @@ pub fn values(container: &FlatMap<K, V>) -> list<V> {
     return result;
 }
 
+/// @brief Find the first key not ordered before a heterogeneous query.
+generic<K, V, Query, LessKeyQuery>
+pub fn lower_bound_by(container: &FlatMap<K, V>, query: Query,
+                      less_key_query: LessKeyQuery) -> i64 {
+    var first: i64 = 0;
+    var count: i64 = container.entries.len();
+    while count > 0 {
+        let step: i64 = count / 2;
+        let middle: i64 = first + step;
+        let entry: tuple<K, V> = container.entries[middle];
+        if less_key_query(entry.0, query) {
+            first = middle + 1;
+            count = count - step - 1;
+        } else {
+            count = step;
+        }
+    }
+    return first;
+}
+
+/// @brief Find the first key ordered after a heterogeneous query.
+generic<K, V, Query, LessQueryKey>
+pub fn upper_bound_by(container: &FlatMap<K, V>, query: Query,
+                      less_query_key: LessQueryKey) -> i64 {
+    var first: i64 = 0;
+    var count: i64 = container.entries.len();
+    while count > 0 {
+        let step: i64 = count / 2;
+        let middle: i64 = first + step;
+        let entry: tuple<K, V> = container.entries[middle];
+        if !less_query_key(query, entry.0) {
+            first = middle + 1;
+            count = count - step - 1;
+        } else {
+            count = step;
+        }
+    }
+    return first;
+}
+
+/// @brief Return the heterogeneous query's half-open index range.
+generic<K, V, Query, LessKeyQuery, LessQueryKey>
+pub fn equal_range_by(container: &FlatMap<K, V>, query: Query,
+                      less_key_query: LessKeyQuery,
+                      less_query_key: LessQueryKey) -> tuple<i64, i64> {
+    return (lower_bound_by(container, query, less_key_query),
+            upper_bound_by(container, query, less_query_key));
+}
+
+/// @brief Whether a heterogeneous query matches a stored key by ordering.
+generic<K, V, Query, LessKeyQuery, LessQueryKey>
+pub fn contains_by(container: &FlatMap<K, V>, query: Query,
+                   less_key_query: LessKeyQuery,
+                   less_query_key: LessQueryKey) -> bool {
+    let index: i64 = lower_bound_by(container, query, less_key_query);
+    if index >= container.entries.len() { return false; }
+    let entry: tuple<K, V> = container.entries[index];
+    return !less_key_query(entry.0, query) &&
+           !less_query_key(query, entry.0);
+}
+
+/// @brief Find a mapped value for a heterogeneous query, or return None.
+generic<K, V, Query, LessKeyQuery, LessQueryKey>
+pub fn get_by(container: &FlatMap<K, V>, query: Query,
+              less_key_query: LessKeyQuery,
+              less_query_key: LessQueryKey) -> option<V> {
+    let index: i64 = lower_bound_by(container, query, less_key_query);
+    if index >= container.entries.len() { return None<V>(); }
+    let entry: tuple<K, V> = container.entries[index];
+    if !less_key_query(entry.0, query) && !less_query_key(query, entry.0) {
+        return Some<V>(entry.1);
+    }
+    return None<V>();
+}
+
+/// @brief Erase the entry equivalent to a heterogeneous query, if present.
+generic<K, V, Query, LessKeyQuery, LessQueryKey>
+pub fn remove_by(container: &mut FlatMap<K, V>, query: Query,
+                 less_key_query: LessKeyQuery,
+                 less_query_key: LessQueryKey) -> bool {
+    let index: i64 = lower_bound_by(container, query, less_key_query);
+    let count: i64 = container.entries.len();
+    if index >= count { return false; }
+    let entry: tuple<K, V> = container.entries[index];
+    if less_key_query(entry.0, query) || less_query_key(query, entry.0) {
+        return false;
+    }
+    var updated: list<tuple<K, V>> = [];
+    for i in 0..index { updated.push(container.entries[i]); }
+    for i in (index + 1)..count { updated.push(container.entries[i]); }
+    container.entries = updated;
+    return true;
+}
+
 /// @brief Transfer non-colliding entries from `source` into `destination`.
 /// Destination values win for equivalent keys; colliding source entries stay
 /// in the source. Return the number of transferred entries (associative

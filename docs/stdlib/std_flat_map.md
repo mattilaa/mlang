@@ -44,6 +44,11 @@ number transferred. Destination values win on duplicate keys, and the colliding
 entries remain in `source`; both maps stay sorted.
 `keys(container)` and `values(container)` return independent lists in matching
 sorted order, so modifying a returned snapshot does not mutate the map.
+`lower_bound_by`, `upper_bound_by`, `equal_range_by`, `contains_by`, `get_by`,
+and `remove_by` support a query type distinct from the stored key type. The
+bound functions take the relevant comparator direction; the combined lookup
+functions take strict-ordering closures for both `(stored_key, query)` and
+`(query, stored_key)`. Neither comparator ordering the pair defines a match.
 
 Keys must support ordering (`<`) and equality (`==`). Lookup is O(log n);
 insertion and removal are O(n) due to list reconstruction. Merging two maps is
