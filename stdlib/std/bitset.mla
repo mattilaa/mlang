@@ -34,6 +34,13 @@ impl BitSet {
         return Ok<BitSet, str8>(BitSet { handle: h });
     }
 
+    /// @brief Create a 64-bit bitset initialized from an unsigned scalar.
+    pub fn from_u64(value: u64) -> result<BitSet, str8> {
+        let handle: i64 = __mlang_std_bitset_from_u64(value);
+        if handle == 0 { return Err<BitSet, str8>(last_error()); }
+        return Ok<BitSet, str8>(BitSet { handle: handle });
+    }
+
     /// @brief Number of active bits.
     pub fn len(self: BitSet) -> i64 {
         return __mlang_std_bitset_len(self.handle);
@@ -156,6 +163,20 @@ impl BitSet {
     /// @brief Return whether every active bit is set (true for an empty set).
     pub fn all(self: BitSet) -> bool {
         return self.count_ones() == self.len();
+    }
+
+    /// @brief Whether the active bits fit in a u64 without losing set bits.
+    pub fn fits_u64(self: BitSet) -> bool {
+        return __mlang_std_bitset_fits_u64(self.handle) != 0;
+    }
+
+    /// @brief Convert to u64; returns Err if any set bit lies above bit 63.
+    /// Longer bitsets are accepted when their higher bits are all zero.
+    pub fn to_u64(self: BitSet) -> result<u64, str8> {
+        if !self.fits_u64() {
+            return Err<u64, str8>("bitset value does not fit in u64");
+        }
+        return Ok<u64, str8>(__mlang_std_bitset_to_u64(self.handle));
     }
 
     /// @brief In-place AND with `rhs_handle`; lengths must match.
