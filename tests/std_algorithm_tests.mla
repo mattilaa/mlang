@@ -293,6 +293,8 @@ use std::algorithm::ranges::for_each;
 use std::algorithm::ranges::for_each_projected;
 use std::algorithm::ranges::for_each_n;
 use std::algorithm::ranges::for_each_n_projected;
+use std::algorithm::ranges::for_each_n_count;
+use std::algorithm::ranges::for_each_n_projected_count;
 use std::algorithm::ranges::generate_n;
 use std::algorithm::ranges::generate;
 use std::algorithm::ranges::fill;
@@ -4117,6 +4119,30 @@ fn test_algorithm_ranges_for_each_n() {
     for_each_n(values, -2, collect);
     verify(sum == 34 && calls == 6);
     verify(values[0] == 3 && values[3] == 11);
+}
+
+#[test]
+fn test_algorithm_ranges_for_each_n_returns_consumed_count() {
+    let values: list<i32> = [3, 5, 7, 11];
+    var total: i32 = 0;
+    let collect = |value: i32| { total = total + value; };
+
+    let first: i64 = for_each_n_count(values, 2, collect);
+    verify(first == 2 && total == 8);
+    let all: i64 = for_each_n_count(values, 99, collect);
+    verify(all == 4 && total == 34);
+    let none: i64 = for_each_n_count(values, -1, collect);
+    verify(none == 0 && total == 34);
+
+    let tens = |value: i32| { return value / 10; };
+    var projected_total: i32 = 0;
+    let collect_key = |key: i32| { projected_total = projected_total + key; };
+    let projected: i64 =
+        for_each_n_projected_count(values, 3, collect_key, tens);
+    verify(projected == 3 && projected_total == 0);
+    let projected_all: i64 =
+        for_each_n_projected_count(values, 99, collect_key, tens);
+    verify(projected_all == 4 && projected_total == 1);
 }
 
 #[test]

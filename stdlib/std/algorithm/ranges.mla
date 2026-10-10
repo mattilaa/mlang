@@ -526,6 +526,24 @@ pub fn for_each_n(data: &list<T>, count: i64, operation: Operation) -> void {
     }
 }
 
+/// @brief Invoke an operation on a bounded prefix and return its end index.
+/// This exposes the consumed-count part of C++20 `for_each_n`'s result for
+/// eager lists; the callable remains an input because generic closure values
+/// cannot currently be returned in tuples.
+/// @ingroup algorithm_ranges
+generic<T, Operation>
+pub fn for_each_n_count(data: &list<T>, count: i64,
+                        operation: Operation) -> i64 {
+    let data_len: i64 = data.len();
+    var n: i64 = count;
+    if n < 0 { n = 0; }
+    if n > data_len { n = data_len; }
+    for i in 0..n {
+        operation(data[i]);
+    }
+    return n;
+}
+
 /// @brief Invoke `operation` on projected values from a bounded prefix.
 /// Counts clamp to the range length; non-positive counts perform no calls.
 /// @ingroup algorithm_ranges
@@ -540,6 +558,22 @@ pub fn for_each_n_projected(data: &list<T>, count: i64,
     for i in 0..n {
         operation(projection(data[i]));
     }
+}
+
+/// @brief Process a projected bounded prefix and return the consumed count.
+/// @ingroup algorithm_ranges
+generic<T, Operation, Projection>
+pub fn for_each_n_projected_count(
+    data: &list<T>, count: i64, operation: Operation, projection: Projection)
+    -> i64 {
+    let data_len: i64 = data.len();
+    var n: i64 = count;
+    if n < 0 { n = 0; }
+    if n > data_len { n = data_len; }
+    for i in 0..n {
+        operation(projection(data[i]));
+    }
+    return n;
 }
 
 /// @brief Fold a range from left to right with an explicit initial value.
