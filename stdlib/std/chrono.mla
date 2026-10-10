@@ -5,6 +5,11 @@
 /// This is intentionally explicit rather than pretending to provide C++'
 /// compile-time ratio parameter, which Mlang does not currently support.
 
+mod std::date;
+use std::date::unix_now;
+mod std::time;
+use std::time::now_ns;
+
 /// @brief Supported fixed duration units, from nanoseconds through weeks.
 pub enum DurationUnit : i32 {
     Nanosecond = 0,
@@ -24,10 +29,22 @@ pub enum DurationOrder : i32 {
     Greater = 1
 };
 
+/// @brief Clock identity used to prevent comparing unrelated time points.
+pub enum ClockKind : i32 {
+    Steady = 0,
+    System = 1
+};
+
 /// @brief An integral count of a selected duration unit.
 pub struct Duration {
     var count: i64;
     var unit: DurationUnit;
+};
+
+/// @brief A time point represented by a duration from its clock's epoch.
+pub struct TimePoint {
+    var since_epoch: Duration;
+    var clock: ClockKind;
 };
 
 /// @brief Lowercase alias for `Duration`.
@@ -83,6 +100,113 @@ pub fn duration_compare(left: Duration, right: Duration)
     if comparison < 0 { return Some<DurationOrder>(DurationOrder::Less); }
     if comparison > 0 { return Some<DurationOrder>(DurationOrder::Greater); }
     return Some<DurationOrder>(DurationOrder::Equivalent);
+}
+
+fn is_valid_clock_kind(clock: ClockKind) -> bool {
+    return clock == ClockKind::Steady || clock == ClockKind::System;
+}
+
+/// @brief Construct a checked time point for a steady or system clock.
+pub fn make_time_point(since_epoch: Duration, clock: ClockKind)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(clock) ||
+       duration_unit_scale(since_epoch.unit) == 0 {
+        return None<TimePoint>();
+    }
+    return Some<TimePoint>(TimePoint {
+        since_epoch: since_epoch,
+        clock: clock
+    });
+}
+
+/// @brief Return the duration from the time point's clock epoch.
+pub fn time_since_epoch(value: TimePoint) -> option<Duration> {
+    if !is_valid_clock_kind(value.clock) ||
+       duration_unit_scale(value.since_epoch.unit) == 0 {
+        return None<Duration>();
+    }
+    return Some<Duration>(value.since_epoch);
+}
+
+/// @brief Add a duration to a time point using their finer unit.
+pub fn time_point_add(value: TimePoint, offset: Duration)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(value.clock) { return None<TimePoint>(); }
+    let point_scale: i64 = duration_unit_scale(value.since_epoch.unit);
+    let offset_scale: i64 = duration_unit_scale(offset.unit);
+    if point_scale == 0 || offset_scale == 0 { return None<TimePoint>(); }
+    var common_unit: DurationUnit = value.since_epoch.unit;
+    if offset_scale < point_scale { common_unit = offset.unit; }
+    let updated: option<Duration> = duration_add(
+        value.since_epoch, offset, common_unit);
+    if updated.is_none() { return None<TimePoint>(); }
+    return Some<TimePoint>(TimePoint {
+        since_epoch: updated.unwrap(),
+        clock: value.clock
+    });
+}
+
+/// @brief Subtract a duration using the finer of the two duration units.
+pub fn time_point_subtract(value: TimePoint, offset: Duration)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(value.clock) { return None<TimePoint>(); }
+    let point_scale: i64 = duration_unit_scale(value.since_epoch.unit);
+    let offset_scale: i64 = duration_unit_scale(offset.unit);
+    if point_scale == 0 || offset_scale == 0 { return None<TimePoint>(); }
+    var common_unit: DurationUnit = value.since_epoch.unit;
+    if offset_scale < point_scale { common_unit = offset.unit; }
+    let updated: option<Duration> = duration_subtract(
+        value.since_epoch, offset, common_unit);
+    if updated.is_none() { return None<TimePoint>(); }
+    return Some<TimePoint>(TimePoint {
+        since_epoch: updated.unwrap(),
+        clock: value.clock
+    });
+}
+
+/// @brief Subtract same-clock time points and return their duration difference.
+/// Different clocks or unrepresentable conversions return `None`.
+pub fn time_point_difference(left: TimePoint, right: TimePoint,
+                             unit: DurationUnit) -> option<Duration> {
+    if !is_valid_clock_kind(left.clock) ||
+       !is_valid_clock_kind(right.clock) || left.clock != right.clock {
+        return None<Duration>();
+    }
+    return duration_subtract(left.since_epoch, right.since_epoch, unit);
+}
+
+/// @brief Compare same-clock time points exactly across duration units.
+/// Different clocks return `None` because their epochs are unrelated.
+pub fn time_point_compare(left: TimePoint, right: TimePoint)
+    -> option<DurationOrder> {
+    if !is_valid_clock_kind(left.clock) ||
+       !is_valid_clock_kind(right.clock) || left.clock != right.clock {
+        return None<DurationOrder>();
+    }
+    return duration_compare(left.since_epoch, right.since_epoch);
+}
+
+/// @brief Return the current monotonic steady-clock time point in nanoseconds.
+pub fn steady_now() -> TimePoint {
+    return TimePoint {
+        since_epoch: Duration {
+            count: now_ns(),
+            unit: DurationUnit::Nanosecond
+        },
+        clock: ClockKind::Steady
+    };
+}
+
+/// @brief Return the current system-clock time point in Unix seconds.
+/// This currently has the whole-second resolution of `std::date::unix_now`.
+pub fn system_now() -> TimePoint {
+    return TimePoint {
+        since_epoch: Duration {
+            count: unix_now(),
+            unit: DurationUnit::Second
+        },
+        clock: ClockKind::System
+    };
 }
 
 /// @brief Construct a duration from an integral count and unit.

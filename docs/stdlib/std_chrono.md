@@ -18,6 +18,10 @@ use std::chrono::duration_ceil;
 use std::chrono::duration_round;
 use std::chrono::duration_add;
 use std::chrono::duration_compare;
+use std::chrono::ClockKind;
+use std::chrono::make_time_point;
+use std::chrono::time_point_add;
+use std::chrono::time_point_difference;
 
 let elapsed = make_duration(90, DurationUnit::Second).unwrap();
 let milliseconds: Duration =
@@ -28,6 +32,11 @@ let total: Duration = duration_add(
 let order = duration_compare(elapsed, total).unwrap(); // Less
 let rounded_minutes: Duration =
     duration_round(elapsed, DurationUnit::Minute).unwrap(); // 2 minutes
+let start = make_time_point(elapsed, ClockKind::Steady).unwrap();
+let later = time_point_add(
+    start, make_duration(5, DurationUnit::Second).unwrap()).unwrap();
+let elapsed_between: Duration = time_point_difference(
+    later, start, DurationUnit::Second).unwrap(); // 5 seconds
 ```
 
 - `make_duration(count, unit)` constructs a value for one of the declared
@@ -52,3 +61,13 @@ let rounded_minutes: Duration =
 `DurationUnit` contains `Nanosecond`, `Microsecond`, `Millisecond`, `Second`,
 `Minute`, `Hour`, `Day`, and `Week`. The module deliberately reports overflow
 through `option` rather than wrapping counts.
+
+`TimePoint` pairs a since-epoch `Duration` with `ClockKind::Steady` or
+`ClockKind::System`, following C++20 `std::chrono::time_point`. Use
+`make_time_point` for checked construction, `time_since_epoch` to inspect the
+stored duration, and `time_point_add` / `time_point_subtract` for checked
+arithmetic. Arithmetic chooses the finer of the point and offset units and
+returns `None` when conversion or arithmetic overflows. `time_point_difference`
+and `time_point_compare` reject different clock kinds because their epochs
+cannot be compared. `steady_now()` returns a monotonic nanosecond point;
+`system_now()` returns the system-clock Unix time at whole-second resolution.

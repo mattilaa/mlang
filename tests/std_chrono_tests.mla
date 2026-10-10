@@ -4,6 +4,8 @@ mod std::testing;
 use std::chrono::Duration;
 use std::chrono::DurationUnit;
 use std::chrono::DurationOrder;
+use std::chrono::ClockKind;
+use std::chrono::TimePoint;
 use std::chrono::make_duration;
 use std::chrono::duration_cast;
 use std::chrono::duration_floor;
@@ -12,6 +14,14 @@ use std::chrono::duration_round;
 use std::chrono::duration_add;
 use std::chrono::duration_subtract;
 use std::chrono::duration_compare;
+use std::chrono::make_time_point;
+use std::chrono::time_since_epoch;
+use std::chrono::time_point_add;
+use std::chrono::time_point_subtract;
+use std::chrono::time_point_difference;
+use std::chrono::time_point_compare;
+use std::chrono::steady_now;
+use std::chrono::system_now;
 use std::testing::verify;
 use std::testing::verify_eq_i64;
 
@@ -163,4 +173,64 @@ fn test_chrono_duration_rounding() {
     let min_value: Duration = make_duration(
         -9223372036854775807 - 1, DurationUnit::Nanosecond).unwrap();
     verify(duration_floor(min_value, DurationUnit::Week).is_some());
+}
+
+#[test]
+fn test_chrono_time_point_arithmetic_and_clock_safety() {
+    let origin_duration: Duration =
+        make_duration(100, DurationUnit::Second).unwrap();
+    let origin: TimePoint =
+        make_time_point(origin_duration, ClockKind::Steady).unwrap();
+    let offset: Duration =
+        make_duration(2500, DurationUnit::Millisecond).unwrap();
+    let advanced: option<TimePoint> = time_point_add(origin, offset);
+    verify(advanced.is_some());
+    let advanced_point: TimePoint = advanced.unwrap();
+    let advanced_epoch: Duration =
+        time_since_epoch(advanced_point).unwrap();
+    verify(advanced_epoch.unit == DurationUnit::Millisecond);
+    verify_eq_i64(102500, advanced_epoch.count);
+
+    let delta: option<Duration> = time_point_difference(
+        advanced_point, origin, DurationUnit::Millisecond);
+    verify(delta.is_some() && delta.unwrap().count == 2500);
+    let order: option<DurationOrder> = time_point_compare(advanced_point, origin);
+    verify(order.is_some() && order.unwrap() == DurationOrder::Greater);
+
+    let half_second: Duration =
+        make_duration(500, DurationUnit::Millisecond).unwrap();
+    let reduced: TimePoint =
+        time_point_subtract(advanced_point, half_second).unwrap();
+    verify(time_since_epoch(reduced).unwrap().count == 102000);
+
+    let system_point: TimePoint = make_time_point(
+        make_duration(100, DurationUnit::Second).unwrap(),
+        ClockKind::System).unwrap();
+    verify(time_point_compare(origin, system_point).is_none());
+    verify(time_point_difference(origin, system_point,
+                                 DurationUnit::Second).is_none());
+
+    let maximum: TimePoint = make_time_point(
+        make_duration(9223372036854775807, DurationUnit::Second).unwrap(),
+        ClockKind::Steady).unwrap();
+    let one_second: Duration = make_duration(1, DurationUnit::Second).unwrap();
+    verify(time_point_add(maximum, one_second).is_none());
+}
+
+#[test]
+fn test_chrono_clock_now_functions() {
+    let before: TimePoint = steady_now();
+    let after: TimePoint = steady_now();
+    verify(before.clock == ClockKind::Steady &&
+           after.clock == ClockKind::Steady);
+    let order: option<DurationOrder> = time_point_compare(after, before);
+    verify(order.is_some());
+    verify(order.unwrap() == DurationOrder::Greater ||
+           order.unwrap() == DurationOrder::Equivalent);
+    verify(time_since_epoch(before).unwrap().unit ==
+           DurationUnit::Nanosecond);
+
+    let wall_clock: TimePoint = system_now();
+    verify(wall_clock.clock == ClockKind::System);
+    verify(time_since_epoch(wall_clock).unwrap().unit == DurationUnit::Second);
 }
