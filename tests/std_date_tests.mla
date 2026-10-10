@@ -3,6 +3,7 @@ mod std::date;
 mod std::strbuf;
 
 use std::date::DateTime;
+use std::date::CivilDate;
 use std::date::TimeZone;
 use std::date::UtcOffset;
 use std::date::format_date;
@@ -24,6 +25,12 @@ use std::date::to_unix_utc;
 use std::date::from_unix_tz;
 use std::date::timezone_offset_at;
 use std::date::utc;
+use std::date::is_leap_year;
+use std::date::days_in_month;
+use std::date::is_valid_civil_date;
+use std::date::to_sys_days;
+use std::date::from_sys_days;
+use std::date::weekday_from_sys_days;
 use std::strbuf::eq;
 use std::strbuf::len;
 use std::testing::verify;
@@ -85,6 +92,42 @@ fn test_unix_epoch_utc_roundtrip() {
     verify(dt.second == 0);
     verify(to_unix_utc(dt) == 0);
     verify(eq(format_iso8601_offset(dt, utc()), "1970-01-01T00:00:00Z") == 1);
+}
+
+#[test]
+fn test_civil_calendar_and_sys_days() {
+    verify(is_leap_year(2000));
+    verify(!is_leap_year(1900));
+    verify(!is_leap_year(2100));
+    verify(is_leap_year(0));
+    verify(is_leap_year(2024));
+    verify(!is_leap_year(2023));
+    verify(days_in_month(2024, 2) == 29);
+    verify(days_in_month(2023, 2) == 28);
+    verify(days_in_month(2024, 13) == 0);
+    verify(is_valid_civil_date(2024, 2, 29));
+    verify(!is_valid_civil_date(1900, 2, 29));
+    verify(!is_valid_civil_date(2024, 4, 31));
+
+    let epoch_days: option<i64> = to_sys_days(1970, 1, 1);
+    verify(epoch_days.is_some() && epoch_days.unwrap() == 0);
+    verify(to_sys_days(1900, 2, 29).is_none());
+    verify(to_sys_days(2024, 2, 29).unwrap() == 19782);
+    let year_zero_leap_day: i64 = to_sys_days(0, 2, 29).unwrap();
+    verify(weekday_from_sys_days(0) == 4);
+    verify(weekday_from_sys_days(2) == 6);
+    verify(weekday_from_sys_days(-1) == 3);
+    verify(weekday_from_sys_days(-4) == 0);
+
+    let leap_day: CivilDate = from_sys_days(19782).unwrap();
+    verify(leap_day.year == 2024 && leap_day.month == 2 &&
+           leap_day.day == 29);
+    let before_epoch: CivilDate = from_sys_days(-1).unwrap();
+    verify(before_epoch.year == 1969 && before_epoch.month == 12 &&
+           before_epoch.day == 31);
+    let year_zero_date: CivilDate = from_sys_days(year_zero_leap_day).unwrap();
+    verify(year_zero_date.year == 0 && year_zero_date.month == 2 &&
+           year_zero_date.day == 29);
 }
 
 #[test]

@@ -6,6 +6,7 @@ Module file: `stdlib/std/date.mla`
 
 ### Types
 - `date_time`
+- `civil_date`
 - `utc_offset`
 - `time_zone`
 
@@ -31,12 +32,25 @@ Module file: `stdlib/std/date.mla`
 - `format_offset(offset: utc_offset) -> str8`
 - `format_date(dt: date_time) -> str8`
 - `format_time(dt: date_time) -> str8`
+- `is_leap_year(year: i32) -> bool`
+- `days_in_month(year: i32, month: i32) -> i32`
+- `is_valid_civil_date(year: i32, month: i32, day: i32) -> bool`
+- `to_sys_days(year, month, day) -> option<i64>` converts a valid Gregorian
+  date to days since 1970-01-01, following C++20 [`std::chrono::sys_days`](Stdlib-Module-API).
+- `from_sys_days(days: i64) -> option<civil_date>` performs the inverse and
+  returns `None` when the year is outside the representable [`i32`](Quick-Guide#types) range.
+- `weekday_from_sys_days(days: i64) -> i32` returns Sunday as `0` through
+  Saturday as `6`.
 
 [`std::date`](Stdlib-Date) supports Unix UTC timestamps in whole seconds. Timezone support is
 provided as fixed UTC offsets (`utc_offset`), system-local conversions, and named
 system timezones (`time_zone`). Unix-like platforms load IANA/zoneinfo names such
 as `Europe/Helsinki` from the OS timezone database. Windows uses Windows system
 timezone IDs such as `FLE Standard Time`.
+
+Civil calendar helpers use the proleptic Gregorian calendar and are independent
+of time zones. Invalid month/day combinations are rejected by `to_sys_days`;
+leap years follow the divisible-by-4, century, and 400-year rules.
 
 Example:
 
