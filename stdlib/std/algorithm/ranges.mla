@@ -22,6 +22,19 @@ pub fn find(data: &list<T>, value: U) -> i64 {
     return -1;
 }
 
+/// @brief Return the first matching index as an option instead of a sentinel.
+/// This preserves the familiar C++20 `ranges::find` result while making the
+/// no-match state explicit in Mlang. The input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn find_option(data: &list<T>, value: U) -> option<i64> {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if data[i] == value { return Some<i64>(i); }
+    }
+    return None<i64>();
+}
+
 /// @brief Find the first element equivalent to `value` under `equivalent`.
 /// Returns -1 if no element matches.
 /// @ingroup algorithm_ranges
@@ -426,6 +439,29 @@ pub fn find_if_projected(data: &list<T>, predicate: Predicate,
         if predicate(projection(data[i])) { return i; }
     }
     return -1;
+}
+
+/// @brief Return the first predicate-matching index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn find_if_option(data: &list<T>, predicate: Predicate) -> option<i64> {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) { return Some<i64>(i); }
+    }
+    return None<i64>();
+}
+
+/// @brief Return the first projected predicate-matching index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn find_if_projected_option(data: &list<T>, predicate: Predicate,
+                                projection: Projection) -> option<i64> {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(projection(data[i])) { return Some<i64>(i); }
+    }
+    return None<i64>();
 }
 
 /// @brief Return the last index accepted by `predicate`, or -1.

@@ -86,6 +86,9 @@ use std::algorithm::ranges::count;
 use std::algorithm::ranges::count_by;
 use std::algorithm::ranges::count_by_projected;
 use std::algorithm::ranges::find;
+use std::algorithm::ranges::find_option;
+use std::algorithm::ranges::find_if_option;
+use std::algorithm::ranges::find_if_projected_option;
 use std::algorithm::ranges::find_by;
 use std::algorithm::ranges::find_by_projected;
 use std::algorithm::ranges::find_projected;
@@ -3608,6 +3611,28 @@ fn test_algorithm_ranges_find_count_contains_remove_take_drop() {
     let reversed_bounds: list<i64> = subrange(data, 5, 2);
     let after_end: list<i64> = subrange(data, 99, 120);
     verify(reversed_bounds.len() == 0 && after_end.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_optional_find_indices() {
+    let values: list<i32> = [12, 17, 23, 31];
+    let found: option<i64> = find_option(values, 23);
+    verify(found.is_some() && found.unwrap() == 2);
+    let missing: option<i64> = find_option(values, 99);
+    verify(missing.is_none());
+
+    let odd = |value: i32| { return value % 2 != 0; };
+    let first_odd: option<i64> = find_if_option(values, odd);
+    verify(first_odd.is_some() && first_odd.unwrap() == 1);
+
+    let tens = |value: i32| { return value / 10; };
+    let key_is_two = |key: i32| { return key == 2; };
+    let projected: option<i64> =
+        find_if_projected_option(values, key_is_two, tens);
+    verify(projected.is_some() && projected.unwrap() == 2);
+    let empty: list<i32> = [];
+    verify(find_option(empty, 1).is_none());
+    verify(find_if_option(empty, odd).is_none());
 }
 
 #[test]
