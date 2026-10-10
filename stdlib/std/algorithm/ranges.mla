@@ -1314,6 +1314,73 @@ pub fn zip_transform6_projected(
     return transformed;
 }
 
+/// @brief Transform projected values from seven ranges over their common prefix.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, Output, Operation, FirstProjection,
+        SecondProjection, ThirdProjection, FourthProjection,
+        FifthProjection, SixthProjection, SeventhProjection>
+pub fn zip_transform7_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, sixth: &list<Y>, seventh: &list<Z>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection, fourth_projection: FourthProjection,
+    fifth_projection: FifthProjection, sixth_projection: SixthProjection,
+    seventh_projection: SeventhProjection) -> list<Output> {
+    var transformed: list<Output> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    if seventh.len() < n { n = seventh.len(); }
+    for i in 0..n {
+        transformed.push(operation(first_projection(first[i]),
+                                   second_projection(second[i]),
+                                   third_projection(third[i]),
+                                   fourth_projection(fourth[i]),
+                                   fifth_projection(fifth[i]),
+                                   sixth_projection(sixth[i]),
+                                   seventh_projection(seventh[i])));
+    }
+    return transformed;
+}
+
+/// @brief Transform projected values from eight ranges over their common prefix.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A, Output, Operation, FirstProjection,
+        SecondProjection, ThirdProjection, FourthProjection,
+        FifthProjection, SixthProjection, SeventhProjection, EighthProjection>
+pub fn zip_transform8_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, sixth: &list<Y>, seventh: &list<Z>, eighth: &list<A>,
+    operation: Operation, first_projection: FirstProjection,
+    second_projection: SecondProjection, third_projection: ThirdProjection,
+    fourth_projection: FourthProjection, fifth_projection: FifthProjection,
+    sixth_projection: SixthProjection, seventh_projection: SeventhProjection,
+    eighth_projection: EighthProjection) -> list<Output> {
+    var transformed: list<Output> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    if seventh.len() < n { n = seventh.len(); }
+    if eighth.len() < n { n = eighth.len(); }
+    for i in 0..n {
+        transformed.push(operation(first_projection(first[i]),
+                                   second_projection(second[i]),
+                                   third_projection(third[i]),
+                                   fourth_projection(fourth[i]),
+                                   fifth_projection(fifth[i]),
+                                   sixth_projection(sixth[i]),
+                                   seventh_projection(seventh[i]),
+                                   eighth_projection(eighth[i])));
+    }
+    return transformed;
+}
+
 /// @brief Transform corresponding elements from three ranges into a new list.
 /// Stops at the shortest input; output type comes from the ternary operation.
 /// C++23 `ranges::zip_transform` counterpart for three inputs.

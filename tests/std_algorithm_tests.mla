@@ -422,6 +422,8 @@ use std::algorithm::ranges::zip_transform3_projected;
 use std::algorithm::ranges::zip_transform4_projected;
 use std::algorithm::ranges::zip_transform5_projected;
 use std::algorithm::ranges::zip_transform6_projected;
+use std::algorithm::ranges::zip_transform7_projected;
+use std::algorithm::ranges::zip_transform8_projected;
 use std::algorithm::ranges::chunk_by;
 use std::algorithm::ranges::chunk_by_projected;
 use std::algorithm::ranges::unique;
@@ -3429,6 +3431,31 @@ fn test_algorithm_ranges_zip_transform_projected_three_and_four_inputs() {
         first_key, second_key, third_key, tens, ones, sixth_key);
     verify(combined_six.len() == 2 && combined_six[0] == 82 &&
            combined_six[1] == 103);
+
+    let seventh: list<i32> = [70, 80];
+    let seventh_key = |value: i32| { return value / 10; };
+    let combine_seven = |a: i32, b: i32, c: i32, d: i32,
+                         e: i32, f: i32, g: i32| {
+        return a + b + c + d + e + f + g;
+    };
+    let combined_seven: list<i32> = zip_transform7_projected(
+        first, second, third, fourth, fifth, sixth, seventh, combine_seven,
+        first_key, second_key, third_key, tens, ones, sixth_key, seventh_key);
+    verify(combined_seven.len() == 2 && combined_seven[0] == 89 &&
+           combined_seven[1] == 111);
+
+    let eighth: list<i32> = [800, 900];
+    let eighth_key = |value: i32| { return value / 100; };
+    let combine_eight = |a: i32, b: i32, c: i32, d: i32,
+                         e: i32, f: i32, g: i32, h: i32| {
+        return a + b + c + d + e + f + g + h;
+    };
+    let combined_eight: list<i32> = zip_transform8_projected(
+        first, second, third, fourth, fifth, sixth, seventh, eighth,
+        combine_eight, first_key, second_key, third_key, tens, ones,
+        sixth_key, seventh_key, eighth_key);
+    verify(combined_eight.len() == 2 && combined_eight[0] == 97 &&
+           combined_eight[1] == 120);
 
     let empty: list<i32> = [];
     let none: list<i32> = zip_transform3_projected(
