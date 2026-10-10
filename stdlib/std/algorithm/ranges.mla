@@ -6542,6 +6542,67 @@ pub fn cartesian_product(first: &list<T>, second: &list<U>, third: &list<V>,
     return out;
 }
 
+/// @brief Materialize every combination from seven heterogeneous ranges.
+/// The rightmost range varies fastest; any empty input yields an empty result.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z>
+pub fn cartesian_product(first: &list<T>, second: &list<U>, third: &list<V>,
+                         fourth: &list<W>, fifth: &list<X>,
+                         sixth: &list<Y>, seventh: &list<Z>)
+    -> list<tuple<T, U, V, W, X, Y, Z>> {
+    var out: list<tuple<T, U, V, W, X, Y, Z>> = [];
+    for i in 0..first.len() {
+        for j in 0..second.len() {
+            for k in 0..third.len() {
+                for m in 0..fourth.len() {
+                    for n in 0..fifth.len() {
+                        for p in 0..sixth.len() {
+                            for q in 0..seventh.len() {
+                                out.push((first[i], second[j], third[k],
+                                          fourth[m], fifth[n], sixth[p],
+                                          seventh[q]));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
+
+/// @brief Materialize every combination from eight heterogeneous ranges.
+/// The rightmost range varies fastest; any empty input yields an empty result.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A>
+pub fn cartesian_product(first: &list<T>, second: &list<U>, third: &list<V>,
+                         fourth: &list<W>, fifth: &list<X>,
+                         sixth: &list<Y>, seventh: &list<Z>,
+                         eighth: &list<A>)
+    -> list<tuple<T, U, V, W, X, Y, Z, A>> {
+    var out: list<tuple<T, U, V, W, X, Y, Z, A>> = [];
+    for i in 0..first.len() {
+        for j in 0..second.len() {
+            for k in 0..third.len() {
+                for m in 0..fourth.len() {
+                    for n in 0..fifth.len() {
+                        for p in 0..sixth.len() {
+                            for q in 0..seventh.len() {
+                                for r in 0..eighth.len() {
+                                    out.push((first[i], second[j], third[k],
+                                              fourth[m], fifth[n], sixth[p],
+                                              seventh[q], eighth[r]));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
+
 /// @brief Pair each element with its zero-based position.
 /// Eager C++23 `views::enumerate` equivalent; the input remains unchanged.
 /// @ingroup algorithm_ranges

@@ -2709,6 +2709,43 @@ fn test_algorithm_ranges_cartesian_product() {
     verify(last_six.0 == 4 && last_six.1 == 20 && last_six.2 &&
            last_six.3 == 2000 && last_six.4 == 20000 &&
            last_six.5 == 60000);
+
+    let seventh_values: list<str8> = ["seven"];
+    let seven_products: list<tuple<i32, i64, bool, i64, i32, i64, str8>> =
+        cartesian_product(left, middle, third_values, fourth_values,
+                          fifth_values, sixth_values, seventh_values);
+    verify(seven_products.len() == 32);
+    let first_seven = seven_products[0];
+    let last_seven = seven_products[31];
+    verify(first_seven.0 == 2 && first_seven.1 == 10 &&
+           first_seven.3 == 1000 && first_seven.5 == 50000 &&
+           eq(first_seven.6, "seven") == 1);
+    verify(last_seven.0 == 4 && last_seven.1 == 20 &&
+           last_seven.3 == 2000 && last_seven.5 == 60000 &&
+           eq(last_seven.6, "seven") == 1);
+
+    let eighth_values: list<u8> = [8, 9];
+    let eight_products: list<tuple<i32, i64, bool, i64, i32, i64, str8, u8>> =
+        cartesian_product(left, middle, third_values, fourth_values,
+                          fifth_values, sixth_values, seventh_values,
+                          eighth_values);
+    verify(eight_products.len() == 64);
+    let first_eight = eight_products[0];
+    let second_eight = eight_products[1];
+    let last_eight = eight_products[63];
+    verify(first_eight.0 == 2 && first_eight.1 == 10 &&
+           first_eight.3 == 1000 && first_eight.5 == 50000 &&
+           eq(first_eight.6, "seven") == 1 && first_eight.7 == 8);
+    verify(second_eight.0 == 2 && second_eight.1 == 10 &&
+           first_eight.7 == 8 && second_eight.7 == 9);
+    verify(last_eight.0 == 4 && last_eight.1 == 20 &&
+           last_eight.3 == 2000 && last_eight.5 == 60000 &&
+           eq(last_eight.6, "seven") == 1 && last_eight.7 == 9);
+    let no_eight_products: list<tuple<i32, i64, bool, i64, i32, i64, str8, u8>> =
+        cartesian_product(left, middle, third_values, fourth_values,
+                          fifth_values, sixth_values, empty_values,
+                          eighth_values);
+    verify(no_eight_products.len() == 0);
 }
 
 #[test]
