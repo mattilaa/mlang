@@ -153,3 +153,243 @@ pub fn in_range_u16_from_u64(value: u64) -> bool { return value <= 65535; }
 pub fn in_range_u32_from_u64(value: u64) -> bool {
     return value <= 4294967295;
 }
+
+/// @brief Check whether a i8 value fits in i8 without narrowing.
+pub fn in_range_i8_from_i8(value: i8) -> bool {
+    return in_range_i8_from_i64(i64(value));
+}
+
+/// @brief Check whether a i8 value fits in i16 without narrowing.
+pub fn in_range_i16_from_i8(value: i8) -> bool {
+    return in_range_i16_from_i64(i64(value));
+}
+
+/// @brief Check whether a i8 value fits in i32 without narrowing.
+pub fn in_range_i32_from_i8(value: i8) -> bool {
+    return in_range_i32_from_i64(i64(value));
+}
+
+/// @brief Check whether a i8 value fits in i64 without narrowing.
+pub fn in_range_i64_from_i8(value: i8) -> bool {
+    return in_range_i64_from_i64(i64(value));
+}
+
+/// @brief Check whether a i8 value fits in u8 without narrowing.
+pub fn in_range_u8_from_i8(value: i8) -> bool {
+    return in_range_u8_from_i64(i64(value));
+}
+
+/// @brief Check whether a i8 value fits in u16 without narrowing.
+pub fn in_range_u16_from_i8(value: i8) -> bool {
+    return in_range_u16_from_i64(i64(value));
+}
+
+/// @brief Check whether a i8 value fits in u32 without narrowing.
+pub fn in_range_u32_from_i8(value: i8) -> bool {
+    return in_range_u32_from_i64(i64(value));
+}
+
+/// @brief Check whether a i8 value fits in u64 without narrowing.
+pub fn in_range_u64_from_i8(value: i8) -> bool {
+    return in_range_u64_from_i64(i64(value));
+}
+
+/// @brief Check whether a i16 value fits in i8 without narrowing.
+pub fn in_range_i8_from_i16(value: i16) -> bool {
+    return in_range_i8_from_i64(i64(value));
+}
+
+/// @brief Check whether a i16 value fits in i16 without narrowing.
+pub fn in_range_i16_from_i16(value: i16) -> bool {
+    return in_range_i16_from_i64(i64(value));
+}
+
+/// @brief Check whether a i16 value fits in i32 without narrowing.
+pub fn in_range_i32_from_i16(value: i16) -> bool {
+    return in_range_i32_from_i64(i64(value));
+}
+
+/// @brief Check whether a i16 value fits in i64 without narrowing.
+pub fn in_range_i64_from_i16(value: i16) -> bool {
+    return in_range_i64_from_i64(i64(value));
+}
+
+/// @brief Check whether a i16 value fits in u8 without narrowing.
+pub fn in_range_u8_from_i16(value: i16) -> bool {
+    return in_range_u8_from_i64(i64(value));
+}
+
+/// @brief Check whether a i16 value fits in u16 without narrowing.
+pub fn in_range_u16_from_i16(value: i16) -> bool {
+    return in_range_u16_from_i64(i64(value));
+}
+
+/// @brief Check whether a i16 value fits in u32 without narrowing.
+pub fn in_range_u32_from_i16(value: i16) -> bool {
+    return in_range_u32_from_i64(i64(value));
+}
+
+/// @brief Check whether a i16 value fits in u64 without narrowing.
+pub fn in_range_u64_from_i16(value: i16) -> bool {
+    return in_range_u64_from_i64(i64(value));
+}
+
+/// @brief Check whether a i32 value fits in i8 without narrowing.
+pub fn in_range_i8_from_i32(value: i32) -> bool {
+    return in_range_i8_from_i64(i64(value));
+}
+
+/// @brief Check whether a i32 value fits in i16 without narrowing.
+pub fn in_range_i16_from_i32(value: i32) -> bool {
+    return in_range_i16_from_i64(i64(value));
+}
+
+/// @brief Check whether a i32 value fits in i32 without narrowing.
+pub fn in_range_i32_from_i32(value: i32) -> bool {
+    return in_range_i32_from_i64(i64(value));
+}
+
+/// @brief Check whether a i32 value fits in i64 without narrowing.
+pub fn in_range_i64_from_i32(value: i32) -> bool {
+    return in_range_i64_from_i64(i64(value));
+}
+
+/// @brief Check whether a i32 value fits in u8 without narrowing.
+pub fn in_range_u8_from_i32(value: i32) -> bool {
+    return in_range_u8_from_i64(i64(value));
+}
+
+/// @brief Check whether a i32 value fits in u16 without narrowing.
+pub fn in_range_u16_from_i32(value: i32) -> bool {
+    return in_range_u16_from_i64(i64(value));
+}
+
+/// @brief Check whether a i32 value fits in u32 without narrowing.
+pub fn in_range_u32_from_i32(value: i32) -> bool {
+    return in_range_u32_from_i64(i64(value));
+}
+
+/// @brief Check whether a i32 value fits in u64 without narrowing.
+pub fn in_range_u64_from_i32(value: i32) -> bool {
+    return in_range_u64_from_i64(i64(value));
+}
+
+/// @brief Check whether a u8 value fits in i8 without narrowing.
+pub fn in_range_i8_from_u8(value: u8) -> bool {
+    return in_range_i8_from_u64(u64(value));
+}
+
+/// @brief Check whether a u8 value fits in i16 without narrowing.
+pub fn in_range_i16_from_u8(value: u8) -> bool {
+    return in_range_i16_from_u64(u64(value));
+}
+
+/// @brief Check whether a u8 value fits in i32 without narrowing.
+pub fn in_range_i32_from_u8(value: u8) -> bool {
+    return in_range_i32_from_u64(u64(value));
+}
+
+/// @brief Check whether a u8 value fits in i64 without narrowing.
+pub fn in_range_i64_from_u8(value: u8) -> bool {
+    return in_range_i64_from_u64(u64(value));
+}
+
+/// @brief Check whether a u8 value fits in u8 without narrowing.
+pub fn in_range_u8_from_u8(value: u8) -> bool {
+    return in_range_u8_from_u64(u64(value));
+}
+
+/// @brief Check whether a u8 value fits in u16 without narrowing.
+pub fn in_range_u16_from_u8(value: u8) -> bool {
+    return in_range_u16_from_u64(u64(value));
+}
+
+/// @brief Check whether a u8 value fits in u32 without narrowing.
+pub fn in_range_u32_from_u8(value: u8) -> bool {
+    return in_range_u32_from_u64(u64(value));
+}
+
+/// @brief Check whether a u8 value fits in u64 without narrowing.
+pub fn in_range_u64_from_u8(value: u8) -> bool {
+    return in_range_u64_from_u64(u64(value));
+}
+
+/// @brief Check whether a u16 value fits in i8 without narrowing.
+pub fn in_range_i8_from_u16(value: u16) -> bool {
+    return in_range_i8_from_u64(u64(value));
+}
+
+/// @brief Check whether a u16 value fits in i16 without narrowing.
+pub fn in_range_i16_from_u16(value: u16) -> bool {
+    return in_range_i16_from_u64(u64(value));
+}
+
+/// @brief Check whether a u16 value fits in i32 without narrowing.
+pub fn in_range_i32_from_u16(value: u16) -> bool {
+    return in_range_i32_from_u64(u64(value));
+}
+
+/// @brief Check whether a u16 value fits in i64 without narrowing.
+pub fn in_range_i64_from_u16(value: u16) -> bool {
+    return in_range_i64_from_u64(u64(value));
+}
+
+/// @brief Check whether a u16 value fits in u8 without narrowing.
+pub fn in_range_u8_from_u16(value: u16) -> bool {
+    return in_range_u8_from_u64(u64(value));
+}
+
+/// @brief Check whether a u16 value fits in u16 without narrowing.
+pub fn in_range_u16_from_u16(value: u16) -> bool {
+    return in_range_u16_from_u64(u64(value));
+}
+
+/// @brief Check whether a u16 value fits in u32 without narrowing.
+pub fn in_range_u32_from_u16(value: u16) -> bool {
+    return in_range_u32_from_u64(u64(value));
+}
+
+/// @brief Check whether a u16 value fits in u64 without narrowing.
+pub fn in_range_u64_from_u16(value: u16) -> bool {
+    return in_range_u64_from_u64(u64(value));
+}
+
+/// @brief Check whether a u32 value fits in i8 without narrowing.
+pub fn in_range_i8_from_u32(value: u32) -> bool {
+    return in_range_i8_from_u64(u64(value));
+}
+
+/// @brief Check whether a u32 value fits in i16 without narrowing.
+pub fn in_range_i16_from_u32(value: u32) -> bool {
+    return in_range_i16_from_u64(u64(value));
+}
+
+/// @brief Check whether a u32 value fits in i32 without narrowing.
+pub fn in_range_i32_from_u32(value: u32) -> bool {
+    return in_range_i32_from_u64(u64(value));
+}
+
+/// @brief Check whether a u32 value fits in i64 without narrowing.
+pub fn in_range_i64_from_u32(value: u32) -> bool {
+    return in_range_i64_from_u64(u64(value));
+}
+
+/// @brief Check whether a u32 value fits in u8 without narrowing.
+pub fn in_range_u8_from_u32(value: u32) -> bool {
+    return in_range_u8_from_u64(u64(value));
+}
+
+/// @brief Check whether a u32 value fits in u16 without narrowing.
+pub fn in_range_u16_from_u32(value: u32) -> bool {
+    return in_range_u16_from_u64(u64(value));
+}
+
+/// @brief Check whether a u32 value fits in u32 without narrowing.
+pub fn in_range_u32_from_u32(value: u32) -> bool {
+    return in_range_u32_from_u64(u64(value));
+}
+
+/// @brief Check whether a u32 value fits in u64 without narrowing.
+pub fn in_range_u64_from_u32(value: u32) -> bool {
+    return in_range_u64_from_u64(u64(value));
+}
