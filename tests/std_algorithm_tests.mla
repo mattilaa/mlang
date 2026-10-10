@@ -115,6 +115,10 @@ use std::algorithm::ranges::find_last_by_projected;
 use std::algorithm::ranges::adjacent_find;
 use std::algorithm::ranges::adjacent_find_by;
 use std::algorithm::ranges::adjacent_find_by_projected;
+use std::algorithm::ranges::adjacent_find_option;
+use std::algorithm::ranges::adjacent_find_projected_option;
+use std::algorithm::ranges::adjacent_find_by_option;
+use std::algorithm::ranges::adjacent_find_by_projected_option;
 use std::algorithm::ranges::find_first_of;
 use std::algorithm::ranges::find_first_of_by;
 use std::algorithm::ranges::find_first_of_by_projected;
@@ -759,6 +763,30 @@ fn test_algorithm_ranges_adjacent_find_by_equivalence() {
     verify(adjacent_find_by(separated, by_tens) == -1);
     verify(adjacent_find_by(one, by_tens) == -1);
     verify(adjacent_find_by(empty, by_tens) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_adjacent_find_option_results() {
+    let values: list<i32> = [11, 21, 22, 23];
+    let matching: list<i32> = [11, 11, 21];
+    let empty: list<i32> = [];
+    let identity = |value: i32| { return value; };
+    let tens = |value: i32| { return value / 10; };
+    let same_tens = |left: i32, right: i32| {
+        return left / 10 == right / 10;
+    };
+
+    verify(adjacent_find_option(values).is_none());
+    verify(adjacent_find_option(matching).unwrap() == 0);
+    verify(adjacent_find_option(empty).is_none());
+    verify(adjacent_find_projected_option(values, tens).unwrap() == 1);
+    verify(adjacent_find_projected_option(empty, tens).is_none());
+    verify(adjacent_find_by_option(values, same_tens).unwrap() == 1);
+    verify(adjacent_find_by_option(empty, same_tens).is_none());
+    verify(adjacent_find_by_projected_option(
+        values, same_tens, identity).unwrap() == 1);
+    verify(adjacent_find_by_projected_option(
+        empty, same_tens, identity).is_none());
 }
 
 #[test]

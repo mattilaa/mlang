@@ -239,6 +239,46 @@ pub fn adjacent_find_by_projected(data: &list<T>, equivalent: Equivalent,
     return -1;
 }
 
+/// @brief Return the first equal adjacent index as an option.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent_find_option(data: &list<T>) -> option<i64> {
+    let index: i64 = adjacent_find(data);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected-equal adjacent index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn adjacent_find_projected_option(data: &list<T>,
+                                      projection: Projection) -> option<i64> {
+    let index: i64 = adjacent_find_projected(data, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first equivalent adjacent index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent>
+pub fn adjacent_find_by_option(data: &list<T>, equivalent: Equivalent)
+    -> option<i64> {
+    let index: i64 = adjacent_find_by(data, equivalent);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected-equivalent adjacent index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent, Projection>
+pub fn adjacent_find_by_projected_option(
+    data: &list<T>, equivalent: Equivalent, projection: Projection)
+    -> option<i64> {
+    let index: i64 = adjacent_find_by_projected(data, equivalent, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
 /// @brief Return the first index in `data` matching any value in `candidates`.
 /// Returns -1 when the ranges have no matching values (C++20 `find_first_of`).
 /// @ingroup algorithm_ranges

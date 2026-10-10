@@ -51,6 +51,10 @@ fn example() {
   `find_if_not_option`, and `find_if_not_projected_option` return
   matching indices as `option<i64>`, providing an explicit `None` result
   instead of the `-1` sentinel used by the compatibility APIs.
+- `adjacent_find_option`, `adjacent_find_projected_option`,
+  `adjacent_find_by_option`, and `adjacent_find_by_projected_option` return
+  the first matching adjacent index as `option<i64>`; short ranges or no
+  matching pair return `None`.
 - `find_last_option`, `find_last_projected_option`, `find_last_by_option`,
   `find_last_by_projected_option`, and the two `find_last_if_*_option` forms
   provide the same explicit absence state for last-match searches.
