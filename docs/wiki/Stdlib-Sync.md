@@ -12,6 +12,7 @@ Module file: `stdlib/std/sync.mla`
 - `AtomicI64` (shared 64-bit atomic integer)
 - `AtomicU64` (shared 64-bit unsigned atomic integer)
 - `AtomicU32` (native-width 32-bit unsigned atomic integer)
+- `AtomicU16` (16-bit unsigned atomic integer)
 - `AtomicI32` (native-width 32-bit signed atomic integer)
 - `AtomicBool` (shared atomic boolean value)
 - `AtomicFlag` (guaranteed lock-free boolean flag)
@@ -175,6 +176,18 @@ read-modify-write operations wrap modulo 2^32. Compare-exchange returns
 observed value after a failed comparison. The backend uses native-width atomic
 storage but does not promise lock-free operations. Notify after changing a
 waited-on value and close only after every thread has stopped using it.
+
+### AtomicU16
+
+`AtomicU16` provides C++20 [`std::atomic<std::uint16_t>`](Stdlib-Module-API) value semantics with
+ordered load/store/exchange, arithmetic and bitwise read-modify-write,
+compare-exchange, wait, and notifications. Arithmetic wraps modulo 2^16.
+`compare_exchange` returns `(exchanged, expected_after)` in a
+`result<tuple<bool, u16>, str8>`. The current opaque implementation uses the
+existing 32-bit atomic storage and a compare-exchange loop for 16-bit wrapping
+arithmetic; this gives atomic semantics but does not promise a lock-free
+16-bit object. Notify after changing a waited-on value and close only after
+all threads have stopped using it.
 
 ### AtomicI32
 
