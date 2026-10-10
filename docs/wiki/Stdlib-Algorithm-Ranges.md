@@ -55,6 +55,9 @@ fn example() {
   provide the same explicit absence state for last-match searches.
 - `find_last_if` and `find_last_if_not` return the last index accepted or
   rejected by a predicate, respectively, or `-1` when no element matches.
+- `find_last_if_not_option` and `find_last_if_not_projected_option` return the
+  last predicate-rejected index as `option<i64>`, using `None` when no element
+  is rejected (including an empty range).
 - `find_last_by(data, key, equivalent)` searches backward and returns the last
   index whose element matches a separate key under the supplied binary
   predicate, or `-1` when none matches.

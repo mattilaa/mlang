@@ -95,6 +95,8 @@ use std::algorithm::ranges::find_last_by_option;
 use std::algorithm::ranges::find_last_by_projected_option;
 use std::algorithm::ranges::find_last_if_option;
 use std::algorithm::ranges::find_last_if_projected_option;
+use std::algorithm::ranges::find_last_if_not_option;
+use std::algorithm::ranges::find_last_if_not_projected_option;
 use std::algorithm::ranges::find_by;
 use std::algorithm::ranges::find_by_projected;
 use std::algorithm::ranges::find_projected;
@@ -3841,10 +3843,19 @@ fn test_algorithm_ranges_optional_last_find_indices() {
     let last_projected: option<i64> =
         find_last_if_projected_option(values, key_is_three, tens);
     verify(last_projected.is_some() && last_projected.unwrap() == 4);
+    let last_rejected: option<i64> =
+        find_last_if_not_option(values, is_even);
+    verify(last_rejected.is_some() && last_rejected.unwrap() == 4);
+    let last_projected_rejected: option<i64> =
+        find_last_if_not_projected_option(values, key_is_three, tens);
+    verify(last_projected_rejected.is_some() &&
+           last_projected_rejected.unwrap() == 3);
 
     let empty: list<i32> = [];
     verify(find_last_option(empty, 1).is_none());
     verify(find_last_if_option(empty, is_even).is_none());
+    verify(find_last_if_not_option(empty, is_even).is_none());
+    verify(find_last_if_not_projected_option(empty, is_even, tens).is_none());
 }
 
 #[test]
