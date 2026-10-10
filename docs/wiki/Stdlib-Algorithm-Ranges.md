@@ -321,8 +321,9 @@ fn example() {
   lists do not expose iterators, `consumed` is the number of elements visited.
 - `fold_left_first(data, operation)` and `fold_right_last(data, operation)`
   seed the reduction from the first or last element. They return
-  [`option<T>`](Quick-Guide#types)—`None` for empty input and `Some(result)` otherwise. These are
-  eager counterparts to the C++23 [`std::ranges`](Stdlib-Module-API) fold algorithms.
+  `option<Output>`—`None` for empty input and `Some(result)` otherwise. The
+  initial element is widened to the operation's accumulator type when needed.
+  These are eager counterparts to the C++23 [`std::ranges`](Stdlib-Module-API) fold algorithms.
 - `fold_left_first_with_iter(data, operation)` returns
   `Some((consumed, accumulator))` for nonempty input and `None` for empty
   input. The output accumulator can differ from the input element type, which

@@ -4399,10 +4399,20 @@ fn test_algorithm_numeric_folds_without_initial_value() {
     };
     verify(left_value == 123 && right_value == 321);
 
+    let encode_wide_left = |acc: i64, value: i32| { return acc * 10 + value; };
+    let encode_wide_right = |value: i32, acc: i64| {
+        return i64(value) + acc * 10;
+    };
+    let wide_left: option<i64> = fold_left_first(values, encode_wide_left);
+    let wide_right: option<i64> = fold_right_last(values, encode_wide_right);
+    verify(wide_left.unwrap() == 123 && wide_right.unwrap() == 321);
+
     let empty: list<i32> = [];
     let empty_left: option<i32> = fold_left_first(empty, encode_left);
     let empty_right: option<i32> = fold_right_last(empty, encode_right);
     verify(empty_left.is_none() && empty_right.is_none());
+    verify(fold_left_first(empty, encode_wide_left).is_none());
+    verify(fold_right_last(empty, encode_wide_right).is_none());
 }
 
 #[test]
@@ -4439,6 +4449,14 @@ fn test_algorithm_ranges_folds() {
     let right_value: i32 = match right { Some(value) => value, None => 0 };
     verify(left_value == 123 && right_value == 321);
 
+    let encode_wide_right = |value: i32, acc: i64| {
+        return i64(value) + acc * 10;
+    };
+    let wide_left: option<i64> = ranges_fold_left_first(values, add_to_i64);
+    let wide_right: option<i64> =
+        ranges_fold_right_last(values, encode_wide_right);
+    verify(wide_left.unwrap() == 6 && wide_right.unwrap() == 321);
+
     let empty: list<i32> = [];
     verify(ranges_fold_left(empty, 17, encode_left) == 17);
     verify(ranges_fold_right(empty, 23, encode_right) == 23);
@@ -4450,6 +4468,8 @@ fn test_algorithm_ranges_folds() {
     verify(ranges_fold_left_first(empty, encode_left).is_none());
     verify(ranges_fold_left_first_with_iter(empty, encode_left).is_none());
     verify(ranges_fold_right_last(empty, encode_right).is_none());
+    verify(ranges_fold_left_first(empty, add_to_i64).is_none());
+    verify(ranges_fold_right_last(empty, encode_wide_right).is_none());
 
     let singleton: list<i32> = [7];
     let singleton_result: option<tuple<i64, i32>> =

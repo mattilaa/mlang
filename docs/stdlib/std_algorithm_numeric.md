@@ -30,8 +30,9 @@ Numeric sequence helpers for integer lists, including generic list folds.
 - `fold_right(data, init, operation)` applies `operation(element, accumulator)`
   from the last element to the first; it returns `init` for empty input.
 - `fold_left_first(data, operation)` and `fold_right_last(data, operation)` fold
-  without an initial value and return `option<T>` (`None` for empty input,
-  otherwise `Some(result)`), matching the C++23 ranges folds.
+  without an initial value and return `option<Output>` (`None` for empty input,
+  otherwise `Some(result)`). The input element type can widen to a distinct
+  operation accumulator type, matching the C++23 ranges folds.
 - `transform_reduce(data, init, reduce, project)` projects each element and
   reduces it in one pass. Its two-range overload transforms corresponding pairs
   and stops at the shorter input.
