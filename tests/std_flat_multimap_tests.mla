@@ -5,6 +5,13 @@ use std::testing::verify;
 use std::flat_multimap::FlatMultiMap;
 use std::flat_multimap::keys as flat_multimap_keys;
 use std::flat_multimap::values as flat_multimap_values;
+use std::flat_multimap::lower_bound_by;
+use std::flat_multimap::upper_bound_by;
+use std::flat_multimap::equal_range_by;
+use std::flat_multimap::count_by;
+use std::flat_multimap::contains_by;
+use std::flat_multimap::get_by;
+use std::flat_multimap::remove_by;
 use std::flat_multimap::erase_if;
 use std::flat_multimap::merge;
 use std::algorithm::ranges::zip;
@@ -41,6 +48,33 @@ fn test_flat_multimap_insert_lookup_and_duplicate_bounds() {
            value_snapshot[2] == 31 && value_snapshot[3] == 32);
     key_snapshot.push(9);
     verify(key_snapshot.len() == 6 && values.len() == 5);
+
+    let key_before_query = |stored: i32, query: i64| {
+        return stored < i32(query);
+    };
+    let query_before_key = |query: i64, stored: i32| {
+        return i32(query) < stored;
+    };
+    let query_three: i64 = 3;
+    let query_two: i64 = 2;
+    verify(lower_bound_by(values, query_three, key_before_query) == 1);
+    verify(upper_bound_by(values, query_three, query_before_key) == 4);
+    let matching: tuple<i64, i64> = equal_range_by(
+        values, query_three, key_before_query, query_before_key);
+    verify(matching.0 == 1 && matching.1 == 4);
+    verify(count_by(values, query_three, key_before_query,
+                    query_before_key) == 3);
+    verify(contains_by(values, query_three, key_before_query,
+                       query_before_key));
+    verify(!contains_by(values, query_two, key_before_query,
+                        query_before_key));
+    let matching_value: option<i32> = get_by(
+        values, query_three, key_before_query, query_before_key);
+    verify(matching_value.is_some() && matching_value.unwrap() == 30);
+    verify(remove_by(&mut values, query_three,
+                     key_before_query, query_before_key) == 3);
+    verify(count_by(values, query_three, key_before_query,
+                    query_before_key) == 0);
 }
 
 #[test]
