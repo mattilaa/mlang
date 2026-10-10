@@ -146,6 +146,14 @@ fn example() {
   multiplicities under an equivalence relation for same-typed ranges.
 - `lexicographical_compare` supports ranges with distinct mutually
   order-comparable element types.
+- `lexicographical_compare_three_way` returns a `LexicographicalOrder`
+  (`Less`, `Equivalent`, or `Greater`) instead of only a boolean, providing
+  the ordering result of C++20 `lexicographical_compare_three_way` without
+  requiring a compiler-specific comparison-category type.
+- `lexicographical_compare_three_way_by` accepts a strict comparator, while
+  `lexicographical_compare_three_way_projected` and
+  `lexicographical_compare_three_way_by_projected` support independent
+  projections for heterogeneous ranges.
 - `lexicographical_compare_by` performs the same range comparison with a
   caller-supplied strict ordering; equivalent elements continue to the next
   position and a matching prefix sorts before its extension.

@@ -184,6 +184,11 @@ use std::algorithm::ranges::ends_with_projected;
 use std::algorithm::ranges::ends_with_by;
 use std::algorithm::ranges::ends_with_by_projected;
 use std::algorithm::ranges::lexicographical_compare;
+use std::algorithm::ranges::LexicographicalOrder;
+use std::algorithm::ranges::lexicographical_compare_three_way;
+use std::algorithm::ranges::lexicographical_compare_three_way_by;
+use std::algorithm::ranges::lexicographical_compare_three_way_projected;
+use std::algorithm::ranges::lexicographical_compare_three_way_by_projected;
 use std::algorithm::ranges::lexicographical_compare_projected;
 use std::algorithm::ranges::lexicographical_compare_by;
 use std::algorithm::ranges::lexicographical_compare_by_projected;
@@ -1490,6 +1495,42 @@ fn test_algorithm_ranges_generic_lexicographical_compare() {
     let mixed: list<i64> = [1, 2, 10];
     verify(lexicographical_compare(first, mixed));
     verify(lexicographical_compare(mixed, first) == false);
+}
+
+#[test]
+fn test_algorithm_ranges_lexicographical_compare_three_way() {
+    let values: list<i32> = [1, 2, 4];
+    let before: list<i64> = [1, 2, 3];
+    let after: list<i32> = [1, 2, 5];
+    let equal: list<i32> = [1, 2, 4];
+    let short: list<i32> = [1, 2];
+    let empty: list<i32> = [];
+
+    verify(lexicographical_compare_three_way(values, before) ==
+           LexicographicalOrder::Greater);
+    verify(lexicographical_compare_three_way(values, after) ==
+           LexicographicalOrder::Less);
+    verify(lexicographical_compare_three_way(values, equal) ==
+           LexicographicalOrder::Equivalent);
+    verify(lexicographical_compare_three_way(values, short) ==
+           LexicographicalOrder::Greater);
+    verify(lexicographical_compare_three_way(empty, values) ==
+           LexicographicalOrder::Less);
+
+    let reverse_less = |left: i32, right: i32| { return left > right; };
+    verify(lexicographical_compare_three_way_by(values, before, reverse_less) ==
+           LexicographicalOrder::Less);
+
+    let project = |value: i32| { return value / 10; };
+    let projected_left: list<i32> = [19, 25];
+    let projected_right: list<i64> = [11, 29];
+    let project_wide = |value: i64| { return i32(value / 10); };
+    verify(lexicographical_compare_three_way_projected(
+        projected_left, projected_right, project, project_wide) ==
+           LexicographicalOrder::Equivalent);
+    verify(lexicographical_compare_three_way_by_projected(
+        projected_left, projected_right, reverse_less,
+        project, project_wide) == LexicographicalOrder::Equivalent);
 }
 
 #[test]
