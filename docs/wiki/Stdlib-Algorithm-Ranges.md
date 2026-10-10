@@ -158,6 +158,9 @@ fn example() {
 - `min_element_value` and `max_element_value` return the selected value for a
   nonempty input. Use the index forms to handle empty ranges; value forms keep
   the first value on ties.
+- `min_element`, `max_element`, and `minmax_element` return the selected value
+  or values in `Some`, and return `None` for empty ranges. The minmax form
+  keeps the first minimum and last maximum, matching the index/value forms.
 - `minmax_element_index(data)` returns `(first_minimum, last_maximum)` in one
   pass, or `(-1, -1)` for empty input. The comparator form
   `minmax_element_index_by(data, less)` applies the same tie rules under a
@@ -513,6 +516,9 @@ fn example() {
   that combined ordering, and output values retain their original elements.
 - `replace(data, old, new)` copies a range while replacing every value equal
   to `old`; the original range is unchanged.
+- `replace_if(data, predicate, new)` copies a range, replacing values accepted
+  by the predicate. `replace_if_projected` applies the predicate to a projected
+  key. Both preserve source order and leave the original range unchanged.
 - `remove_projected` and `remove_copy_projected` filter out elements whose
   projected key matches a value. `replace_projected` and
   `replace_copy_projected` replace elements by projected-key equality; all

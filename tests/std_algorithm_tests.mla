@@ -352,6 +352,9 @@ use std::algorithm::ranges::minmax_element_index;
 use std::algorithm::ranges::min_element_value;
 use std::algorithm::ranges::max_element_value;
 use std::algorithm::ranges::minmax_element_value;
+use std::algorithm::ranges::min_element;
+use std::algorithm::ranges::max_element;
+use std::algorithm::ranges::minmax_element;
 use std::algorithm::ranges::min_element_index_by;
 use std::algorithm::ranges::max_element_index_by;
 use std::algorithm::ranges::minmax_element_index_by;
@@ -2800,6 +2803,33 @@ fn test_algorithm_ranges_generic_replace() {
     let words: list<str8> = ["red", "blue", "red"];
     let renamed: list<str8> = replace(words, "red", "green");
     verify(renamed[0] == "green" && renamed[1] == "blue");
+
+}
+
+#[test]
+fn test_algorithm_ranges_replace_if() {
+    let values: list<i32> = [1, 2, 2, 3, 2];
+    let is_even = |value: i32| { return value % 2 == 0; };
+    let replacement: i32 = 0;
+    let replaced: list<i32> = replace_if(values, is_even, replacement);
+    verify(replaced.len() == 5);
+    verify(replaced[0] == 1 && replaced[1] == 0 && replaced[2] == 0);
+    verify(replaced[3] == 3 && replaced[4] == 0);
+    verify(values[1] == 2 && values[2] == 2);
+    let empty: list<i32> = [];
+    let empty_replaced: list<i32> = replace_if(empty, is_even, replacement);
+    verify(empty_replaced.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_replace_if_projected() {
+    let values: list<i32> = [11, 22, 29, 31];
+    let tens = |value: i32| { return value / 10; };
+    let is_two = |key: i32| { return key == 2; };
+    let replaced: list<i32> = replace_if_projected(values, is_two, 99, tens);
+    verify(replaced.len() == 4);
+    verify(replaced[0] == 11 && replaced[1] == 99 &&
+           replaced[2] == 99 && replaced[3] == 31);
 }
 
 #[test]
@@ -2963,6 +2993,14 @@ fn test_algorithm_ranges_generic_element_extrema() {
 #[test]
 fn test_algorithm_ranges_generic_element_values() {
     let values: list<i32> = [8, -3, 11, 11, 4];
+    let safe_min: option<i32> = min_element(values);
+    let safe_max: option<i32> = max_element(values);
+    let safe_extrema: option<tuple<i32, i32>> = minmax_element(values);
+    verify(safe_min.is_some() && safe_min.unwrap() == -3);
+    verify(safe_max.is_some() && safe_max.unwrap() == 11);
+    verify(safe_extrema.is_some());
+    let safe_pair: tuple<i32, i32> = safe_extrema.unwrap();
+    verify(safe_pair.0 == -3 && safe_pair.1 == 11);
     verify(min_element_value(values) == -3);
     verify(max_element_value(values) == 11);
     let values_extrema: tuple<i32, i32> = minmax_element_value(values);
@@ -2970,6 +3008,10 @@ fn test_algorithm_ranges_generic_element_values() {
     let words: list<str8> = ["pear", "apple", "plum"];
     verify(min_element_value(words) == "apple");
     verify(max_element_value(words) == "plum");
+    let empty: list<i32> = [];
+    verify(min_element(empty).is_none());
+    verify(max_element(empty).is_none());
+    verify(minmax_element(empty).is_none());
 }
 
 #[test]
