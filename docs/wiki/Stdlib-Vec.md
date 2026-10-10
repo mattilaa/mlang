@@ -31,9 +31,9 @@ operations for in-place Vec updates.
   rejected at compile time, otherwise empty containers abort at runtime
 - `v.clear()` — remove all elements (Vec remains valid for further pushes)
 - `erase(v, value) -> i64` — remove all matching values (C++20
-  `std::erase(vector, value)`); returns the number removed
+  [`std::erase(vector, value)`](Stdlib-Module-API)); returns the number removed
 - `erase_if(v, predicate) -> i64` — remove values accepted by a predicate
-  (C++20 `std::erase_if(vector, predicate)`); preserves survivor order and
+  (C++20 [`std::erase_if(vector, predicate)`](Stdlib-Module-API)); preserves survivor order and
   returns the number removed
 - `append_range(&mut v, source) -> i64` — append a snapshot of `source`
   (C++23 `vector::append_range`); returns the appended count

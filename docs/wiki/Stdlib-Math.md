@@ -15,9 +15,13 @@ Module file: `stdlib/std/math.mla`
 - `clamp(x, low, high)`
 - `pow(a, b)`
 - `sqrt(x)`
-- `hypot(x, y)` for [`f32`](Quick-Guide#types) and [`f64`](Quick-Guide#types), computing a stable Euclidean norm without squaring large or tiny arguments directly (C++20 [`std::hypot`](Stdlib-Module-API))
-- `fma(x, y, z)` for [`f32`](Quick-Guide#types) and [`f64`](Quick-Guide#types), computing `x*y+z` with one final rounding (C++ [`std::fma`](Stdlib-Module-API))
-- `nextafter(x, y)`, `isfinite(x)`, `isinf(x)`, `isnan(x)`, and `signbit(x)` for both floating types, exposing representable-neighbor and IEEE-754 classification operations from `<cmath>`
+- `hypot(x, y)` for [`f32`](Quick-Guide#types) and [`f64`](Quick-Guide#types), computing a stable Euclidean norm without
+  squaring large or tiny arguments directly (C++20 [`std::hypot`](Stdlib-Module-API))
+- `fma(x, y, z)` for [`f32`](Quick-Guide#types) and [`f64`](Quick-Guide#types), computing `x*y+z` with one final
+  rounding (C++ [`std::fma`](Stdlib-Module-API))
+- `nextafter(x, y)`, `isfinite(x)`, `isinf(x)`, `isnan(x)`, and `signbit(x)`
+  for both floating types, exposing representable-neighbor and IEEE-754
+  classification operations from `<cmath>`
 - `sin(x)`
 - `cos(x)`
 - `tan(x)`
@@ -42,7 +46,7 @@ arithmetic operators `+`, `-`, `*`, `/`, and unary `-`. Division uses the
 conjugate formula and is intended for numeric component types; division by a
 zero complex value follows the component type's normal division behavior.
 `norm()` aliases the squared-magnitude `norm_sqr()` method, and `arg()` returns
-the phase angle as `f64` using the `atan2(y, x)` helpers.
+the phase angle as [`f64`](Quick-Guide#types) using the `atan2(y, x)` helpers.
 `polar(magnitude, phase)` constructs a floating-point complex value from its
 magnitude and phase in radians.
 Floating-point overloads of `exp`, `log`, and `sqrt` provide the usual
@@ -50,4 +54,4 @@ principal complex exponential, logarithm, and square root; `log` and `sqrt`
 use a scaled Euclidean magnitude to avoid the direct `re*re + im*im` overflow.
 `sin`, `cos`, `tan`, `sinh`, `cosh`, and `tanh` are also available for both
 floating complex types. Scalar `sinh` and `cosh` overloads are provided for
-`f32` and `f64`.
+[`f32`](Quick-Guide#types) and [`f64`](Quick-Guide#types).

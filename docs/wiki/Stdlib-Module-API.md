@@ -48,6 +48,7 @@ mod std::jsonrpc;
 mod std::limits;
 mod std::log;
 mod std::math;
+mod std::numbers;
 mod std::matrix;
 mod std::multiarray;
 mod std::mutmultiarray;
@@ -64,6 +65,10 @@ mod std::serde;
 mod std::simd;
 mod std::span;
 mod std::mdspan;
+mod std::flat_map;
+mod std::flat_set;
+mod std::flat_multiset;
+mod std::flat_multimap;
 mod std::strbuf;
 mod std::sync;
 mod std::term;
@@ -139,6 +144,7 @@ The source-of-truth implementation files are:
 - [std::midi](Stdlib-Midi)
 - [std::algorithm::numeric](Stdlib-Algorithm-Numeric)
 - [std::math](Stdlib-Math)
+- [std::numbers](Stdlib-Numbers)
 - [std::rand](Stdlib-Rand)
 - [std::ringbuffer](https://github.com/mattilaa/mlang/blob/main/docs/stdlib/std_ringbuffer.md)
 - [std::simd](Stdlib-Simd)
@@ -161,6 +167,10 @@ The source-of-truth implementation files are:
 - [std::serde](Stdlib-Serde)
 - [std::span](Stdlib-Span)
 - [std::mdspan](Stdlib-Mdspan)
+- [std::flat_map](Stdlib-Flat-Map)
+- [std::flat_set](Stdlib-Flat-Set)
+- [std::flat_multiset](Stdlib-Flat-Multiset)
+- [std::flat_multimap](Stdlib-Flat-Multimap)
 - [std::strbuf](Stdlib-Strbuf)
 - [std::unordered](Stdlib-Unordered)
 - [std::vec](Stdlib-Vec)
@@ -176,7 +186,6 @@ The source-of-truth implementation files are:
 - [std::exceptions](Stdlib-Exceptions)
 - [std::platform](Stdlib-Platform)
 - [std::stop_token](Stdlib-Stop-Token)
-- [std::jthread](Stdlib-Jthread)
 - [std::sync](Stdlib-Sync)
 - [std::testing](Stdlib-Testing)
 - [std::thread](Stdlib-Thread)
