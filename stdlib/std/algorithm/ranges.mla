@@ -355,6 +355,52 @@ pub fn find_first_of_by_projected(
     return -1;
 }
 
+/// @brief Return the first candidate match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn find_first_of_option(data: &list<T>, candidates: &list<U>)
+    -> option<i64> {
+    let index: i64 = find_first_of(data, candidates);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected candidate match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, DataProjection, CandidateProjection>
+pub fn find_first_of_projected_option(
+    data: &list<T>, candidates: &list<U>,
+    data_projection: DataProjection,
+    candidate_projection: CandidateProjection) -> option<i64> {
+    let index: i64 = find_first_of_projected(
+        data, candidates, data_projection, candidate_projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first equivalent candidate match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn find_first_of_by_option(data: &list<T>, candidates: &list<U>,
+                               equivalent: Equivalent) -> option<i64> {
+    let index: i64 = find_first_of_by(data, candidates, equivalent);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected equivalent candidate match as an option.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, DataProjection, CandidateProjection>
+pub fn find_first_of_by_projected_option(
+    data: &list<T>, candidates: &list<U>, equivalent: Equivalent,
+    data_projection: DataProjection, candidate_projection: CandidateProjection)
+    -> option<i64> {
+    let index: i64 = find_first_of_by_projected(
+        data, candidates, equivalent, data_projection, candidate_projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
 /// @brief Return whether sorted `range` contains sorted `subset`.
 /// Duplicate multiplicities matter; both inputs must be nondecreasing.
 /// C++20 `std::ranges::includes` equivalent.

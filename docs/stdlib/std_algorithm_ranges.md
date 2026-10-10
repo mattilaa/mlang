@@ -80,6 +80,10 @@ fn example() {
   binary equivalence predicate and supports different element types.
 - `find_first_of_by_projected` adds independent projections for the data and
   candidate ranges before applying the binary equivalence predicate.
+- `find_first_of_option`, `find_first_of_projected_option`,
+  `find_first_of_by_option`, and `find_first_of_by_projected_option` return
+  the first candidate match as `option<i64>`, using `None` when no candidate
+  matches (including an empty candidate range).
 - `find_projected`, `count_projected`, and `contains_projected` apply a unary
   projection before comparing with the search value, covering the common
   C++20 ranges projection use case without requiring a custom predicate.
