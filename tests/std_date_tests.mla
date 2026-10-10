@@ -34,6 +34,7 @@ use std::date::from_sys_days;
 use std::date::weekday_from_sys_days;
 use std::date::add_civil_days;
 use std::date::days_between;
+use std::date::add_civil_years;
 use std::date::add_civil_months;
 use std::date::nth_weekday_of_month;
 use std::date::last_weekday_of_month;
@@ -203,6 +204,30 @@ fn test_civil_date_month_arithmetic() {
     };
     verify(add_civil_months(max_date, 1).is_none());
     verify(add_civil_months(min_date, -1).is_none());
+}
+
+#[test]
+fn test_civil_date_year_arithmetic() {
+    let leap_day: CivilDate = CivilDate { year: 2024, month: 2, day: 29 };
+    let common_year: CivilDate = add_civil_years(leap_day, 1).unwrap();
+    verify(common_year.year == 2025 && common_year.month == 2 &&
+           common_year.day == 29);
+    verify(!is_valid_civil_date(common_year.year, common_year.month,
+                                common_year.day));
+    let leap_year: CivilDate = add_civil_years(leap_day, -4).unwrap();
+    verify(leap_year.year == 2020 &&
+           is_valid_civil_date(leap_year.year, leap_year.month, leap_year.day));
+
+    let invalid: CivilDate = CivilDate { year: 2023, month: 2, day: 29 };
+    verify(add_civil_years(invalid, 1).is_none());
+    let max_date: CivilDate = CivilDate {
+        year: 2147483647, month: 12, day: 31
+    };
+    let min_date: CivilDate = CivilDate {
+        year: -2147483648, month: 1, day: 1
+    };
+    verify(add_civil_years(max_date, 1).is_none());
+    verify(add_civil_years(min_date, -1).is_none());
 }
 
 #[test]

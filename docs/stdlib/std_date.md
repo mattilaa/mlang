@@ -58,6 +58,9 @@ Module file: `stdlib/std/date.mla`
   while preserving the day field, like C++20 `year_month_day + months`. The
   result may be invalid when the destination month is shorter; validate it
   with `is_valid_civil_date` before converting it to epoch days.
+- `add_civil_years(date, offset) -> option<civil_date>` adds years while
+  preserving month and day, like C++20 `year_month_day + years`. Moving a leap
+  day to a common year can produce an invalid date, which must be checked.
 
 `std::date` supports Unix UTC timestamps in whole seconds. Timezone support is
 provided as fixed UTC offsets (`utc_offset`), system-local conversions, and named

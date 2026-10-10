@@ -245,6 +245,28 @@ pub fn days_between(first: CivilDate, last: CivilDate) -> option<i64> {
     return Some<i64>(last_day.unwrap() - first_day.unwrap());
 }
 
+/// @brief Add calendar years while preserving the month and day fields.
+/// Invalid input or a year outside `i32` returns `None`. Like C++20
+/// `year_month_day + years`, a leap day may become invalid in a common year;
+/// validate the returned date with `is_valid_civil_date`.
+pub fn add_civil_years(date: CivilDate, offset: i64) -> option<CivilDate> {
+    if !is_valid_civil_date(date.year, date.month, date.day) {
+        return None<CivilDate>();
+    }
+    let current_year: i64 = i64(date.year);
+    let minimum_year: i64 = -2147483648;
+    let maximum_year: i64 = 2147483647;
+    if offset > 0 && current_year > maximum_year - offset {
+        return None<CivilDate>();
+    }
+    if offset < 0 && current_year < minimum_year - offset {
+        return None<CivilDate>();
+    }
+    return Some<CivilDate>(CivilDate {
+        year: i32(current_year + offset), month: date.month, day: date.day
+    });
+}
+
 /// @brief Add calendar months while preserving the day field.
 /// Invalid input or a year outside `i32` returns `None`. As with C++20
 /// `year_month_day + months`, the returned date can be invalid when the target
