@@ -61,6 +61,7 @@ use std::date::add_civil_months;
 use std::date::is_valid_year_month;
 use std::date::make_year_month;
 use std::date::add_year_month_months;
+use std::date::months_between;
 use std::date::add_year_month_years;
 use std::date::year_month_first_day;
 use std::date::year_month_last_day;
@@ -78,6 +79,7 @@ use std::date::is_valid_year;
 use std::date::make_year;
 use std::date::year_number;
 use std::date::add_years;
+use std::date::years_between;
 use std::date::year_is_leap;
 use std::date::days_in_year;
 use std::date::make_year_month_from_parts;
@@ -293,6 +295,13 @@ fn test_year_month_value_and_arithmetic() {
     verify(!is_valid_year_month(YearMonth { year: 2024, month: 13 }));
     verify(make_year_month(2024, 0).is_none());
     verify(year_month_first_day(YearMonth { year: 2024, month: 13 }).is_none());
+    verify(months_between(YearMonth { year: 2023, month: 12 },
+                          YearMonth { year: 2024, month: 2 }).unwrap() == 2);
+    verify(months_between(YearMonth { year: 2024, month: 2 },
+                          YearMonth { year: 2023, month: 12 }).unwrap() == -2);
+    verify(months_between(YearMonth { year: 0, month: 12 },
+                          YearMonth { year: 1, month: 1 }).unwrap() == 1);
+    verify(months_between(YearMonth { year: 2024, month: 13 }, january).is_none());
 }
 
 #[test]
@@ -370,6 +379,9 @@ fn test_typed_chrono_year_values() {
     verify(days_in_year(common) == 365);
 
     verify(year_number(add_years(leap, -4).unwrap()) == 1996);
+    verify(years_between(make_year(-1).unwrap(), make_year(1).unwrap()).unwrap() == 2);
+    verify(years_between(make_year(1).unwrap(), make_year(-1).unwrap()).unwrap() == -2);
+    verify(years_between(Year { value: 40000 }, leap).is_none());
     verify(add_years(make_year(32767).unwrap(), 1).is_none());
     verify(add_years(make_year(-32767).unwrap(), -1).is_none());
     verify(add_years(leap, 9223372036854775807).is_none());

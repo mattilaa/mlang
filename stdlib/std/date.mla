@@ -176,6 +176,15 @@ pub fn add_years(value: Year, offset: i64) -> option<Year> {
     return Some<Year>(Year { value: i32(current + offset) });
 }
 
+/// @brief Return the signed year distance from `first` to `last`.
+/// Invalid chrono year values return `None`.
+pub fn years_between(first: Year, last: Year) -> option<i64> {
+    if !is_valid_year(first.value) || !is_valid_year(last.value) {
+        return None<i64>();
+    }
+    return Some<i64>(i64(last.value) - i64(first.value));
+}
+
 /// @brief Whether a chrono year is a Gregorian leap year.
 pub fn year_is_leap(value: Year) -> bool {
     return is_valid_year(value.value) && is_leap_year(value.value);
@@ -414,6 +423,17 @@ pub fn add_year_month_months(value: YearMonth, offset: i64)
     return Some<YearMonth>(YearMonth {
         year: i32(target_year), month: i32(target_month_in_year)
     });
+}
+
+/// @brief Return the signed month distance from `first` to `last`.
+/// Invalid month fields return `None`; month normalization uses year zero.
+pub fn months_between(first: YearMonth, last: YearMonth) -> option<i64> {
+    if !is_valid_year_month(first) || !is_valid_year_month(last) {
+        return None<i64>();
+    }
+    let first_index: i64 = i64(first.year) * 12 + i64(first.month) - 1;
+    let last_index: i64 = i64(last.year) * 12 + i64(last.month) - 1;
+    return Some<i64>(last_index - first_index);
 }
 
 /// @brief Add calendar years while preserving the month.

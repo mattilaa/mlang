@@ -45,6 +45,8 @@ Module file: `stdlib/std/date.mla`
 - `make_year(value) -> option<Year>` validates the C++20 chrono year range;
   `year_number`, `is_valid_year`, `add_years`, `year_is_leap`, and
   `days_in_year` provide checked conversion, arithmetic, and calendar queries.
+- `years_between(first, last) -> option<i64>` returns the signed year
+  difference (`last - first`) for valid typed years.
 - `make_year_month_from_parts(year, month)` combines typed `Year` and `Month`
   values into a `YearMonth`.
 - `days_in_month(year: i32, month: i32) -> i32`
@@ -70,6 +72,8 @@ Module file: `stdlib/std/date.mla`
   years, and `add_year_month_years(value, offset)` preserves the month while
   shifting the year. Invalid months and results outside [`i32`](Quick-Guide#types) years return
   `None`.
+- `months_between(first, last) -> option<i64>` returns the signed number of
+  calendar months from the first valid `YearMonth` to the second.
 - `year_month_first_day(value)` and `year_month_last_day(value)` return the
   first or final `CivilDate` of a valid month, including leap-year February.
 - `make_month_day(month, day)` validates a recurring month/day pair; February
