@@ -4,6 +4,12 @@ use std::testing::verify;
 use std::flat_multiset::FlatMultiSet;
 use std::flat_multiset::erase_if;
 use std::flat_multiset::merge;
+use std::flat_multiset::lower_bound_by;
+use std::flat_multiset::upper_bound_by;
+use std::flat_multiset::equal_range_by;
+use std::flat_multiset::count_by;
+use std::flat_multiset::contains_by;
+use std::flat_multiset::remove_by;
 
 #[test]
 fn test_flat_multiset_duplicate_lookup_and_bounds() {
@@ -22,6 +28,28 @@ fn test_flat_multiset_duplicate_lookup_and_bounds() {
     verify(equal.0 == 1 && equal.1 == 4 && values.count(3) == 3);
     verify(absent.0 == 1 && absent.1 == 1 && values.count(2) == 0);
     verify(values.contains(3) && !values.contains(2));
+    let key_before_query = |stored: i32, query: i64| {
+        return stored < i32(query);
+    };
+    let query_before_key = |query: i64, stored: i32| {
+        return i32(query) < stored;
+    };
+    let query_three: i64 = 3;
+    let query_two: i64 = 2;
+    verify(lower_bound_by(values, query_three, key_before_query) == 1);
+    verify(upper_bound_by(values, query_three, query_before_key) == 4);
+    let matching: tuple<i64, i64> = equal_range_by(
+        values, query_three, key_before_query, query_before_key);
+    verify(matching.0 == 1 && matching.1 == 4);
+    verify(count_by(values, query_three, key_before_query,
+                    query_before_key) == 3);
+    verify(contains_by(values, query_three, key_before_query,
+                       query_before_key));
+    verify(!contains_by(values, query_two, key_before_query,
+                        query_before_key));
+    verify(remove_by(&mut values, query_three,
+                     key_before_query, query_before_key) == 3);
+    verify(!values.contains(3));
 }
 
 #[test]
