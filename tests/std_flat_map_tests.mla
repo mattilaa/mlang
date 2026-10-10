@@ -1,14 +1,22 @@
 mod std::testing;
 mod std::flat_map;
 mod std::algorithm::ranges;
+mod std::strbuf;
 use std::testing::verify;
 use std::testing::verify_eq_i32;
 use std::flat_map::FlatMap;
 use std::flat_map::keys as flat_map_keys;
 use std::flat_map::values as flat_map_values;
+use std::flat_map::lower_bound_by;
+use std::flat_map::upper_bound_by;
+use std::flat_map::equal_range_by;
+use std::flat_map::contains_by;
+use std::flat_map::get_by;
+use std::flat_map::remove_by;
 use std::flat_map::erase_if;
 use std::flat_map::merge;
 use std::algorithm::ranges::zip;
+use std::strbuf::eq;
 
 #[test]
 fn test_flat_map_sorted_insert_lookup_and_replace() {
@@ -83,6 +91,47 @@ fn test_flat_map_try_emplace_and_insert_or_assign() {
     verify(newly_inserted.0 == 0 && newly_inserted.1);
     verify(values.len() == 4 && values.key_at(0) == 1 &&
            values.value_at(2) == 31 && values.key_at(3) == 4);
+}
+
+#[test]
+fn test_flat_map_heterogeneous_lookup() {
+    var values: FlatMap<i32, str8> = FlatMap<i32, str8>::new();
+    values.insert(10, "ten");
+    values.insert(30, "thirty");
+    values.insert(50, "fifty");
+    let key_before_query = |stored: i32, query: i64| {
+        return stored < i32(query);
+    };
+    let query_before_key = |query: i64, stored: i32| {
+        return i32(query) < stored;
+    };
+    let query_thirty: i64 = 30;
+    let query_thirty_one: i64 = 31;
+    let query_fifty: i64 = 50;
+    let query_forty: i64 = 40;
+    let query_ten: i64 = 10;
+
+    verify(lower_bound_by(values, query_thirty, key_before_query) == 1);
+    verify(lower_bound_by(values, query_thirty_one, key_before_query) == 2);
+    verify(upper_bound_by(values, query_thirty, query_before_key) == 2);
+    let present: tuple<i64, i64> = equal_range_by(
+        values, query_thirty, key_before_query, query_before_key);
+    let absent: tuple<i64, i64> = equal_range_by(
+        values, query_thirty_one, key_before_query, query_before_key);
+    verify(present.0 == 1 && present.1 == 2);
+    verify(absent.0 == 2 && absent.1 == 2);
+    verify(contains_by(values, query_fifty, key_before_query,
+                       query_before_key));
+    verify(!contains_by(values, query_forty, key_before_query,
+                        query_before_key));
+    let found: option<str8> = get_by(
+        values, query_thirty, key_before_query, query_before_key);
+    verify(found.is_some() && eq(found.unwrap(), "thirty") == 1);
+    verify(remove_by(&mut values, query_ten,
+                     key_before_query, query_before_key));
+    verify(!remove_by(&mut values, query_ten,
+                      key_before_query, query_before_key));
+    verify(values.len() == 2 && values.key_at(0) == 30);
 }
 
 #[test]
