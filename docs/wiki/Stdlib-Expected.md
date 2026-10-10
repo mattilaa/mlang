@@ -16,6 +16,8 @@ use std::expected::and_then;
 use std::expected::or_else;
 use std::expected::value_or;
 use std::expected::value_or_else;
+use std::expected::error_or;
+use std::expected::error_or_else;
 
 fn example() {
     let parsed: result<i32, str8> = Ok<i32, str8>(21);
@@ -56,6 +58,10 @@ fn example() {
   evaluated before the call.
 - `value_or_else(input, fallback)` has the same result but lazily invokes its
   zero-argument closure only for `Err` (a convenience beyond the C++23 API).
+- `error_or(input, fallback)` returns the error for `Err`, or the supplied
+  fallback error for `Ok`, matching C++23 `expected::error_or`.
+- `error_or_else(input, fallback)` lazily invokes a zero-argument closure only
+  for `Ok`, complementing `error_or` when computing the fallback is costly.
 
 These are free functions because Mlang's [`result<T, E>`](Quick-Guide#types) is a built-in generic
 sum type rather than an importable class. They provide the value/error mapping

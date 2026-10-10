@@ -82,3 +82,25 @@ pub fn value_or_else(input: result<T, E>, fallback: Fallback) -> T {
     }
     return fallback();
 }
+
+/// @brief Return the error or the supplied fallback error.
+/// C++23 `std::expected::error_or` equivalent.
+/// @ingroup expected
+generic<T, E>
+pub fn error_or(input: result<T, E>, fallback: E) -> E {
+    if input.is_err() {
+        return input.unwrap_err();
+    }
+    return fallback;
+}
+
+/// @brief Return the error or lazily compute a fallback error.
+/// This convenience invokes the closure only when the input is successful.
+/// @ingroup expected
+generic<T, E, Fallback>
+pub fn error_or_else(input: result<T, E>, fallback: Fallback) -> E {
+    if input.is_err() {
+        return input.unwrap_err();
+    }
+    return fallback();
+}

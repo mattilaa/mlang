@@ -8,6 +8,8 @@ use std::expected::and_then;
 use std::expected::or_else;
 use std::expected::value_or;
 use std::expected::value_or_else;
+use std::expected::error_or;
+use std::expected::error_or_else;
 use std::strbuf::len;
 
 #[test]
@@ -84,5 +86,24 @@ fn test_expected_value_fallbacks() {
     verify(value_or_else(successful, fallback) == 5);
     verify(fallback_calls == 0);
     verify(value_or_else(failed, fallback) == 13);
+    verify(fallback_calls == 1);
+}
+
+#[test]
+fn test_expected_error_fallbacks() {
+    let successful: result<i32, str8> = Ok<i32, str8>(5);
+    let failed: result<i32, str8> = Err<i32, str8>("error");
+    let fallback: str8 = "fallback";
+    verify(len(error_or(successful, fallback)) == 8);
+    verify(len(error_or(failed, fallback)) == 5);
+
+    var fallback_calls: i32 = 0;
+    let make_fallback = || {
+        fallback_calls = fallback_calls + 1;
+        return "generated";
+    };
+    verify(len(error_or_else(failed, make_fallback)) == 5);
+    verify(fallback_calls == 0);
+    verify(len(error_or_else(successful, make_fallback)) == 9);
     verify(fallback_calls == 1);
 }
