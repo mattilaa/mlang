@@ -37,6 +37,12 @@ pub struct Year {
     var value: i32;
 };
 
+/// @brief Day-of-month field like C++20 `std::chrono::day`.
+/// Arithmetic can produce zero, which is representable but fails `is_valid_day`.
+pub struct Day {
+    var value: i32;
+};
+
 /// @brief Recurring month/day pair, like C++20 `std::chrono::month_day`.
 /// February 29 is representable and resolves only in leap years.
 pub struct MonthDay {
@@ -236,6 +242,48 @@ pub fn add_months_to_month(value: Month, offset: i64) -> option<Month> {
 pub fn month_days(value: Month, year: i32) -> i32 {
     if !is_valid_month(value) { return 0; }
     return days_in_month(year, month_number(value));
+}
+
+/// @brief Whether a day component is in the standard calendar range 1..31.
+pub fn is_valid_day(value: Day) -> bool {
+    return value.value >= 1 && value.value <= 31;
+}
+
+/// @brief Construct a checked day-of-month component.
+pub fn make_day(value: i32) -> option<Day> {
+    if value < 1 || value > 31 { return None<Day>(); }
+    return Some<Day>(Day { value: value });
+}
+
+/// @brief Return a day component's numeric value.
+pub fn day_number(value: Day) -> i32 {
+    return value.value;
+}
+
+/// @brief Add signed days with the modulo-32 behavior of `chrono::day`.
+/// The result may be day zero, which is representable but not a valid date day.
+pub fn add_days_to_day(value: Day, offset: i64) -> Day {
+    let current: i64 = i64(value.value) % 32;
+    let delta: i64 = offset % 32;
+    var shifted: i64 = (current + delta) % 32;
+    if shifted < 0 { shifted = shifted + 32; }
+    return Day { value: i32(shifted) };
+}
+
+/// @brief Construct a civil date from checked chrono year/month/day fields.
+pub fn make_civil_date_from_parts(year: Year, month: Month, day: Day)
+    -> option<CivilDate> {
+    if !is_valid_year(year.value) || !is_valid_month(month) ||
+       !is_valid_day(day) {
+        return None<CivilDate>();
+    }
+    let numeric_month: i32 = month_number(month);
+    if !is_valid_civil_date(year.value, numeric_month, day.value) {
+        return None<CivilDate>();
+    }
+    return Some<CivilDate>(CivilDate {
+        year: year.value, month: numeric_month, day: day.value
+    });
 }
 
 /// @brief Return whether the fields form a valid proleptic Gregorian date.

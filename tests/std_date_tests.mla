@@ -9,6 +9,7 @@ use std::date::MonthDay;
 use std::date::MonthDayLast;
 use std::date::Month;
 use std::date::Year;
+use std::date::Day;
 use std::date::IsoWeekDate;
 use std::date::Weekday;
 use std::date::YearMonthWeekday;
@@ -78,6 +79,11 @@ use std::date::add_years;
 use std::date::year_is_leap;
 use std::date::days_in_year;
 use std::date::make_year_month_from_parts;
+use std::date::is_valid_day;
+use std::date::make_day;
+use std::date::day_number;
+use std::date::add_days_to_day;
+use std::date::make_civil_date_from_parts;
 use std::date::nth_weekday_of_month;
 use std::date::last_weekday_of_month;
 use std::date::to_iso_week_date;
@@ -369,6 +375,33 @@ fn test_typed_chrono_year_values() {
     verify(february.year == 2000 && february.month == 2);
     verify(make_year_month_from_parts(
         Year { value: 50000 }, Month::February).is_none());
+}
+
+#[test]
+fn test_typed_chrono_day_values() {
+    verify(make_day(0).is_none());
+    verify(make_day(32).is_none());
+    let first: Day = make_day(1).unwrap();
+    let last: Day = make_day(31).unwrap();
+    verify(is_valid_day(first) && day_number(first) == 1);
+    verify(is_valid_day(last) && day_number(last) == 31);
+
+    let wraps_to_zero: Day = add_days_to_day(last, 1);
+    verify(day_number(wraps_to_zero) == 0 && !is_valid_day(wraps_to_zero));
+    verify(day_number(add_days_to_day(first, -1)) == 0);
+    verify(day_number(add_days_to_day(first, 9223372036854775807)) == 0);
+    verify(day_number(add_days_to_day(first, -9223372036854775807 - 1)) == 1);
+
+    let year: Year = make_year(2024).unwrap();
+    let february: Month = Month::February;
+    let leap_date: CivilDate = make_civil_date_from_parts(
+        year, february, make_day(29).unwrap()).unwrap();
+    verify(leap_date.year == 2024 && leap_date.month == 2 &&
+           leap_date.day == 29);
+    verify(make_civil_date_from_parts(
+        make_year(2023).unwrap(), february, make_day(29).unwrap()).is_none());
+    verify(make_civil_date_from_parts(
+        year, Month::April, make_day(31).unwrap()).is_none());
 }
 
 #[test]

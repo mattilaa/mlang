@@ -9,6 +9,7 @@ Module file: `stdlib/std/date.mla`
 - `civil_date`
 - `YearMonth` (checked year/month without a day)
 - `Year` (checked proleptic Gregorian year in `-32767..32767`)
+- `Day` (checked day-of-month component)
 - `MonthDay` and `MonthDayLast` (recurring month/day calendar values)
 - `Weekday` (`Sunday` through `Saturday`, with Sunday=`0`)
 - `Month` (`January` through `December`, numbered `1..12`)
@@ -49,6 +50,13 @@ Module file: `stdlib/std/date.mla`
   checked numeric month and the typed `Month`; `is_valid_month` validates a
   typed value. `add_months_to_month(month, offset)` wraps within the year, and
   `month_days(month, year)` returns the calendar length of the month.
+- `make_day(value) -> option<Day>`, `day_number`, and `is_valid_day` provide a
+  checked C++20-style day component. `add_days_to_day` follows `chrono::day`
+  modulo-32 arithmetic and may produce representable day zero; the validity
+  query distinguishes it from a real day-of-month.
+- `make_civil_date_from_parts(year, month, day)` combines typed `Year`,
+  `Month`, and `Day`, returning `None` for invalid combinations such as April
+  31 or February 29 in a common year.
 - `is_valid_civil_date(year: i32, month: i32, day: i32) -> bool`
 - `make_year_month(year, month) -> option<YearMonth>` constructs a checked
   month value; `is_valid_year_month` validates one directly.
