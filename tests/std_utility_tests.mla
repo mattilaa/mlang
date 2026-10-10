@@ -1,0 +1,23 @@
+mod std::testing;
+mod std::utility;
+
+use std::utility::to_underlying;
+use std::testing::verify;
+
+enum ByteCode : u8 {
+    Start = 1,
+    Finish = 255
+};
+
+enum SignedCode : i32 {
+    Before = -1,
+    After = 3
+};
+
+#[test]
+fn test_to_underlying_preserves_enum_values_and_widths() {
+    let byte_value: u8 = to_underlying(ByteCode::Finish);
+    let signed_value: i32 = to_underlying(SignedCode::Before);
+    verify(byte_value == 255);
+    verify(signed_value == -1);
+}

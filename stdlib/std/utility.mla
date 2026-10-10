@@ -1,0 +1,17 @@
+/// \file utility.mla
+/// \brief C++20/23-style utility operations for MLang.
+
+/// @brief Convert an integer-backed enum to its declared underlying type.
+///
+/// MLang does not expose an associated-type expression for an enum's
+/// underlying integer type, so the destination type is inferred from the
+/// caller's expected result type. Use the enum's declared underlying type:
+/// ```mla
+/// let raw: u8 = to_underlying(MyByteEnum::Value);
+/// ```
+/// This is the Mlang counterpart to C++23 `std::to_underlying`.
+/// @ingroup utility
+generic<Enum, Underlying>
+pub fn to_underlying(value: Enum) -> Underlying {
+    return Underlying(value);
+}
