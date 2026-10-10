@@ -108,6 +108,9 @@ fn example() {
   `contains_subrange_by_projected` apply independent projections before their
   binary equivalence predicate, with the same empty-pattern and absent-pattern
   behavior as the corresponding non-projected functions.
+- `search_option` / `find_end_option` and their projected/equivalence variants
+  return `option<i64>` indices instead of `-1`. A successful empty-pattern
+  match remains a `Some` (`0` for first search, `data.len()` for last search).
 - `equal` compares lists in order, including across distinct equality-comparable
   element types; `is_permutation` compares element multiplicities without
   considering order.

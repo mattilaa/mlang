@@ -148,6 +148,14 @@ use std::algorithm::ranges::find_end;
 use std::algorithm::ranges::find_end_projected;
 use std::algorithm::ranges::find_end_by;
 use std::algorithm::ranges::find_end_by_projected;
+use std::algorithm::ranges::search_option;
+use std::algorithm::ranges::search_projected_option;
+use std::algorithm::ranges::search_by_option;
+use std::algorithm::ranges::search_by_projected_option;
+use std::algorithm::ranges::find_end_option;
+use std::algorithm::ranges::find_end_projected_option;
+use std::algorithm::ranges::find_end_by_option;
+use std::algorithm::ranges::find_end_by_projected_option;
 use std::algorithm::ranges::contains_subrange;
 use std::algorithm::ranges::contains_subrange_projected;
 use std::algorithm::ranges::contains_subrange_by;
@@ -1137,6 +1145,47 @@ fn test_algorithm_ranges_subrange_search_by_projected() {
     verify(contains_subrange_by_projected(
         empty, empty, same_decade, identity, narrow));
     verify(data[0] == 11 && data[5] == 29);
+}
+
+#[test]
+fn test_algorithm_ranges_subrange_search_option_results() {
+    let values: list<i32> = [11, 22, 13, 24, 31, 22];
+    let pattern: list<i32> = [22];
+    let absent: list<i32> = [99];
+    let empty: list<i32> = [];
+    let tens = |value: i32| { return value / 10; };
+    let same_tens = |left: i32, right: i32| {
+        return left / 10 == right / 10;
+    };
+
+    verify(search_option(values, pattern).unwrap() == 1);
+    verify(find_end_option(values, pattern).unwrap() == 5);
+    verify(search_option(values, absent).is_none());
+    verify(find_end_option(values, absent).is_none());
+    verify(search_option(values, empty).unwrap() == 0);
+    verify(find_end_option(values, empty).unwrap() == values.len());
+
+    let projected_pattern: list<i32> = [20];
+    verify(search_projected_option(
+        values, projected_pattern, tens, tens).unwrap() == 1);
+    verify(find_end_projected_option(
+        values, projected_pattern, tens, tens).unwrap() == 5);
+    verify(search_by_option(values, projected_pattern, same_tens).unwrap() == 1);
+    verify(find_end_by_option(values, projected_pattern, same_tens).unwrap() == 5);
+
+    let identity = |value: i32| { return value; };
+    let narrow = |value: i32| { return value / 10; };
+    verify(search_by_projected_option(
+        values, projected_pattern, same_tens, identity, tens).unwrap() == 1);
+    verify(find_end_by_projected_option(
+        values, projected_pattern, same_tens, identity, tens).unwrap() == 5);
+    verify(search_projected_option(
+        values, absent, tens, tens).is_none());
+    verify(find_end_by_projected_option(
+        values, absent, same_tens, identity, narrow).is_none());
+    let no_values: list<i32> = [];
+    verify(search_option(no_values, pattern).is_none());
+    verify(find_end_option(no_values, pattern).is_none());
 }
 
 #[test]

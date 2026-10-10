@@ -3078,6 +3078,96 @@ pub fn find_end_by_projected(
     return found;
 }
 
+/// @brief Return the first subrange match as an option index.
+/// Empty patterns match at index zero; absence is `None`.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn search_option(data: &list<T>, pattern: &list<U>) -> option<i64> {
+    let index: i64 = search(data, pattern);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected subrange match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, DataProjection, PatternProjection>
+pub fn search_projected_option(
+    data: &list<T>, pattern: &list<U>, data_projection: DataProjection,
+    pattern_projection: PatternProjection) -> option<i64> {
+    let index: i64 = search_projected(data, pattern, data_projection,
+                                      pattern_projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first equivalent subrange match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn search_by_option(data: &list<T>, pattern: &list<U>,
+                        equivalent: Equivalent) -> option<i64> {
+    let index: i64 = search_by(data, pattern, equivalent);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected-equivalent subrange match as an option.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, DataProjection, PatternProjection>
+pub fn search_by_projected_option(
+    data: &list<T>, pattern: &list<U>, equivalent: Equivalent,
+    data_projection: DataProjection, pattern_projection: PatternProjection)
+    -> option<i64> {
+    let index: i64 = search_by_projected(
+        data, pattern, equivalent, data_projection, pattern_projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last subrange match as an option index.
+/// An empty pattern matches at `data.len()`; absence is `None`.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn find_end_option(data: &list<T>, pattern: &list<U>) -> option<i64> {
+    let index: i64 = find_end(data, pattern);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last projected subrange match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, DataProjection, PatternProjection>
+pub fn find_end_projected_option(
+    data: &list<T>, pattern: &list<U>, data_projection: DataProjection,
+    pattern_projection: PatternProjection) -> option<i64> {
+    let index: i64 = find_end_projected(
+        data, pattern, data_projection, pattern_projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last equivalent subrange match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn find_end_by_option(data: &list<T>, pattern: &list<U>,
+                          equivalent: Equivalent) -> option<i64> {
+    let index: i64 = find_end_by(data, pattern, equivalent);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last projected-equivalent match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, DataProjection, PatternProjection>
+pub fn find_end_by_projected_option(
+    data: &list<T>, pattern: &list<U>, equivalent: Equivalent,
+    data_projection: DataProjection, pattern_projection: PatternProjection)
+    -> option<i64> {
+    let index: i64 = find_end_by_projected(
+        data, pattern, equivalent, data_projection, pattern_projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
 /// @brief Return whether `pattern` occurs as a contiguous subsequence.
 /// C++23 ranges-style subrange membership check.
 /// @ingroup algorithm_ranges
