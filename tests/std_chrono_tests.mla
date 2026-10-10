@@ -28,6 +28,10 @@ use std::chrono::time_point_round;
 use std::chrono::steady_now;
 use std::chrono::system_now;
 use std::chrono::make_hh_mm_ss;
+use std::chrono::is_am;
+use std::chrono::is_pm;
+use std::chrono::make12;
+use std::chrono::make24;
 use std::testing::verify;
 use std::testing::verify_eq_i64;
 
@@ -307,4 +311,27 @@ fn test_chrono_hh_mm_ss_decomposition() {
         -9223372036854775807 - 1, DurationUnit::Hour).unwrap();
     verify(make_hh_mm_ss(huge_weeks).is_none());
     verify(make_hh_mm_ss(minimum_hours).is_none());
+}
+
+#[test]
+fn test_chrono_twelve_and_twenty_four_hour_helpers() {
+    verify(is_am(0) && is_am(11));
+    verify(!is_am(12) && !is_am(23) && !is_am(-1));
+    verify(is_pm(12) && is_pm(23));
+    verify(!is_pm(0) && !is_pm(11) && !is_pm(24));
+
+    verify(make12(0).unwrap() == 12);
+    verify(make12(1).unwrap() == 1);
+    verify(make12(12).unwrap() == 12);
+    verify(make12(13).unwrap() == 1);
+    verify(make12(23).unwrap() == 11);
+    verify(make12(-1).is_none() && make12(24).is_none());
+
+    verify(make24(12, false).unwrap() == 0);
+    verify(make24(1, false).unwrap() == 1);
+    verify(make24(11, false).unwrap() == 11);
+    verify(make24(12, true).unwrap() == 12);
+    verify(make24(1, true).unwrap() == 13);
+    verify(make24(11, true).unwrap() == 23);
+    verify(make24(0, false).is_none() && make24(13, true).is_none());
 }

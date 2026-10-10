@@ -56,6 +56,37 @@ pub struct HhMmSs {
     var subseconds: Duration;
 };
 
+/// @brief Return whether a 24-hour clock hour is ante meridiem (0 through 11).
+pub fn is_am(hour: i32) -> bool {
+    return hour >= 0 && hour <= 11;
+}
+
+/// @brief Return whether a 24-hour clock hour is post meridiem (12 through 23).
+pub fn is_pm(hour: i32) -> bool {
+    return hour >= 12 && hour <= 23;
+}
+
+/// @brief Convert a valid 24-hour hour to its 12-hour form (12 for midnight).
+/// Invalid hours return `None` rather than relying on C++'s unspecified result.
+pub fn make12(hour: i32) -> option<i32> {
+    if hour < 0 || hour > 23 { return None<i32>(); }
+    let converted: i32 = hour % 12;
+    if converted == 0 { return Some<i32>(12); }
+    return Some<i32>(converted);
+}
+
+/// @brief Convert a 12-hour value and AM/PM flag to a 24-hour clock hour.
+/// Valid input hours are 1 through 12; invalid values return `None`.
+pub fn make24(hour: i32, pm: bool) -> option<i32> {
+    if hour < 1 || hour > 12 { return None<i32>(); }
+    if pm {
+        if hour == 12 { return Some<i32>(12); }
+        return Some<i32>(hour + 12);
+    }
+    if hour == 12 { return Some<i32>(0); }
+    return Some<i32>(hour);
+}
+
 /// @brief Lowercase alias for `Duration`.
 use type duration = Duration;
 use type hh_mm_ss = HhMmSs;

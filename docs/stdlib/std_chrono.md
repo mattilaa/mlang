@@ -25,6 +25,8 @@ use std::chrono::time_point_difference;
 use std::chrono::time_point_round;
 use std::chrono::HhMmSs;
 use std::chrono::make_hh_mm_ss;
+use std::chrono::make12;
+use std::chrono::make24;
 
 let elapsed = make_duration(90, DurationUnit::Second).unwrap();
 let milliseconds: Duration =
@@ -42,6 +44,7 @@ let elapsed_between: Duration = time_point_difference(
     later, start, DurationUnit::Second).unwrap(); // 5 seconds
 let rounded_start = time_point_round(start, DurationUnit::Second).unwrap();
 let clock_fields: HhMmSs = make_hh_mm_ss(elapsed).unwrap();
+let evening_hour: i32 = make24(7, true).unwrap(); // 19
 ```
 
 - `make_duration(count, unit)` constructs a value for one of the declared
@@ -87,3 +90,8 @@ non-negative fractional remainder expressed in the source unit. This follows
 C++20 `std::chrono::hh_mm_ss` decomposition while retaining Mlang's runtime
 duration precision. It returns `None` if the absolute total hours cannot fit
 in `i64`.
+
+The 12/24-hour helpers `is_am(hour)`, `is_pm(hour)`, `make12(hour)`, and
+`make24(hour, pm)` follow C++20 chrono conventions. The conversions return
+`None` for out-of-range inputs; `make12` accepts `0..23`, while `make24`
+accepts `1..12` and an AM/PM flag.
