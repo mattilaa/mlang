@@ -301,6 +301,7 @@ use std::algorithm::ranges::generate;
 use std::algorithm::ranges::fill;
 use std::algorithm::ranges::fill_n;
 use std::algorithm::ranges::copy_n;
+use std::algorithm::ranges::copy_n_with_count;
 use std::algorithm::ranges::copy as ranges_copy;
 use std::algorithm::ranges::swap_ranges;
 use std::algorithm::ranges::filter;
@@ -4240,11 +4241,24 @@ fn test_algorithm_ranges_copy_n() {
 
     let prefix: list<i32> = copy_n(values, 2);
     verify(prefix.len() == 2 && prefix[0] == 4 && prefix[1] == 8);
+    let counted_prefix: tuple<i64, list<i32>> =
+        copy_n_with_count(values, 2);
+    let counted_prefix_values: list<i32> = counted_prefix.1;
+    verify(counted_prefix.0 == 2 && counted_prefix_values.len() == 2 &&
+           counted_prefix_values[1] == 8);
 
     let all_values: list<i32> = copy_n(values, 10);
     verify(all_values.len() == 3 && all_values[2] == 15);
+    let counted_all: tuple<i64, list<i32>> =
+        copy_n_with_count(values, 10);
+    let counted_all_values: list<i32> = counted_all.1;
+    verify(counted_all.0 == 3 && counted_all_values[2] == 15);
     let no_values: list<i32> = copy_n(values, -2);
     verify(no_values.len() == 0);
+    let counted_none: tuple<i64, list<i32>> =
+        copy_n_with_count(values, -2);
+    let counted_none_values: list<i32> = counted_none.1;
+    verify(counted_none.0 == 0 && counted_none_values.len() == 0);
     let empty: list<i32> = [];
     let empty_copy: list<i32> = ranges_copy(empty);
     verify(empty_copy.len() == 0);

@@ -766,6 +766,29 @@ pub fn copy_n(data: &list<T>, count: i64) -> list<T> {
     return copied;
 }
 
+/// @brief Copy a bounded prefix and return the consumed count with the copy.
+/// Counts below zero consume zero elements; oversized counts clamp to the list
+/// length. This exposes the output-iterator progress of C++20 `copy_n` in an
+/// eager-list result.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn copy_n_with_count(data: &list<T>, count: i64)
+    -> tuple<i64, list<T>> {
+    var copied: list<T> = [];
+    let data_len: i64 = data.len();
+    var copy_len: i64 = count;
+    if copy_len < 0 {
+        copy_len = 0;
+    }
+    if copy_len > data_len {
+        copy_len = data_len;
+    }
+    for i in 0..copy_len {
+        copied.push(data[i]);
+    }
+    return (copy_len, copied);
+}
+
 /// @brief Materialize an independent list copy of the complete range.
 /// This is the eager-list analogue of C++20 `std::ranges::copy`.
 /// @ingroup algorithm_ranges
