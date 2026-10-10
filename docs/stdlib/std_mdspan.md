@@ -23,6 +23,9 @@ single scalar element.
   properties; both supported layouts are unique, exhaustive, and strided.
 - `get(indices)` requires exactly one index per dimension and returns `None`
   for invalid rank or out-of-bounds indices.
+- `linear_index(indices)` returns the mapped backing-list offset for a valid
+  coordinate, or `None` for invalid rank or bounds. This exposes the mapping
+  operation separately from loading the element.
 - `from_extents_left(data, extents)` validates and copies the same inputs but
   maps the leftmost extent contiguously, following C++23 `layout_left`.
 - `from_extents_strided(data, extents, strides)` copies all three lists and

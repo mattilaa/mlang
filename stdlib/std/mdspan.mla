@@ -250,6 +250,27 @@ impl<T> Mdspan {
         return Some<i64>(self.extents[dimension]);
     }
 
+    /// @brief Map a full-rank coordinate to its backing-list offset.
+    /// Malformed-rank and out-of-bounds coordinates return `None`.
+    pub fn linear_index(self: Mdspan<T>, indices: &list<i64>) -> option<i64> {
+        let rank: i64 = self.extents.len();
+        if indices.len() != rank { return None<i64>(); }
+        var offset: i64 = 0;
+        for dimension in 0..rank {
+            let coordinate: i64 = indices[dimension];
+            let extent_value: i64 = self.extents[dimension];
+            if coordinate < 0 || coordinate >= extent_value {
+                return None<i64>();
+            }
+            offset = offset + coordinate * self.strides[dimension];
+        }
+        if offset < 0 || offset >= self.required_size ||
+           offset >= self.data.len() {
+            return None<i64>();
+        }
+        return Some<i64>(offset);
+    }
+
     /// @brief Read an element at a full-rank index using the selected layout.
     /// Wrong-rank or out-of-bounds indices return `None`.
     pub fn get(self: Mdspan<T>, indices: &list<i64>) -> option<T> {
