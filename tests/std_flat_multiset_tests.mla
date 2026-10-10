@@ -1,0 +1,73 @@
+mod std::testing;
+mod std::flat_multiset;
+use std::testing::verify;
+use std::flat_multiset::FlatMultiSet;
+use std::flat_multiset::erase_if;
+use std::flat_multiset::merge;
+
+#[test]
+fn test_flat_multiset_duplicate_lookup_and_bounds() {
+    var values: FlatMultiSet<i32> = FlatMultiSet<i32>::new();
+    values.insert(4);
+    values.insert(3);
+    values.insert(3);
+    values.insert(1);
+    values.insert(3);
+    verify(values.len() == 5 && values.key_at(0) == 1 &&
+           values.key_at(1) == 3 && values.key_at(2) == 3 &&
+           values.key_at(3) == 3 && values.key_at(4) == 4);
+    verify(values.lower_bound(3) == 1 && values.upper_bound(3) == 4);
+    let equal: tuple<i64, i64> = values.equal_range(3);
+    let absent: tuple<i64, i64> = values.equal_range(2);
+    verify(equal.0 == 1 && equal.1 == 4 && values.count(3) == 3);
+    verify(absent.0 == 1 && absent.1 == 1 && values.count(2) == 0);
+    verify(values.contains(3) && !values.contains(2));
+}
+
+#[test]
+fn test_flat_multiset_range_replace_and_remove() {
+    var values: FlatMultiSet<i32> = FlatMultiSet<i32>::new();
+    let incoming: list<i32> = [3, 1, 3, 2, 3];
+    verify(values.insert_range(incoming) == 5 && values.len() == 5);
+    let replacement: list<i32> = [1, 2, 2, 5];
+    verify(values.replace(replacement));
+    verify(values.len() == 4 && values.key_at(1) == 2 &&
+           values.key_at(2) == 2);
+    let descending: list<i32> = [1, 5, 2];
+    verify(!values.replace(descending));
+    verify(values.len() == 4 && values.key_at(3) == 5);
+    verify(values.remove(2) == 2 && values.remove(2) == 0);
+    verify(values.len() == 2 && values.key_at(0) == 1 &&
+           values.key_at(1) == 5);
+    values.clear();
+    verify(values.is_empty());
+}
+
+#[test]
+fn test_flat_multiset_erase_if_keeps_sorted_duplicates() {
+    var values: FlatMultiSet<i32> = FlatMultiSet<i32>::new();
+    let input: list<i32> = [5, 2, 4, 2, 1, 3, 4];
+    values.insert_range(input);
+    let erase_even = |key: i32| { return key % 2 == 0; };
+    verify(erase_if(&mut values, erase_even) == 4);
+    verify(values.len() == 3 && values.key_at(0) == 1 &&
+           values.key_at(1) == 3 && values.key_at(2) == 5);
+}
+
+#[test]
+fn test_flat_multiset_merge_transfers_all_duplicates() {
+    var destination: FlatMultiSet<i32> = FlatMultiSet<i32>::new();
+    let left: list<i32> = [1, 3, 3, 6];
+    destination.insert_range(left);
+    var source: FlatMultiSet<i32> = FlatMultiSet<i32>::new();
+    let right: list<i32> = [2, 3, 4, 6, 6];
+    source.insert_range(right);
+
+    verify(merge(&mut destination, &mut source) == 5);
+    verify(destination.len() == 9 && source.is_empty());
+    let expected: list<i32> = [1, 2, 3, 3, 3, 4, 6, 6, 6];
+    for i in 0..expected.len() {
+        verify(destination.key_at(i) == expected[i]);
+    }
+    verify(merge(&mut destination, &mut source) == 0);
+}

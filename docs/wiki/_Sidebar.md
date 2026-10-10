@@ -81,6 +81,7 @@
 - [[std::mdspan|Stdlib-Mdspan]]
 - [[std::flat_map|Stdlib-Flat-Map]]
 - [[std::flat_set|Stdlib-Flat-Set]]
+- [[std::flat_multiset|Stdlib-Flat-MultiSet]]
 - [[std::stop_token|Stdlib-Stop-Token]]
 - [[std::jthread|Stdlib-Jthread]]
 - [[std::strbuf|Stdlib-Strbuf]]
