@@ -52,12 +52,14 @@ fn example() {
 - `or_else(input, recovery)` invokes a recovery operation returning another
   result for `Err`, and propagates the original value otherwise.
 - `value_or(input, fallback)` returns the value for `Ok`, or the supplied value
-  for `Err`. As in C++23 `expected::value_or`, the fallback expression is
-  evaluated before the call.
+  for `Err`. The fallback may have a type implicitly convertible to the value
+  type. As in C++23 `expected::value_or`, the fallback expression is evaluated
+  before the call.
 - `value_or_else(input, fallback)` has the same result but lazily invokes its
   zero-argument closure only for `Err` (a convenience beyond the C++23 API).
 - `error_or(input, fallback)` returns the error for `Err`, or the supplied
-  fallback error for `Ok`, matching C++23 `expected::error_or`.
+  fallback error for `Ok`; its type may be implicitly convertible to the error
+  type, matching C++23 `expected::error_or`.
 - `error_or_else(input, fallback)` lazily invokes a zero-argument closure only
   for `Ok`, complementing `error_or` when computing the fallback is costly.
 

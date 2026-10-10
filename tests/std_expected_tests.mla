@@ -78,6 +78,12 @@ fn test_expected_value_fallbacks() {
     verify(value_or(successful, fallback_value) == 5);
     verify(value_or(failed, fallback_value) == 10);
 
+    let wide_value: result<i64, str8> = Ok<i64, str8>(42);
+    let narrow_fallback: i32 = 17;
+    verify(value_or(wide_value, narrow_fallback) == 42);
+    let wide_failed: result<i64, str8> = Err<i64, str8>("no value");
+    verify(value_or(wide_failed, narrow_fallback) == 17);
+
     var fallback_calls: i32 = 0;
     let fallback = || {
         fallback_calls = fallback_calls + 1;
@@ -96,6 +102,12 @@ fn test_expected_error_fallbacks() {
     let fallback: str8 = "fallback";
     verify(len(error_or(successful, fallback)) == 8);
     verify(len(error_or(failed, fallback)) == 5);
+
+    let numeric_success: result<i32, i64> = Ok<i32, i64>(5);
+    let narrow_error_fallback: i32 = 19;
+    verify(error_or(numeric_success, narrow_error_fallback) == 19);
+    let numeric_failure: result<i32, i64> = Err<i32, i64>(23);
+    verify(error_or(numeric_failure, narrow_error_fallback) == 23);
 
     var fallback_calls: i32 = 0;
     let make_fallback = || {
