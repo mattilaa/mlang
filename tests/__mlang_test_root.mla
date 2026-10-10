@@ -4,6 +4,8 @@ mod runtime_generic_tests;
 use runtime_generic_tests::*;
 mod runtime_optional_tests;
 use runtime_optional_tests::*;
+mod std_expected_tests;
+use std_expected_tests::*;
 mod std_ascii_tests;
 use std_ascii_tests::*;
 mod enum_tests;

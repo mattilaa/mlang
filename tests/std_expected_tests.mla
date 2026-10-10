@@ -1,0 +1,88 @@
+mod std::testing;
+mod std::expected;
+mod std::strbuf;
+use std::testing::verify;
+use std::expected::transform;
+use std::expected::transform_error;
+use std::expected::and_then;
+use std::expected::or_else;
+use std::expected::value_or;
+use std::expected::value_or_else;
+use std::strbuf::len;
+
+#[test]
+fn test_expected_transform_and_transform_error() {
+    let successful: result<i32, str8> = Ok<i32, str8>(21);
+    let failed: result<i32, str8> = Err<i32, str8>("bad");
+    var value_calls: i32 = 0;
+    let double = |value: i32| {
+        value_calls = value_calls + 1;
+        return value * 2;
+    };
+
+    let doubled: result<i32, str8> = transform(successful, double);
+    verify(doubled.is_ok() && doubled.unwrap() == 42);
+    let preserved_error: result<i32, str8> = transform(failed, double);
+    verify(preserved_error.is_err() &&
+           len(preserved_error.unwrap_err()) == 3);
+    verify(value_calls == 1);
+
+    var error_calls: i32 = 0;
+    let error_length = |message: str8| {
+        error_calls = error_calls + 1;
+        return len(message);
+    };
+    let preserved_value: result<i32, i64> =
+        transform_error(successful, error_length);
+    verify(preserved_value.is_ok() && preserved_value.unwrap() == 21);
+    let changed_error: result<i32, i64> =
+        transform_error(failed, error_length);
+    verify(changed_error.is_err() && changed_error.unwrap_err() == 3);
+    verify(error_calls == 1);
+}
+
+#[test]
+fn test_expected_and_then_and_or_else() {
+    let successful: result<i32, str8> = Ok<i32, str8>(7);
+    let failed: result<i32, str8> = Err<i32, str8>("missing");
+    var next_calls: i32 = 0;
+    let next = |value: i32| {
+        next_calls = next_calls + 1;
+        return Ok<i32, str8>(value * 3);
+    };
+    let chained: result<i32, str8> = and_then(successful, next);
+    verify(chained.is_ok() && chained.unwrap() == 21);
+    let skipped: result<i32, str8> = and_then(failed, next);
+    verify(skipped.is_err() && len(skipped.unwrap_err()) == 7);
+    verify(next_calls == 1);
+
+    var recover_calls: i32 = 0;
+    let recover = |message: str8| {
+        recover_calls = recover_calls + 1;
+        return Ok<i32, i64>(7);
+    };
+    let unchanged: result<i32, i64> = or_else(successful, recover);
+    verify(unchanged.is_ok() && unchanged.unwrap() == 7);
+    let recovered: result<i32, i64> = or_else(failed, recover);
+    verify(recovered.is_ok() && recovered.unwrap() == 7);
+    verify(recover_calls == 1);
+}
+
+#[test]
+fn test_expected_value_fallbacks() {
+    let successful: result<i32, str8> = Ok<i32, str8>(5);
+    let failed: result<i32, str8> = Err<i32, str8>("no value");
+    let fallback_value: i32 = 10;
+    verify(value_or(successful, fallback_value) == 5);
+    verify(value_or(failed, fallback_value) == 10);
+
+    var fallback_calls: i32 = 0;
+    let fallback = || {
+        fallback_calls = fallback_calls + 1;
+        return 13;
+    };
+    verify(value_or_else(successful, fallback) == 5);
+    verify(fallback_calls == 0);
+    verify(value_or_else(failed, fallback) == 13);
+    verify(fallback_calls == 1);
+}
