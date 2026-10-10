@@ -494,7 +494,7 @@ fn example() {
 - `adjacent_transform5` through `adjacent_transform8` apply five- through
   eight-argument operations to neighboring windows; each infers the output
   type and returns an empty list when the input is too short. The `_projected`
-  adjacent-transform forms currently cover widths two through five and apply
+  adjacent-transform forms currently cover widths two through eight and apply
   operations to projected keys while preserving the original source values.
 - `enumerate(data)` materializes `(index, value)` tuples with zero-based indices
   (C++23 `views::enumerate` style).

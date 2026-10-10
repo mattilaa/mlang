@@ -6531,6 +6531,56 @@ pub fn adjacent_transform8(data: &list<T>, operation: Operation)
     return out;
 }
 
+/// @brief Apply a six-argument operation to each window of projected values.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform6_projected(data: &list<T>, operation: Operation,
+                                     projection: Projection) -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 6 { return out; }
+    for i in 0..(n - 5) {
+        out.push(operation(projection(data[i]), projection(data[i + 1]),
+                           projection(data[i + 2]), projection(data[i + 3]),
+                           projection(data[i + 4]), projection(data[i + 5])));
+    }
+    return out;
+}
+
+/// @brief Apply a seven-argument operation to each window of projected values.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform7_projected(data: &list<T>, operation: Operation,
+                                     projection: Projection) -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 7 { return out; }
+    for i in 0..(n - 6) {
+        out.push(operation(projection(data[i]), projection(data[i + 1]),
+                           projection(data[i + 2]), projection(data[i + 3]),
+                           projection(data[i + 4]), projection(data[i + 5]),
+                           projection(data[i + 6])));
+    }
+    return out;
+}
+
+/// @brief Apply an eight-argument operation to each window of projected values.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform8_projected(data: &list<T>, operation: Operation,
+                                     projection: Projection) -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 8 { return out; }
+    for i in 0..(n - 7) {
+        out.push(operation(projection(data[i]), projection(data[i + 1]),
+                           projection(data[i + 2]), projection(data[i + 3]),
+                           projection(data[i + 4]), projection(data[i + 5]),
+                           projection(data[i + 6]), projection(data[i + 7])));
+    }
+    return out;
+}
+
 /// @brief Materialize every pair from two ranges in nested-loop order.
 /// The right range varies fastest; equivalent to C++23 `views::cartesian_product`.
 /// @ingroup algorithm_ranges
