@@ -294,6 +294,10 @@ fn example() {
   paired-range overload takes two lists and stops at the shorter one. Both
   forms allow heterogeneous input, projected-term, and accumulator types and
   return `init` unchanged when no elements are consumed.
+- `inner_product(left, right, init)` sums pairwise products over the shared
+  prefix, and its custom-operation overload accepts `reduce` and `product`
+  closures. `inner_product_by` names the custom form explicitly. Inputs can be
+  heterogeneous and traversal stops at the shorter list.
 - `inclusive_scan` and `exclusive_scan` materialize prefix results, with seeded
   overloads supporting an accumulator/output type different from the input.
   `transform_inclusive_scan` and `transform_exclusive_scan` additionally

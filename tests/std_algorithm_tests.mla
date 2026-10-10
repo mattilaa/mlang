@@ -46,6 +46,8 @@ use std::algorithm::ranges::inclusive_scan as ranges_inclusive_scan;
 use std::algorithm::ranges::exclusive_scan as ranges_exclusive_scan;
 use std::algorithm::ranges::transform_inclusive_scan as ranges_transform_inclusive_scan;
 use std::algorithm::ranges::transform_exclusive_scan as ranges_transform_exclusive_scan;
+use std::algorithm::ranges::inner_product as ranges_inner_product;
+use std::algorithm::ranges::inner_product_by as ranges_inner_product_by;
 use std::algorithm::numeric::transform_reduce;
 use std::algorithm::numeric::inclusive_scan;
 use std::algorithm::numeric::exclusive_scan;
@@ -3936,6 +3938,23 @@ fn test_algorithm_ranges_scans() {
     verify(ranges_transform_inclusive_scan(empty, add_i64, square).len() == 0);
     verify(ranges_transform_inclusive_scan(empty, 7, add_i64, square).len() == 0);
     verify(ranges_transform_exclusive_scan(empty, 7, add_i64, square).len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_inner_product() {
+    let left: list<i32> = [1, 2, 3];
+    let right: list<i32> = [4, 5];
+    verify(ranges_inner_product(left, right, 7) == 21);
+
+    let right_wide: list<i16> = [4, 5];
+    let add = |acc: i64, term: i64| { return acc + term; };
+    let product = |a: i32, b: i16| { return i64(a * i32(b)); };
+    verify(ranges_inner_product_by(left, right_wide, 7, add, product) == 21);
+    verify(ranges_inner_product(left, right_wide, 13, add, product) == 27);
+
+    let empty: list<i32> = [];
+    verify(ranges_inner_product(left, empty, 19) == 19);
+    verify(ranges_inner_product_by(empty, right_wide, 23, add, product) == 23);
 }
 
 #[test]

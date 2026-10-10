@@ -626,6 +626,48 @@ pub fn transform_reduce(left: &list<T>, right: &list<V>, init: U,
     return acc;
 }
 
+/// @brief Compute the sum of pairwise products over the shared range prefix.
+/// The accumulator may use a different type from either input element type.
+/// This eager-list counterpart to `std::inner_product` stops at the shorter
+/// input and returns `init` when either input is empty.
+/// @ingroup algorithm_ranges
+generic<T, V, U>
+pub fn inner_product(left: &list<T>, right: &list<V>, init: U) -> U {
+    var acc: U = init;
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        acc = acc + (left[i] * right[i]);
+    }
+    return acc;
+}
+
+/// @brief Compute a paired-range inner product with custom operations.
+/// `product(left, right)` creates each term, and `reduce(acc, term)` folds it
+/// into the accumulator. Inputs may have different element types.
+/// @ingroup algorithm_ranges
+generic<T, V, U, Reduce, Product>
+pub fn inner_product_by(left: &list<T>, right: &list<V>, init: U,
+                        reduce: Reduce, product: Product) -> U {
+    var acc: U = init;
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        acc = reduce(acc, product(left[i], right[i]));
+    }
+    return acc;
+}
+
+/// @brief C++-style custom-operation overload of `inner_product`.
+/// @ingroup algorithm_ranges
+generic<T, V, U, Reduce, Product>
+pub fn inner_product(left: &list<T>, right: &list<V>, init: U,
+                     reduce: Reduce, product: Product) -> U {
+    return inner_product_by(left, right, init, reduce, product);
+}
+
 /// @brief Materialize an inclusive prefix scan using `operation`.
 /// The first input value seeds the output; empty input produces an empty list.
 /// @ingroup algorithm_ranges
