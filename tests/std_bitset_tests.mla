@@ -28,8 +28,103 @@ fn test_bitset_set_get_toggle_and_count() {
     let b3b: result<bool, str8> = bs.get(3);
     verify(!b3b.is_err() && !b3b.unwrap());
     verify_eq(2, bs.count_ones());
+    verify_eq(2, bs.count());
+    verify(bs.any());
+    verify(!bs.none());
+    verify(!bs.all());
 
     bs.close();
+}
+
+#[test]
+fn test_bitset_standard_queries_empty_and_full() {
+    let r: result<BitSet, str8> = BitSet::new(0);
+    verify(!r.is_err());
+    let bits: BitSet = r.unwrap();
+    verify(bits.none());
+    verify(!bits.any());
+    verify(bits.all());
+    verify_eq(0, bits.count());
+
+    verify(bits.resize(4, true) == 0);
+    verify(bits.all() && bits.any());
+    verify_eq(4, bits.count());
+
+    verify(bits.set(2, false) == 0);
+    verify(!bits.all() && bits.any() && !bits.none());
+    verify_eq(3, bits.count());
+
+    verify(bits.set(0, false) == 0);
+    verify(bits.set(1, false) == 0);
+    verify(bits.set(3, false) == 0);
+    verify(bits.none() && !bits.any());
+    bits.close();
+}
+
+#[test]
+fn test_bitset_bulk_set_reset_and_flip() {
+    let r: result<BitSet, str8> = BitSet::new(67);
+    verify(!r.is_err());
+    let bits: BitSet = r.unwrap();
+    verify(bits.resize(67, false) == 0);
+
+    verify(bits.set_all() == 0);
+    verify(bits.len() == 67 && bits.all() && bits.count() == 67);
+    verify(bits.flip_all() == 0);
+    verify(bits.none() && bits.count() == 0);
+
+    verify(bits.set(66, true) == 0);
+    verify(bits.reset() == 0);
+    verify(bits.len() == 67 && bits.none());
+    bits.close();
+}
+
+#[test]
+fn test_bitset_shifts_across_word_boundaries() {
+    let r: result<BitSet, str8> = BitSet::new(130);
+    verify(!r.is_err());
+    let bits: BitSet = r.unwrap();
+    verify(bits.resize(130, false) == 0);
+    verify(bits.set(0, true) == 0);
+    verify(bits.set(63, true) == 0);
+    verify(bits.set(64, true) == 0);
+    verify(bits.set(129, true) == 0);
+
+    verify(bits.shift_left(1) == 0);
+    verify(bits.get_fast(0) == 0);
+    verify(bits.get_fast(1) == 1);
+    verify(bits.get_fast(64) == 1);
+    verify(bits.get_fast(65) == 1);
+    verify(bits.get_fast(129) == 0);
+    verify(bits.count() == 3);
+
+    verify(bits.shift_right(1) == 0);
+    verify(bits.get_fast(0) == 1);
+    verify(bits.get_fast(63) == 1);
+    verify(bits.get_fast(64) == 1);
+    verify(bits.count() == 3);
+
+    verify(bits.reset() == 0);
+    verify(bits.set(0, true) == 0);
+    verify(bits.set(63, true) == 0);
+    verify(bits.set(64, true) == 0);
+    verify(bits.shift_left(64) == 0);
+    verify(bits.get_fast(0) == 0);
+    verify(bits.get_fast(64) == 1);
+    verify(bits.get_fast(127) == 1);
+    verify(bits.get_fast(128) == 1);
+    verify(bits.shift_right(64) == 0);
+    verify(bits.get_fast(0) == 1);
+    verify(bits.get_fast(63) == 1);
+    verify(bits.get_fast(64) == 1);
+
+    verify(bits.shift_left(130) == 0);
+    verify(bits.none());
+    verify(bits.set(3, true) == 0);
+    verify(bits.shift_left(-1) == -1);
+    verify(bits.shift_right(-1) == -1);
+    verify(bits.get_fast(3) == 1);
+    bits.close();
 }
 
 #[test]
@@ -91,6 +186,74 @@ fn test_bitset_bitwise_ops() {
     verify(a.xor_eq(b.raw_handle()) == 0);
     verify_eq(7, a.count_ones());
 
+    a.close();
+    b.close();
+}
+
+#[test]
+fn test_bitset_value_returning_bitwise_ops() {
+    let ar: result<BitSet, str8> = BitSet::new(67);
+    let br: result<BitSet, str8> = BitSet::new(67);
+    verify(!ar.is_err() && !br.is_err());
+    let a: BitSet = ar.unwrap();
+    let b: BitSet = br.unwrap();
+    verify(a.resize(67, false) == 0);
+    verify(b.resize(67, false) == 0);
+    verify(a.set(0, true) == 0 && a.set(63, true) == 0);
+    verify(a.set(64, true) == 0 && a.set(66, true) == 0);
+    verify(b.set(1, true) == 0 && b.set(63, true) == 0);
+    verify(b.set(64, true) == 0);
+
+    let and_result: result<BitSet, str8> = a.bit_and(b);
+    let or_result: result<BitSet, str8> = a.bit_or(b);
+    let xor_result: result<BitSet, str8> = a.bit_xor(b);
+    let not_result: result<BitSet, str8> = a.complement();
+    verify(and_result.is_ok() && or_result.is_ok() &&
+           xor_result.is_ok() && not_result.is_ok());
+    let and_bits: BitSet = and_result.unwrap();
+    let or_bits: BitSet = or_result.unwrap();
+    let xor_bits: BitSet = xor_result.unwrap();
+    let not_bits: BitSet = not_result.unwrap();
+    verify(and_bits.len() == 67 && and_bits.count() == 2);
+    verify(and_bits.get_fast(63) == 1 && and_bits.get_fast(64) == 1);
+    verify(or_bits.count() == 5 && or_bits.get_fast(0) == 1 &&
+           or_bits.get_fast(1) == 1 && or_bits.get_fast(66) == 1);
+    verify(xor_bits.count() == 3 && xor_bits.get_fast(0) == 1 &&
+           xor_bits.get_fast(1) == 1 && xor_bits.get_fast(66) == 1);
+    verify(not_bits.len() == 67 && not_bits.count() == 63);
+    verify(not_bits.get_fast(0) == 0 && not_bits.get_fast(1) == 1 &&
+           not_bits.get_fast(66) == 0);
+    verify(a.count() == 4 && b.count() == 3);
+
+    let short_result: result<BitSet, str8> = BitSet::new(66);
+    verify(!short_result.is_err());
+    let short_bits: BitSet = short_result.unwrap();
+    verify(short_bits.resize(66, false) == 0);
+    let mismatch: result<BitSet, str8> = a.bit_and(short_bits);
+    verify(mismatch.is_err());
+
+    let empty_a_result: result<BitSet, str8> = BitSet::new(0);
+    let empty_b_result: result<BitSet, str8> = BitSet::new(0);
+    verify(!empty_a_result.is_err() && !empty_b_result.is_err());
+    let empty_a: BitSet = empty_a_result.unwrap();
+    let empty_b: BitSet = empty_b_result.unwrap();
+    let empty_and_result: result<BitSet, str8> = empty_a.bit_and(empty_b);
+    let empty_not_result: result<BitSet, str8> = empty_a.complement();
+    verify(empty_and_result.is_ok() && empty_not_result.is_ok());
+    let empty_and: BitSet = empty_and_result.unwrap();
+    let empty_not: BitSet = empty_not_result.unwrap();
+    verify(empty_and.len() == 0 && empty_and.all());
+    verify(empty_not.len() == 0 && empty_not.none());
+
+    and_bits.close();
+    or_bits.close();
+    xor_bits.close();
+    not_bits.close();
+    short_bits.close();
+    empty_and.close();
+    empty_not.close();
+    empty_a.close();
+    empty_b.close();
     a.close();
     b.close();
 }

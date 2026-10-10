@@ -306,6 +306,29 @@ int64_t __mlang_std_bitset_count_ones(int64_t handle)
     return (int64_t)total;
 }
 
+int32_t __mlang_std_bitset_set_all(int64_t handle)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b)
+        return -1;
+    size_t words = words_for_bits(b->len_bits);
+    for(size_t i = 0u; i < words; ++i)
+        b->words[i] = ~(uint64_t)0u;
+    bitset_mask_tail(b);
+    return 0;
+}
+
+int32_t __mlang_std_bitset_reset(int64_t handle)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b)
+        return -1;
+    size_t words = words_for_bits(b->len_bits);
+    if(words > 0u)
+        memset(b->words, 0, words * sizeof(uint64_t));
+    return 0;
+}
+
 int64_t __mlang_std_bitset_life_step_toroidal(int64_t current_handle, int64_t next_handle,
                                               int64_t width, int64_t height)
 {
@@ -426,6 +449,130 @@ int32_t __mlang_std_bitset_not_eq(int64_t handle)
     size_t words = words_for_bits(b->len_bits);
     for(size_t i = 0u; i < words; ++i)
         b->words[i] = ~b->words[i];
+    bitset_mask_tail(b);
+    return 0;
+}
+
+int64_t __mlang_std_bitset_bitwise_copy(int64_t lhs_handle,
+                                        int64_t rhs_handle,
+                                        int32_t operation)
+{
+    mlang_bitset_t* lhs = (mlang_bitset_t*)(intptr_t)lhs_handle;
+    mlang_bitset_t* rhs = (mlang_bitset_t*)(intptr_t)rhs_handle;
+    if(!lhs || !rhs || operation < 0 || operation > 2)
+    {
+        bitset_set_error("invalid bitwise operation arguments");
+        return 0;
+    }
+    if(lhs->len_bits != rhs->len_bits)
+    {
+        bitset_set_error("bitset lengths must match");
+        return 0;
+    }
+
+    int64_t output_handle = __mlang_std_bitset_new((int64_t)lhs->len_bits);
+    if(output_handle == 0)
+        return 0;
+    mlang_bitset_t* output = (mlang_bitset_t*)(intptr_t)output_handle;
+    output->len_bits = lhs->len_bits;
+    size_t words = words_for_bits(lhs->len_bits);
+    for(size_t i = 0u; i < words; ++i)
+    {
+        if(operation == 0)
+            output->words[i] = lhs->words[i] & rhs->words[i];
+        else if(operation == 1)
+            output->words[i] = lhs->words[i] | rhs->words[i];
+        else
+            output->words[i] = lhs->words[i] ^ rhs->words[i];
+    }
+    bitset_mask_tail(output);
+    return output_handle;
+}
+
+int64_t __mlang_std_bitset_complement_copy(int64_t handle)
+{
+    mlang_bitset_t* input = (mlang_bitset_t*)(intptr_t)handle;
+    if(!input)
+    {
+        bitset_set_error("invalid bitset handle");
+        return 0;
+    }
+    int64_t output_handle = __mlang_std_bitset_new((int64_t)input->len_bits);
+    if(output_handle == 0)
+        return 0;
+    mlang_bitset_t* output = (mlang_bitset_t*)(intptr_t)output_handle;
+    output->len_bits = input->len_bits;
+    size_t words = words_for_bits(input->len_bits);
+    for(size_t i = 0u; i < words; ++i)
+        output->words[i] = ~input->words[i];
+    bitset_mask_tail(output);
+    return output_handle;
+}
+
+int32_t __mlang_std_bitset_shift_left(int64_t handle, int64_t amount)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b || amount < 0)
+    {
+        bitset_set_error("shift amount must be non-negative");
+        return -1;
+    }
+    size_t words = words_for_bits(b->len_bits);
+    if((uint64_t)amount >= (uint64_t)b->len_bits)
+    {
+        if(words > 0u)
+            memset(b->words, 0, words * sizeof(uint64_t));
+        return 0;
+    }
+
+    size_t whole_words = (size_t)amount / 64u;
+    unsigned int bit_shift = (unsigned int)((size_t)amount % 64u);
+    for(size_t i = words; i-- > 0u;)
+    {
+        uint64_t shifted = 0u;
+        if(i >= whole_words)
+        {
+            size_t source = i - whole_words;
+            shifted = b->words[source] << bit_shift;
+            if(bit_shift > 0u && source > 0u)
+                shifted |= b->words[source - 1u] >> (64u - bit_shift);
+        }
+        b->words[i] = shifted;
+    }
+    bitset_mask_tail(b);
+    return 0;
+}
+
+int32_t __mlang_std_bitset_shift_right(int64_t handle, int64_t amount)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b || amount < 0)
+    {
+        bitset_set_error("shift amount must be non-negative");
+        return -1;
+    }
+    size_t words = words_for_bits(b->len_bits);
+    if((uint64_t)amount >= (uint64_t)b->len_bits)
+    {
+        if(words > 0u)
+            memset(b->words, 0, words * sizeof(uint64_t));
+        return 0;
+    }
+
+    size_t whole_words = (size_t)amount / 64u;
+    unsigned int bit_shift = (unsigned int)((size_t)amount % 64u);
+    for(size_t i = 0u; i < words; ++i)
+    {
+        uint64_t shifted = 0u;
+        size_t source = i + whole_words;
+        if(source < words)
+        {
+            shifted = b->words[source] >> bit_shift;
+            if(bit_shift > 0u && source + 1u < words)
+                shifted |= b->words[source + 1u] << (64u - bit_shift);
+        }
+        b->words[i] = shifted;
+    }
     bitset_mask_tail(b);
     return 0;
 }

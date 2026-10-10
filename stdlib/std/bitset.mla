@@ -110,6 +110,54 @@ impl BitSet {
         return __mlang_std_bitset_count_ones(self.handle);
     }
 
+    /// @brief Count set bits, matching `std::bitset::count`.
+    pub fn count(self: BitSet) -> i64 {
+        return self.count_ones();
+    }
+
+    /// @brief Set every active bit to one without changing the bitset length.
+    pub fn set_all(self: BitSet) -> i32 {
+        return __mlang_std_bitset_set_all(self.handle);
+    }
+
+    /// @brief Set every active bit to zero without changing the bitset length.
+    /// Unlike `clear`, this preserves the current length.
+    pub fn reset(self: BitSet) -> i32 {
+        return __mlang_std_bitset_reset(self.handle);
+    }
+
+    /// @brief Flip every active bit without changing the bitset length.
+    pub fn flip_all(self: BitSet) -> i32 {
+        return self.not_eq();
+    }
+
+    /// @brief Shift set bits toward larger indices, discarding overflow bits.
+    /// A negative amount returns -1; an amount at least `len()` clears all bits.
+    pub fn shift_left(self: BitSet, amount: i64) -> i32 {
+        return __mlang_std_bitset_shift_left(self.handle, amount);
+    }
+
+    /// @brief Shift set bits toward smaller indices, discarding underflow bits.
+    /// A negative amount returns -1; an amount at least `len()` clears all bits.
+    pub fn shift_right(self: BitSet, amount: i64) -> i32 {
+        return __mlang_std_bitset_shift_right(self.handle, amount);
+    }
+
+    /// @brief Return whether any active bit is set.
+    pub fn any(self: BitSet) -> bool {
+        return self.count_ones() != 0;
+    }
+
+    /// @brief Return whether no active bits are set.
+    pub fn none(self: BitSet) -> bool {
+        return self.count_ones() == 0;
+    }
+
+    /// @brief Return whether every active bit is set (true for an empty set).
+    pub fn all(self: BitSet) -> bool {
+        return self.count_ones() == self.len();
+    }
+
     /// @brief In-place AND with `rhs_handle`; lengths must match.
     pub fn and_eq(self: BitSet, rhs_handle: i64) -> i32 {
         return __mlang_std_bitset_and_eq(self.handle, rhs_handle);
@@ -128,6 +176,40 @@ impl BitSet {
     /// @brief In-place bit inversion over active length.
     pub fn not_eq(self: BitSet) -> i32 {
         return __mlang_std_bitset_not_eq(self.handle);
+    }
+
+    /// @brief Return a new bitset containing the bitwise AND of both inputs.
+    /// The inputs must have equal lengths and remain unchanged.
+    pub fn bit_and(self: BitSet, other: BitSet) -> result<BitSet, str8> {
+        let handle: i64 = __mlang_std_bitset_bitwise_copy(
+            self.handle, other.handle, 0);
+        if handle == 0 { return Err<BitSet, str8>(last_error()); }
+        return Ok<BitSet, str8>(BitSet { handle: handle });
+    }
+
+    /// @brief Return a new bitset containing the bitwise OR of both inputs.
+    /// The inputs must have equal lengths and remain unchanged.
+    pub fn bit_or(self: BitSet, other: BitSet) -> result<BitSet, str8> {
+        let handle: i64 = __mlang_std_bitset_bitwise_copy(
+            self.handle, other.handle, 1);
+        if handle == 0 { return Err<BitSet, str8>(last_error()); }
+        return Ok<BitSet, str8>(BitSet { handle: handle });
+    }
+
+    /// @brief Return a new bitset containing the bitwise XOR of both inputs.
+    /// The inputs must have equal lengths and remain unchanged.
+    pub fn bit_xor(self: BitSet, other: BitSet) -> result<BitSet, str8> {
+        let handle: i64 = __mlang_std_bitset_bitwise_copy(
+            self.handle, other.handle, 2);
+        if handle == 0 { return Err<BitSet, str8>(last_error()); }
+        return Ok<BitSet, str8>(BitSet { handle: handle });
+    }
+
+    /// @brief Return a new bitset with every active bit complemented.
+    pub fn complement(self: BitSet) -> result<BitSet, str8> {
+        let handle: i64 = __mlang_std_bitset_complement_copy(self.handle);
+        if handle == 0 { return Err<BitSet, str8>(last_error()); }
+        return Ok<BitSet, str8>(BitSet { handle: handle });
     }
 
     /// @brief Raw handle for interop.
