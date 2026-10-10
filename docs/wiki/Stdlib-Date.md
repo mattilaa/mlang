@@ -10,6 +10,7 @@ Module file: `stdlib/std/date.mla`
 - `YearMonth` (checked year/month without a day)
 - `MonthDay` and `MonthDayLast` (recurring month/day calendar values)
 - `Weekday` (`Sunday` through `Saturday`, with Sunday=`0`)
+- `Month` (`January` through `December`, numbered `1..12`)
 - `YearMonthWeekday` and `YearMonthWeekdayLast`
 - `utc_offset`
 - `time_zone`
@@ -38,6 +39,10 @@ Module file: `stdlib/std/date.mla`
 - `format_time(dt: date_time) -> str8`
 - `is_leap_year(year: i32) -> bool`
 - `days_in_month(year: i32, month: i32) -> i32`
+- `month_from_number(value)` and `month_number(value)` convert between a
+  checked numeric month and the typed `Month`; `is_valid_month` validates a
+  typed value. `add_months_to_month(month, offset)` wraps within the year, and
+  `month_days(month, year)` returns the calendar length of the month.
 - `is_valid_civil_date(year: i32, month: i32, day: i32) -> bool`
 - `make_year_month(year, month) -> option<YearMonth>` constructs a checked
   month value; `is_valid_year_month` validates one directly.

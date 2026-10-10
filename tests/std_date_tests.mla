@@ -7,6 +7,7 @@ use std::date::CivilDate;
 use std::date::YearMonth;
 use std::date::MonthDay;
 use std::date::MonthDayLast;
+use std::date::Month;
 use std::date::IsoWeekDate;
 use std::date::Weekday;
 use std::date::YearMonthWeekday;
@@ -64,6 +65,11 @@ use std::date::make_month_day;
 use std::date::resolve_month_day;
 use std::date::make_month_day_last;
 use std::date::resolve_month_day_last;
+use std::date::is_valid_month;
+use std::date::month_number;
+use std::date::month_from_number;
+use std::date::add_months_to_month;
+use std::date::month_days;
 use std::date::nth_weekday_of_month;
 use std::date::last_weekday_of_month;
 use std::date::to_iso_week_date;
@@ -298,6 +304,30 @@ fn test_recurring_month_day_calendar_values() {
     verify(common_february_last.day == 28);
     verify(make_month_day_last(0).is_none());
     verify(resolve_month_day_last(MonthDayLast { month: 13 }, 2024).is_none());
+}
+
+#[test]
+fn test_typed_month_conversion_and_arithmetic() {
+    verify(is_valid_month(Month::January));
+    verify(is_valid_month(Month::December));
+    verify(month_number(Month::January) == 1);
+    verify(month_number(Month::December) == 12);
+    verify(month_from_number(0).is_none());
+    verify(month_from_number(13).is_none());
+    verify(month_from_number(2).unwrap() == Month::February);
+
+    verify(add_months_to_month(Month::December, 1).unwrap() == Month::January);
+    verify(add_months_to_month(Month::January, -1).unwrap() == Month::December);
+    verify(add_months_to_month(Month::March, 24).unwrap() == Month::March);
+    let huge_positive: Month = add_months_to_month(
+        Month::January, 9223372036854775807).unwrap();
+    let huge_negative: Month = add_months_to_month(
+        Month::January, -9223372036854775807 - 1).unwrap();
+    verify(month_number(huge_positive) >= 1 && month_number(huge_positive) <= 12);
+    verify(month_number(huge_negative) >= 1 && month_number(huge_negative) <= 12);
+
+    verify(month_days(Month::February, 2024) == 29);
+    verify(month_days(Month::February, 2023) == 28);
 }
 
 #[test]

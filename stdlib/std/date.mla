@@ -43,6 +43,22 @@ pub struct MonthDayLast {
     var month: i32;
 };
 
+/// @brief One-based calendar month, corresponding to C++20 `chrono::month`.
+pub enum Month : i32 {
+    January = 1,
+    February = 2,
+    March = 3,
+    April = 4,
+    May = 5,
+    June = 6,
+    July = 7,
+    August = 8,
+    September = 9,
+    October = 10,
+    November = 11,
+    December = 12
+};
+
 /// @brief ISO-8601 week date (week-year, week number, Monday-based weekday).
 pub struct IsoWeekDate {
     var year: i32;
@@ -117,6 +133,65 @@ pub fn days_in_month(year: i32, month: i32) -> i32 {
     if month == 2 { return is_leap_year(year) ? 29 : 28; }
     if month == 4 || month == 6 || month == 9 || month == 11 { return 30; }
     return 31;
+}
+
+/// @brief Return whether a typed month holds a valid calendar month.
+pub fn is_valid_month(value: Month) -> bool {
+    return value == Month::January || value == Month::February ||
+           value == Month::March || value == Month::April ||
+           value == Month::May || value == Month::June ||
+           value == Month::July || value == Month::August ||
+           value == Month::September || value == Month::October ||
+           value == Month::November || value == Month::December;
+}
+
+/// @brief Convert a typed month to its one-based numeric representation.
+pub fn month_number(value: Month) -> i32 {
+    if value == Month::January { return 1; }
+    if value == Month::February { return 2; }
+    if value == Month::March { return 3; }
+    if value == Month::April { return 4; }
+    if value == Month::May { return 5; }
+    if value == Month::June { return 6; }
+    if value == Month::July { return 7; }
+    if value == Month::August { return 8; }
+    if value == Month::September { return 9; }
+    if value == Month::October { return 10; }
+    if value == Month::November { return 11; }
+    return 12;
+}
+
+/// @brief Convert a one-based number to a typed month, validating 1..12.
+pub fn month_from_number(value: i32) -> option<Month> {
+    if value == 1 { return Some<Month>(Month::January); }
+    if value == 2 { return Some<Month>(Month::February); }
+    if value == 3 { return Some<Month>(Month::March); }
+    if value == 4 { return Some<Month>(Month::April); }
+    if value == 5 { return Some<Month>(Month::May); }
+    if value == 6 { return Some<Month>(Month::June); }
+    if value == 7 { return Some<Month>(Month::July); }
+    if value == 8 { return Some<Month>(Month::August); }
+    if value == 9 { return Some<Month>(Month::September); }
+    if value == 10 { return Some<Month>(Month::October); }
+    if value == 11 { return Some<Month>(Month::November); }
+    if value == 12 { return Some<Month>(Month::December); }
+    return None<Month>();
+}
+
+/// @brief Add signed months with wraparound, discarding whole years.
+pub fn add_months_to_month(value: Month, offset: i64) -> option<Month> {
+    if !is_valid_month(value) { return None<Month>(); }
+    let current: i64 = i64(month_number(value)) - 1;
+    let delta: i64 = offset % 12;
+    var shifted: i64 = (current + delta) % 12;
+    if shifted < 0 { shifted = shifted + 12; }
+    return month_from_number(i32(shifted + 1));
+}
+
+/// @brief Return the number of days in a typed month for `year`.
+pub fn month_days(value: Month, year: i32) -> i32 {
+    if !is_valid_month(value) { return 0; }
+    return days_in_month(year, month_number(value));
 }
 
 /// @brief Return whether the fields form a valid proleptic Gregorian date.
