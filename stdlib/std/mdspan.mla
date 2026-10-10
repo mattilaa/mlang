@@ -292,4 +292,30 @@ impl<T> Mdspan {
         }
         return Some<T>(self.data[flat_index]);
     }
+
+    /// @brief Write an element through the mapping when indices are valid.
+    /// The descriptor owns a copy of its source list, so writes do not modify
+    /// the list passed to its constructor.
+    pub fn set(self: &mut Mdspan<T>, indices: &list<i64>, value: T) -> bool {
+        let rank: i64 = self.extents.len();
+        if indices.len() != rank { return false; }
+        var flat_index: i64 = 0;
+        for dimension in 0..rank {
+            let index: i64 = indices[dimension];
+            let extent_value: i64 = self.extents[dimension];
+            if index < 0 || index >= extent_value { return false; }
+            flat_index = flat_index + index * self.strides[dimension];
+        }
+        if flat_index < 0 || flat_index >= self.required_size ||
+           flat_index >= self.data.len() {
+            return false;
+        }
+        var updated: list<T> = [];
+        for i in 0..self.data.len() {
+            if i == flat_index { updated.push(value); }
+            else { updated.push(self.data[i]); }
+        }
+        self.data = updated;
+        return true;
+    }
 }
