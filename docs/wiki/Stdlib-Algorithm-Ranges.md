@@ -446,7 +446,7 @@ fn example() {
   input as one field.
 - `concat(left, right)` copies two same-typed ranges into one list (C++23
   `views::concat` style).
-- `zip` overloads for two, three, and four ranges materialize heterogeneous
+- `zip` overloads for two through six ranges materialize heterogeneous
   tuples, stopping at the shortest input (C++23 `views::zip` style).
 - `pairwise(data)` materializes tuples of each adjacent pair (C++23
   `views::pairwise` style); inputs shorter than two elements produce an empty
@@ -472,7 +472,7 @@ fn example() {
   caller-selected starting index, including negative offsets.
 - `keys(data)` and `values(data)` project the first or second member of each
   `tuple<K, V>` (eager counterparts to C++20 `views::keys` and `views::values`).
-- `cartesian_product` overloads for two through five ranges materialize
+- `cartesian_product` overloads for two through six ranges materialize
   every value combination in nested-loop order; the rightmost input varies
   fastest (C++23 `views::cartesian_product` style). Any empty input produces
   an empty result.

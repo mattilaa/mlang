@@ -2487,6 +2487,16 @@ fn test_algorithm_ranges_zip_five_ranges() {
     };
     let sums: list<i32> = zip_transform(a, b, c, d, e, sum_five);
     verify(sums.len() == 2 && sums[0] == 11111 && sums[1] == 22222);
+
+    let sixth_values: list<i64> = [100000, 200000];
+    let six_rows: list<tuple<i32, i64, bool, str8, i32, i64>> =
+        zip(first_values, second_values, third_values, fourth_values,
+            fifth_values, sixth_values);
+    verify(six_rows.len() == 2);
+    let six_first: tuple<i32, i64, bool, str8, i32, i64> = six_rows[0];
+    verify(six_first.0 == 1 && six_first.1 == 10 && six_first.2 &&
+           eq(six_first.3, "a") == 1 && six_first.4 == 100 &&
+           six_first.5 == 100000);
 }
 
 #[test]
@@ -2601,6 +2611,20 @@ fn test_algorithm_ranges_cartesian_product() {
         cartesian_product(left, middle, third_values, fourth_values,
                           empty_values);
     verify(no_products.len() == 0);
+
+    let sixth_values: list<i64> = [50000, 60000];
+    let six_products: list<tuple<i32, i64, bool, i64, i32, i64>> =
+        cartesian_product(left, middle, third_values, fourth_values,
+                          fifth_values, sixth_values);
+    verify(six_products.len() == 32);
+    let first_six: tuple<i32, i64, bool, i64, i32, i64> = six_products[0];
+    let last_six: tuple<i32, i64, bool, i64, i32, i64> = six_products[31];
+    verify(first_six.0 == 2 && first_six.1 == 10 && first_six.2 &&
+           first_six.3 == 1000 && first_six.4 == 10000 &&
+           first_six.5 == 50000);
+    verify(last_six.0 == 4 && last_six.1 == 20 && last_six.2 &&
+           last_six.3 == 2000 && last_six.4 == 20000 &&
+           last_six.5 == 60000);
 }
 
 #[test]
