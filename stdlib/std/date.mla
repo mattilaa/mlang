@@ -380,12 +380,14 @@ pub fn resolve_month_day_last(value: MonthDayLast, year: i32)
 
 /// @brief Return whether the year/month fields form a valid Gregorian month.
 pub fn is_valid_year_month(value: YearMonth) -> bool {
-    return value.month >= 1 && value.month <= 12;
+    return is_valid_year(value.year) && value.month >= 1 && value.month <= 12;
 }
 
 /// @brief Construct a checked year/month value.
 pub fn make_year_month(year: i32, month: i32) -> option<YearMonth> {
-    if month < 1 || month > 12 { return None<YearMonth>(); }
+    if !is_valid_year(year) || month < 1 || month > 12 {
+        return None<YearMonth>();
+    }
     return Some<YearMonth>(YearMonth { year: year, month: month });
 }
 
@@ -401,13 +403,13 @@ pub fn make_year_month_from_parts(year: Year, month: Month)
 }
 
 /// @brief Add calendar months, normalizing across year boundaries.
-/// Invalid input and results outside the `i32` year range return `None`.
+/// Invalid input and results outside the chrono `Year` range return `None`.
 pub fn add_year_month_months(value: YearMonth, offset: i64)
     -> option<YearMonth> {
     if !is_valid_year_month(value) { return None<YearMonth>(); }
     let current_month: i64 = i64(value.year) * 12 + i64(value.month) - 1;
-    let minimum_month: i64 = i64(-2147483648) * 12;
-    let maximum_month: i64 = i64(2147483647) * 12 + 11;
+    let minimum_month: i64 = i64(-32767) * 12;
+    let maximum_month: i64 = i64(32767) * 12 + 11;
     if offset > 0 && current_month > maximum_month - offset {
         return None<YearMonth>();
     }
@@ -441,8 +443,8 @@ pub fn add_year_month_years(value: YearMonth, offset: i64)
     -> option<YearMonth> {
     if !is_valid_year_month(value) { return None<YearMonth>(); }
     let current_year: i64 = i64(value.year);
-    let minimum_year: i64 = -2147483648;
-    let maximum_year: i64 = 2147483647;
+    let minimum_year: i64 = -32767;
+    let maximum_year: i64 = 32767;
     if offset > 0 && current_year > maximum_year - offset {
         return None<YearMonth>();
     }

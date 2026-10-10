@@ -8,7 +8,7 @@ Module file: `stdlib/std/date.mla`
 - `date_time`
 - `civil_date`
 - `YearMonthDay` (alias of `CivilDate`)
-- `YearMonth` (checked year/month without a day)
+- `YearMonth` (checked year/month without a day; year range matches `Year`)
 - `Year` (checked proleptic Gregorian year in `-32767..32767`)
 - `Day` (checked day-of-month component)
 - `MonthDay` and `MonthDayLast` (recurring month/day calendar values)

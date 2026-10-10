@@ -283,8 +283,8 @@ fn test_year_month_value_and_arithmetic() {
 
     let shifted_year: YearMonth = add_year_month_years(leap_month, -4).unwrap();
     verify(shifted_year.year == 2020 && shifted_year.month == 2);
-    let max_month: YearMonth = YearMonth { year: 2147483647, month: 12 };
-    let min_month: YearMonth = YearMonth { year: -2147483648, month: 1 };
+    let max_month: YearMonth = YearMonth { year: 32767, month: 12 };
+    let min_month: YearMonth = YearMonth { year: -32767, month: 1 };
     verify(add_year_month_months(max_month, 1).is_none());
     verify(add_year_month_months(min_month, -1).is_none());
     verify(add_year_month_months(january, 9223372036854775807).is_none());
@@ -293,8 +293,11 @@ fn test_year_month_value_and_arithmetic() {
     verify(add_year_month_years(january, 9223372036854775807).is_none());
     verify(add_year_month_years(january, -9223372036854775807 - 1).is_none());
     verify(!is_valid_year_month(YearMonth { year: 2024, month: 13 }));
+    verify(!is_valid_year_month(YearMonth { year: 32768, month: 1 }));
     verify(make_year_month(2024, 0).is_none());
+    verify(make_year_month(32768, 1).is_none());
     verify(year_month_first_day(YearMonth { year: 2024, month: 13 }).is_none());
+    verify(months_between(YearMonth { year: 32768, month: 1 }, january).is_none());
     verify(months_between(YearMonth { year: 2023, month: 12 },
                           YearMonth { year: 2024, month: 2 }).unwrap() == 2);
     verify(months_between(YearMonth { year: 2024, month: 2 },
