@@ -5033,6 +5033,130 @@ pub fn minmax_element_index_by_projected(data: &list<T>, less: Less,
     return (minimum, maximum);
 }
 
+/// @brief Return the minimum element index, or `None` for an empty range.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn min_element_index_option(data: &list<T>) -> option<i64> {
+    let index: i64 = min_element_index(data);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the maximum element index, or `None` for an empty range.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn max_element_index_option(data: &list<T>) -> option<i64> {
+    let index: i64 = max_element_index(data);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first-minimum and last-maximum indices as an option.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn minmax_element_index_option(data: &list<T>)
+    -> option<tuple<i64, i64>> {
+    let indices: tuple<i64, i64> = minmax_element_index(data);
+    if indices.0 < 0 { return None<tuple<i64, i64>>(); }
+    return Some<tuple<i64, i64>>(indices);
+}
+
+/// @brief Return the minimum index under `less`, or `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn min_element_index_by_option(data: &list<T>, less: Less)
+    -> option<i64> {
+    let index: i64 = min_element_index_by(data, less);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the maximum index under `less`, or `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn max_element_index_by_option(data: &list<T>, less: Less)
+    -> option<i64> {
+    let index: i64 = max_element_index_by(data, less);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return comparator-based extrema indices as an option.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn minmax_element_index_by_option(data: &list<T>, less: Less)
+    -> option<tuple<i64, i64>> {
+    let indices: tuple<i64, i64> = minmax_element_index_by(data, less);
+    if indices.0 < 0 { return None<tuple<i64, i64>>(); }
+    return Some<tuple<i64, i64>>(indices);
+}
+
+/// @brief Return the projected minimum index, or `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn min_element_index_projected_option(data: &list<T>,
+                                          projection: Projection)
+    -> option<i64> {
+    let index: i64 = min_element_index_projected(data, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the projected maximum index, or `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn max_element_index_projected_option(data: &list<T>,
+                                          projection: Projection)
+    -> option<i64> {
+    let index: i64 = max_element_index_projected(data, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return projected extrema indices as an option.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn minmax_element_index_projected_option(data: &list<T>,
+                                             projection: Projection)
+    -> option<tuple<i64, i64>> {
+    let indices: tuple<i64, i64> =
+        minmax_element_index_projected(data, projection);
+    if indices.0 < 0 { return None<tuple<i64, i64>>(); }
+    return Some<tuple<i64, i64>>(indices);
+}
+
+/// @brief Return comparator-projected minimum index, or `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn min_element_index_by_projected_option(
+    data: &list<T>, less: Less, projection: Projection) -> option<i64> {
+    let index: i64 = min_element_index_by_projected(data, less, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return comparator-projected maximum index, or `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn max_element_index_by_projected_option(
+    data: &list<T>, less: Less, projection: Projection) -> option<i64> {
+    let index: i64 = max_element_index_by_projected(data, less, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return comparator-projected extrema indices as an option.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn minmax_element_index_by_projected_option(
+    data: &list<T>, less: Less, projection: Projection)
+    -> option<tuple<i64, i64>> {
+    let indices: tuple<i64, i64> =
+        minmax_element_index_by_projected(data, less, projection);
+    if indices.0 < 0 { return None<tuple<i64, i64>>(); }
+    return Some<tuple<i64, i64>>(indices);
+}
+
 /// @brief Return the first value with a minimum comparator-projected key.
 /// Requires a nonempty input.
 /// @ingroup algorithm_ranges

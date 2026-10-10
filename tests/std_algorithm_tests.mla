@@ -387,6 +387,9 @@ use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
 use std::algorithm::ranges::minmax_element_index;
+use std::algorithm::ranges::min_element_index_option;
+use std::algorithm::ranges::max_element_index_option;
+use std::algorithm::ranges::minmax_element_index_option;
 use std::algorithm::ranges::min_element_value;
 use std::algorithm::ranges::max_element_value;
 use std::algorithm::ranges::minmax_element_value;
@@ -405,18 +408,27 @@ use std::algorithm::ranges::minmax_element_by_projected;
 use std::algorithm::ranges::min_element_index_by;
 use std::algorithm::ranges::max_element_index_by;
 use std::algorithm::ranges::minmax_element_index_by;
+use std::algorithm::ranges::min_element_index_by_option;
+use std::algorithm::ranges::max_element_index_by_option;
+use std::algorithm::ranges::minmax_element_index_by_option;
 use std::algorithm::ranges::min_element_value_by;
 use std::algorithm::ranges::max_element_value_by;
 use std::algorithm::ranges::minmax_element_value_by;
 use std::algorithm::ranges::min_element_index_projected;
 use std::algorithm::ranges::max_element_index_projected;
 use std::algorithm::ranges::minmax_element_index_projected;
+use std::algorithm::ranges::min_element_index_projected_option;
+use std::algorithm::ranges::max_element_index_projected_option;
+use std::algorithm::ranges::minmax_element_index_projected_option;
 use std::algorithm::ranges::min_element_value_projected;
 use std::algorithm::ranges::max_element_value_projected;
 use std::algorithm::ranges::minmax_element_value_projected;
 use std::algorithm::ranges::min_element_index_by_projected;
 use std::algorithm::ranges::max_element_index_by_projected;
 use std::algorithm::ranges::minmax_element_index_by_projected;
+use std::algorithm::ranges::min_element_index_by_projected_option;
+use std::algorithm::ranges::max_element_index_by_projected_option;
+use std::algorithm::ranges::minmax_element_index_by_projected_option;
 use std::algorithm::ranges::min_element_value_by_projected;
 use std::algorithm::ranges::max_element_value_by_projected;
 use std::algorithm::ranges::minmax_element_value_by_projected;
@@ -3218,6 +3230,55 @@ fn test_algorithm_ranges_generic_element_extrema() {
     let no_extrema: tuple<i64, i64> = minmax_element_index(empty);
     verify(extrema.0 == 1 && extrema.1 == 3);
     verify(no_extrema.0 == -1 && no_extrema.1 == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_optional_extrema_indices() {
+    let values: list<i32> = [23, 11, 19, 32, 38];
+    let empty: list<i32> = [];
+    let descending = |left: i32, right: i32| { return left > right; };
+    let tens = |value: i32| { return value / 10; };
+
+    verify(min_element_index_option(values).unwrap() == 1);
+    verify(max_element_index_option(values).unwrap() == 4);
+    let plain_pair: tuple<i64, i64> = minmax_element_index_option(values).unwrap();
+    verify(plain_pair.0 == 1 && plain_pair.1 == 4);
+    verify(min_element_index_option(empty).is_none());
+    verify(max_element_index_option(empty).is_none());
+    verify(minmax_element_index_option(empty).is_none());
+
+    verify(min_element_index_by_option(values, descending).unwrap() == 4);
+    verify(max_element_index_by_option(values, descending).unwrap() == 1);
+    let by_pair: tuple<i64, i64> =
+        minmax_element_index_by_option(values, descending).unwrap();
+    verify(by_pair.0 == 4 && by_pair.1 == 1);
+    verify(min_element_index_by_option(empty, descending).is_none());
+    verify(max_element_index_by_option(empty, descending).is_none());
+    verify(minmax_element_index_by_option(empty, descending).is_none());
+
+    verify(min_element_index_projected_option(values, tens).unwrap() == 1);
+    verify(max_element_index_projected_option(values, tens).unwrap() == 3);
+    let projected_pair: tuple<i64, i64> =
+        minmax_element_index_projected_option(values, tens).unwrap();
+    verify(projected_pair.0 == 1 && projected_pair.1 == 4);
+    verify(min_element_index_projected_option(empty, tens).is_none());
+    verify(max_element_index_projected_option(empty, tens).is_none());
+    verify(minmax_element_index_projected_option(empty, tens).is_none());
+
+    verify(min_element_index_by_projected_option(
+        values, descending, tens).unwrap() == 3);
+    verify(max_element_index_by_projected_option(
+        values, descending, tens).unwrap() == 1);
+    let both_pair: tuple<i64, i64> =
+        minmax_element_index_by_projected_option(
+            values, descending, tens).unwrap();
+    verify(both_pair.0 == 3 && both_pair.1 == 2);
+    verify(min_element_index_by_projected_option(
+        empty, descending, tens).is_none());
+    verify(max_element_index_by_projected_option(
+        empty, descending, tens).is_none());
+    verify(minmax_element_index_by_projected_option(
+        empty, descending, tens).is_none());
 }
 
 #[test]

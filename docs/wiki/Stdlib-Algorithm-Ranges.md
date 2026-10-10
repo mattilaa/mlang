@@ -177,6 +177,11 @@ fn example() {
   pass, or `(-1, -1)` for empty input. The comparator form
   `minmax_element_index_by(data, less)` applies the same tie rules under a
   strict ordering.
+- `min_element_index_option`, `max_element_index_option`, and
+  `minmax_element_index_option` return `Some(index)` or `Some((min, max))`,
+  using `None` for empty input. `_by_option`, `_projected_option`, and
+  `_by_projected_option` forms preserve the corresponding comparator and
+  projection ordering and tie behavior.
 - `minmax_element_value(data)` and `minmax_element_value_by(data, less)` return
   both selected values in one traversal; like the individual value forms, they
   require nonempty input.
