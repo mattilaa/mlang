@@ -59,6 +59,13 @@ typedef struct
 
 typedef struct
 {
+    _Atomic uint32_t value;
+    pthread_mutex_t wait_mu;
+    pthread_cond_t wait_cv;
+} mlang_sync_atomic_u32_t;
+
+typedef struct
+{
     atomic_flag flag;
 } mlang_sync_atomic_flag_t;
 
@@ -566,6 +573,236 @@ int __mlang_std_sync_atomic_i64_free(int64_t handle)
         int error = cond_rc != 0 ? cond_rc : mutex_rc;
         (void)snprintf(g_last_error, sizeof(g_last_error),
                        "std::sync AtomicI64: destroy: %s", strerror(error));
+        return -1;
+    }
+    free(value);
+    clear_error();
+    return 0;
+}
+
+static mlang_sync_atomic_u32_t* atomic_u32_from_handle(int64_t handle)
+{
+    return (mlang_sync_atomic_u32_t*)(intptr_t)handle;
+}
+
+static int atomic_u32_validate(int64_t handle, int order, memory_order* out)
+{
+    if(!atomic_u32_from_handle(handle))
+    {
+        set_error("std::sync AtomicU32: invalid handle");
+        return 0;
+    }
+    if(!atomic_order_from_int(order, out))
+    {
+        set_error("std::sync AtomicU32: invalid memory order");
+        return 0;
+    }
+    return 1;
+}
+
+int64_t __mlang_std_sync_atomic_u32_new(uint32_t initial)
+{
+    mlang_sync_atomic_u32_t* value = malloc(sizeof(*value));
+    if(!value)
+    {
+        set_error("std::sync AtomicU32: out of memory");
+        return 0;
+    }
+    atomic_init(&value->value, initial);
+    int rc = pthread_mutex_init(&value->wait_mu, NULL);
+    if(rc != 0)
+    {
+        free(value);
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicU32: mutex init: %s", strerror(rc));
+        return 0;
+    }
+    rc = pthread_cond_init(&value->wait_cv, NULL);
+    if(rc != 0)
+    {
+        (void)pthread_mutex_destroy(&value->wait_mu);
+        free(value);
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicU32: condition init: %s", strerror(rc));
+        return 0;
+    }
+    clear_error();
+    return (int64_t)(intptr_t)value;
+}
+
+int __mlang_std_sync_atomic_u32_load(int64_t handle, int order, uint32_t* output)
+{
+    memory_order mo;
+    if(!output)
+    {
+        set_error("std::sync AtomicU32: null output");
+        return -1;
+    }
+    if(!atomic_u32_validate(handle, order, &mo)) return -1;
+    if(mo == memory_order_release || mo == memory_order_acq_rel)
+    {
+        set_error("std::sync AtomicU32: invalid load memory order");
+        return -1;
+    }
+    *output = atomic_load_explicit(&atomic_u32_from_handle(handle)->value, mo);
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_atomic_u32_store(int64_t handle, uint32_t value, int order)
+{
+    memory_order mo;
+    if(!atomic_u32_validate(handle, order, &mo)) return -1;
+    if(mo == memory_order_consume || mo == memory_order_acquire ||
+       mo == memory_order_acq_rel)
+    {
+        set_error("std::sync AtomicU32: invalid store memory order");
+        return -1;
+    }
+    atomic_store_explicit(&atomic_u32_from_handle(handle)->value, value, mo);
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_atomic_u32_wait(int64_t handle, uint32_t old_value, int order)
+{
+    memory_order mo;
+    if(!atomic_u32_validate(handle, order, &mo)) return -1;
+    if(mo == memory_order_release || mo == memory_order_acq_rel)
+    {
+        set_error("std::sync AtomicU32: invalid wait memory order");
+        return -1;
+    }
+    mlang_sync_atomic_u32_t* value = atomic_u32_from_handle(handle);
+    int rc = pthread_mutex_lock(&value->wait_mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicU32: wait mutex lock: %s", strerror(rc));
+        return -1;
+    }
+    while(atomic_load_explicit(&value->value, mo) == old_value)
+    {
+        rc = pthread_cond_wait(&value->wait_cv, &value->wait_mu);
+        if(rc != 0)
+        {
+            (void)pthread_mutex_unlock(&value->wait_mu);
+            (void)snprintf(g_last_error, sizeof(g_last_error),
+                           "std::sync AtomicU32: wait: %s", strerror(rc));
+            return -1;
+        }
+    }
+    rc = pthread_mutex_unlock(&value->wait_mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicU32: wait mutex unlock: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+static int atomic_u32_notify(int64_t handle, int all)
+{
+    memory_order ignored;
+    if(!atomic_u32_validate(handle, 5, &ignored)) return -1;
+    mlang_sync_atomic_u32_t* value = atomic_u32_from_handle(handle);
+    int rc = pthread_mutex_lock(&value->wait_mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicU32: notify mutex lock: %s", strerror(rc));
+        return -1;
+    }
+    rc = all ? pthread_cond_broadcast(&value->wait_cv) :
+               pthread_cond_signal(&value->wait_cv);
+    int unlock_rc = pthread_mutex_unlock(&value->wait_mu);
+    if(rc != 0 || unlock_rc != 0)
+    {
+        int error = rc != 0 ? rc : unlock_rc;
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicU32: notify: %s", strerror(error));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_atomic_u32_notify_one(int64_t handle)
+{
+    return atomic_u32_notify(handle, 0);
+}
+
+int __mlang_std_sync_atomic_u32_notify_all(int64_t handle)
+{
+    return atomic_u32_notify(handle, 1);
+}
+
+#define DEFINE_ATOMIC_U32_RMW(name, expression) \
+int __mlang_std_sync_atomic_u32_##name(int64_t handle, uint32_t operand, \
+                                       int order, uint32_t* output) \
+{ \
+    memory_order mo; \
+    if(!output || !atomic_u32_validate(handle, order, &mo)) { \
+        if(!output) set_error("std::sync AtomicU32: null output"); \
+        return -1; \
+    } \
+    *output = (expression); \
+    clear_error(); \
+    return 0; \
+}
+
+DEFINE_ATOMIC_U32_RMW(exchange,
+    atomic_exchange_explicit(&atomic_u32_from_handle(handle)->value, operand, mo))
+DEFINE_ATOMIC_U32_RMW(fetch_add,
+    atomic_fetch_add_explicit(&atomic_u32_from_handle(handle)->value, operand, mo))
+DEFINE_ATOMIC_U32_RMW(fetch_sub,
+    atomic_fetch_sub_explicit(&atomic_u32_from_handle(handle)->value, operand, mo))
+DEFINE_ATOMIC_U32_RMW(fetch_and,
+    atomic_fetch_and_explicit(&atomic_u32_from_handle(handle)->value, operand, mo))
+DEFINE_ATOMIC_U32_RMW(fetch_or,
+    atomic_fetch_or_explicit(&atomic_u32_from_handle(handle)->value, operand, mo))
+DEFINE_ATOMIC_U32_RMW(fetch_xor,
+    atomic_fetch_xor_explicit(&atomic_u32_from_handle(handle)->value, operand, mo))
+
+#undef DEFINE_ATOMIC_U32_RMW
+
+int __mlang_std_sync_atomic_u32_compare_exchange(int64_t handle,
+                                                 uint32_t* expected,
+                                                 uint32_t desired, int order)
+{
+    memory_order success;
+    if(!expected || !atomic_u32_validate(handle, order, &success))
+    {
+        if(!expected) set_error("std::sync AtomicU32: null expected pointer");
+        return -1;
+    }
+    memory_order failure = success;
+    if(success == memory_order_release) failure = memory_order_relaxed;
+    else if(success == memory_order_acq_rel) failure = memory_order_acquire;
+    int exchanged = atomic_compare_exchange_strong_explicit(
+        &atomic_u32_from_handle(handle)->value, expected, desired,
+        success, failure);
+    clear_error();
+    return exchanged ? 1 : 0;
+}
+
+int __mlang_std_sync_atomic_u32_free(int64_t handle)
+{
+    mlang_sync_atomic_u32_t* value = atomic_u32_from_handle(handle);
+    if(!value)
+    {
+        set_error("std::sync AtomicU32: invalid handle");
+        return -1;
+    }
+    int cond_rc = pthread_cond_destroy(&value->wait_cv);
+    int mutex_rc = pthread_mutex_destroy(&value->wait_mu);
+    if(cond_rc != 0 || mutex_rc != 0)
+    {
+        int error = cond_rc != 0 ? cond_rc : mutex_rc;
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicU32: destroy: %s", strerror(error));
         return -1;
     }
     free(value);

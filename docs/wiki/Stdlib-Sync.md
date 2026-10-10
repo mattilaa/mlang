@@ -11,6 +11,7 @@ Module file: `stdlib/std/sync.mla`
 - `lock_free_queue` (SPSC str8 queue)
 - `AtomicI64` (shared 64-bit atomic integer)
 - `AtomicU64` (shared 64-bit unsigned atomic integer)
+- `AtomicU32` (native-width 32-bit unsigned atomic integer)
 - `AtomicBool` (shared atomic boolean value)
 - `AtomicFlag` (guaranteed lock-free boolean flag)
 - `Latch` (one-shot countdown latch)
@@ -161,6 +162,18 @@ The current implementation uses the existing 64-bit atomic runtime storage;
 it does not promise lock-free behavior. As with `AtomicI64`, use explicit
 acquire/release ordering when publishing other data, notify after changing a
 waited-on value, and close only after every thread has stopped using it.
+
+### AtomicU32
+
+`AtomicU32` is a native-width C11 atomic unsigned 32-bit integer and follows
+C++20 [`std::atomic<std::uint32_t>`](Stdlib-Module-API) semantics. It supports ordered `load`,
+`store`, `exchange`, `fetch_add`, `fetch_sub`, `fetch_and`, `fetch_or`,
+`fetch_xor`, strong `compare_exchange`, `wait`, and notifications. Arithmetic
+read-modify-write operations wrap modulo 2^32. Compare-exchange returns
+`result<tuple<bool, u32>, str8>` as `(exchanged, expected_after)`, exposing the
+observed value after a failed comparison. The backend uses native-width atomic
+storage but does not promise lock-free operations. Notify after changing a
+waited-on value and close only after every thread has stopped using it.
 
 ### AtomicBool
 
