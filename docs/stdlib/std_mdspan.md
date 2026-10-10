@@ -26,6 +26,9 @@ single scalar element.
 - `linear_index(indices)` returns the mapped backing-list offset for a valid
   coordinate, or `None` for invalid rank or bounds. This exposes the mapping
   operation separately from loading the element.
+- `set(indices, value)` writes through a valid mapping and returns false for
+  invalid rank or coordinates. Since the Mlang descriptor owns a copy, writes
+  update that copy and leave the constructor's input list unchanged.
 - `from_extents_left(data, extents)` validates and copies the same inputs but
   maps the leftmost extent contiguously, following C++23 `layout_left`.
 - `from_extents_strided(data, extents, strides)` copies all three lists and

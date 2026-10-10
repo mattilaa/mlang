@@ -15,7 +15,7 @@ fn test_mdspan_rank_extents_and_row_major_access() {
     let shape: list<i64> = [2, 3];
     let maybe_view: option<Mdspan<i32>> = from_extents(data, shape);
     verify(maybe_view.is_some());
-    let view: Mdspan<i32> = maybe_view.unwrap();
+    var view: Mdspan<i32> = maybe_view.unwrap();
     verify_eq_i64(2, view.rank());
     verify_eq_i64(6, view.size());
     verify_eq_i64(6, view.required_span_size());
@@ -62,6 +62,14 @@ fn test_mdspan_rank_extents_and_row_major_access() {
     verify(wrong_rank_value.is_none());
     verify(before_start_value.is_none());
     verify(past_extent_value.is_none());
+    let update_indices: list<i64> = [1, 1];
+    verify(view.set(update_indices, 55));
+    let updated_value: option<i32> = view.get(update_indices);
+    verify(updated_value.is_some() && updated_value.unwrap() == 55);
+    verify(data[4] == 50);
+    verify(!view.set(wrong_rank, 99));
+    verify(!view.set(before_start, 99));
+    verify(!view.set(past_extent, 99));
 }
 
 #[test]
@@ -104,7 +112,7 @@ fn test_mdspan_layout_left_column_major_access() {
     let shape: list<i64> = [2, 3];
     let maybe_left: option<Mdspan<i32>> = from_extents_left(data, shape);
     verify(maybe_left.is_some());
-    let left: Mdspan<i32> = maybe_left.unwrap();
+    var left: Mdspan<i32> = maybe_left.unwrap();
     let row_stride: option<i64> = left.stride(0);
     let column_stride: option<i64> = left.stride(1);
     verify(row_stride.is_some() && row_stride.unwrap() == 1);
@@ -122,6 +130,10 @@ fn test_mdspan_layout_left_column_major_access() {
     verify(b.is_some() && b.unwrap() == 30);
     verify(c.is_some() && c.unwrap() == 60);
     verify(mapped_offset.is_some() && mapped_offset.unwrap() == 1);
+    let update_indices: list<i64> = [0, 1];
+    verify(left.set(update_indices, 33));
+    let updated: option<i32> = left.get(update_indices);
+    verify(updated.is_some() && updated.unwrap() == 33 && data[2] == 30);
     verify(data[0] == 10 && data[1] == 20 && data[2] == 30);
 
     let bad_shape: list<i64> = [2, 4];
@@ -137,7 +149,7 @@ fn test_mdspan_layout_stride_custom_mapping() {
     let maybe_view: option<Mdspan<i32>> =
         from_extents_strided(data, shape, strides);
     verify(maybe_view.is_some());
-    let view: Mdspan<i32> = maybe_view.unwrap();
+    var view: Mdspan<i32> = maybe_view.unwrap();
     verify(view.rank() == 2 && view.size() == 6);
     verify(view.required_span_size() == 8);
     verify(view.is_unique() && !view.is_exhaustive() && view.is_strided());
@@ -156,6 +168,10 @@ fn test_mdspan_layout_stride_custom_mapping() {
     verify(b.is_some() && b.unwrap() == 30);
     verify(c.is_some() && c.unwrap() == 80);
     verify(c_offset.is_some() && c_offset.unwrap() == 7);
+    let update_indices: list<i64> = [1, 1];
+    verify(view.set(update_indices, 88));
+    let updated: option<i32> = view.get(update_indices);
+    verify(updated.is_some() && updated.unwrap() == 88);
 }
 
 #[test]
