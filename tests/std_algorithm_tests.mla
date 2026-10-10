@@ -37,6 +37,7 @@ use std::algorithm::numeric::fold_right_last;
 use std::algorithm::ranges::fold_left as ranges_fold_left;
 use std::algorithm::ranges::fold_right as ranges_fold_right;
 use std::algorithm::ranges::fold_left_with_iter as ranges_fold_left_with_iter;
+use std::algorithm::ranges::fold_right_with_iter as ranges_fold_right_with_iter;
 use std::algorithm::ranges::fold_left_first as ranges_fold_left_first;
 use std::algorithm::ranges::fold_left_first_with_iter as ranges_fold_left_first_with_iter;
 use std::algorithm::ranges::fold_right_last as ranges_fold_right_last;
@@ -3665,6 +3666,9 @@ fn test_algorithm_ranges_folds() {
     verify(ranges_fold_right(values, 4, encode_right) == 4321);
     let with_iter: tuple<i64, i32> = ranges_fold_left_with_iter(values, 4, encode_left);
     verify(with_iter.0 == 3 && with_iter.1 == 4123);
+    let right_with_iter: tuple<i64, i32> =
+        ranges_fold_right_with_iter(values, 4, encode_right);
+    verify(right_with_iter.0 == 3 && right_with_iter.1 == 4321);
 
     let add_to_i64 = |acc: i64, value: i32| { return acc + value; };
     let heterogeneous: i64 = ranges_fold_left(values, 10, add_to_i64);
@@ -3692,6 +3696,9 @@ fn test_algorithm_ranges_folds() {
     verify(ranges_fold_right(empty, 23, encode_right) == 23);
     let empty_with_iter: tuple<i64, i32> = ranges_fold_left_with_iter(empty, 29, encode_left);
     verify(empty_with_iter.0 == 0 && empty_with_iter.1 == 29);
+    let empty_right_with_iter: tuple<i64, i32> =
+        ranges_fold_right_with_iter(empty, 31, encode_right);
+    verify(empty_right_with_iter.0 == 0 && empty_right_with_iter.1 == 31);
     verify(ranges_fold_left_first(empty, encode_left).is_none());
     verify(ranges_fold_left_first_with_iter(empty, encode_left).is_none());
     verify(ranges_fold_right_last(empty, encode_right).is_none());
