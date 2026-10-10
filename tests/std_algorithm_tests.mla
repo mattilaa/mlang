@@ -89,6 +89,9 @@ use std::algorithm::ranges::count_by;
 use std::algorithm::ranges::count_by_projected;
 use std::algorithm::ranges::find;
 use std::algorithm::ranges::find_option;
+use std::algorithm::ranges::find_projected_option;
+use std::algorithm::ranges::find_by_option;
+use std::algorithm::ranges::find_by_projected_option;
 use std::algorithm::ranges::find_if_option;
 use std::algorithm::ranges::find_if_projected_option;
 use std::algorithm::ranges::find_if_not_option;
@@ -4059,6 +4062,15 @@ fn test_algorithm_ranges_optional_find_indices() {
     let projected: option<i64> =
         find_if_projected_option(values, key_is_two, tens);
     verify(projected.is_some() && projected.unwrap() == 2);
+    verify(find_projected_option(values, 2, tens).unwrap() == 2);
+    let same_tens = |left: i32, right: i32| {
+        return left / 10 == right / 10;
+    };
+    verify(find_by_option(values, 29, same_tens).unwrap() == 2);
+    verify(find_by_projected_option(values, 29, same_tens, tens).unwrap() == 2);
+    verify(find_projected_option(values, 9, tens).is_none());
+    verify(find_by_option(values, 99, same_tens).is_none());
+    verify(find_by_projected_option(values, 99, same_tens, tens).is_none());
     let first_even: option<i64> = find_if_not_option(values, odd);
     verify(first_even.is_some() && first_even.unwrap() == 0);
     let first_not_one: option<i64> =
@@ -4066,6 +4078,9 @@ fn test_algorithm_ranges_optional_find_indices() {
     verify(first_not_one.is_some() && first_not_one.unwrap() == 0);
     let empty: list<i32> = [];
     verify(find_option(empty, 1).is_none());
+    verify(find_projected_option(empty, 1, tens).is_none());
+    verify(find_by_option(empty, 1, same_tens).is_none());
+    verify(find_by_projected_option(empty, 1, same_tens, tens).is_none());
     verify(find_if_option(empty, odd).is_none());
     verify(find_if_not_option(empty, odd).is_none());
     verify(find_if_not_projected_option(empty, key_is_two, tens).is_none());

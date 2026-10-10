@@ -74,6 +74,37 @@ pub fn find_projected(data: &list<T>, value: U, projection: Projection) -> i64 {
     return -1;
 }
 
+/// @brief Return the first projected value match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn find_projected_option(data: &list<T>, value: U,
+                             projection: Projection) -> option<i64> {
+    let index: i64 = find_projected(data, value, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first equivalent value match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn find_by_option(data: &list<T>, value: U,
+                      equivalent: Equivalent) -> option<i64> {
+    let index: i64 = find_by(data, value, equivalent);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected equivalent match as an option index.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, Projection>
+pub fn find_by_projected_option(data: &list<T>, value: U,
+                                equivalent: Equivalent,
+                                projection: Projection) -> option<i64> {
+    let index: i64 = find_by_projected(data, value, equivalent, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
 /// @brief Find the last element whose projected value equals `value`.
 /// Returns -1 when no projected key matches.
 /// @ingroup algorithm_ranges
