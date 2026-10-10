@@ -161,6 +161,28 @@ impl<K, V> FlatMultiMap {
     }
 }
 
+/// @brief Copy keys in ascending order, retaining equivalent keys.
+generic<K, V>
+pub fn keys(container: &FlatMultiMap<K, V>) -> list<K> {
+    var result: list<K> = [];
+    for i in 0..container.entries.len() {
+        let entry: tuple<K, V> = container.entries[i];
+        result.push(entry.0);
+    }
+    return result;
+}
+
+/// @brief Copy mapped values in corresponding key order.
+generic<K, V>
+pub fn values(container: &FlatMultiMap<K, V>) -> list<V> {
+    var result: list<V> = [];
+    for i in 0..container.entries.len() {
+        let entry: tuple<K, V> = container.entries[i];
+        result.push(entry.1);
+    }
+    return result;
+}
+
 /// @brief Erase entries accepted by a key/value predicate.
 generic<K, V, Predicate>
 pub fn erase_if(container: &mut FlatMultiMap<K, V>, predicate: Predicate)

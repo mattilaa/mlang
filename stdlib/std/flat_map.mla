@@ -237,6 +237,28 @@ impl<K, V> FlatMap {
     }
 }
 
+/// @brief Copy keys in ascending map order (C++23 `flat_map::keys` analogue).
+generic<K, V>
+pub fn keys(container: &FlatMap<K, V>) -> list<K> {
+    var result: list<K> = [];
+    for i in 0..container.entries.len() {
+        let entry: tuple<K, V> = container.entries[i];
+        result.push(entry.0);
+    }
+    return result;
+}
+
+/// @brief Copy mapped values in the corresponding key order.
+generic<K, V>
+pub fn values(container: &FlatMap<K, V>) -> list<V> {
+    var result: list<V> = [];
+    for i in 0..container.entries.len() {
+        let entry: tuple<K, V> = container.entries[i];
+        result.push(entry.1);
+    }
+    return result;
+}
+
 /// @brief Transfer non-colliding entries from `source` into `destination`.
 /// Destination values win for equivalent keys; colliding source entries stay
 /// in the source. Return the number of transferred entries (associative

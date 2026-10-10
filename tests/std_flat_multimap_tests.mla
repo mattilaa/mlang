@@ -3,6 +3,8 @@ mod std::flat_multimap;
 mod std::algorithm::ranges;
 use std::testing::verify;
 use std::flat_multimap::FlatMultiMap;
+use std::flat_multimap::keys as flat_multimap_keys;
+use std::flat_multimap::values as flat_multimap_values;
 use std::flat_multimap::erase_if;
 use std::flat_multimap::merge;
 use std::algorithm::ranges::zip;
@@ -31,6 +33,14 @@ fn test_flat_multimap_insert_lookup_and_duplicate_bounds() {
     verify(first.is_some() && first.unwrap() == 30);
     let missing: option<i32> = values.get(2);
     verify(missing.is_none());
+    let key_snapshot: list<i32> = flat_multimap_keys(values);
+    let value_snapshot: list<i32> = flat_multimap_values(values);
+    verify(key_snapshot.len() == 5 && key_snapshot[1] == 3 &&
+           key_snapshot[3] == 3);
+    verify(value_snapshot.len() == 5 && value_snapshot[1] == 30 &&
+           value_snapshot[2] == 31 && value_snapshot[3] == 32);
+    key_snapshot.push(9);
+    verify(key_snapshot.len() == 6 && values.len() == 5);
 }
 
 #[test]

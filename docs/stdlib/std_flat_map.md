@@ -19,7 +19,8 @@ let score: option<str8> = scores.get(20);
 
 The API includes `len`, `is_empty`, `lower_bound`, `upper_bound`, `equal_range`,
 `contains`, `get`, `insert`, `try_emplace`, `insert_or_assign`, `insert_range`,
-`remove`, `erase_if`, `clear`, `replace`, `merge`, `key_at`, and `value_at`.
+`remove`, `erase_if`, `clear`, `replace`, `merge`, `key_at`, `value_at`,
+`keys(container)`, and `values(container)`.
 `equal_range(key)` returns the half-open index pair `(lower_bound, upper_bound)`;
 it is empty for an absent key and contains one entry for a present key because
 keys are unique. `insert` returns true
@@ -41,6 +42,8 @@ false and leaves the existing contents unchanged.
 `merge(destination, source)` transfers non-colliding entries and returns the
 number transferred. Destination values win on duplicate keys, and the colliding
 entries remain in `source`; both maps stay sorted.
+`keys(container)` and `values(container)` return independent lists in matching
+sorted order, so modifying a returned snapshot does not mutate the map.
 
 Keys must support ordering (`<`) and equality (`==`). Lookup is O(log n);
 insertion and removal are O(n) due to list reconstruction. Merging two maps is
