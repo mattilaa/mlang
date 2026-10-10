@@ -19,6 +19,18 @@ let raw: u8 = to_underlying(Status::Failed);
   Mlang does not currently express an enum's underlying type as an associated
   type, provide the matching destination type through the result's expected
   type (for example, `let raw: u8 = to_underlying(value)`).
+- `cmp_equal_*`, `cmp_not_equal_*`, `cmp_less_*`, `cmp_greater_*`,
+  `cmp_less_equal_*`, and `cmp_greater_equal_*` compare signed and unsigned
+  integer operands without converting a negative signed value or a large
+  unsigned value through the wrong domain. The suffix identifies operand
+  order: `_signed_unsigned` or `_unsigned_signed`. Inputs are widened losslessly
+  to [`i64`](Quick-Guide#types) and [`u64`](Quick-Guide#types), so smaller integer types are supported too.
+- `in_range_<target>_from_i64(value)` and `in_range_<target>_from_u64(value)`
+  check whether a value can be represented by the named integer target ([`i8`](Quick-Guide#types),
+  [`i16`](Quick-Guide#types), [`i32`](Quick-Guide#types), [`i64`](Quick-Guide#types), [`u8`](Quick-Guide#types), [`u16`](Quick-Guide#types), [`u32`](Quick-Guide#types), or [`u64`](Quick-Guide#types)) before a cast. The source
+  width can be widened to [`i64`](Quick-Guide#types) or [`u64`](Quick-Guide#types) first without loss.
 
 This follows the behavior of C++23 [`std::to_underlying`](Stdlib-Module-API) when the destination
-type matches the enum's declared underlying type.
+type matches the enum's declared underlying type. Mixed-sign comparison and
+conversion range helpers follow C++20 `<utility>` integer comparison
+(`cmp_*`) and `in_range` semantics.

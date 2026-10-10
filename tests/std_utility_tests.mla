@@ -2,6 +2,34 @@ mod std::testing;
 mod std::utility;
 
 use std::utility::to_underlying;
+use std::utility::cmp_equal_signed_unsigned;
+use std::utility::cmp_equal_unsigned_signed;
+use std::utility::cmp_not_equal_signed_unsigned;
+use std::utility::cmp_not_equal_unsigned_signed;
+use std::utility::cmp_less_signed_unsigned;
+use std::utility::cmp_less_unsigned_signed;
+use std::utility::cmp_greater_signed_unsigned;
+use std::utility::cmp_greater_unsigned_signed;
+use std::utility::cmp_less_equal_signed_unsigned;
+use std::utility::cmp_less_equal_unsigned_signed;
+use std::utility::cmp_greater_equal_signed_unsigned;
+use std::utility::cmp_greater_equal_unsigned_signed;
+use std::utility::in_range_i8_from_i64;
+use std::utility::in_range_i64_from_i64;
+use std::utility::in_range_i16_from_i64;
+use std::utility::in_range_i32_from_i64;
+use std::utility::in_range_u8_from_i64;
+use std::utility::in_range_u16_from_i64;
+use std::utility::in_range_u32_from_i64;
+use std::utility::in_range_u64_from_i64;
+use std::utility::in_range_i8_from_u64;
+use std::utility::in_range_i16_from_u64;
+use std::utility::in_range_i32_from_u64;
+use std::utility::in_range_i64_from_u64;
+use std::utility::in_range_u64_from_u64;
+use std::utility::in_range_u8_from_u64;
+use std::utility::in_range_u16_from_u64;
+use std::utility::in_range_u32_from_u64;
 use std::testing::verify;
 
 enum ByteCode : u8 {
@@ -20,4 +48,66 @@ fn test_to_underlying_preserves_enum_values_and_widths() {
     let signed_value: i32 = to_underlying(SignedCode::Before);
     verify(byte_value == 255);
     verify(signed_value == -1);
+}
+
+#[test]
+fn test_mixed_sign_integer_comparisons() {
+    let signed_negative: i64 = -1;
+    let signed_zero: i64 = 0;
+    let signed_large: i64 = 4294967295;
+    let unsigned_zero: u64 = 0;
+    let unsigned_one: u64 = 1;
+    let unsigned_i64_max: u64 = 9223372036854775807;
+    let unsigned_max: u64 = 18446744073709551615;
+
+    verify(cmp_less_signed_unsigned(signed_negative, unsigned_zero));
+    verify(cmp_less_unsigned_signed(unsigned_zero, signed_one));
+    verify(!cmp_less_unsigned_signed(unsigned_one, signed_negative));
+    verify(cmp_equal_signed_unsigned(signed_large, u64(4294967295u32)));
+    verify(cmp_equal_unsigned_signed(unsigned_i64_max, i64(9223372036854775807)));
+    verify(cmp_greater_unsigned_signed(unsigned_max, signed_zero));
+    verify(cmp_greater_signed_unsigned(signed_zero, unsigned_max) == false);
+
+    verify(cmp_not_equal_signed_unsigned(signed_negative, unsigned_zero));
+    verify(cmp_not_equal_unsigned_signed(unsigned_one, signed_zero));
+    verify(cmp_less_equal_signed_unsigned(signed_zero, unsigned_zero));
+    verify(cmp_less_equal_unsigned_signed(unsigned_zero, signed_zero));
+    verify(cmp_greater_equal_signed_unsigned(signed_zero, unsigned_zero));
+    verify(cmp_greater_equal_unsigned_signed(unsigned_max, signed_zero));
+}
+
+#[test]
+fn test_integer_conversion_range_checks() {
+    verify(in_range_i64_from_i64(-9223372036854775807 - 1));
+    verify(in_range_i8_from_i64(-128));
+    verify(!in_range_i8_from_i64(-129));
+    verify(in_range_i16_from_i64(32767));
+    verify(!in_range_i16_from_i64(32768));
+    verify(in_range_i32_from_i64(-2147483648));
+    verify(!in_range_i32_from_i64(2147483648));
+    verify(!in_range_u8_from_i64(-1));
+    verify(in_range_u8_from_i64(255));
+    verify(!in_range_u8_from_i64(256));
+    verify(in_range_u16_from_i64(65535));
+    verify(!in_range_u16_from_i64(65536));
+    verify(in_range_u32_from_i64(4294967295));
+    verify(!in_range_u32_from_i64(4294967296));
+    verify(in_range_u64_from_i64(0));
+    verify(!in_range_u64_from_i64(-1));
+
+    verify(in_range_i8_from_u64(127));
+    verify(!in_range_i8_from_u64(128));
+    verify(in_range_i16_from_u64(32767));
+    verify(!in_range_i16_from_u64(32768));
+    verify(in_range_i32_from_u64(2147483647));
+    verify(!in_range_i32_from_u64(2147483648));
+    verify(in_range_i64_from_u64(9223372036854775807));
+    verify(!in_range_i64_from_u64(9223372036854775808u64));
+    verify(in_range_u64_from_u64(18446744073709551615));
+    verify(in_range_u8_from_u64(255));
+    verify(!in_range_u8_from_u64(256));
+    verify(in_range_u16_from_u64(65535));
+    verify(!in_range_u16_from_u64(65536));
+    verify(in_range_u32_from_u64(4294967295));
+    verify(!in_range_u32_from_u64(4294967296));
 }
