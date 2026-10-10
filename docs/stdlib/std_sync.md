@@ -13,6 +13,7 @@ Module file: `stdlib/std/sync.mla`
 - `AtomicU16` (16-bit unsigned atomic integer)
 - `AtomicU8` (8-bit unsigned atomic integer)
 - `AtomicI16` (16-bit signed atomic integer)
+- `AtomicI8` (8-bit signed atomic integer)
 - `AtomicI32` (native-width 32-bit signed atomic integer)
 - `AtomicBool` (shared atomic boolean value)
 - `AtomicFlag` (guaranteed lock-free boolean flag)
@@ -199,6 +200,15 @@ Compare-exchange returns `result<tuple<bool, u8>, str8>` as
 loop over the existing 16-bit atomic storage for wrapping arithmetic, so it
 does not promise a lock-free 8-bit object. Notify after changing a waited-on
 value and close only after all threads have stopped using it.
+
+### AtomicI8
+
+`AtomicI8` provides C++20 `std::atomic<std::int8_t>` value semantics with
+ordered load/store/exchange, arithmetic and bitwise read-modify-write,
+compare-exchange, wait, and notifications. Signed arithmetic wraps at the
+8-bit two's-complement representation boundary. Compare-exchange returns
+`result<tuple<bool, i8>, str8>` as `(exchanged, expected_after)`. It reuses the
+unsigned 8-bit value semantics and does not promise a lock-free 8-bit object.
 
 ### AtomicI16
 

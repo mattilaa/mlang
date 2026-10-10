@@ -13,6 +13,7 @@ use std::sync::AtomicU64;
 use std::sync::AtomicU32;
 use std::sync::AtomicU16;
 use std::sync::AtomicU8;
+use std::sync::AtomicI8;
 use std::sync::AtomicI16;
 use std::sync::AtomicI32;
 use std::sync::AtomicBool;
@@ -108,6 +109,15 @@ fn atomic_u8_wait_worker(raw_handle: i64) -> i32 {
     let waited: result<i32, str8> = value.wait(0);
     if waited.is_err() { return 1; }
     let current: result<u8, str8> = value.load();
+    if current.is_err() { return 2; }
+    return current.unwrap() == 1 ? 0 : 3;
+}
+
+fn atomic_i8_wait_worker(raw_handle: i64) -> i32 {
+    let value: AtomicI8 = AtomicI8 { handle: raw_handle };
+    let waited: result<i32, str8> = value.wait(0);
+    if waited.is_err() { return 1; }
+    let current: result<i8, str8> = value.load();
     if current.is_err() { return 2; }
     return current.unwrap() == 1 ? 0 : 3;
 }
@@ -749,6 +759,65 @@ fn test_atomic_u8_compare_exchange_contention() {
     verify(r1 == 0 && r2 == 0 && r3 == 0 && r4 == 0);
     verify(observed.is_ok());
     if observed.is_ok() { verify(observed.unwrap() == 200); }
+}
+
+#[test]
+fn test_atomic_i8_signed_wrap_order_and_cas() {
+    let max: i8 = 127;
+    let min: i8 = -128;
+    let created: result<AtomicI8, str8> = AtomicI8::new(max);
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let value: AtomicI8 = created.unwrap();
+
+    let initial: result<i8, str8> = value.load_with_order(AtomicOrder::Acquire);
+    let wrapped_add: result<i8, str8> =
+        value.fetch_add_with_order(1, AtomicOrder::Relaxed);
+    let wrapped_value: result<i8, str8> = value.load();
+    let subtract: result<i8, str8> = value.fetch_sub(1);
+    let and_old: result<i8, str8> = value.fetch_and(15);
+    let or_old: result<i8, str8> = value.fetch_or(16);
+    let xor_old: result<i8, str8> = value.fetch_xor(3);
+    let exchange_old: result<i8, str8> = value.exchange(1);
+    let success: result<tuple<bool, i8>, str8> = value.compare_exchange(1, min);
+    let failure: result<tuple<bool, i8>, str8> = value.compare_exchange(1, 2);
+    let invalid_load: result<i8, str8> =
+        value.load_with_order(AtomicOrder::Release);
+    let invalid_store: result<i32, str8> =
+        value.store_with_order(5, AtomicOrder::Acquire);
+    let stored: result<i32, str8> =
+        value.store_with_order(-128, AtomicOrder::Release);
+    let loaded: result<i8, str8> = value.load_with_order(AtomicOrder::Acquire);
+    let closed: i32 = value.close();
+
+    verify(initial.is_ok() && initial.unwrap() == max);
+    verify(wrapped_add.is_ok() && wrapped_add.unwrap() == max);
+    verify(wrapped_value.is_ok() && wrapped_value.unwrap() == min);
+    verify(subtract.is_ok() && subtract.unwrap() == min);
+    verify(and_old.is_ok() && and_old.unwrap() == max);
+    verify(or_old.is_ok() && or_old.unwrap() == 15);
+    verify(xor_old.is_ok() && xor_old.unwrap() == 31);
+    verify(exchange_old.is_ok() && exchange_old.unwrap() == 28);
+    verify(success.is_ok() && success.unwrap().0 && success.unwrap().1 == 1);
+    verify(failure.is_ok() && !failure.unwrap().0 && failure.unwrap().1 == min);
+    verify(invalid_load.is_err() && invalid_store.is_err() && stored.is_ok());
+    verify(loaded.is_ok() && loaded.unwrap() == min && closed == 0);
+}
+
+#[test]
+fn test_atomic_i8_wait_notify() {
+    let created: result<AtomicI8, str8> = AtomicI8::new(0);
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let value: AtomicI8 = created.unwrap();
+    let worker: std::thread::thread =
+        thread::spawn(atomic_i8_wait_worker, value.handle);
+    let stored: result<i32, str8> = value.store(1);
+    let notified: result<i32, str8> = value.notify_all();
+    let worker_status: i32 = join(worker);
+    let closed: i32 = value.close();
+    verify(stored.is_ok() && notified.is_ok() && worker_status == 0);
+    verify(closed == 0);
 }
 
 #[test]
