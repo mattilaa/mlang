@@ -827,6 +827,22 @@ pub fn fold_left(data: &list<T>, init: U, operation: Operation) -> U {
     return acc;
 }
 
+/// @brief Fold projected elements from left to right with an initial value.
+/// The operation receives the accumulator and projected element. This
+/// Mlang ranges extension composes projection and C++23 `fold_left` in one
+/// pass without allocating an intermediate transformed list.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation, Projection>
+pub fn fold_left_projected(data: &list<T>, init: U, operation: Operation,
+                           projection: Projection) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, projection(data[i]));
+    }
+    return acc;
+}
+
 /// @brief Project each range element before folding it into the accumulator.
 /// The accumulator type may differ from the input and projected element types.
 /// This eager ranges counterpart to `std::transform_reduce` visits each value
@@ -1045,6 +1061,22 @@ pub fn fold_right(data: &list<T>, init: U, operation: Operation) -> U {
     return acc;
 }
 
+/// @brief Fold projected elements from right to left with an initial value.
+/// The operation receives the projected element and accumulator. This avoids
+/// allocating an intermediate transformed list.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation, Projection>
+pub fn fold_right_projected(data: &list<T>, init: U, operation: Operation,
+                            projection: Projection) -> U {
+    var acc: U = init;
+    var i: i64 = data.len();
+    while i > 0 {
+        i = i - 1;
+        acc = operation(projection(data[i]), acc);
+    }
+    return acc;
+}
+
 /// @brief Fold left and return the final consumed index with the accumulator.
 /// Mlang's eager-list analogue of C++23 `std::ranges::fold_left_with_iter`.
 /// The returned index is the list length, including for empty input.
@@ -1093,6 +1125,23 @@ pub fn fold_left_first(data: &list<T>, operation: Operation)
     return Some<Output>(acc);
 }
 
+/// @brief Fold a non-empty range of projected values from left to right.
+/// The first projected element seeds the accumulator; empty input returns
+/// `None`. This is the projected Mlang counterpart to C++23 `fold_left_first`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn fold_left_first_projected(data: &list<T>, operation: Operation,
+                                 projection: Projection)
+    -> option<Output> {
+    let n: i64 = data.len();
+    if n == 0 { return None<Output>(); }
+    var acc: Output = projection(data[0]);
+    for i in 1..n {
+        acc = operation(acc, projection(data[i]));
+    }
+    return Some<Output>(acc);
+}
+
 /// @brief Fold a non-empty range without an initial value and return the
 /// consumed element count with the result. Empty input returns None. This is
 /// the eager-list analogue of C++23 `std::ranges::fold_left_first_with_iter`.
@@ -1126,6 +1175,25 @@ pub fn fold_right_last(data: &list<T>, operation: Operation)
     while i > 0 {
         i = i - 1;
         acc = operation(data[i], acc);
+    }
+    return Some<Output>(acc);
+}
+
+/// @brief Fold a non-empty range of projected values from right to left.
+/// The last projected element seeds the accumulator; empty input returns
+/// `None`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn fold_right_last_projected(data: &list<T>, operation: Operation,
+                                 projection: Projection)
+    -> option<Output> {
+    let n: i64 = data.len();
+    if n == 0 { return None<Output>(); }
+    var i: i64 = n - 1;
+    var acc: Output = projection(data[i]);
+    while i > 0 {
+        i = i - 1;
+        acc = operation(projection(data[i]), acc);
     }
     return Some<Output>(acc);
 }

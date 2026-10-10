@@ -1,0 +1,550 @@
+/// \file chrono.mla
+/// \brief Checked duration arithmetic inspired by C++20 <chrono>.
+///
+/// Mlang represents a duration as an i64 count paired with a runtime unit.
+/// This is intentionally explicit rather than pretending to provide C++'
+/// compile-time ratio parameter, which Mlang does not currently support.
+
+mod std::date;
+use std::date::unix_now;
+mod std::time;
+use std::time::now_ns;
+
+/// @brief Supported fixed duration units, from nanoseconds through weeks.
+pub enum DurationUnit : i32 {
+    Nanosecond = 0,
+    Microsecond = 1,
+    Millisecond = 2,
+    Second = 3,
+    Minute = 4,
+    Hour = 5,
+    Day = 6,
+    Week = 7
+};
+
+/// @brief Exact ordering of two durations after accounting for their units.
+pub enum DurationOrder : i32 {
+    Less = -1,
+    Equivalent = 0,
+    Greater = 1
+};
+
+/// @brief Clock identity used to prevent comparing unrelated time points.
+pub enum ClockKind : i32 {
+    Steady = 0,
+    System = 1
+};
+
+/// @brief An integral count of a selected duration unit.
+pub struct Duration {
+    var count: i64;
+    var unit: DurationUnit;
+};
+
+/// @brief A time point represented by a duration from its clock's epoch.
+pub struct TimePoint {
+    var since_epoch: Duration;
+    var clock: ClockKind;
+};
+
+/// @brief Sign-separated hours, minutes, seconds, and fractional remainder.
+pub struct HhMmSs {
+    var is_negative: bool;
+    var hours: i64;
+    var minutes: i32;
+    var seconds: i32;
+    var subseconds: Duration;
+};
+
+/// @brief Return whether a 24-hour clock hour is ante meridiem (0 through 11).
+pub fn is_am(hour: i32) -> bool {
+    return hour >= 0 && hour <= 11;
+}
+
+/// @brief Return whether a 24-hour clock hour is post meridiem (12 through 23).
+pub fn is_pm(hour: i32) -> bool {
+    return hour >= 12 && hour <= 23;
+}
+
+/// @brief Convert a valid 24-hour hour to its 12-hour form (12 for midnight).
+/// Invalid hours return `None` rather than relying on C++'s unspecified result.
+pub fn make12(hour: i32) -> option<i32> {
+    if hour < 0 || hour > 23 { return None<i32>(); }
+    let converted: i32 = hour % 12;
+    if converted == 0 { return Some<i32>(12); }
+    return Some<i32>(converted);
+}
+
+/// @brief Convert a 12-hour value and AM/PM flag to a 24-hour clock hour.
+/// Valid input hours are 1 through 12; invalid values return `None`.
+pub fn make24(hour: i32, pm: bool) -> option<i32> {
+    if hour < 1 || hour > 12 { return None<i32>(); }
+    if pm {
+        if hour == 12 { return Some<i32>(12); }
+        return Some<i32>(hour + 12);
+    }
+    if hour == 12 { return Some<i32>(0); }
+    return Some<i32>(hour);
+}
+
+/// @brief Lowercase alias for `Duration`.
+use type duration = Duration;
+use type hh_mm_ss = HhMmSs;
+
+fn duration_unit_scale(unit: DurationUnit) -> i64 {
+    if unit == DurationUnit::Nanosecond { return 1; }
+    if unit == DurationUnit::Microsecond { return 1000; }
+    if unit == DurationUnit::Millisecond { return 1000000; }
+    if unit == DurationUnit::Second { return 1000000000; }
+    if unit == DurationUnit::Minute { return 60000000000; }
+    if unit == DurationUnit::Hour { return 3600000000000; }
+    if unit == DurationUnit::Day { return 86400000000000; }
+    if unit == DurationUnit::Week { return 604800000000000; }
+    return 0;
+}
+
+/// @brief Decompose a duration into a sign, total hours, minute/second parts,
+/// and a fractional remainder in the source unit. Values whose absolute hour
+/// count cannot fit in i64 return `None`.
+pub fn make_hh_mm_ss(value: Duration) -> option<HhMmSs> {
+    if duration_unit_scale(value.unit) == 0 { return None<HhMmSs>(); }
+
+    let negative: bool = value.count < 0;
+    var signed_hours: i64 = 0;
+    var signed_minutes: i64 = 0;
+    var signed_seconds: i64 = 0;
+    var signed_subseconds: i64 = 0;
+
+    if value.unit == DurationUnit::Week {
+        let factor: i64 = 168;
+        let maximum: i64 = 9223372036854775807;
+        let minimum: i64 = -9223372036854775807 - 1;
+        if value.count > 0 && value.count > maximum / factor {
+            return None<HhMmSs>();
+        }
+        if value.count < 0 && value.count < minimum / factor {
+            return None<HhMmSs>();
+        }
+        signed_hours = value.count * factor;
+    } else if value.unit == DurationUnit::Day {
+        let factor: i64 = 24;
+        let maximum: i64 = 9223372036854775807;
+        let minimum: i64 = -9223372036854775807 - 1;
+        if value.count > 0 && value.count > maximum / factor {
+            return None<HhMmSs>();
+        }
+        if value.count < 0 && value.count < minimum / factor {
+            return None<HhMmSs>();
+        }
+        signed_hours = value.count * factor;
+    } else if value.unit == DurationUnit::Hour {
+        signed_hours = value.count;
+    } else if value.unit == DurationUnit::Minute {
+        signed_hours = value.count / 60;
+        signed_minutes = value.count % 60;
+    } else if value.unit == DurationUnit::Second {
+        signed_hours = value.count / 3600;
+        let remainder: i64 = value.count % 3600;
+        signed_minutes = remainder / 60;
+        signed_seconds = remainder % 60;
+    } else {
+        let scale: i64 = duration_unit_scale(value.unit);
+        let ticks_per_second: i64 = 1000000000 / scale;
+        let ticks_per_minute: i64 = ticks_per_second * 60;
+        let ticks_per_hour: i64 = ticks_per_minute * 60;
+        signed_hours = value.count / ticks_per_hour;
+        let after_hours: i64 = value.count % ticks_per_hour;
+        signed_minutes = after_hours / ticks_per_minute;
+        let after_minutes: i64 = after_hours % ticks_per_minute;
+        signed_seconds = after_minutes / ticks_per_second;
+        signed_subseconds = after_minutes % ticks_per_second;
+    }
+
+    if signed_hours == -9223372036854775807 - 1 {
+        return None<HhMmSs>();
+    }
+    var hours: i64 = signed_hours;
+    var minutes: i64 = signed_minutes;
+    var seconds: i64 = signed_seconds;
+    var subseconds: i64 = signed_subseconds;
+    if negative {
+        hours = 0 - signed_hours;
+        minutes = 0 - signed_minutes;
+        seconds = 0 - signed_seconds;
+        subseconds = 0 - signed_subseconds;
+    }
+
+    return Some<HhMmSs>(HhMmSs {
+        is_negative: negative,
+        hours: hours,
+        minutes: i32(minutes),
+        seconds: i32(seconds),
+        subseconds: Duration {
+            count: subseconds,
+            unit: value.unit
+        }
+    });
+}
+
+/// @brief Format a duration as signed `HH:MM:SS`, retaining subsecond scale.
+/// Millisecond, microsecond, and nanosecond inputs append exactly 3, 6, or 9
+/// fractional digits. Invalid durations return `None`.
+pub fn format_hh_mm_ss(value: Duration) -> option<str8> {
+    let parts_option: option<HhMmSs> = make_hh_mm_ss(value);
+    if parts_option.is_none() { return None<str8>(); }
+    let parts: HhMmSs = parts_option.unwrap();
+    var sign: str8 = "";
+    if parts.is_negative { sign = "-"; }
+
+    if value.unit == DurationUnit::Millisecond {
+        return Some<str8>(format!("{}{:02}:{:02}:{:02}.{:03}", sign,
+            parts.hours, parts.minutes, parts.seconds,
+            parts.subseconds.count));
+    }
+    if value.unit == DurationUnit::Microsecond {
+        return Some<str8>(format!("{}{:02}:{:02}:{:02}.{:06}", sign,
+            parts.hours, parts.minutes, parts.seconds,
+            parts.subseconds.count));
+    }
+    if value.unit == DurationUnit::Nanosecond {
+        return Some<str8>(format!("{}{:02}:{:02}:{:02}.{:09}", sign,
+            parts.hours, parts.minutes, parts.seconds,
+            parts.subseconds.count));
+    }
+    return Some<str8>(format!("{}{:02}:{:02}:{:02}", sign, parts.hours,
+                              parts.minutes, parts.seconds));
+}
+
+fn compare_fine_to_coarse(fine_count: i64, ratio: i64,
+                           coarse_count: i64) -> i32 {
+    let quotient: i64 = fine_count / ratio;
+    if quotient < coarse_count { return -1; }
+    if quotient > coarse_count { return 1; }
+    let remainder: i64 = fine_count % ratio;
+    if remainder < 0 { return -1; }
+    if remainder > 0 { return 1; }
+    return 0;
+}
+
+/// @brief Compare two durations exactly, even when their units differ.
+/// Returns `None` for a malformed unit. The comparison avoids multiplying a
+/// count by a large conversion factor, so extreme valid counts remain safe.
+pub fn duration_compare(left: Duration, right: Duration)
+    -> option<DurationOrder> {
+    let left_scale: i64 = duration_unit_scale(left.unit);
+    let right_scale: i64 = duration_unit_scale(right.unit);
+    if left_scale == 0 || right_scale == 0 {
+        return None<DurationOrder>();
+    }
+
+    var comparison: i32 = 0;
+    if left_scale == right_scale {
+        if left.count < right.count { comparison = -1; }
+        else if left.count > right.count { comparison = 1; }
+    } else if left_scale < right_scale {
+        let ratio: i64 = right_scale / left_scale;
+        comparison = compare_fine_to_coarse(left.count, ratio, right.count);
+    } else {
+        let ratio: i64 = left_scale / right_scale;
+        comparison = 0 - compare_fine_to_coarse(
+            right.count, ratio, left.count);
+    }
+
+    if comparison < 0 { return Some<DurationOrder>(DurationOrder::Less); }
+    if comparison > 0 { return Some<DurationOrder>(DurationOrder::Greater); }
+    return Some<DurationOrder>(DurationOrder::Equivalent);
+}
+
+fn is_valid_clock_kind(clock: ClockKind) -> bool {
+    return clock == ClockKind::Steady || clock == ClockKind::System;
+}
+
+/// @brief Construct a checked time point for a steady or system clock.
+pub fn make_time_point(since_epoch: Duration, clock: ClockKind)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(clock) ||
+       duration_unit_scale(since_epoch.unit) == 0 {
+        return None<TimePoint>();
+    }
+    return Some<TimePoint>(TimePoint {
+        since_epoch: since_epoch,
+        clock: clock
+    });
+}
+
+/// @brief Return the duration from the time point's clock epoch.
+pub fn time_since_epoch(value: TimePoint) -> option<Duration> {
+    if !is_valid_clock_kind(value.clock) ||
+       duration_unit_scale(value.since_epoch.unit) == 0 {
+        return None<Duration>();
+    }
+    return Some<Duration>(value.since_epoch);
+}
+
+/// @brief Add a duration to a time point using their finer unit.
+pub fn time_point_add(value: TimePoint, offset: Duration)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(value.clock) { return None<TimePoint>(); }
+    let point_scale: i64 = duration_unit_scale(value.since_epoch.unit);
+    let offset_scale: i64 = duration_unit_scale(offset.unit);
+    if point_scale == 0 || offset_scale == 0 { return None<TimePoint>(); }
+    var common_unit: DurationUnit = value.since_epoch.unit;
+    if offset_scale < point_scale { common_unit = offset.unit; }
+    let updated: option<Duration> = duration_add(
+        value.since_epoch, offset, common_unit);
+    if updated.is_none() { return None<TimePoint>(); }
+    return Some<TimePoint>(TimePoint {
+        since_epoch: updated.unwrap(),
+        clock: value.clock
+    });
+}
+
+/// @brief Subtract a duration using the finer of the two duration units.
+pub fn time_point_subtract(value: TimePoint, offset: Duration)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(value.clock) { return None<TimePoint>(); }
+    let point_scale: i64 = duration_unit_scale(value.since_epoch.unit);
+    let offset_scale: i64 = duration_unit_scale(offset.unit);
+    if point_scale == 0 || offset_scale == 0 { return None<TimePoint>(); }
+    var common_unit: DurationUnit = value.since_epoch.unit;
+    if offset_scale < point_scale { common_unit = offset.unit; }
+    let updated: option<Duration> = duration_subtract(
+        value.since_epoch, offset, common_unit);
+    if updated.is_none() { return None<TimePoint>(); }
+    return Some<TimePoint>(TimePoint {
+        since_epoch: updated.unwrap(),
+        clock: value.clock
+    });
+}
+
+/// @brief Subtract same-clock time points and return their duration difference.
+/// Different clocks or unrepresentable conversions return `None`.
+pub fn time_point_difference(left: TimePoint, right: TimePoint,
+                             unit: DurationUnit) -> option<Duration> {
+    if !is_valid_clock_kind(left.clock) ||
+       !is_valid_clock_kind(right.clock) || left.clock != right.clock {
+        return None<Duration>();
+    }
+    return duration_subtract(left.since_epoch, right.since_epoch, unit);
+}
+
+/// @brief Compare same-clock time points exactly across duration units.
+/// Different clocks return `None` because their epochs are unrelated.
+pub fn time_point_compare(left: TimePoint, right: TimePoint)
+    -> option<DurationOrder> {
+    if !is_valid_clock_kind(left.clock) ||
+       !is_valid_clock_kind(right.clock) || left.clock != right.clock {
+        return None<DurationOrder>();
+    }
+    return duration_compare(left.since_epoch, right.since_epoch);
+}
+
+/// @brief Cast the stored duration while preserving the clock identity.
+pub fn time_point_cast(value: TimePoint, unit: DurationUnit)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(value.clock) { return None<TimePoint>(); }
+    let converted: option<Duration> = duration_cast(value.since_epoch, unit);
+    if converted.is_none() { return None<TimePoint>(); }
+    return make_time_point(converted.unwrap(), value.clock);
+}
+
+/// @brief Floor a time point's duration to `unit`, preserving its clock.
+pub fn time_point_floor(value: TimePoint, unit: DurationUnit)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(value.clock) { return None<TimePoint>(); }
+    let converted: option<Duration> = duration_floor(value.since_epoch, unit);
+    if converted.is_none() { return None<TimePoint>(); }
+    return make_time_point(converted.unwrap(), value.clock);
+}
+
+/// @brief Ceil a time point's duration to `unit`, preserving its clock.
+pub fn time_point_ceil(value: TimePoint, unit: DurationUnit)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(value.clock) { return None<TimePoint>(); }
+    let converted: option<Duration> = duration_ceil(value.since_epoch, unit);
+    if converted.is_none() { return None<TimePoint>(); }
+    return make_time_point(converted.unwrap(), value.clock);
+}
+
+/// @brief Round a time point's duration to nearest, ties-to-even.
+pub fn time_point_round(value: TimePoint, unit: DurationUnit)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(value.clock) { return None<TimePoint>(); }
+    let converted: option<Duration> = duration_round(value.since_epoch, unit);
+    if converted.is_none() { return None<TimePoint>(); }
+    return make_time_point(converted.unwrap(), value.clock);
+}
+
+/// @brief Return the current monotonic steady-clock time point in nanoseconds.
+pub fn steady_now() -> TimePoint {
+    return TimePoint {
+        since_epoch: Duration {
+            count: now_ns(),
+            unit: DurationUnit::Nanosecond
+        },
+        clock: ClockKind::Steady
+    };
+}
+
+/// @brief Return the current system-clock time point in Unix seconds.
+/// This currently has the whole-second resolution of `std::date::unix_now`.
+pub fn system_now() -> TimePoint {
+    return TimePoint {
+        since_epoch: Duration {
+            count: unix_now(),
+            unit: DurationUnit::Second
+        },
+        clock: ClockKind::System
+    };
+}
+
+/// @brief Construct a duration from an integral count and unit.
+/// Every declared unit is valid; `None` protects against invalid enum values.
+pub fn make_duration(count: i64, unit: DurationUnit) -> option<Duration> {
+    if duration_unit_scale(unit) == 0 { return None<Duration>(); }
+    return Some<Duration>(Duration { count: count, unit: unit });
+}
+
+/// @brief Convert a duration to `unit`, truncating toward zero.
+/// This matches integral C++ chrono duration-cast rounding. Multiplication
+/// overflow or an invalid unit returns `None`.
+pub fn duration_cast(value: Duration, unit: DurationUnit)
+    -> option<Duration> {
+    let source_scale: i64 = duration_unit_scale(value.unit);
+    let target_scale: i64 = duration_unit_scale(unit);
+    if source_scale == 0 || target_scale == 0 {
+        return None<Duration>();
+    }
+
+    var converted: i64 = value.count;
+    if source_scale > target_scale {
+        if source_scale % target_scale != 0 { return None<Duration>(); }
+        let multiplier: i64 = source_scale / target_scale;
+        let maximum: i64 = 9223372036854775807;
+        let minimum: i64 = -9223372036854775807 - 1;
+        if converted > 0 && converted > maximum / multiplier {
+            return None<Duration>();
+        }
+        if converted < 0 && converted < minimum / multiplier {
+            return None<Duration>();
+        }
+        converted = converted * multiplier;
+    } else if source_scale < target_scale {
+        if target_scale % source_scale != 0 { return None<Duration>(); }
+        converted = converted / (target_scale / source_scale);
+    }
+
+    return Some<Duration>(Duration { count: converted, unit: unit });
+}
+
+/// @brief Round a duration down to a requested unit.
+/// Unlike `duration_cast`, negative fractional values round away from zero.
+/// Returns `None` if conversion or the downward adjustment overflows.
+pub fn duration_floor(value: Duration, unit: DurationUnit)
+    -> option<Duration> {
+    let converted: option<Duration> = duration_cast(value, unit);
+    if converted.is_none() { return None<Duration>(); }
+    var result: Duration = converted.unwrap();
+    let source_scale: i64 = duration_unit_scale(value.unit);
+    let target_scale: i64 = duration_unit_scale(unit);
+    if source_scale >= target_scale { return Some<Duration>(result); }
+    let divisor: i64 = target_scale / source_scale;
+    if value.count % divisor < 0 {
+        if result.count == -9223372036854775807 - 1 {
+            return None<Duration>();
+        }
+        result.count = result.count - 1;
+    }
+    return Some<Duration>(result);
+}
+
+/// @brief Round a duration up to a requested unit.
+/// Unlike `duration_cast`, positive fractional values round away from zero.
+/// Returns `None` if conversion or the upward adjustment overflows.
+pub fn duration_ceil(value: Duration, unit: DurationUnit)
+    -> option<Duration> {
+    let converted: option<Duration> = duration_cast(value, unit);
+    if converted.is_none() { return None<Duration>(); }
+    var result: Duration = converted.unwrap();
+    let source_scale: i64 = duration_unit_scale(value.unit);
+    let target_scale: i64 = duration_unit_scale(unit);
+    if source_scale >= target_scale { return Some<Duration>(result); }
+    let divisor: i64 = target_scale / source_scale;
+    if value.count % divisor > 0 {
+        if result.count == 9223372036854775807 {
+            return None<Duration>();
+        }
+        result.count = result.count + 1;
+    }
+    return Some<Duration>(result);
+}
+
+/// @brief Round to the nearest requested unit, with ties going to even.
+/// This follows C++ chrono `round`; conversion or adjustment overflow returns
+/// `None`.
+pub fn duration_round(value: Duration, unit: DurationUnit)
+    -> option<Duration> {
+    let converted: option<Duration> = duration_cast(value, unit);
+    if converted.is_none() { return None<Duration>(); }
+    var result: Duration = converted.unwrap();
+    let source_scale: i64 = duration_unit_scale(value.unit);
+    let target_scale: i64 = duration_unit_scale(unit);
+    if source_scale >= target_scale { return Some<Duration>(result); }
+
+    let divisor: i64 = target_scale / source_scale;
+    var remainder: i64 = value.count % divisor;
+    if remainder < 0 { remainder = 0 - remainder; }
+    let twice_remainder: i64 = remainder * 2;
+    let round_away: bool = twice_remainder > divisor ||
+        (twice_remainder == divisor && result.count % 2 != 0);
+    if !round_away { return Some<Duration>(result); }
+
+    if value.count > 0 {
+        if result.count == 9223372036854775807 {
+            return None<Duration>();
+        }
+        result.count = result.count + 1;
+    } else if value.count < 0 {
+        if result.count == -9223372036854775807 - 1 {
+            return None<Duration>();
+        }
+        result.count = result.count - 1;
+    }
+    return Some<Duration>(result);
+}
+
+/// @brief Add durations after converting both to the requested unit.
+/// Conversion or result overflow returns `None`.
+pub fn duration_add(left: Duration, right: Duration, unit: DurationUnit)
+    -> option<Duration> {
+    let converted_left: option<Duration> = duration_cast(left, unit);
+    let converted_right: option<Duration> = duration_cast(right, unit);
+    if converted_left.is_none() || converted_right.is_none() {
+        return None<Duration>();
+    }
+    let a: i64 = converted_left.unwrap().count;
+    let b: i64 = converted_right.unwrap().count;
+    let maximum: i64 = 9223372036854775807;
+    let minimum: i64 = -9223372036854775807 - 1;
+    if b > 0 && a > maximum - b { return None<Duration>(); }
+    if b < 0 && a < minimum - b { return None<Duration>(); }
+    return Some<Duration>(Duration { count: a + b, unit: unit });
+}
+
+/// @brief Subtract durations after converting both to the requested unit.
+/// Conversion or result overflow returns `None`.
+pub fn duration_subtract(left: Duration, right: Duration,
+                         unit: DurationUnit) -> option<Duration> {
+    let converted_left: option<Duration> = duration_cast(left, unit);
+    let converted_right: option<Duration> = duration_cast(right, unit);
+    if converted_left.is_none() || converted_right.is_none() {
+        return None<Duration>();
+    }
+    let a: i64 = converted_left.unwrap().count;
+    let b: i64 = converted_right.unwrap().count;
+    let maximum: i64 = 9223372036854775807;
+    let minimum: i64 = -9223372036854775807 - 1;
+    if b > 0 && a < minimum + b { return None<Duration>(); }
+    if b < 0 && a > maximum + b { return None<Duration>(); }
+    return Some<Duration>(Duration { count: a - b, unit: unit });
+}

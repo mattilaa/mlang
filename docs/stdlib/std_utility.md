@@ -8,11 +8,17 @@ library.
 ```mla
 mod std::utility;
 use std::utility::to_underlying;
+use std::utility::exchange;
 
 enum Status : u8 { Ready = 1, Failed = 255 };
 let raw: u8 = to_underlying(Status::Failed);
+var current: i32 = 12;
+let previous: i32 = exchange(current, 20); // previous = 12, current = 20
 ```
 
+- `exchange(value, replacement)` replaces a mutable value and returns the old
+  contents. Mlang currently requires the replacement to have the same type as
+  the value.
 - `to_underlying(value)` converts an integer-backed enum to an integer. Since
   Mlang does not currently express an enum's underlying type as an associated
   type, provide the matching destination type through the result's expected

@@ -16,6 +16,17 @@ pub fn to_underlying(value: Enum) -> Underlying {
     return Underlying(value);
 }
 
+/// @brief Replace a mutable value and return its previous contents.
+/// This is the value-level counterpart of C++ `std::exchange`. Both the
+/// returned old value and replacement have the same type.
+/// @ingroup utility
+generic<T>
+pub fn exchange(value: &mut T, replacement: T) -> T {
+    let previous: T = value;
+    value = replacement;
+    return previous;
+}
+
 /// @brief Compare a signed integer and an unsigned integer without wraparound.
 /// Mlang counterpart to C++20 `std::cmp_equal` for mixed-sign values.
 generic<Signed, Unsigned>

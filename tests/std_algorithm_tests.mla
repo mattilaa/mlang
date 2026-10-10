@@ -38,11 +38,15 @@ use std::algorithm::numeric::fold_left_first;
 use std::algorithm::numeric::fold_right_last;
 use std::algorithm::ranges::fold_left as ranges_fold_left;
 use std::algorithm::ranges::fold_right as ranges_fold_right;
+use std::algorithm::ranges::fold_left_projected;
+use std::algorithm::ranges::fold_right_projected;
 use std::algorithm::ranges::fold_left_with_iter as ranges_fold_left_with_iter;
 use std::algorithm::ranges::fold_right_with_iter as ranges_fold_right_with_iter;
 use std::algorithm::ranges::fold_left_first as ranges_fold_left_first;
 use std::algorithm::ranges::fold_left_first_with_iter as ranges_fold_left_first_with_iter;
 use std::algorithm::ranges::fold_right_last as ranges_fold_right_last;
+use std::algorithm::ranges::fold_left_first_projected;
+use std::algorithm::ranges::fold_right_last_projected;
 use std::algorithm::ranges::transform_reduce as ranges_transform_reduce;
 use std::algorithm::ranges::inclusive_scan as ranges_inclusive_scan;
 use std::algorithm::ranges::exclusive_scan as ranges_exclusive_scan;
@@ -4477,6 +4481,29 @@ fn test_algorithm_ranges_folds() {
     verify(singleton_result.is_some());
     let singleton_fold: tuple<i64, i32> = singleton_result.unwrap();
     verify(singleton_fold.0 == 1 && singleton_fold.1 == 7);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_folds() {
+    let values: list<i32> = [2, 5, 8];
+    let widen = |value: i32| { return i64(value); };
+    let append_left = |acc: i64, value: i64| { return acc * 10 + value; };
+    let append_right = |value: i64, acc: i64| { return value + acc * 10; };
+    verify(fold_left_projected(values, 1, append_left, widen) == 1258);
+    verify(fold_right_projected(values, 4, append_right, widen) == 4852);
+
+    let left: option<i64> =
+        fold_left_first_projected(values, append_left, widen);
+    let right: option<i64> =
+        fold_right_last_projected(values, append_right, widen);
+    verify(left.is_some() && left.unwrap() == 258);
+    verify(right.is_some() && right.unwrap() == 852);
+
+    let empty: list<i32> = [];
+    verify(fold_left_projected(empty, 37, append_left, widen) == 37);
+    verify(fold_right_projected(empty, 41, append_right, widen) == 41);
+    verify(fold_left_first_projected(empty, append_left, widen).is_none());
+    verify(fold_right_last_projected(empty, append_right, widen).is_none());
 }
 
 #[test]

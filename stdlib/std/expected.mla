@@ -58,12 +58,12 @@ pub fn or_else(input: result<T, E>, recovery: Recovery)
     return Ok<T, NewError>(input.unwrap());
 }
 
-/// @brief Return the successful value or the supplied fallback value.
+/// @brief Return the successful value or a fallback convertible to `T`.
 /// The fallback is evaluated by the caller before this function is entered,
 /// matching C++23 `std::expected::value_or`.
 /// @ingroup expected
-generic<T, E>
-pub fn value_or(input: result<T, E>, fallback: T) -> T {
+generic<T, E, U>
+pub fn value_or(input: result<T, E>, fallback: U) -> T {
     if input.is_ok() {
         return input.unwrap();
     }
@@ -83,11 +83,11 @@ pub fn value_or_else(input: result<T, E>, fallback: Fallback) -> T {
     return fallback();
 }
 
-/// @brief Return the error or the supplied fallback error.
+/// @brief Return the error or a fallback convertible to `E`.
 /// C++23 `std::expected::error_or` equivalent.
 /// @ingroup expected
-generic<T, E>
-pub fn error_or(input: result<T, E>, fallback: E) -> E {
+generic<T, E, U>
+pub fn error_or(input: result<T, E>, fallback: U) -> E {
     if input.is_err() {
         return input.unwrap_err();
     }
