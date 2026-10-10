@@ -2,6 +2,7 @@ mod std::testing;
 mod std::utility;
 
 use std::utility::to_underlying;
+use std::utility::exchange;
 use std::utility::cmp_equal_signed_unsigned;
 use std::utility::cmp_equal_unsigned_signed;
 use std::utility::cmp_not_equal_signed_unsigned;
@@ -42,12 +43,34 @@ enum SignedCode : i32 {
     After = 3
 };
 
+struct UtilityPair {
+    var count: i32;
+    var label: str8;
+};
+
 #[test]
 fn test_to_underlying_preserves_enum_values_and_widths() {
     let byte_value: u8 = to_underlying(ByteCode::Finish);
     let signed_value: i32 = to_underlying(SignedCode::Before);
     verify(byte_value == 255);
     verify(signed_value == -1);
+}
+
+#[test]
+fn test_exchange_replaces_values_and_returns_old_contents() {
+    var count: i64 = 41;
+    let previous_count: i64 = exchange(count, 99);
+    verify(previous_count == 41 && count == 99);
+
+    var ready: bool = false;
+    let previous_ready: bool = exchange(ready, true);
+    verify(!previous_ready && ready);
+
+    var pair: UtilityPair = UtilityPair { count: 7, label: "before" };
+    let previous_pair: UtilityPair = exchange(
+        pair, UtilityPair { count: 12, label: "after" });
+    verify(previous_pair.count == 7 && previous_pair.label == "before");
+    verify(pair.count == 12 && pair.label == "after");
 }
 
 #[test]
