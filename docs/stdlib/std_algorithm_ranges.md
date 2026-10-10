@@ -300,12 +300,16 @@ fn example() {
 - `transform(data, operation)` eagerly maps every element into a new list;
   the output element type is inferred from the closure return type and may
   differ from the input element type.
+- `transform_with_count` returns `(consumed, output)` with the transformed
+  list, exposing the full input progress of the eager unary transform.
 - The binary `transform(left, right, operation)` overload transforms paired
   elements into a new list and stops at the shorter input, matching the bounded
   two-range form of C++20 `std::ranges::transform`.
 - `transform_projected` applies a projection before its unary operation;
   `zip_transform_projected` applies independent projections to paired inputs
   before the binary operation, stopping at the shorter range.
+- `transform_projected_with_count` combines unary projection and transform
+  while also returning the input element count.
 - `zip_transform3_projected` and `zip_transform4_projected` apply independent
   projections to three or four corresponding inputs before invoking the
   operation; each stops at the shortest input and infers the result type.

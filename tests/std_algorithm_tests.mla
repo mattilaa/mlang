@@ -390,7 +390,9 @@ use std::algorithm::ranges::drop_while;
 use std::algorithm::ranges::take_while_projected;
 use std::algorithm::ranges::drop_while_projected;
 use std::algorithm::ranges::transform;
+use std::algorithm::ranges::transform_with_count;
 use std::algorithm::ranges::transform_projected;
+use std::algorithm::ranges::transform_projected_with_count;
 use std::algorithm::ranges::zip_transform;
 use std::algorithm::ranges::zip_transform_projected;
 use std::algorithm::ranges::zip_transform3_projected;
@@ -3101,6 +3103,17 @@ fn test_algorithm_ranges_transform_changes_element_type() {
     let incremented: list<i32> = transform(values, add_one);
     verify(incremented.len() == 3);
     verify(incremented[0] == 2 && incremented[1] == 4 && incremented[2] == 3);
+
+    let counted: tuple<i64, list<i32>> =
+        transform_with_count(values, add_one);
+    let counted_values: list<i32> = counted.1;
+    verify(counted.0 == 3 && counted_values[0] == 2 &&
+           counted_values[2] == 3);
+    let empty: list<i32> = [];
+    let empty_counted: tuple<i64, list<i32>> =
+        transform_with_count(empty, add_one);
+    let empty_values: list<i32> = empty_counted.1;
+    verify(empty_counted.0 == 0 && empty_values.len() == 0);
 }
 
 #[test]
@@ -3126,6 +3139,11 @@ fn test_algorithm_ranges_transform_projected() {
         values, square_as_float, project_tens);
     verify(squares.len() == 3 && squares[0] == 1.0 &&
            squares[1] == 4.0 && squares[2] == 9.0);
+    let counted_squares: tuple<i64, list<f64>> =
+        transform_projected_with_count(
+            values, square_as_float, project_tens);
+    let counted_square_values: list<f64> = counted_squares.1;
+    verify(counted_squares.0 == 3 && counted_square_values[2] == 9.0);
 
     let other: list<i32> = [19, 28];
     let add_keys = |left: i32, right: i32| { return left + right; };

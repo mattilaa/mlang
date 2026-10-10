@@ -872,6 +872,22 @@ pub fn transform(data: &list<T>, operation: Operation) -> list<Output> {
     return transformed;
 }
 
+/// @brief Transform a range and return the consumed count with the output.
+/// The count equals the input length, including zero for empty input. This
+/// exposes an eager-list analogue of the input/output progress in C++20's
+/// `std::ranges::transform` result.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn transform_with_count(data: &list<T>, operation: Operation)
+    -> tuple<i64, list<Output>> {
+    var transformed: list<Output> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        transformed.push(operation(data[i]));
+    }
+    return (n, transformed);
+}
+
 /// @brief Transform corresponding values from two ranges into a new list.
 /// Stops when either input ends, matching the bounded binary overload of
 /// C++20 `std::ranges::transform`.
@@ -902,6 +918,20 @@ pub fn transform_projected(data: &list<T>, operation: Operation,
         transformed.push(operation(projection(data[i])));
     }
     return transformed;
+}
+
+/// @brief Project and transform a range, returning its consumed count.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn transform_projected_with_count(
+    data: &list<T>, operation: Operation, projection: Projection)
+    -> tuple<i64, list<Output>> {
+    var transformed: list<Output> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        transformed.push(operation(projection(data[i])));
+    }
+    return (n, transformed);
 }
 
 /// @brief Transform corresponding elements from two ranges into a new list.
