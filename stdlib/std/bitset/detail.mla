@@ -24,3 +24,7 @@ extern pub fn __mlang_std_bitset_and_eq(lhs_handle: i64, rhs_handle: i64) -> i32
 extern pub fn __mlang_std_bitset_or_eq(lhs_handle: i64, rhs_handle: i64) -> i32;
 extern pub fn __mlang_std_bitset_xor_eq(lhs_handle: i64, rhs_handle: i64) -> i32;
 extern pub fn __mlang_std_bitset_not_eq(handle: i64) -> i32;
+extern pub fn __mlang_std_bitset_bitwise_copy(lhs_handle: i64,
+                                              rhs_handle: i64,
+                                              operation: i32) -> i64;
+extern pub fn __mlang_std_bitset_complement_copy(handle: i64) -> i64;

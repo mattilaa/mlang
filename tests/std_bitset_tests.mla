@@ -189,3 +189,71 @@ fn test_bitset_bitwise_ops() {
     a.close();
     b.close();
 }
+
+#[test]
+fn test_bitset_value_returning_bitwise_ops() {
+    let ar: result<BitSet, str8> = BitSet::new(67);
+    let br: result<BitSet, str8> = BitSet::new(67);
+    verify(!ar.is_err() && !br.is_err());
+    let a: BitSet = ar.unwrap();
+    let b: BitSet = br.unwrap();
+    verify(a.resize(67, false) == 0);
+    verify(b.resize(67, false) == 0);
+    verify(a.set(0, true) == 0 && a.set(63, true) == 0);
+    verify(a.set(64, true) == 0 && a.set(66, true) == 0);
+    verify(b.set(1, true) == 0 && b.set(63, true) == 0);
+    verify(b.set(64, true) == 0);
+
+    let and_result: result<BitSet, str8> = a.bit_and(b);
+    let or_result: result<BitSet, str8> = a.bit_or(b);
+    let xor_result: result<BitSet, str8> = a.bit_xor(b);
+    let not_result: result<BitSet, str8> = a.complement();
+    verify(and_result.is_ok() && or_result.is_ok() &&
+           xor_result.is_ok() && not_result.is_ok());
+    let and_bits: BitSet = and_result.unwrap();
+    let or_bits: BitSet = or_result.unwrap();
+    let xor_bits: BitSet = xor_result.unwrap();
+    let not_bits: BitSet = not_result.unwrap();
+    verify(and_bits.len() == 67 && and_bits.count() == 2);
+    verify(and_bits.get_fast(63) == 1 && and_bits.get_fast(64) == 1);
+    verify(or_bits.count() == 5 && or_bits.get_fast(0) == 1 &&
+           or_bits.get_fast(1) == 1 && or_bits.get_fast(66) == 1);
+    verify(xor_bits.count() == 3 && xor_bits.get_fast(0) == 1 &&
+           xor_bits.get_fast(1) == 1 && xor_bits.get_fast(66) == 1);
+    verify(not_bits.len() == 67 && not_bits.count() == 63);
+    verify(not_bits.get_fast(0) == 0 && not_bits.get_fast(1) == 1 &&
+           not_bits.get_fast(66) == 0);
+    verify(a.count() == 4 && b.count() == 3);
+
+    let short_result: result<BitSet, str8> = BitSet::new(66);
+    verify(!short_result.is_err());
+    let short_bits: BitSet = short_result.unwrap();
+    verify(short_bits.resize(66, false) == 0);
+    let mismatch: result<BitSet, str8> = a.bit_and(short_bits);
+    verify(mismatch.is_err());
+
+    let empty_a_result: result<BitSet, str8> = BitSet::new(0);
+    let empty_b_result: result<BitSet, str8> = BitSet::new(0);
+    verify(!empty_a_result.is_err() && !empty_b_result.is_err());
+    let empty_a: BitSet = empty_a_result.unwrap();
+    let empty_b: BitSet = empty_b_result.unwrap();
+    let empty_and_result: result<BitSet, str8> = empty_a.bit_and(empty_b);
+    let empty_not_result: result<BitSet, str8> = empty_a.complement();
+    verify(empty_and_result.is_ok() && empty_not_result.is_ok());
+    let empty_and: BitSet = empty_and_result.unwrap();
+    let empty_not: BitSet = empty_not_result.unwrap();
+    verify(empty_and.len() == 0 && empty_and.all());
+    verify(empty_not.len() == 0 && empty_not.none());
+
+    and_bits.close();
+    or_bits.close();
+    xor_bits.close();
+    not_bits.close();
+    short_bits.close();
+    empty_and.close();
+    empty_not.close();
+    empty_a.close();
+    empty_b.close();
+    a.close();
+    b.close();
+}
