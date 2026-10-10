@@ -310,8 +310,8 @@ fn example() {
   before the binary operation, stopping at the shorter range.
 - `transform_projected_with_count` combines unary projection and transform
   while also returning the input element count.
-- `zip_transform3_projected` and `zip_transform4_projected` apply independent
-  projections to three or four corresponding inputs before invoking the
+- `zip_transform3_projected` through `zip_transform6_projected` apply
+  independent projections to each corresponding input before invoking the
   operation; each stops at the shortest input and infers the result type.
 - `zip_transform` applies operations to corresponding values from two through
   six inputs, stopping at the shortest input and inferring the output type.

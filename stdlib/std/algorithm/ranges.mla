@@ -1019,6 +1019,62 @@ pub fn zip_transform4_projected(
     return transformed;
 }
 
+/// @brief Transform projected values from five ranges over their common prefix.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Output, Operation, FirstProjection, SecondProjection,
+        ThirdProjection, FourthProjection, FifthProjection>
+pub fn zip_transform5_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection, fourth_projection: FourthProjection,
+    fifth_projection: FifthProjection) -> list<Output> {
+    var transformed: list<Output> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    for i in 0..n {
+        transformed.push(operation(first_projection(first[i]),
+                                   second_projection(second[i]),
+                                   third_projection(third[i]),
+                                   fourth_projection(fourth[i]),
+                                   fifth_projection(fifth[i])));
+    }
+    return transformed;
+}
+
+/// @brief Transform projected values from six ranges over their common prefix.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Output, Operation, FirstProjection,
+        SecondProjection, ThirdProjection, FourthProjection,
+        FifthProjection, SixthProjection>
+pub fn zip_transform6_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, sixth: &list<Y>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection, fourth_projection: FourthProjection,
+    fifth_projection: FifthProjection,
+    sixth_projection: SixthProjection) -> list<Output> {
+    var transformed: list<Output> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    for i in 0..n {
+        transformed.push(operation(first_projection(first[i]),
+                                   second_projection(second[i]),
+                                   third_projection(third[i]),
+                                   fourth_projection(fourth[i]),
+                                   fifth_projection(fifth[i]),
+                                   sixth_projection(sixth[i])));
+    }
+    return transformed;
+}
+
 /// @brief Transform corresponding elements from three ranges into a new list.
 /// Stops at the shortest input; output type comes from the ternary operation.
 /// C++23 `ranges::zip_transform` counterpart for three inputs.
