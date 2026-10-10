@@ -342,9 +342,9 @@ fn example() {
   independent projections to each corresponding input before invoking the
   operation; each stops at the shortest input and infers the result type.
 - `zip_transform` applies operations to corresponding values from two through
-  six inputs, stopping at the shortest input and inferring the output type.
+  eight inputs, stopping at the shortest input and inferring the output type.
   This eager-list API mirrors the C++23 `std::ranges::zip_transform` shape.
-- `zip` materializes heterogeneous tuples from two through six input ranges,
+- `zip` materializes heterogeneous tuples from two through eight input ranges,
   stopping at the shortest input.
 - `find_if_not` returns the first rejected element's index; `remove_if` returns
   a copy without accepted elements, and `replace_if` substitutes a value for

@@ -1397,6 +1397,51 @@ pub fn zip_transform(first: &list<T>, second: &list<U>, third: &list<V>,
     return transformed;
 }
 
+/// @brief Transform corresponding values from seven ranges over their common prefix.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, Output, Operation>
+pub fn zip_transform(first: &list<T>, second: &list<U>, third: &list<V>,
+                     fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+                     seventh: &list<Z>, operation: Operation)
+    -> list<Output> {
+    var transformed: list<Output> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    if seventh.len() < n { n = seventh.len(); }
+    for i in 0..n {
+        transformed.push(operation(first[i], second[i], third[i], fourth[i],
+                                   fifth[i], sixth[i], seventh[i]));
+    }
+    return transformed;
+}
+
+/// @brief Transform corresponding values from eight ranges over their common prefix.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A, Output, Operation>
+pub fn zip_transform(first: &list<T>, second: &list<U>, third: &list<V>,
+                     fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+                     seventh: &list<Z>, eighth: &list<A>,
+                     operation: Operation) -> list<Output> {
+    var transformed: list<Output> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    if seventh.len() < n { n = seventh.len(); }
+    if eighth.len() < n { n = eighth.len(); }
+    for i in 0..n {
+        transformed.push(operation(first[i], second[i], third[i], fourth[i],
+                                   fifth[i], sixth[i], seventh[i], eighth[i]));
+    }
+    return transformed;
+}
+
 /// @brief Return whether every element is accepted by `predicate`.
 /// Empty ranges return true, matching C++20 `std::ranges::all_of`.
 /// @ingroup algorithm_ranges
@@ -6092,6 +6137,50 @@ pub fn zip(first: &list<T>, second: &list<U>, third: &list<V>,
     for i in 0..n {
         out.push((first[i], second[i], third[i], fourth[i], fifth[i],
                   sixth[i]));
+    }
+    return out;
+}
+
+/// @brief Zip seven heterogeneous ranges, stopping at the shortest input.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z>
+pub fn zip(first: &list<T>, second: &list<U>, third: &list<V>,
+          fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+          seventh: &list<Z>) -> list<tuple<T, U, V, W, X, Y, Z>> {
+    var out: list<tuple<T, U, V, W, X, Y, Z>> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    if seventh.len() < n { n = seventh.len(); }
+    for i in 0..n {
+        out.push((first[i], second[i], third[i], fourth[i], fifth[i],
+                  sixth[i], seventh[i]));
+    }
+    return out;
+}
+
+/// @brief Zip eight heterogeneous ranges, stopping at the shortest input.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A>
+pub fn zip(first: &list<T>, second: &list<U>, third: &list<V>,
+          fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+          seventh: &list<Z>, eighth: &list<A>)
+    -> list<tuple<T, U, V, W, X, Y, Z, A>> {
+    var out: list<tuple<T, U, V, W, X, Y, Z, A>> = [];
+    var n: i64 = first.len();
+    if second.len() < n { n = second.len(); }
+    if third.len() < n { n = third.len(); }
+    if fourth.len() < n { n = fourth.len(); }
+    if fifth.len() < n { n = fifth.len(); }
+    if sixth.len() < n { n = sixth.len(); }
+    if seventh.len() < n { n = seventh.len(); }
+    if eighth.len() < n { n = eighth.len(); }
+    for i in 0..n {
+        out.push((first[i], second[i], third[i], fourth[i], fifth[i],
+                  sixth[i], seventh[i], eighth[i]));
     }
     return out;
 }
