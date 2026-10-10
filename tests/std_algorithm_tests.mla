@@ -355,6 +355,15 @@ use std::algorithm::ranges::minmax_element_value;
 use std::algorithm::ranges::min_element;
 use std::algorithm::ranges::max_element;
 use std::algorithm::ranges::minmax_element;
+use std::algorithm::ranges::min_element_by;
+use std::algorithm::ranges::max_element_by;
+use std::algorithm::ranges::minmax_element_by;
+use std::algorithm::ranges::min_element_projected;
+use std::algorithm::ranges::max_element_projected;
+use std::algorithm::ranges::minmax_element_projected;
+use std::algorithm::ranges::min_element_by_projected;
+use std::algorithm::ranges::max_element_by_projected;
+use std::algorithm::ranges::minmax_element_by_projected;
 use std::algorithm::ranges::min_element_index_by;
 use std::algorithm::ranges::max_element_index_by;
 use std::algorithm::ranges::minmax_element_index_by;
@@ -3012,6 +3021,47 @@ fn test_algorithm_ranges_generic_element_values() {
     verify(min_element(empty).is_none());
     verify(max_element(empty).is_none());
     verify(minmax_element(empty).is_none());
+}
+
+#[test]
+fn test_algorithm_ranges_safe_comparator_projected_extrema() {
+    let values: list<i32> = [21, 12, 23, 14];
+    let ascending = |left: i32, right: i32| { return left < right; };
+    let descending = |left: i32, right: i32| { return left > right; };
+    let tens = |value: i32| { return value / 10; };
+
+    let min_by: option<i32> = min_element_by(values, descending);
+    let max_by: option<i32> = max_element_by(values, descending);
+    let pair_by: option<tuple<i32, i32>> =
+        minmax_element_by(values, descending);
+    verify(min_by.is_some() && min_by.unwrap() == 23);
+    verify(max_by.is_some() && max_by.unwrap() == 12);
+    let pair: tuple<i32, i32> = pair_by.unwrap();
+    verify(pair.0 == 23 && pair.1 == 12);
+
+    let min_projected: option<i32> = min_element_projected(values, tens);
+    let max_projected: option<i32> = max_element_projected(values, tens);
+    let pair_projected: option<tuple<i32, i32>> =
+        minmax_element_projected(values, tens);
+    verify(min_projected.unwrap() == 12);
+    verify(max_projected.unwrap() == 21);
+    let projected_pair: tuple<i32, i32> = pair_projected.unwrap();
+    verify(projected_pair.0 == 12 && projected_pair.1 == 23);
+
+    let min_both: option<i32> = min_element_by_projected(
+        values, ascending, tens);
+    let max_both: option<i32> = max_element_by_projected(
+        values, ascending, tens);
+    let pair_both: option<tuple<i32, i32>> = minmax_element_by_projected(
+        values, ascending, tens);
+    verify(min_both.unwrap() == 12 && max_both.unwrap() == 21);
+    let both_pair: tuple<i32, i32> = pair_both.unwrap();
+    verify(both_pair.0 == 12 && both_pair.1 == 23);
+
+    let empty: list<i32> = [];
+    verify(min_element_by(empty, ascending).is_none());
+    verify(max_element_projected(empty, tens).is_none());
+    verify(minmax_element_by_projected(empty, ascending, tens).is_none());
 }
 
 #[test]

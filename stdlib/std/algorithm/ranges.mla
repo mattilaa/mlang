@@ -4046,6 +4046,159 @@ pub fn minmax_element(data: &list<T>) -> option<tuple<T, T>> {
     return Some<tuple<T, T>>((minimum, maximum));
 }
 
+/// @brief Comparator-based safe minimum; returns `None` for an empty range.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn min_element_by(data: &list<T>, less: Less) -> option<T> {
+    let n: i64 = data.len();
+    if n == 0 { return None<T>(); }
+    var best: T = data[0];
+    for i in 1..n {
+        if less(data[i], best) { best = data[i]; }
+    }
+    return Some<T>(best);
+}
+
+/// @brief Comparator-based safe maximum; returns `None` for an empty range.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn max_element_by(data: &list<T>, less: Less) -> option<T> {
+    let n: i64 = data.len();
+    if n == 0 { return None<T>(); }
+    var best: T = data[0];
+    for i in 1..n {
+        if less(best, data[i]) { best = data[i]; }
+    }
+    return Some<T>(best);
+}
+
+/// @brief Comparator-based safe min/max pair; returns `None` when empty.
+/// Keeps the first minimum and last maximum among equivalent values.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn minmax_element_by(data: &list<T>, less: Less)
+    -> option<tuple<T, T>> {
+    let n: i64 = data.len();
+    if n == 0 { return None<tuple<T, T>>(); }
+    var minimum: T = data[0];
+    var maximum: T = data[0];
+    for i in 1..n {
+        let value: T = data[i];
+        if less(value, minimum) { minimum = value; }
+        if !less(value, maximum) { maximum = value; }
+    }
+    return Some<tuple<T, T>>((minimum, maximum));
+}
+
+/// @brief Safe minimum selected by projected keys; returns the original value.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn min_element_projected(data: &list<T>, projection: Projection)
+    -> option<T> {
+    let n: i64 = data.len();
+    if n == 0 { return None<T>(); }
+    var best: T = data[0];
+    var best_key = projection(best);
+    for i in 1..n {
+        let value: T = data[i];
+        let key = projection(value);
+        if key < best_key { best = value; best_key = key; }
+    }
+    return Some<T>(best);
+}
+
+/// @brief Safe maximum selected by projected keys; returns the original value.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn max_element_projected(data: &list<T>, projection: Projection)
+    -> option<T> {
+    let n: i64 = data.len();
+    if n == 0 { return None<T>(); }
+    var best: T = data[0];
+    var best_key = projection(best);
+    for i in 1..n {
+        let value: T = data[i];
+        let key = projection(value);
+        if key > best_key { best = value; best_key = key; }
+    }
+    return Some<T>(best);
+}
+
+/// @brief Safe projected min/max pair; returns original values, or `None`.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn minmax_element_projected(data: &list<T>, projection: Projection)
+    -> option<tuple<T, T>> {
+    let n: i64 = data.len();
+    if n == 0 { return None<tuple<T, T>>(); }
+    var minimum: T = data[0];
+    var maximum: T = data[0];
+    var minimum_key = projection(minimum);
+    var maximum_key = minimum_key;
+    for i in 1..n {
+        let value: T = data[i];
+        let key = projection(value);
+        if key < minimum_key { minimum = value; minimum_key = key; }
+        if !(key < maximum_key) { maximum = value; maximum_key = key; }
+    }
+    return Some<tuple<T, T>>((minimum, maximum));
+}
+
+/// @brief Safe minimum selected by comparator and projection.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn min_element_by_projected(data: &list<T>, less: Less,
+                                projection: Projection) -> option<T> {
+    let n: i64 = data.len();
+    if n == 0 { return None<T>(); }
+    var best: T = data[0];
+    var best_key = projection(best);
+    for i in 1..n {
+        let value: T = data[i];
+        let key = projection(value);
+        if less(key, best_key) { best = value; best_key = key; }
+    }
+    return Some<T>(best);
+}
+
+/// @brief Safe maximum selected by comparator and projection.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn max_element_by_projected(data: &list<T>, less: Less,
+                                projection: Projection) -> option<T> {
+    let n: i64 = data.len();
+    if n == 0 { return None<T>(); }
+    var best: T = data[0];
+    var best_key = projection(best);
+    for i in 1..n {
+        let value: T = data[i];
+        let key = projection(value);
+        if less(best_key, key) { best = value; best_key = key; }
+    }
+    return Some<T>(best);
+}
+
+/// @brief Safe comparator/projection min/max pair; returns `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn minmax_element_by_projected(data: &list<T>, less: Less,
+                                   projection: Projection)
+    -> option<tuple<T, T>> {
+    let n: i64 = data.len();
+    if n == 0 { return None<tuple<T, T>>(); }
+    var minimum: T = data[0];
+    var maximum: T = data[0];
+    var minimum_key = projection(minimum);
+    var maximum_key = minimum_key;
+    for i in 1..n {
+        let value: T = data[i];
+        let key = projection(value);
+        if less(key, minimum_key) { minimum = value; minimum_key = key; }
+        if !less(key, maximum_key) { maximum = value; maximum_key = key; }
+    }
+    return Some<tuple<T, T>>((minimum, maximum));
+}
+
 /// @brief Return the minimum and maximum values in one traversal.
 /// Requires a nonempty input; use `minmax_element_index` to handle emptiness.
 /// The minimum is the first equivalent value and maximum the last, matching
