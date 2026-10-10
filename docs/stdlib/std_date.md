@@ -5,6 +5,7 @@ Module file: `stdlib/std/date.mla`
 ### Types
 - `date_time`
 - `civil_date`
+- `YearMonth` (checked year/month without a day)
 - `Weekday` (`Sunday` through `Saturday`, with Sunday=`0`)
 - `YearMonthWeekday` and `YearMonthWeekdayLast`
 - `utc_offset`
@@ -35,6 +36,14 @@ Module file: `stdlib/std/date.mla`
 - `is_leap_year(year: i32) -> bool`
 - `days_in_month(year: i32, month: i32) -> i32`
 - `is_valid_civil_date(year: i32, month: i32, day: i32) -> bool`
+- `make_year_month(year, month) -> option<YearMonth>` constructs a checked
+  month value; `is_valid_year_month` validates one directly.
+- `add_year_month_months(value, offset)` normalizes month arithmetic across
+  years, and `add_year_month_years(value, offset)` preserves the month while
+  shifting the year. Invalid months and results outside `i32` years return
+  `None`.
+- `year_month_first_day(value)` and `year_month_last_day(value)` return the
+  first or final `CivilDate` of a valid month, including leap-year February.
 - `to_sys_days(year, month, day) -> option<i64>` converts a valid Gregorian
   date to days since 1970-01-01, following C++20 `std::chrono::sys_days`.
 - `from_sys_days(days: i64) -> option<civil_date>` performs the inverse and

@@ -25,6 +25,12 @@ pub struct CivilDate {
     var day: i32;
 };
 
+/// @brief Year and month without a day, like C++20 `std::chrono::year_month`.
+pub struct YearMonth {
+    var year: i32;
+    var month: i32;
+};
+
 /// @brief ISO-8601 week date (week-year, week number, Monday-based weekday).
 pub struct IsoWeekDate {
     var year: i32;
@@ -104,6 +110,77 @@ pub fn days_in_month(year: i32, month: i32) -> i32 {
 /// @brief Return whether the fields form a valid proleptic Gregorian date.
 pub fn is_valid_civil_date(year: i32, month: i32, day: i32) -> bool {
     return day >= 1 && day <= days_in_month(year, month);
+}
+
+/// @brief Return whether the year/month fields form a valid Gregorian month.
+pub fn is_valid_year_month(value: YearMonth) -> bool {
+    return value.month >= 1 && value.month <= 12;
+}
+
+/// @brief Construct a checked year/month value.
+pub fn make_year_month(year: i32, month: i32) -> option<YearMonth> {
+    if month < 1 || month > 12 { return None<YearMonth>(); }
+    return Some<YearMonth>(YearMonth { year: year, month: month });
+}
+
+/// @brief Add calendar months, normalizing across year boundaries.
+/// Invalid input and results outside the `i32` year range return `None`.
+pub fn add_year_month_months(value: YearMonth, offset: i64)
+    -> option<YearMonth> {
+    if !is_valid_year_month(value) { return None<YearMonth>(); }
+    let current_month: i64 = i64(value.year) * 12 + i64(value.month) - 1;
+    let minimum_month: i64 = i64(-2147483648) * 12;
+    let maximum_month: i64 = i64(2147483647) * 12 + 11;
+    if offset > 0 && current_month > maximum_month - offset {
+        return None<YearMonth>();
+    }
+    if offset < 0 && current_month < minimum_month - offset {
+        return None<YearMonth>();
+    }
+    let target_month: i64 = current_month + offset;
+    var target_year: i64 = target_month / 12;
+    if target_month < 0 && target_month % 12 != 0 {
+        target_year = target_year - 1;
+    }
+    let target_month_in_year: i64 = target_month - target_year * 12 + 1;
+    return Some<YearMonth>(YearMonth {
+        year: i32(target_year), month: i32(target_month_in_year)
+    });
+}
+
+/// @brief Add calendar years while preserving the month.
+pub fn add_year_month_years(value: YearMonth, offset: i64)
+    -> option<YearMonth> {
+    if !is_valid_year_month(value) { return None<YearMonth>(); }
+    let current_year: i64 = i64(value.year);
+    let minimum_year: i64 = -2147483648;
+    let maximum_year: i64 = 2147483647;
+    if offset > 0 && current_year > maximum_year - offset {
+        return None<YearMonth>();
+    }
+    if offset < 0 && current_year < minimum_year - offset {
+        return None<YearMonth>();
+    }
+    return Some<YearMonth>(YearMonth {
+        year: i32(current_year + offset), month: value.month
+    });
+}
+
+/// @brief Return the first civil date in a valid year/month.
+pub fn year_month_first_day(value: YearMonth) -> option<CivilDate> {
+    if !is_valid_year_month(value) { return None<CivilDate>(); }
+    return Some<CivilDate>(CivilDate {
+        year: value.year, month: value.month, day: 1
+    });
+}
+
+/// @brief Return the final civil date in a valid year/month.
+pub fn year_month_last_day(value: YearMonth) -> option<CivilDate> {
+    if !is_valid_year_month(value) { return None<CivilDate>(); }
+    return Some<CivilDate>(CivilDate {
+        year: value.year, month: value.month,
+        day: days_in_month(value.year, value.month)
+    });
 }
 
 /// @brief Convert a valid civil date to days since 1970-01-01.
