@@ -31,6 +31,8 @@ use std::date::is_valid_civil_date;
 use std::date::to_sys_days;
 use std::date::from_sys_days;
 use std::date::weekday_from_sys_days;
+use std::date::add_civil_days;
+use std::date::days_between;
 use std::strbuf::eq;
 use std::strbuf::len;
 use std::testing::verify;
@@ -128,6 +130,37 @@ fn test_civil_calendar_and_sys_days() {
     let year_zero_date: CivilDate = from_sys_days(year_zero_leap_day).unwrap();
     verify(year_zero_date.year == 0 && year_zero_date.month == 2 &&
            year_zero_date.day == 29);
+}
+
+#[test]
+fn test_civil_date_day_arithmetic() {
+    let leap_day: CivilDate = CivilDate { year: 2024, month: 2, day: 29 };
+    let following: CivilDate = add_civil_days(leap_day, 1).unwrap();
+    verify(following.year == 2024 && following.month == 3 &&
+           following.day == 1);
+    let preceding: CivilDate = add_civil_days(leap_day, -1).unwrap();
+    verify(preceding.year == 2024 && preceding.month == 2 &&
+           preceding.day == 28);
+
+    let epoch: CivilDate = CivilDate { year: 1970, month: 1, day: 1 };
+    let before_epoch: CivilDate = add_civil_days(epoch, -1).unwrap();
+    verify(before_epoch.year == 1969 && before_epoch.month == 12 &&
+           before_epoch.day == 31);
+    verify(days_between(before_epoch, epoch).unwrap() == 1);
+    verify(days_between(epoch, before_epoch).unwrap() == -1);
+
+    let invalid: CivilDate = CivilDate { year: 2023, month: 2, day: 29 };
+    verify(add_civil_days(invalid, 0).is_none());
+    verify(days_between(invalid, epoch).is_none());
+
+    let last_supported: CivilDate = CivilDate {
+        year: 2147483647, month: 12, day: 31
+    };
+    let first_supported: CivilDate = CivilDate {
+        year: -2147483648, month: 1, day: 1
+    };
+    verify(add_civil_days(last_supported, 1).is_none());
+    verify(add_civil_days(first_supported, -1).is_none());
 }
 
 #[test]

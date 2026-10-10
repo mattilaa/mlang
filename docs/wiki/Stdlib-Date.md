@@ -41,6 +41,11 @@ Module file: `stdlib/std/date.mla`
   returns `None` when the year is outside the representable [`i32`](Quick-Guide#types) range.
 - `weekday_from_sys_days(days: i64) -> i32` returns Sunday as `0` through
   Saturday as `6`.
+- `add_civil_days(date: civil_date, offset: i64) -> option<civil_date>` adds
+  days using calendar arithmetic and returns `None` when the date is invalid or
+  the resulting year is outside [`i32`](Quick-Guide#types).
+- `days_between(first, last) -> option<i64>` returns the signed day distance
+  from the first valid date to the second.
 
 [`std::date`](Stdlib-Date) supports Unix UTC timestamps in whole seconds. Timezone support is
 provided as fixed UTC offsets (`utc_offset`), system-local conversions, and named

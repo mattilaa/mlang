@@ -123,6 +123,34 @@ pub fn weekday_from_sys_days(days: i64) -> i32 {
     return i32(weekday);
 }
 
+/// @brief Add a signed day offset to a civil date.
+/// Returns `None` for an invalid date or when the resulting year does not fit
+/// in `i32`. This is civil-date arithmetic equivalent to adding `days` to
+/// C++20 `std::chrono::sys_days`.
+pub fn add_civil_days(date: CivilDate, offset: i64) -> option<CivilDate> {
+    let start: option<i64> = to_sys_days(date.year, date.month, date.day);
+    if start.is_none() { return None<CivilDate>(); }
+    let current_day: i64 = start.unwrap();
+    let minimum_day: i64 = to_sys_days(-2147483648, 1, 1).unwrap();
+    let maximum_day: i64 = to_sys_days(2147483647, 12, 31).unwrap();
+    if offset > 0 && current_day > maximum_day - offset {
+        return None<CivilDate>();
+    }
+    if offset < 0 && current_day < minimum_day - offset {
+        return None<CivilDate>();
+    }
+    return from_sys_days(current_day + offset);
+}
+
+/// @brief Return elapsed civil days from `first` to `last`.
+/// Invalid input dates return `None`.
+pub fn days_between(first: CivilDate, last: CivilDate) -> option<i64> {
+    let first_day: option<i64> = to_sys_days(first.year, first.month, first.day);
+    let last_day: option<i64> = to_sys_days(last.year, last.month, last.day);
+    if first_day.is_none() || last_day.is_none() { return None<i64>(); }
+    return Some<i64>(last_day.unwrap() - first_day.unwrap());
+}
+
 
 /// @brief Return current local date-time.
 pub fn now() -> DateTime {
