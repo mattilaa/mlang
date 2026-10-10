@@ -20,6 +20,10 @@ use std::chrono::time_point_add;
 use std::chrono::time_point_subtract;
 use std::chrono::time_point_difference;
 use std::chrono::time_point_compare;
+use std::chrono::time_point_cast;
+use std::chrono::time_point_floor;
+use std::chrono::time_point_ceil;
+use std::chrono::time_point_round;
 use std::chrono::steady_now;
 use std::chrono::system_now;
 use std::testing::verify;
@@ -215,6 +219,37 @@ fn test_chrono_time_point_arithmetic_and_clock_safety() {
         ClockKind::Steady).unwrap();
     let one_second: Duration = make_duration(1, DurationUnit::Second).unwrap();
     verify(time_point_add(maximum, one_second).is_none());
+    verify(time_point_cast(maximum, DurationUnit::Nanosecond).is_none());
+}
+
+#[test]
+fn test_chrono_time_point_cast_and_rounding() {
+    let negative: TimePoint = make_time_point(
+        make_duration(-90, DurationUnit::Second).unwrap(),
+        ClockKind::System).unwrap();
+
+    let cast: TimePoint =
+        time_point_cast(negative, DurationUnit::Minute).unwrap();
+    verify(cast.clock == ClockKind::System);
+    verify(time_since_epoch(cast).unwrap().count == -1);
+
+    let floor: TimePoint =
+        time_point_floor(negative, DurationUnit::Minute).unwrap();
+    let ceil: TimePoint =
+        time_point_ceil(negative, DurationUnit::Minute).unwrap();
+    let round: TimePoint =
+        time_point_round(negative, DurationUnit::Minute).unwrap();
+    verify(time_since_epoch(floor).unwrap().count == -2);
+    verify(time_since_epoch(ceil).unwrap().count == -1);
+    verify(time_since_epoch(round).unwrap().count == -2);
+
+    let positive_tie: TimePoint = make_time_point(
+        make_duration(150, DurationUnit::Second).unwrap(),
+        ClockKind::Steady).unwrap();
+    let even_tie: TimePoint =
+        time_point_round(positive_tie, DurationUnit::Minute).unwrap();
+    verify(time_since_epoch(even_tie).unwrap().count == 2);
+    verify(even_tie.clock == ClockKind::Steady);
 }
 
 #[test]

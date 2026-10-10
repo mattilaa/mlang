@@ -186,6 +186,42 @@ pub fn time_point_compare(left: TimePoint, right: TimePoint)
     return duration_compare(left.since_epoch, right.since_epoch);
 }
 
+/// @brief Cast the stored duration while preserving the clock identity.
+pub fn time_point_cast(value: TimePoint, unit: DurationUnit)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(value.clock) { return None<TimePoint>(); }
+    let converted: option<Duration> = duration_cast(value.since_epoch, unit);
+    if converted.is_none() { return None<TimePoint>(); }
+    return make_time_point(converted.unwrap(), value.clock);
+}
+
+/// @brief Floor a time point's duration to `unit`, preserving its clock.
+pub fn time_point_floor(value: TimePoint, unit: DurationUnit)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(value.clock) { return None<TimePoint>(); }
+    let converted: option<Duration> = duration_floor(value.since_epoch, unit);
+    if converted.is_none() { return None<TimePoint>(); }
+    return make_time_point(converted.unwrap(), value.clock);
+}
+
+/// @brief Ceil a time point's duration to `unit`, preserving its clock.
+pub fn time_point_ceil(value: TimePoint, unit: DurationUnit)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(value.clock) { return None<TimePoint>(); }
+    let converted: option<Duration> = duration_ceil(value.since_epoch, unit);
+    if converted.is_none() { return None<TimePoint>(); }
+    return make_time_point(converted.unwrap(), value.clock);
+}
+
+/// @brief Round a time point's duration to nearest, ties-to-even.
+pub fn time_point_round(value: TimePoint, unit: DurationUnit)
+    -> option<TimePoint> {
+    if !is_valid_clock_kind(value.clock) { return None<TimePoint>(); }
+    let converted: option<Duration> = duration_round(value.since_epoch, unit);
+    if converted.is_none() { return None<TimePoint>(); }
+    return make_time_point(converted.unwrap(), value.clock);
+}
+
 /// @brief Return the current monotonic steady-clock time point in nanoseconds.
 pub fn steady_now() -> TimePoint {
     return TimePoint {

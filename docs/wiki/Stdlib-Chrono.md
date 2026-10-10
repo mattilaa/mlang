@@ -24,6 +24,7 @@ use std::chrono::ClockKind;
 use std::chrono::make_time_point;
 use std::chrono::time_point_add;
 use std::chrono::time_point_difference;
+use std::chrono::time_point_round;
 
 let elapsed = make_duration(90, DurationUnit::Second).unwrap();
 let milliseconds: Duration =
@@ -39,6 +40,7 @@ let later = time_point_add(
     start, make_duration(5, DurationUnit::Second).unwrap()).unwrap();
 let elapsed_between: Duration = time_point_difference(
     later, start, DurationUnit::Second).unwrap(); // 5 seconds
+let rounded_start = time_point_round(start, DurationUnit::Second).unwrap();
 ```
 
 - `make_duration(count, unit)` constructs a value for one of the declared
@@ -73,3 +75,7 @@ returns `None` when conversion or arithmetic overflows. `time_point_difference`
 and `time_point_compare` reject different clock kinds because their epochs
 cannot be compared. `steady_now()` returns a monotonic nanosecond point;
 `system_now()` returns the system-clock Unix time at whole-second resolution.
+`time_point_cast`, `time_point_floor`, `time_point_ceil`, and
+`time_point_round` convert or round the since-epoch duration while retaining
+the original clock identity. Their checked integral rounding follows the
+corresponding C++20 chrono operations.
