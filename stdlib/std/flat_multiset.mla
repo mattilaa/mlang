@@ -133,6 +133,87 @@ impl<T> FlatMultiSet {
     }
 }
 
+/// @brief Find the first stored key not ordered before a heterogeneous query.
+generic<T, Query, LessKeyQuery>
+pub fn lower_bound_by(container: &FlatMultiSet<T>, query: Query,
+                      less_key_query: LessKeyQuery) -> i64 {
+    var first: i64 = 0;
+    var count: i64 = container.keys.len();
+    while count > 0 {
+        let step: i64 = count / 2;
+        let middle: i64 = first + step;
+        if less_key_query(container.keys[middle], query) {
+            first = middle + 1;
+            count = count - step - 1;
+        } else {
+            count = step;
+        }
+    }
+    return first;
+}
+
+/// @brief Find the first stored key ordered after a heterogeneous query.
+generic<T, Query, LessQueryKey>
+pub fn upper_bound_by(container: &FlatMultiSet<T>, query: Query,
+                      less_query_key: LessQueryKey) -> i64 {
+    var first: i64 = 0;
+    var count: i64 = container.keys.len();
+    while count > 0 {
+        let step: i64 = count / 2;
+        let middle: i64 = first + step;
+        if !less_query_key(query, container.keys[middle]) {
+            first = middle + 1;
+            count = count - step - 1;
+        } else {
+            count = step;
+        }
+    }
+    return first;
+}
+
+/// @brief Return the half-open index range matching a heterogeneous query.
+generic<T, Query, LessKeyQuery, LessQueryKey>
+pub fn equal_range_by(container: &FlatMultiSet<T>, query: Query,
+                      less_key_query: LessKeyQuery,
+                      less_query_key: LessQueryKey) -> tuple<i64, i64> {
+    return (lower_bound_by(container, query, less_key_query),
+            upper_bound_by(container, query, less_query_key));
+}
+
+/// @brief Count keys matching a heterogeneous query by ordering equivalence.
+generic<T, Query, LessKeyQuery, LessQueryKey>
+pub fn count_by(container: &FlatMultiSet<T>, query: Query,
+                less_key_query: LessKeyQuery,
+                less_query_key: LessQueryKey) -> i64 {
+    return upper_bound_by(container, query, less_query_key) -
+           lower_bound_by(container, query, less_key_query);
+}
+
+/// @brief Whether any key matches a heterogeneous query.
+generic<T, Query, LessKeyQuery, LessQueryKey>
+pub fn contains_by(container: &FlatMultiSet<T>, query: Query,
+                   less_key_query: LessKeyQuery,
+                   less_query_key: LessQueryKey) -> bool {
+    return count_by(container, query, less_key_query, less_query_key) != 0;
+}
+
+/// @brief Erase all keys matching a heterogeneous query; return count removed.
+generic<T, Query, LessKeyQuery, LessQueryKey>
+pub fn remove_by(container: &mut FlatMultiSet<T>, query: Query,
+                 less_key_query: LessKeyQuery,
+                 less_query_key: LessQueryKey) -> i64 {
+    let first: i64 = lower_bound_by(container, query, less_key_query);
+    let last: i64 = upper_bound_by(container, query, less_query_key);
+    let removed: i64 = last - first;
+    if removed == 0 { return 0; }
+    var updated: list<T> = [];
+    let count: i64 = container.keys.len();
+    for i in 0..first { updated.push(container.keys[i]); }
+    for i in last..count { updated.push(container.keys[i]); }
+    container.keys = updated;
+    return removed;
+}
+
 /// @brief Erase keys accepted by `predicate` and return the removal count.
 generic<T, Predicate>
 pub fn erase_if(container: &mut FlatMultiSet<T>, predicate: Predicate) -> i64 {

@@ -19,6 +19,10 @@ let smallest: i32 = ids.key_at(0); // 7
 `is_empty`, `lower_bound`, `upper_bound`, `equal_range`, `contains`, `insert`,
 `insert_range`, `replace`, `remove`, `clear`, and `key_at`. Free functions
 `erase_if` and `merge` provide C++20/23-style bulk operations.
+`lower_bound_by`, `upper_bound_by`, `equal_range_by`, `contains_by`, and
+`remove_by` accept a heterogeneous query plus strict-ordering comparators in
+both `(stored_key, query)` and `(query, stored_key)` directions; neither
+ordering the pair defines a match.
 
 Ordering equivalence means neither key is less than the other. `insert` returns
 true only for a new key. `insert_range` processes values in order and returns
