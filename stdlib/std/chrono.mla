@@ -186,6 +186,35 @@ pub fn make_hh_mm_ss(value: Duration) -> option<HhMmSs> {
     });
 }
 
+/// @brief Format a duration as signed `HH:MM:SS`, retaining subsecond scale.
+/// Millisecond, microsecond, and nanosecond inputs append exactly 3, 6, or 9
+/// fractional digits. Invalid durations return `None`.
+pub fn format_hh_mm_ss(value: Duration) -> option<str8> {
+    let parts_option: option<HhMmSs> = make_hh_mm_ss(value);
+    if parts_option.is_none() { return None<str8>(); }
+    let parts: HhMmSs = parts_option.unwrap();
+    var sign: str8 = "";
+    if parts.is_negative { sign = "-"; }
+
+    if value.unit == DurationUnit::Millisecond {
+        return Some<str8>(format!("{}{:02}:{:02}:{:02}.{:03}", sign,
+            parts.hours, parts.minutes, parts.seconds,
+            parts.subseconds.count));
+    }
+    if value.unit == DurationUnit::Microsecond {
+        return Some<str8>(format!("{}{:02}:{:02}:{:02}.{:06}", sign,
+            parts.hours, parts.minutes, parts.seconds,
+            parts.subseconds.count));
+    }
+    if value.unit == DurationUnit::Nanosecond {
+        return Some<str8>(format!("{}{:02}:{:02}:{:02}.{:09}", sign,
+            parts.hours, parts.minutes, parts.seconds,
+            parts.subseconds.count));
+    }
+    return Some<str8>(format!("{}{:02}:{:02}:{:02}", sign, parts.hours,
+                              parts.minutes, parts.seconds));
+}
+
 fn compare_fine_to_coarse(fine_count: i64, ratio: i64,
                            coarse_count: i64) -> i32 {
     let quotient: i64 = fine_count / ratio;

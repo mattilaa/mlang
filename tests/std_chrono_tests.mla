@@ -28,6 +28,7 @@ use std::chrono::time_point_round;
 use std::chrono::steady_now;
 use std::chrono::system_now;
 use std::chrono::make_hh_mm_ss;
+use std::chrono::format_hh_mm_ss;
 use std::chrono::is_am;
 use std::chrono::is_pm;
 use std::chrono::make12;
@@ -334,4 +335,23 @@ fn test_chrono_twelve_and_twenty_four_hour_helpers() {
     verify(make24(1, true).unwrap() == 13);
     verify(make24(11, true).unwrap() == 23);
     verify(make24(0, false).is_none() && make24(13, true).is_none());
+}
+
+#[test]
+fn test_chrono_hh_mm_ss_formatting() {
+    verify(format_hh_mm_ss(
+        make_duration(90061, DurationUnit::Second).unwrap()).unwrap() ==
+        "25:01:01");
+    verify(format_hh_mm_ss(
+        make_duration(-1234567, DurationUnit::Millisecond).unwrap()).unwrap() ==
+        "-00:20:34.567");
+    verify(format_hh_mm_ss(
+        make_duration(1250000, DurationUnit::Microsecond).unwrap()).unwrap() ==
+        "00:00:01.250000");
+    verify(format_hh_mm_ss(
+        make_duration(1, DurationUnit::Nanosecond).unwrap()).unwrap() ==
+        "00:00:00.000000001");
+    verify(format_hh_mm_ss(
+        make_duration(-1, DurationUnit::Millisecond).unwrap()).unwrap() ==
+        "-00:00:00.001");
 }
