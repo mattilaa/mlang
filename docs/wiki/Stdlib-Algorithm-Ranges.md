@@ -313,6 +313,12 @@ fn example() {
   `(accumulator, element)` for left folds and `(element, accumulator)` for
   right folds; the accumulator type may differ from the element type. Empty
   input returns `init` unchanged.
+- `fold_left_projected` and `fold_right_projected` fuse a unary projection
+  with the corresponding initialized fold, avoiding an intermediate list.
+  `fold_left_first_projected` and `fold_right_last_projected` do the same for
+  no-initial-value folds; they return `None` for empty input and can widen the
+  projected seed into a distinct accumulator type. These projected forms are
+  Mlang extensions of the C++23 fold algorithms.
 - `fold_left_with_iter(data, init, operation)` returns `(consumed, accumulator)`;
   `consumed` is the eager list length (zero for empty input), standing in for
   the final iterator in C++23 [`std::ranges::fold_left_with_iter`](Stdlib-Module-API).
