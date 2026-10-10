@@ -9,7 +9,7 @@ Numeric sequence helpers for integer lists, including generic list folds.
 ### API
 - `midpoint_i64(first, second)` and `midpoint_u64(first, second)` compute an
   overflow-safe integral midpoint, rounding a tie toward `first` (C++20
-  `std::midpoint`). `midpoint_f32` and `midpoint_f64` provide overflow-safe
+  [`std::midpoint`](Stdlib-Module-API)). `midpoint_f32` and `midpoint_f64` provide overflow-safe
   floating-point midpoint overloads for the corresponding Mlang types.
   `midpoint_i8/i16/i32` and `midpoint_u8/u16/u32` cover the remaining integer
   widths with the same tie behavior.
@@ -19,7 +19,7 @@ Numeric sequence helpers for integer lists, including generic list folds.
   list element type, and empty input returns `init`. The C++-style overload
   `accumulate(data, init, operation)` is available as well.
 - `reduce(data, init)` and `reduce(data, init, operation)` provide seeded
-  C++ `std::reduce` forms. The eager Mlang implementation is sequential, while
+  C++ [`std::reduce`](Stdlib-Module-API) forms. The eager Mlang implementation is sequential, while
   callers should still use associative, commutative operations for portable
   C++ reduce semantics.
 - `fold_left(data, init, operation)` applies `operation(accumulator, element)`

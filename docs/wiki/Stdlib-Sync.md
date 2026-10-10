@@ -108,10 +108,10 @@ use `SpscQueue<T>` for fixed-size audio commands.
 `AtomicI64` provides a C11 atomic signed 64-bit integer; the implementation may
 use a lock-backed runtime operation on targets where native 64-bit atomics are
 not lock-free. Construction returns `result<AtomicI64, str8>` and reports
-allocation failures. It offers `load`, `store`, `exchange`, `fetch_add`,
-`fetch_sub`, `fetch_and`, `fetch_or`, `fetch_xor`, and strong
-`compare_exchange`. Operations without an explicit order use sequentially
-consistent ordering. The `_with_order` variants accept
+allocation failures. It offers `load`, `store`,
+`exchange`, `fetch_add`, `fetch_sub`, `fetch_and`, `fetch_or`, `fetch_xor`, and
+strong `compare_exchange`. Operations without an explicit order use
+sequentially consistent ordering. The `_with_order` variants accept
 `AtomicOrder::{Relaxed, Consume, Acquire, Release, AcqRel, SeqCst}`; invalid
 load/store/wait orderings are rejected and returned as errors. `wait(old)`
 blocks while the value remains equal to `old`, while `notify_one()` and
@@ -152,6 +152,32 @@ already set; `clear()` resets it. Both default to sequential consistency and
 have `_with_order` variants. `clear` rejects acquire-like memory orders. This
 supports small spin-lock/state-flag use cases; prefer `mutex` when waiting
 threads should sleep instead of spin. Close the flag only after all users stop.
+
+### Barrier
+
+`Barrier` is a reusable C++20-style phase barrier for a fixed participant
+group. `arrive()` returns a phase token without blocking; pass it to `wait()`
+to wait for that phase, or use `arrive_and_wait()` for the common combined
+operation. The final arrival advances the phase and wakes all waiters.
+`arrive_by(n)` accounts for multiple participants in one arrival, and
+`arrive_and_drop()` participates in the current phase while reducing the
+expected participant count for future phases. The participant count must be
+positive at construction. Do not close the barrier while any participant is
+arriving or waiting.
+
+```rust
+mod std::sync;
+use std::sync::Barrier;
+
+fn main() -> i32 {
+    let created: result<Barrier, str8> = Barrier::new(1);
+    if created.is_err() { return 1; }
+    let barrier: Barrier = created.unwrap();
+    let completed: result<i32, str8> = barrier.arrive_and_wait();
+    barrier.close();
+    return completed.is_ok() ? 0 : 1;
+}
+```
 
 ### Latch
 
@@ -200,31 +226,5 @@ fn main() -> i32 {
     let released: result<i32, str8> = permits.release();
     permits.close();
     return acquired.is_ok() && acquired.unwrap() && released.is_ok() ? 0 : 1;
-}
-```
-
-### Barrier
-
-`Barrier` is a reusable C++20-style phase barrier for a fixed participant
-group. `arrive()` returns a phase token without blocking; pass it to `wait()`
-to wait for that phase, or use `arrive_and_wait()` for the common combined
-operation. The final arrival advances the phase and wakes all waiters.
-`arrive_by(n)` accounts for multiple participants in one arrival, and
-`arrive_and_drop()` participates in the current phase while reducing the
-expected participant count for future phases. The participant count must be
-positive at construction. Do not close the barrier while any participant is
-arriving or waiting.
-
-```rust
-mod std::sync;
-use std::sync::Barrier;
-
-fn main() -> i32 {
-    let created: result<Barrier, str8> = Barrier::new(1);
-    if created.is_err() { return 1; }
-    let barrier: Barrier = created.unwrap();
-    let completed: result<i32, str8> = barrier.arrive_and_wait();
-    barrier.close();
-    return completed.is_ok() ? 0 : 1;
 }
 ```

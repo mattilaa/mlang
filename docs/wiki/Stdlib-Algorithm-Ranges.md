@@ -52,11 +52,11 @@ fn example() {
 - `find_last_by(data, key, equivalent)` searches backward and returns the last
   index whose element matches a separate key under the supplied binary
   predicate, or `-1` when none matches.
-- `find_last_by_projected(data, key, equivalent, projection)` applies a
-  projection before matching each element against the lookup key while
-  searching backward.
 - `find_by`, `count_by`, and `contains_by` apply the same element/key
   equivalence predicate for first-match lookup, counting, and membership.
+- `find_last_by_projected(data, key, equivalent, projection)` searches
+  backward, applying the projection to each element before matching it against
+  a possibly heterogeneous lookup key with the supplied predicate.
 - `find_by_projected`, `count_by_projected`, and `contains_by_projected` apply
   the equivalence predicate to a projected element key and the lookup key.
 - `adjacent_find_by(data, equivalent)` returns the first adjacent index whose
@@ -257,8 +257,10 @@ fn example() {
 - `for_each_n(data, count, operation)` invokes a closure on a bounded prefix
   in iteration order. Negative counts perform no calls and oversized counts
   clamp to the input length.
-- `for_each_n_count` and `for_each_n_projected_count` return the consumed count
-  after processing a bounded prefix.
+- `for_each_n_count` and `for_each_n_projected_count` return the number of
+  elements consumed after processing the bounded prefix, adapting the standard
+  ending-iterator result to eager-list indices. The callable remains an input
+  because generic closure values cannot currently be returned in tuples.
 - `for_each_projected` and `for_each_n_projected` invoke the operation on each
   element's projected value, preserving traversal order and bounded-count
   behavior.
@@ -275,24 +277,24 @@ fn example() {
   input returns `init` unchanged.
 - `fold_left_with_iter(data, init, operation)` returns `(consumed, accumulator)`;
   `consumed` is the eager list length (zero for empty input), standing in for
-  the final iterator in C++23 `std::ranges::fold_left_with_iter`.
+  the final iterator in C++23 [`std::ranges::fold_left_with_iter`](Stdlib-Module-API).
 - `fold_right_with_iter(data, init, operation)` provides the corresponding
   reverse-order eager-list fold and returns `(consumed, accumulator)`. Since
   lists do not expose iterators, `consumed` is the number of elements visited.
 - `fold_left_first(data, operation)` and `fold_right_last(data, operation)`
   seed the reduction from the first or last element. They return
-  `option<T>`—`None` for empty input and `Some(result)` otherwise. These are
-  eager counterparts to the C++23 `std::ranges` fold algorithms.
+  [`option<T>`](Quick-Guide#types)—`None` for empty input and `Some(result)` otherwise. These are
+  eager counterparts to the C++23 [`std::ranges`](Stdlib-Module-API) fold algorithms.
 - `fold_left_first_with_iter(data, operation)` returns
   `Some((consumed, accumulator))` for nonempty input and `None` for empty
   input. The output accumulator can differ from the input element type, which
   is useful for widening reductions.
 - `fill(data, value)` returns a new list of the same length with every item set
   to `value`; the source list is unchanged, matching the result of applying
-  C++20 `std::ranges::fill` to an equal-sized destination range.
+  C++20 [`std::ranges::fill`](Stdlib-Module-API) to an equal-sized destination range.
 - `fill_n(count, value)` materializes exactly `count` copies in a new list;
   non-positive counts return an empty list. This eager-list helper adapts C++20
-  `std::ranges::fill_n`, whose output length is normally defined by an output
+  [`std::ranges::fill_n`](Stdlib-Module-API), whose output length is normally defined by an output
   iterator rather than a new allocation.
 - `copy_n(data, count)` copies a bounded prefix; negative counts produce an
   empty list and oversized counts clamp to the input length. This eager,
@@ -300,7 +302,7 @@ fn example() {
 - `copy_n_with_count(data, count)` returns `(consumed, copied)` so callers can
   observe the actual bounded progress alongside the copied prefix.
 - `copy(data)` materializes a full list copy, the eager-list counterpart to
-  `std::ranges::copy`; the source remains unchanged.
+  [`std::ranges::copy`](Stdlib-Module-API); the source remains unchanged.
 - `swap_ranges(left, right)` returns two copied lists with corresponding
   elements in the common prefix exchanged; an unmatched tail is preserved.
   Both inputs remain unchanged.
@@ -311,7 +313,7 @@ fn example() {
   list, exposing the full input progress of the eager unary transform.
 - The binary `transform(left, right, operation)` overload transforms paired
   elements into a new list and stops at the shorter input, matching the bounded
-  two-range form of C++20 `std::ranges::transform`.
+  two-range form of C++20 [`std::ranges::transform`](Stdlib-Module-API).
 - `transform_projected` applies a projection before its unary operation;
   `zip_transform_projected` applies independent projections to paired inputs
   before the binary operation, stopping at the shorter range.
@@ -322,7 +324,7 @@ fn example() {
   operation; each stops at the shortest input and infers the result type.
 - `zip_transform` applies operations to corresponding values from two through
   six inputs, stopping at the shortest input and inferring the output type.
-  This eager-list API mirrors the C++23 `std::ranges::zip_transform` shape.
+  This eager-list API mirrors the C++23 [`std::ranges::zip_transform`](Stdlib-Module-API) shape.
 - `zip` materializes heterogeneous tuples from two through six input ranges,
   stopping at the shortest input.
 - `find_if_not` returns the first rejected element's index; `remove_if` returns
@@ -349,7 +351,7 @@ fn example() {
 - `unique_by_projected(data, equivalent, projection)` compares projected keys
   with a caller-supplied equivalence predicate while retaining original values.
 - `unique_copy(data)` and `unique_copy_by(data, equivalent)` provide C++20
-  `std::ranges::unique_copy` counterparts; they retain the first item of each
+  [`std::ranges::unique_copy`](Stdlib-Module-API) counterparts; they retain the first item of each
   adjacent run in a new list and leave the source unchanged.
 - `unique_copy_by_projected(data, equivalent, projection)` provides the same
   copied behavior using equivalence over projected keys.
@@ -382,8 +384,9 @@ fn example() {
 - `take_while(data, predicate)` copies the initial matching prefix;
   `drop_while(data, predicate)` copies the rest after that prefix, matching the
   eager behavior of C++20 `views::take_while` and `views::drop_while`.
-- `take_while_projected` and `drop_while_projected` apply their predicate to
-  projected keys while retaining the original elements in the output.
+- `take_while_projected` and `drop_while_projected` apply a predicate to
+  projected keys while returning the original elements, preserving data shape
+  for record-like lists.
 - `take_last(data, count)` copies a suffix and `drop_last(data, count)` copies
   the prefix before it (C++23 `views::take_last`/`drop_last` counterparts).
   Counts are clamped to the range; non-positive counts yield empty/all values,
@@ -396,10 +399,10 @@ fn example() {
   `iota_range_by(start, end, step)` provide generic typed progressions; the
   stepped form also terminates if arithmetic stops making progress.
 - `repeat(value, count)` eagerly materializes `count` copies of a value, the
-  list counterpart to the C++23 `std::views::repeat`; non-positive counts are
+  list counterpart to the C++23 [`std::views::repeat`](Stdlib-Module-API); non-positive counts are
   empty.
 - `single(value)` materializes a one-element list, corresponding to C++20
-  `std::views::single`.
+  [`std::views::single`](Stdlib-Module-API).
 - `clamp_by(data, low, high, less)` clamps each element using a custom ordering;
   bounds must be ordered according to the comparator.
 - `clamp_projected(data, low, high, projection)` compares projected keys for
@@ -433,7 +436,8 @@ fn example() {
 - `chunk_by(data, equivalent)` groups adjacent elements while the binary
   predicate accepts each neighboring pair (C++23 `views::chunk_by` style).
 - `chunk_by_projected(data, equivalent, projection)` groups adjacent values
-  by their projected keys while retaining original elements in each chunk.
+  when their projected keys are equivalent, preserving the original elements
+  in each eager output chunk.
 - `windows(data, size)` materializes every overlapping fixed-size sublist
   (C++23 `views::slide` style); invalid sizes produce an empty list. `slide`
   is the standard view spelling.
@@ -537,6 +541,6 @@ fn example() {
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 - `iota_range(start, end)` materializes a typed half-open range, preserving
-  the input element type instead of widening it to `i64`.
+  the input element type instead of widening it to [`i64`](Quick-Guide#types).
 
 The module retains the original `_i64` functions for source compatibility.

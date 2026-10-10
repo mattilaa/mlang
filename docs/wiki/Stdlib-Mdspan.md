@@ -5,7 +5,7 @@
 Module file: `stdlib/std/mdspan.mla`
 
 `Mdspan<T>` is a checked, runtime-rank multidimensional descriptor
-inspired by C++23 `std::mdspan`. Mlang currently stores its own copy of the
+inspired by C++23 [`std::mdspan`](Stdlib-Mdspan). Mlang currently stores its own copy of the
 input data and extents; it is not a zero-copy view and does not implement C++
 accessor policies. `from_extents` uses C++ `layout_right` (row-major) mapping;
 `from_extents_left` uses C++ `layout_left` (column-major) mapping, and
@@ -25,6 +25,12 @@ single scalar element.
   properties; both supported layouts are unique, exhaustive, and strided.
 - `get(indices)` requires exactly one index per dimension and returns `None`
   for invalid rank or out-of-bounds indices.
+- `linear_index(indices)` returns the mapped backing-list offset for a valid
+  coordinate, or `None` for invalid rank or bounds. This exposes the mapping
+  operation separately from loading the element.
+- `set(indices, value)` writes through a valid mapping and returns false for
+  invalid rank or coordinates. Since the Mlang descriptor owns a copy, writes
+  update that copy and leave the constructor's input list unchanged.
 - `from_extents_left(data, extents)` validates and copies the same inputs but
   maps the leftmost extent contiguously, following C++23 `layout_left`.
 - `from_extents_strided(data, extents, strides)` copies all three lists and
@@ -35,16 +41,25 @@ single scalar element.
   proportional to the number of logical elements (plus sorting those offsets).
 - `mdspan<T>` is a lowercase type alias for `Mdspan<T>`.
 
+Example:
+
 ```rust
 mod std::mdspan;
 use std::mdspan::Mdspan;
 use std::mdspan::from_extents;
+use std::mdspan::from_extents_strided;
 
 let data: list<i32> = [10, 20, 30, 40, 50, 60];
 let shape: list<i64> = [2, 3];
 let result: option<Mdspan<i32>> = from_extents(data, shape);
 let view: Mdspan<i32> = result.unwrap();
 let value: option<i32> = view.get([1, 2]); // Some(60), row-major
+
+let padded: list<i32> = [10, 20, 30, 40, 50, 60, 70, 80];
+let padded_shape: list<i64> = [2, 3];
+let padded_strides: list<i64> = [3, 2];
+let strided: option<Mdspan<i32>> =
+    from_extents_strided(padded, padded_shape, padded_strides);
 ```
 
 Run the regression suite with `build/mlang test tests/std_mdspan_tests.mla`.
