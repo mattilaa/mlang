@@ -62,6 +62,8 @@ mod std_flat_set_tests;
 use std_flat_set_tests::*;
 mod std_flat_multiset_tests;
 use std_flat_multiset_tests::*;
+mod std_flat_multimap_tests;
+use std_flat_multimap_tests::*;
 mod test_sample;
 use test_sample::*;
 mod type_alias_tests;
