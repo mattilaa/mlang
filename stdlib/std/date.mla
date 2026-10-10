@@ -25,11 +25,94 @@ pub struct CivilDate {
     var day: i32;
 };
 
+/// @brief C++20-style name for the civil `year_month_day` calendar value.
+alias YearMonthDay = CivilDate;
+
+/// @brief Year and month without a day, like C++20 `std::chrono::year_month`.
+pub struct YearMonth {
+    var year: i32;
+    var month: i32;
+};
+
+/// @brief Checked proleptic Gregorian year like C++20 `std::chrono::year`.
+/// The valid numeric range is -32767 through 32767, including year zero.
+pub struct Year {
+    var value: i32;
+};
+
+/// @brief Day-of-month field like C++20 `std::chrono::day`.
+/// Arithmetic can produce zero, which is representable but fails `is_valid_day`.
+pub struct Day {
+    var value: i32;
+};
+
+/// @brief Recurring month/day pair, like C++20 `std::chrono::month_day`.
+/// February 29 is representable and resolves only in leap years.
+pub struct MonthDay {
+    var month: i32;
+    var day: i32;
+};
+
+/// @brief Recurring final day of a month, like C++20 `month_day_last`.
+pub struct MonthDayLast {
+    var month: i32;
+};
+
+/// @brief One-based calendar month, corresponding to C++20 `chrono::month`.
+pub enum Month : i32 {
+    January = 1,
+    February = 2,
+    March = 3,
+    April = 4,
+    May = 5,
+    June = 6,
+    July = 7,
+    August = 8,
+    September = 9,
+    October = 10,
+    November = 11,
+    December = 12
+};
+
 /// @brief ISO-8601 week date (week-year, week number, Monday-based weekday).
 pub struct IsoWeekDate {
     var year: i32;
     var week: i32;
     var weekday: i32;
+};
+
+/// @brief Sunday-based weekday used by the C++20 `std::chrono::weekday` API.
+pub enum Weekday : i32 {
+    Sunday = 0,
+    Monday = 1,
+    Tuesday = 2,
+    Wednesday = 3,
+    Thursday = 4,
+    Friday = 5,
+    Saturday = 6
+};
+
+/// @brief One-based occurrence of a weekday within a civil month.
+/// The occurrence is in 1..5; resolution returns `None` if it does not exist.
+pub struct YearMonthWeekday {
+    var year: i32;
+    var month: i32;
+    var weekday: Weekday;
+    var occurrence: i32;
+};
+
+/// @brief Final occurrence of a weekday within a civil month.
+pub struct YearMonthWeekdayLast {
+    var year: i32;
+    var month: i32;
+    var weekday: Weekday;
+};
+
+/// @brief Year/month combined with a final day-of-month specification.
+/// C++20 `std::chrono::year_month_day_last` counterpart.
+pub struct YearMonthDayLast {
+    var year: Year;
+    var month: Month;
 };
 
 /// @brief Fixed UTC offset in seconds, for example `+02:00` is `7200`.
@@ -66,6 +149,53 @@ pub fn is_leap_year(year: i32) -> bool {
     return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
 }
 
+/// @brief Whether an integer is in the representable chrono year range.
+pub fn is_valid_year(year: i32) -> bool {
+    return year >= -32767 && year <= 32767;
+}
+
+/// @brief Construct a checked chrono year.
+pub fn make_year(value: i32) -> option<Year> {
+    if !is_valid_year(value) { return None<Year>(); }
+    return Some<Year>(Year { value: value });
+}
+
+/// @brief Return a chrono year's numeric value.
+pub fn year_number(value: Year) -> i32 {
+    return value.value;
+}
+
+/// @brief Shift a chrono year by signed years, returning `None` on overflow.
+pub fn add_years(value: Year, offset: i64) -> option<Year> {
+    if !is_valid_year(value.value) { return None<Year>(); }
+    let current: i64 = i64(value.value);
+    let minimum: i64 = -32767;
+    let maximum: i64 = 32767;
+    if offset > 0 && current > maximum - offset { return None<Year>(); }
+    if offset < 0 && current < minimum - offset { return None<Year>(); }
+    return Some<Year>(Year { value: i32(current + offset) });
+}
+
+/// @brief Return the signed year distance from `first` to `last`.
+/// Invalid chrono year values return `None`.
+pub fn years_between(first: Year, last: Year) -> option<i64> {
+    if !is_valid_year(first.value) || !is_valid_year(last.value) {
+        return None<i64>();
+    }
+    return Some<i64>(i64(last.value) - i64(first.value));
+}
+
+/// @brief Whether a chrono year is a Gregorian leap year.
+pub fn year_is_leap(value: Year) -> bool {
+    return is_valid_year(value.value) && is_leap_year(value.value);
+}
+
+/// @brief Return 365 or 366 days for a chrono year.
+pub fn days_in_year(value: Year) -> i32 {
+    if !is_valid_year(value.value) { return 0; }
+    return year_is_leap(value) ? 366 : 365;
+}
+
 /// @brief Return days in a month, or zero when `month` is outside 1..12.
 pub fn days_in_month(year: i32, month: i32) -> i32 {
     if month < 1 || month > 12 { return 0; }
@@ -74,9 +204,273 @@ pub fn days_in_month(year: i32, month: i32) -> i32 {
     return 31;
 }
 
+/// @brief Return whether a typed month holds a valid calendar month.
+pub fn is_valid_month(value: Month) -> bool {
+    return value == Month::January || value == Month::February ||
+           value == Month::March || value == Month::April ||
+           value == Month::May || value == Month::June ||
+           value == Month::July || value == Month::August ||
+           value == Month::September || value == Month::October ||
+           value == Month::November || value == Month::December;
+}
+
+/// @brief Convert a typed month to its one-based numeric representation.
+pub fn month_number(value: Month) -> i32 {
+    if value == Month::January { return 1; }
+    if value == Month::February { return 2; }
+    if value == Month::March { return 3; }
+    if value == Month::April { return 4; }
+    if value == Month::May { return 5; }
+    if value == Month::June { return 6; }
+    if value == Month::July { return 7; }
+    if value == Month::August { return 8; }
+    if value == Month::September { return 9; }
+    if value == Month::October { return 10; }
+    if value == Month::November { return 11; }
+    return 12;
+}
+
+/// @brief Convert a one-based number to a typed month, validating 1..12.
+pub fn month_from_number(value: i32) -> option<Month> {
+    if value == 1 { return Some<Month>(Month::January); }
+    if value == 2 { return Some<Month>(Month::February); }
+    if value == 3 { return Some<Month>(Month::March); }
+    if value == 4 { return Some<Month>(Month::April); }
+    if value == 5 { return Some<Month>(Month::May); }
+    if value == 6 { return Some<Month>(Month::June); }
+    if value == 7 { return Some<Month>(Month::July); }
+    if value == 8 { return Some<Month>(Month::August); }
+    if value == 9 { return Some<Month>(Month::September); }
+    if value == 10 { return Some<Month>(Month::October); }
+    if value == 11 { return Some<Month>(Month::November); }
+    if value == 12 { return Some<Month>(Month::December); }
+    return None<Month>();
+}
+
+/// @brief Add signed months with wraparound, discarding whole years.
+pub fn add_months_to_month(value: Month, offset: i64) -> option<Month> {
+    if !is_valid_month(value) { return None<Month>(); }
+    let current: i64 = i64(month_number(value)) - 1;
+    let delta: i64 = offset % 12;
+    var shifted: i64 = (current + delta) % 12;
+    if shifted < 0 { shifted = shifted + 12; }
+    return month_from_number(i32(shifted + 1));
+}
+
+/// @brief Return the number of days in a typed month for `year`.
+pub fn month_days(value: Month, year: i32) -> i32 {
+    if !is_valid_month(value) { return 0; }
+    return days_in_month(year, month_number(value));
+}
+
+/// @brief Whether a day component is in the standard calendar range 1..31.
+pub fn is_valid_day(value: Day) -> bool {
+    return value.value >= 1 && value.value <= 31;
+}
+
+/// @brief Construct a checked day-of-month component.
+pub fn make_day(value: i32) -> option<Day> {
+    if value < 1 || value > 31 { return None<Day>(); }
+    return Some<Day>(Day { value: value });
+}
+
+/// @brief Return a day component's numeric value.
+pub fn day_number(value: Day) -> i32 {
+    return value.value;
+}
+
+/// @brief Add signed days with the modulo-32 behavior of `chrono::day`.
+/// The result may be day zero, which is representable but not a valid date day.
+pub fn add_days_to_day(value: Day, offset: i64) -> Day {
+    let current: i64 = i64(value.value) % 32;
+    let delta: i64 = offset % 32;
+    var shifted: i64 = (current + delta) % 32;
+    if shifted < 0 { shifted = shifted + 32; }
+    return Day { value: i32(shifted) };
+}
+
+/// @brief Construct a civil date from checked chrono year/month/day fields.
+pub fn make_civil_date_from_parts(year: Year, month: Month, day: Day)
+    -> option<CivilDate> {
+    if !is_valid_year(year.value) || !is_valid_month(month) ||
+       !is_valid_day(day) {
+        return None<CivilDate>();
+    }
+    let numeric_month: i32 = month_number(month);
+    if !is_valid_civil_date(year.value, numeric_month, day.value) {
+        return None<CivilDate>();
+    }
+    return Some<CivilDate>(CivilDate {
+        year: year.value, month: numeric_month, day: day.value
+    });
+}
+
+/// @brief Construct a checked year/month/last-day calendar value.
+pub fn make_year_month_day_last(year: Year, month: Month)
+    -> option<YearMonthDayLast> {
+    if !is_valid_year(year.value) || !is_valid_month(month) {
+        return None<YearMonthDayLast>();
+    }
+    return Some<YearMonthDayLast>(YearMonthDayLast {
+        year: year, month: month
+    });
+}
+
+/// @brief Return the final day component described by a valid value.
+pub fn year_month_day_last_day(value: YearMonthDayLast) -> option<Day> {
+    if !is_valid_year(value.year.value) || !is_valid_month(value.month) {
+        return None<Day>();
+    }
+    return make_day(month_days(value.month, value.year.value));
+}
+
+/// @brief Resolve a year/month/last-day value to a civil date.
+pub fn resolve_year_month_day_last(value: YearMonthDayLast)
+    -> option<CivilDate> {
+    let day: option<Day> = year_month_day_last_day(value);
+    if day.is_none() { return None<CivilDate>(); }
+    return make_civil_date_from_parts(value.year, value.month, day.unwrap());
+}
+
 /// @brief Return whether the fields form a valid proleptic Gregorian date.
 pub fn is_valid_civil_date(year: i32, month: i32, day: i32) -> bool {
     return day >= 1 && day <= days_in_month(year, month);
+}
+
+/// @brief Whether a month/day pair is valid for at least one Gregorian year.
+/// February 29 is valid as a recurring date even though it needs a leap year.
+pub fn is_valid_month_day(value: MonthDay) -> bool {
+    return value.day >= 1 && value.day <= days_in_month(2000, value.month);
+}
+
+/// @brief Construct a checked recurring month/day value.
+pub fn make_month_day(month: i32, day: i32) -> option<MonthDay> {
+    let value: MonthDay = MonthDay { month: month, day: day };
+    if !is_valid_month_day(value) { return None<MonthDay>(); }
+    return Some<MonthDay>(value);
+}
+
+/// @brief Resolve a recurring month/day pair in a specific year.
+/// February 29 returns `None` in common years.
+pub fn resolve_month_day(value: MonthDay, year: i32) -> option<CivilDate> {
+    if !is_valid_month_day(value) ||
+       !is_valid_civil_date(year, value.month, value.day) {
+        return None<CivilDate>();
+    }
+    return Some<CivilDate>(CivilDate {
+        year: year, month: value.month, day: value.day
+    });
+}
+
+/// @brief Construct a checked recurring final-day-of-month value.
+pub fn make_month_day_last(month: i32) -> option<MonthDayLast> {
+    if month < 1 || month > 12 { return None<MonthDayLast>(); }
+    return Some<MonthDayLast>(MonthDayLast { month: month });
+}
+
+/// @brief Resolve the final date of a month in a specific year.
+pub fn resolve_month_day_last(value: MonthDayLast, year: i32)
+    -> option<CivilDate> {
+    let day: i32 = days_in_month(year, value.month);
+    if day == 0 { return None<CivilDate>(); }
+    return Some<CivilDate>(CivilDate {
+        year: year, month: value.month, day: day
+    });
+}
+
+/// @brief Return whether the year/month fields form a valid Gregorian month.
+pub fn is_valid_year_month(value: YearMonth) -> bool {
+    return is_valid_year(value.year) && value.month >= 1 && value.month <= 12;
+}
+
+/// @brief Construct a checked year/month value.
+pub fn make_year_month(year: i32, month: i32) -> option<YearMonth> {
+    if !is_valid_year(year) || month < 1 || month > 12 {
+        return None<YearMonth>();
+    }
+    return Some<YearMonth>(YearMonth { year: year, month: month });
+}
+
+/// @brief Construct a year/month from checked chrono calendar fields.
+pub fn make_year_month_from_parts(year: Year, month: Month)
+    -> option<YearMonth> {
+    if !is_valid_year(year.value) || !is_valid_month(month) {
+        return None<YearMonth>();
+    }
+    return Some<YearMonth>(YearMonth {
+        year: year_number(year), month: month_number(month)
+    });
+}
+
+/// @brief Add calendar months, normalizing across year boundaries.
+/// Invalid input and results outside the chrono `Year` range return `None`.
+pub fn add_year_month_months(value: YearMonth, offset: i64)
+    -> option<YearMonth> {
+    if !is_valid_year_month(value) { return None<YearMonth>(); }
+    let current_month: i64 = i64(value.year) * 12 + i64(value.month) - 1;
+    let minimum_month: i64 = i64(-32767) * 12;
+    let maximum_month: i64 = i64(32767) * 12 + 11;
+    if offset > 0 && current_month > maximum_month - offset {
+        return None<YearMonth>();
+    }
+    if offset < 0 && current_month < minimum_month - offset {
+        return None<YearMonth>();
+    }
+    let target_month: i64 = current_month + offset;
+    var target_year: i64 = target_month / 12;
+    if target_month < 0 && target_month % 12 != 0 {
+        target_year = target_year - 1;
+    }
+    let target_month_in_year: i64 = target_month - target_year * 12 + 1;
+    return Some<YearMonth>(YearMonth {
+        year: i32(target_year), month: i32(target_month_in_year)
+    });
+}
+
+/// @brief Return the signed month distance from `first` to `last`.
+/// Invalid month fields return `None`; month normalization uses year zero.
+pub fn months_between(first: YearMonth, last: YearMonth) -> option<i64> {
+    if !is_valid_year_month(first) || !is_valid_year_month(last) {
+        return None<i64>();
+    }
+    let first_index: i64 = i64(first.year) * 12 + i64(first.month) - 1;
+    let last_index: i64 = i64(last.year) * 12 + i64(last.month) - 1;
+    return Some<i64>(last_index - first_index);
+}
+
+/// @brief Add calendar years while preserving the month.
+pub fn add_year_month_years(value: YearMonth, offset: i64)
+    -> option<YearMonth> {
+    if !is_valid_year_month(value) { return None<YearMonth>(); }
+    let current_year: i64 = i64(value.year);
+    let minimum_year: i64 = -32767;
+    let maximum_year: i64 = 32767;
+    if offset > 0 && current_year > maximum_year - offset {
+        return None<YearMonth>();
+    }
+    if offset < 0 && current_year < minimum_year - offset {
+        return None<YearMonth>();
+    }
+    return Some<YearMonth>(YearMonth {
+        year: i32(current_year + offset), month: value.month
+    });
+}
+
+/// @brief Return the first civil date in a valid year/month.
+pub fn year_month_first_day(value: YearMonth) -> option<CivilDate> {
+    if !is_valid_year_month(value) { return None<CivilDate>(); }
+    return Some<CivilDate>(CivilDate {
+        year: value.year, month: value.month, day: 1
+    });
+}
+
+/// @brief Return the final civil date in a valid year/month.
+pub fn year_month_last_day(value: YearMonth) -> option<CivilDate> {
+    if !is_valid_year_month(value) { return None<CivilDate>(); }
+    return Some<CivilDate>(CivilDate {
+        year: value.year, month: value.month,
+        day: days_in_month(value.year, value.month)
+    });
 }
 
 /// @brief Convert a valid civil date to days since 1970-01-01.
@@ -131,6 +525,66 @@ pub fn weekday_from_sys_days(days: i64) -> i32 {
     var weekday: i64 = (days % 7 + 4) % 7;
     if weekday < 0 { weekday = weekday + 7; }
     return i32(weekday);
+}
+
+/// @brief Convert a Sunday-based weekday encoding to a typed weekday.
+/// Values outside 0 through 6 return `None`.
+pub fn weekday_from_c_encoding(encoding: i32) -> option<Weekday> {
+    if encoding == 0 { return Some<Weekday>(Weekday::Sunday); }
+    if encoding == 1 { return Some<Weekday>(Weekday::Monday); }
+    if encoding == 2 { return Some<Weekday>(Weekday::Tuesday); }
+    if encoding == 3 { return Some<Weekday>(Weekday::Wednesday); }
+    if encoding == 4 { return Some<Weekday>(Weekday::Thursday); }
+    if encoding == 5 { return Some<Weekday>(Weekday::Friday); }
+    if encoding == 6 { return Some<Weekday>(Weekday::Saturday); }
+    return None<Weekday>();
+}
+
+/// @brief Convert a Monday-based ISO weekday encoding to a typed weekday.
+/// ISO values use Monday=1 through Sunday=7; other values return `None`.
+pub fn weekday_from_iso_encoding(encoding: i32) -> option<Weekday> {
+    if encoding < 1 || encoding > 7 { return None<Weekday>(); }
+    if encoding == 7 { return Some<Weekday>(Weekday::Sunday); }
+    return weekday_from_c_encoding(encoding);
+}
+
+/// @brief Return the C-compatible Sunday=0 through Saturday=6 encoding.
+pub fn weekday_c_encoding(day: Weekday) -> i32 {
+    if day == Weekday::Sunday { return 0; }
+    if day == Weekday::Monday { return 1; }
+    if day == Weekday::Tuesday { return 2; }
+    if day == Weekday::Wednesday { return 3; }
+    if day == Weekday::Thursday { return 4; }
+    if day == Weekday::Friday { return 5; }
+    return 6;
+}
+
+/// @brief Return the ISO Monday=1 through Sunday=7 encoding.
+pub fn weekday_iso_encoding(day: Weekday) -> i32 {
+    let encoding: i32 = weekday_c_encoding(day);
+    return encoding == 0 ? 7 : encoding;
+}
+
+/// @brief Return the typed weekday for a day count since the Unix epoch.
+pub fn weekday_from_sys_days_typed(days: i64) -> Weekday {
+    return weekday_from_c_encoding(weekday_from_sys_days(days)).unwrap();
+}
+
+/// @brief Return the typed weekday for a valid civil date, or `None`.
+pub fn weekday_of(date: CivilDate) -> option<Weekday> {
+    let days: option<i64> = to_sys_days(date.year, date.month, date.day);
+    if days.is_none() { return None<Weekday>(); }
+    return Some<Weekday>(weekday_from_sys_days_typed(days.unwrap()));
+}
+
+/// @brief Add a signed number of days to a weekday.
+/// The offset is reduced modulo seven first, avoiding overflow for large days.
+pub fn add_weekdays(day: Weekday, offset: i64) -> Weekday {
+    let current: i64 = i64(weekday_c_encoding(day));
+    let delta: i64 = offset % 7;
+    var result: i64 = (current + delta) % 7;
+    if result < 0 { result = result + 7; }
+    return weekday_from_c_encoding(i32(result)).unwrap();
 }
 
 /// @brief Convert a civil date to an ISO week date.
@@ -215,6 +669,43 @@ pub fn last_weekday_of_month(year: i32, month: i32,
     return Some<CivilDate>(CivilDate {
         year: year, month: month, day: last_day - distance
     });
+}
+
+/// @brief Construct a checked weekday-occurrence calendar value.
+pub fn make_year_month_weekday(year: i32, month: i32, weekday: Weekday,
+                               occurrence: i32)
+    -> option<YearMonthWeekday> {
+    if month < 1 || month > 12 || occurrence < 1 || occurrence > 5 {
+        return None<YearMonthWeekday>();
+    }
+    return Some<YearMonthWeekday>(YearMonthWeekday {
+        year: year, month: month, weekday: weekday, occurrence: occurrence
+    });
+}
+
+/// @brief Resolve a weekday occurrence to a civil date.
+/// Returns `None` when the requested occurrence is absent from that month.
+pub fn resolve_year_month_weekday(value: YearMonthWeekday)
+    -> option<CivilDate> {
+    return nth_weekday_of_month(value.year, value.month,
+                                weekday_c_encoding(value.weekday),
+                                value.occurrence);
+}
+
+/// @brief Construct a checked final-weekday calendar value.
+pub fn make_year_month_weekday_last(year: i32, month: i32, weekday: Weekday)
+    -> option<YearMonthWeekdayLast> {
+    if month < 1 || month > 12 { return None<YearMonthWeekdayLast>(); }
+    return Some<YearMonthWeekdayLast>(YearMonthWeekdayLast {
+        year: year, month: month, weekday: weekday
+    });
+}
+
+/// @brief Resolve the final occurrence of a weekday to a civil date.
+pub fn resolve_year_month_weekday_last(value: YearMonthWeekdayLast)
+    -> option<CivilDate> {
+    return last_weekday_of_month(value.year, value.month,
+                                 weekday_c_encoding(value.weekday));
 }
 
 /// @brief Add a signed day offset to a civil date.

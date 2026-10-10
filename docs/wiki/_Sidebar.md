@@ -93,6 +93,7 @@
 - [[std::time|Stdlib-Time]]
 - [[std::timer|Stdlib-Timer]]
 - [[std::unordered|Stdlib-Unordered]]
+- [[std::utility|Stdlib-Utility]]
 - [[std::vec|Stdlib-Vec]]
 
 ## Tooling

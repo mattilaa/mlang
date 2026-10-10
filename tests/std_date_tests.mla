@@ -4,7 +4,18 @@ mod std::strbuf;
 
 use std::date::DateTime;
 use std::date::CivilDate;
+use std::date::YearMonthDay;
+use std::date::YearMonth;
+use std::date::MonthDay;
+use std::date::MonthDayLast;
+use std::date::Month;
+use std::date::Year;
+use std::date::Day;
+use std::date::YearMonthDayLast;
 use std::date::IsoWeekDate;
+use std::date::Weekday;
+use std::date::YearMonthWeekday;
+use std::date::YearMonthWeekdayLast;
 use std::date::TimeZone;
 use std::date::UtcOffset;
 use std::date::format_date;
@@ -32,10 +43,54 @@ use std::date::is_valid_civil_date;
 use std::date::to_sys_days;
 use std::date::from_sys_days;
 use std::date::weekday_from_sys_days;
+use std::date::weekday_from_c_encoding;
+use std::date::weekday_from_iso_encoding;
+use std::date::weekday_c_encoding;
+use std::date::weekday_iso_encoding;
+use std::date::weekday_from_sys_days_typed;
+use std::date::weekday_of;
+use std::date::add_weekdays;
+use std::date::make_year_month_weekday;
+use std::date::resolve_year_month_weekday;
+use std::date::make_year_month_weekday_last;
+use std::date::resolve_year_month_weekday_last;
 use std::date::add_civil_days;
 use std::date::days_between;
 use std::date::add_civil_years;
 use std::date::add_civil_months;
+use std::date::is_valid_year_month;
+use std::date::make_year_month;
+use std::date::add_year_month_months;
+use std::date::months_between;
+use std::date::add_year_month_years;
+use std::date::year_month_first_day;
+use std::date::year_month_last_day;
+use std::date::is_valid_month_day;
+use std::date::make_month_day;
+use std::date::resolve_month_day;
+use std::date::make_month_day_last;
+use std::date::resolve_month_day_last;
+use std::date::is_valid_month;
+use std::date::month_number;
+use std::date::month_from_number;
+use std::date::add_months_to_month;
+use std::date::month_days;
+use std::date::is_valid_year;
+use std::date::make_year;
+use std::date::year_number;
+use std::date::add_years;
+use std::date::years_between;
+use std::date::year_is_leap;
+use std::date::days_in_year;
+use std::date::make_year_month_from_parts;
+use std::date::is_valid_day;
+use std::date::make_day;
+use std::date::day_number;
+use std::date::add_days_to_day;
+use std::date::make_civil_date_from_parts;
+use std::date::make_year_month_day_last;
+use std::date::year_month_day_last_day;
+use std::date::resolve_year_month_day_last;
 use std::date::nth_weekday_of_month;
 use std::date::last_weekday_of_month;
 use std::date::to_iso_week_date;
@@ -207,6 +262,195 @@ fn test_civil_date_month_arithmetic() {
 }
 
 #[test]
+fn test_year_month_value_and_arithmetic() {
+    let january: YearMonth = make_year_month(2024, 1).unwrap();
+    verify(is_valid_year_month(january));
+
+    let previous: YearMonth = add_year_month_months(january, -1).unwrap();
+    verify(previous.year == 2023 && previous.month == 12);
+    let next_year_zero: YearMonth = add_year_month_months(
+        YearMonth { year: 0, month: 1 }, -1).unwrap();
+    verify(next_year_zero.year == -1 && next_year_zero.month == 12);
+    let normalized: YearMonth = add_year_month_months(
+        YearMonth { year: 2023, month: 11 }, 15).unwrap();
+    verify(normalized.year == 2025 && normalized.month == 2);
+
+    let leap_month: YearMonth = YearMonth { year: 2024, month: 2 };
+    let first: CivilDate = year_month_first_day(leap_month).unwrap();
+    let last: CivilDate = year_month_last_day(leap_month).unwrap();
+    verify(first.year == 2024 && first.month == 2 && first.day == 1);
+    verify(last.year == 2024 && last.month == 2 && last.day == 29);
+
+    let shifted_year: YearMonth = add_year_month_years(leap_month, -4).unwrap();
+    verify(shifted_year.year == 2020 && shifted_year.month == 2);
+    let max_month: YearMonth = YearMonth { year: 32767, month: 12 };
+    let min_month: YearMonth = YearMonth { year: -32767, month: 1 };
+    verify(add_year_month_months(max_month, 1).is_none());
+    verify(add_year_month_months(min_month, -1).is_none());
+    verify(add_year_month_months(january, 9223372036854775807).is_none());
+    verify(add_year_month_months(january, -9223372036854775807 - 1).is_none());
+    verify(add_year_month_years(max_month, 1).is_none());
+    verify(add_year_month_years(january, 9223372036854775807).is_none());
+    verify(add_year_month_years(january, -9223372036854775807 - 1).is_none());
+    verify(!is_valid_year_month(YearMonth { year: 2024, month: 13 }));
+    verify(!is_valid_year_month(YearMonth { year: 32768, month: 1 }));
+    verify(make_year_month(2024, 0).is_none());
+    verify(make_year_month(32768, 1).is_none());
+    verify(year_month_first_day(YearMonth { year: 2024, month: 13 }).is_none());
+    verify(months_between(YearMonth { year: 32768, month: 1 }, january).is_none());
+    verify(months_between(YearMonth { year: 2023, month: 12 },
+                          YearMonth { year: 2024, month: 2 }).unwrap() == 2);
+    verify(months_between(YearMonth { year: 2024, month: 2 },
+                          YearMonth { year: 2023, month: 12 }).unwrap() == -2);
+    verify(months_between(YearMonth { year: 0, month: 12 },
+                          YearMonth { year: 1, month: 1 }).unwrap() == 1);
+    verify(months_between(YearMonth { year: 2024, month: 13 }, january).is_none());
+}
+
+#[test]
+fn test_recurring_month_day_calendar_values() {
+    let leap_day_option: option<MonthDay> = make_month_day(2, 29);
+    verify(leap_day_option.is_some());
+    let leap_day: MonthDay = leap_day_option.unwrap();
+    verify(is_valid_month_day(leap_day));
+    let leap_date: CivilDate = resolve_month_day(leap_day, 2024).unwrap();
+    verify(leap_date.year == 2024 && leap_date.month == 2 && leap_date.day == 29);
+    verify(resolve_month_day(leap_day, 2023).is_none());
+
+    let christmas: MonthDay = make_month_day(12, 25).unwrap();
+    let date: CivilDate = resolve_month_day(christmas, 2025).unwrap();
+    verify(date.year == 2025 && date.month == 12 && date.day == 25);
+    verify(make_month_day(2, 30).is_none());
+    verify(make_month_day(13, 1).is_none());
+    verify(!is_valid_month_day(MonthDay { month: 0, day: 1 }));
+
+    let february_last_option: option<MonthDayLast> = make_month_day_last(2);
+    verify(february_last_option.is_some());
+    let february_last: CivilDate =
+        resolve_month_day_last(february_last_option.unwrap(), 2024).unwrap();
+    verify(february_last.year == 2024 && february_last.month == 2 &&
+           february_last.day == 29);
+    let common_february_last: CivilDate =
+        resolve_month_day_last(MonthDayLast { month: 2 }, 2023).unwrap();
+    verify(common_february_last.day == 28);
+    verify(make_month_day_last(0).is_none());
+    verify(resolve_month_day_last(MonthDayLast { month: 13 }, 2024).is_none());
+}
+
+#[test]
+fn test_typed_month_conversion_and_arithmetic() {
+    verify(is_valid_month(Month::January));
+    verify(is_valid_month(Month::December));
+    verify(month_number(Month::January) == 1);
+    verify(month_number(Month::December) == 12);
+    verify(month_from_number(0).is_none());
+    verify(month_from_number(13).is_none());
+    verify(month_from_number(2).unwrap() == Month::February);
+
+    verify(add_months_to_month(Month::December, 1).unwrap() == Month::January);
+    verify(add_months_to_month(Month::January, -1).unwrap() == Month::December);
+    verify(add_months_to_month(Month::March, 24).unwrap() == Month::March);
+    let huge_positive: Month = add_months_to_month(
+        Month::January, 9223372036854775807).unwrap();
+    let huge_negative: Month = add_months_to_month(
+        Month::January, -9223372036854775807 - 1).unwrap();
+    verify(month_number(huge_positive) >= 1 && month_number(huge_positive) <= 12);
+    verify(month_number(huge_negative) >= 1 && month_number(huge_negative) <= 12);
+
+    verify(month_days(Month::February, 2024) == 29);
+    verify(month_days(Month::February, 2023) == 28);
+}
+
+#[test]
+fn test_typed_chrono_year_values() {
+    verify(!is_valid_year(-32768));
+    verify(is_valid_year(-32767));
+    verify(is_valid_year(0));
+    verify(is_valid_year(32767));
+    verify(!is_valid_year(32768));
+    verify(make_year(-32768).is_none());
+    verify(make_year(32768).is_none());
+
+    let leap: Year = make_year(2000).unwrap();
+    let common: Year = make_year(1900).unwrap();
+    let year_zero: Year = make_year(0).unwrap();
+    verify(year_number(leap) == 2000);
+    verify(year_is_leap(leap));
+    verify(!year_is_leap(common));
+    verify(year_is_leap(year_zero));
+    verify(days_in_year(leap) == 366);
+    verify(days_in_year(common) == 365);
+
+    verify(year_number(add_years(leap, -4).unwrap()) == 1996);
+    verify(years_between(make_year(-1).unwrap(), make_year(1).unwrap()).unwrap() == 2);
+    verify(years_between(make_year(1).unwrap(), make_year(-1).unwrap()).unwrap() == -2);
+    verify(years_between(Year { value: 40000 }, leap).is_none());
+    verify(add_years(make_year(32767).unwrap(), 1).is_none());
+    verify(add_years(make_year(-32767).unwrap(), -1).is_none());
+    verify(add_years(leap, 9223372036854775807).is_none());
+    verify(add_years(leap, -9223372036854775807 - 1).is_none());
+
+    let february: YearMonth = make_year_month_from_parts(
+        leap, Month::February).unwrap();
+    verify(february.year == 2000 && february.month == 2);
+    verify(make_year_month_from_parts(
+        Year { value: 50000 }, Month::February).is_none());
+}
+
+#[test]
+fn test_typed_chrono_day_values() {
+    verify(make_day(0).is_none());
+    verify(make_day(32).is_none());
+    let first: Day = make_day(1).unwrap();
+    let last: Day = make_day(31).unwrap();
+    verify(is_valid_day(first) && day_number(first) == 1);
+    verify(is_valid_day(last) && day_number(last) == 31);
+
+    let wraps_to_zero: Day = add_days_to_day(last, 1);
+    verify(day_number(wraps_to_zero) == 0 && !is_valid_day(wraps_to_zero));
+    verify(day_number(add_days_to_day(first, -1)) == 0);
+    verify(day_number(add_days_to_day(first, 9223372036854775807)) == 0);
+    verify(day_number(add_days_to_day(first, -9223372036854775807 - 1)) == 1);
+
+    let year: Year = make_year(2024).unwrap();
+    let february: Month = Month::February;
+    let leap_date: CivilDate = make_civil_date_from_parts(
+        year, february, make_day(29).unwrap()).unwrap();
+    verify(leap_date.year == 2024 && leap_date.month == 2 &&
+           leap_date.day == 29);
+    verify(make_civil_date_from_parts(
+        make_year(2023).unwrap(), february, make_day(29).unwrap()).is_none());
+    verify(make_civil_date_from_parts(
+        year, Month::April, make_day(31).unwrap()).is_none());
+}
+
+#[test]
+fn test_year_month_day_last_values() {
+    let leap_year: Year = make_year(2024).unwrap();
+    let common_year: Year = make_year(2023).unwrap();
+    let february: Month = Month::February;
+    let leap_last: YearMonthDayLast = make_year_month_day_last(
+        leap_year, february).unwrap();
+    let leap_day: Day = year_month_day_last_day(leap_last).unwrap();
+    verify(day_number(leap_day) == 29);
+    let leap_date: YearMonthDay = resolve_year_month_day_last(leap_last).unwrap();
+    verify(leap_date.year == 2024 && leap_date.month == 2 &&
+           leap_date.day == 29);
+
+    let common_last: YearMonthDayLast = make_year_month_day_last(
+        common_year, february).unwrap();
+    verify(day_number(year_month_day_last_day(common_last).unwrap()) == 28);
+    verify(resolve_year_month_day_last(common_last).unwrap().day == 28);
+    let april: YearMonthDayLast = make_year_month_day_last(
+        leap_year, Month::April).unwrap();
+    verify(resolve_year_month_day_last(april).unwrap().day == 30);
+    verify(make_year_month_day_last(leap_year, Month::February).is_some());
+    verify(year_month_day_last_day(YearMonthDayLast {
+        year: Year { value: 50000 }, month: february
+    }).is_none());
+}
+
+#[test]
 fn test_civil_date_year_arithmetic() {
     let leap_day: CivilDate = CivilDate { year: 2024, month: 2, day: 29 };
     let common_year: CivilDate = add_civil_years(leap_day, 1).unwrap();
@@ -231,6 +475,31 @@ fn test_civil_date_year_arithmetic() {
 }
 
 #[test]
+fn test_typed_weekday_encodings_and_arithmetic() {
+    verify(weekday_from_c_encoding(-1).is_none());
+    verify(weekday_from_c_encoding(7).is_none());
+    verify(weekday_from_iso_encoding(0).is_none());
+    verify(weekday_from_iso_encoding(8).is_none());
+    verify(weekday_from_c_encoding(0).unwrap() == Weekday::Sunday);
+    verify(weekday_from_iso_encoding(1).unwrap() == Weekday::Monday);
+    verify(weekday_from_iso_encoding(7).unwrap() == Weekday::Sunday);
+    verify(weekday_c_encoding(Weekday::Saturday) == 6);
+    verify(weekday_iso_encoding(Weekday::Sunday) == 7);
+
+    let epoch: CivilDate = CivilDate { year: 1970, month: 1, day: 1 };
+    verify(weekday_of(epoch).unwrap() == Weekday::Thursday);
+    verify(weekday_from_sys_days_typed(-1) == Weekday::Wednesday);
+    let invalid: CivilDate = CivilDate { year: 2023, month: 2, day: 29 };
+    verify(weekday_of(invalid).is_none());
+
+    verify(add_weekdays(Weekday::Friday, 9) == Weekday::Sunday);
+    verify(add_weekdays(Weekday::Monday, -2) == Weekday::Saturday);
+    verify(add_weekdays(Weekday::Sunday, 0) == Weekday::Sunday);
+    verify(add_weekdays(Weekday::Wednesday, 9223372036854775807) ==
+           Weekday::Wednesday);
+}
+
+#[test]
 fn test_civil_weekday_of_month() {
     let second_tuesday: CivilDate = nth_weekday_of_month(2024, 7, 2, 2).unwrap();
     verify(second_tuesday.year == 2024 && second_tuesday.month == 7 &&
@@ -250,6 +519,33 @@ fn test_civil_weekday_of_month() {
     verify(nth_weekday_of_month(2024, 1, 7, 1).is_none());
     verify(nth_weekday_of_month(2024, 1, 1, 0).is_none());
     verify(last_weekday_of_month(2024, 1, -1).is_none());
+}
+
+#[test]
+fn test_typed_year_month_weekday_calendar_values() {
+    let second_tuesday_option: option<YearMonthWeekday> =
+        make_year_month_weekday(2024, 7, Weekday::Tuesday, 2);
+    verify(second_tuesday_option.is_some());
+    let second_tuesday: CivilDate =
+        resolve_year_month_weekday(second_tuesday_option.unwrap()).unwrap();
+    verify(second_tuesday.year == 2024 && second_tuesday.month == 7 &&
+           second_tuesday.day == 9);
+
+    let absent_fifth: option<YearMonthWeekday> =
+        make_year_month_weekday(2021, 2, Weekday::Monday, 5);
+    verify(absent_fifth.is_some());
+    verify(resolve_year_month_weekday(absent_fifth.unwrap()).is_none());
+    verify(make_year_month_weekday(2024, 13, Weekday::Monday, 1).is_none());
+    verify(make_year_month_weekday(2024, 2, Weekday::Monday, 0).is_none());
+
+    let final_friday_option: option<YearMonthWeekdayLast> =
+        make_year_month_weekday_last(2024, 7, Weekday::Friday);
+    verify(final_friday_option.is_some());
+    let final_friday: CivilDate = resolve_year_month_weekday_last(
+        final_friday_option.unwrap()).unwrap();
+    verify(final_friday.year == 2024 && final_friday.month == 7 &&
+           final_friday.day == 26);
+    verify(make_year_month_weekday_last(2024, 0, Weekday::Friday).is_none());
 }
 
 #[test]

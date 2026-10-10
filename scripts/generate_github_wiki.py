@@ -96,6 +96,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::time", "std_time.md"),
     ("std::timer", "std_timer.md"),
     ("std::unordered", "std_unordered.md"),
+    ("std::utility", "std_utility.md"),
     ("std::vec", "std_vec.md"),
 ]
 

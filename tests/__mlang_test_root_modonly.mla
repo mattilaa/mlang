@@ -9,6 +9,7 @@ mod std_term_tests;
 mod type_inference_tests;
 mod std_io_traits_tests;
 mod std_date_tests;
+mod std_utility_tests;
 mod type_name_property_tests;
 mod function_return_inference_tests;
 mod ternary_operator_tests;

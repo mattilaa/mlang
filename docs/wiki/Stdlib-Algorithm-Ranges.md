@@ -146,6 +146,14 @@ fn example() {
   multiplicities under an equivalence relation for same-typed ranges.
 - `lexicographical_compare` supports ranges with distinct mutually
   order-comparable element types.
+- `lexicographical_compare_three_way` returns a `LexicographicalOrder`
+  (`Less`, `Equivalent`, or `Greater`) instead of only a boolean, providing
+  the ordering result of C++20 `lexicographical_compare_three_way` without
+  requiring a compiler-specific comparison-category type.
+- `lexicographical_compare_three_way_by` accepts a strict comparator, while
+  `lexicographical_compare_three_way_projected` and
+  `lexicographical_compare_three_way_by_projected` support independent
+  projections for heterogeneous ranges.
 - `lexicographical_compare_by` performs the same range comparison with a
   caller-supplied strict ordering; equivalent elements continue to the next
   position and a matching prefix sorts before its extension.
@@ -313,8 +321,9 @@ fn example() {
   lists do not expose iterators, `consumed` is the number of elements visited.
 - `fold_left_first(data, operation)` and `fold_right_last(data, operation)`
   seed the reduction from the first or last element. They return
-  [`option<T>`](Quick-Guide#types)—`None` for empty input and `Some(result)` otherwise. These are
-  eager counterparts to the C++23 [`std::ranges`](Stdlib-Module-API) fold algorithms.
+  `option<Output>`—`None` for empty input and `Some(result)` otherwise. The
+  initial element is widened to the operation's accumulator type when needed.
+  These are eager counterparts to the C++23 [`std::ranges`](Stdlib-Module-API) fold algorithms.
 - `fold_left_first_with_iter(data, operation)` returns
   `Some((consumed, accumulator))` for nonempty input and `None` for empty
   input. The output accumulator can differ from the input element type, which

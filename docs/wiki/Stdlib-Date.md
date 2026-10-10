@@ -7,6 +7,15 @@ Module file: `stdlib/std/date.mla`
 ### Types
 - `date_time`
 - `civil_date`
+- `YearMonthDay` (alias of `CivilDate`)
+- `YearMonth` (checked year/month without a day; year range matches `Year`)
+- `Year` (checked proleptic Gregorian year in `-32767..32767`)
+- `Day` (checked day-of-month component)
+- `MonthDay` and `MonthDayLast` (recurring month/day calendar values)
+- `Weekday` (`Sunday` through `Saturday`, with Sunday=`0`)
+- `Month` (`January` through `December`, numbered `1..12`)
+- `YearMonthWeekday` and `YearMonthWeekdayLast`
+- `YearMonthDayLast`
 - `utc_offset`
 - `time_zone`
 
@@ -33,20 +42,72 @@ Module file: `stdlib/std/date.mla`
 - `format_date(dt: date_time) -> str8`
 - `format_time(dt: date_time) -> str8`
 - `is_leap_year(year: i32) -> bool`
+- `make_year(value) -> option<Year>` validates the C++20 chrono year range;
+  `year_number`, `is_valid_year`, `add_years`, `year_is_leap`, and
+  `days_in_year` provide checked conversion, arithmetic, and calendar queries.
+- `years_between(first, last) -> option<i64>` returns the signed year
+  difference (`last - first`) for valid typed years.
+- `make_year_month_from_parts(year, month)` combines typed `Year` and `Month`
+  values into a `YearMonth`.
 - `days_in_month(year: i32, month: i32) -> i32`
+- `month_from_number(value)` and `month_number(value)` convert between a
+  checked numeric month and the typed `Month`; `is_valid_month` validates a
+  typed value. `add_months_to_month(month, offset)` wraps within the year, and
+  `month_days(month, year)` returns the calendar length of the month.
+- `make_day(value) -> option<Day>`, `day_number`, and `is_valid_day` provide a
+  checked C++20-style day component. `add_days_to_day` follows `chrono::day`
+  modulo-32 arithmetic and may produce representable day zero; the validity
+  query distinguishes it from a real day-of-month.
+- `make_civil_date_from_parts(year, month, day)` combines typed `Year`,
+  `Month`, and `Day`, returning `None` for invalid combinations such as April
+  31 or February 29 in a common year.
+- `make_year_month_day_last(year, month)` creates a checked
+  `YearMonthDayLast`; `year_month_day_last_day` returns its leap-aware `Day`
+  component, and `resolve_year_month_day_last` produces the corresponding
+  `YearMonthDay`/`CivilDate`.
 - `is_valid_civil_date(year: i32, month: i32, day: i32) -> bool`
+- `make_year_month(year, month) -> option<YearMonth>` constructs a checked
+  month value; `is_valid_year_month` validates one directly.
+- `add_year_month_months(value, offset)` normalizes month arithmetic across
+  years, and `add_year_month_years(value, offset)` preserves the month while
+  shifting the year. Invalid months and results outside [`i32`](Quick-Guide#types) years return
+  `None`.
+- `months_between(first, last) -> option<i64>` returns the signed number of
+  calendar months from the first valid `YearMonth` to the second.
+- `year_month_first_day(value)` and `year_month_last_day(value)` return the
+  first or final `CivilDate` of a valid month, including leap-year February.
+- `make_month_day(month, day)` validates a recurring month/day pair; February
+  29 is allowed and resolves only in leap years through
+  `resolve_month_day(value, year)`. `make_month_day_last(month)` and
+  `resolve_month_day_last(value, year)` represent and resolve the final day of
+  a month, accounting for leap years.
 - `to_sys_days(year, month, day) -> option<i64>` converts a valid Gregorian
   date to days since 1970-01-01, following C++20 [`std::chrono::sys_days`](Stdlib-Module-API).
 - `from_sys_days(days: i64) -> option<civil_date>` performs the inverse and
   returns `None` when the year is outside the representable [`i32`](Quick-Guide#types) range.
 - `weekday_from_sys_days(days: i64) -> i32` returns Sunday as `0` through
   Saturday as `6`.
+- `weekday_of(date: civil_date) -> option<Weekday>` returns a typed weekday for
+  a valid date. `weekday_from_sys_days_typed` gives the typed form for a day
+  count.
+- `weekday_c_encoding` and `weekday_iso_encoding` convert a typed weekday to
+  Sunday-based `0..6` or ISO Monday-based `1..7` numbering. The corresponding
+  `weekday_from_c_encoding` and `weekday_from_iso_encoding` functions validate
+  and convert those encodings, returning `None` when out of range.
+- `add_weekdays(day, offset)` adds a signed number of days modulo seven,
+  including negative offsets and very large [`i64`](Quick-Guide#types) values.
 - `nth_weekday_of_month(year, month, weekday, occurrence)` returns an optional
   date for the first through fifth occurrence of a weekday
   (`year_month_weekday` style); nonexistent fifth occurrences return `None`.
 - `last_weekday_of_month(year, month, weekday)` returns the final occurrence
   of a weekday (`year_month_weekday_last` style). Weekday numbers use
   Sunday=`0` through Saturday=`6`.
+- `make_year_month_weekday(year, month, weekday, occurrence)` and
+  `make_year_month_weekday_last(year, month, weekday)` construct checked,
+  typed calendar specifications using `Weekday`. Resolve them with
+  `resolve_year_month_weekday` or `resolve_year_month_weekday_last`; resolution
+  returns `None` for invalid fields or a nonexistent nth occurrence (such as a
+  fifth Monday in a four-Monday month).
 - `to_iso_week_date(date)` and `from_iso_week_date(iso)` convert between civil
   dates and ISO week dates (Monday=`1` through Sunday=`7`), including week-year
   rollover at New Year. Invalid dates and nonexistent week 53 values return

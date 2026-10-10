@@ -1079,17 +1079,18 @@ pub fn fold_right_with_iter(data: &list<T>, init: U,
 /// @brief Fold a non-empty range from left to right without an initial value.
 /// Empty input returns None. C++23 `std::ranges::fold_left_first` equivalent.
 /// @ingroup algorithm_ranges
-generic<T, Operation>
-pub fn fold_left_first(data: &list<T>, operation: Operation) -> option<T> {
+generic<T, Output, Operation>
+pub fn fold_left_first(data: &list<T>, operation: Operation)
+    -> option<Output> {
     let n: i64 = data.len();
     if n == 0 {
-        return None<T>();
+        return None<Output>();
     }
-    var acc: T = data[0];
+    var acc: Output = data[0];
     for i in 1..n {
         acc = operation(acc, data[i]);
     }
-    return Some<T>(acc);
+    return Some<Output>(acc);
 }
 
 /// @brief Fold a non-empty range without an initial value and return the
@@ -1113,19 +1114,20 @@ pub fn fold_left_first_with_iter(data: &list<T>, operation: Operation)
 /// @brief Fold a non-empty range from right to left without an initial value.
 /// Empty input returns None. C++23 `std::ranges::fold_right_last` equivalent.
 /// @ingroup algorithm_ranges
-generic<T, Operation>
-pub fn fold_right_last(data: &list<T>, operation: Operation) -> option<T> {
+generic<T, Output, Operation>
+pub fn fold_right_last(data: &list<T>, operation: Operation)
+    -> option<Output> {
     let n: i64 = data.len();
     if n == 0 {
-        return None<T>();
+        return None<Output>();
     }
     var i: i64 = n - 1;
-    var acc: T = data[i];
+    var acc: Output = data[i];
     while i > 0 {
         i = i - 1;
         acc = operation(data[i], acc);
     }
-    return Some<T>(acc);
+    return Some<Output>(acc);
 }
 
 /// @brief Materialize `count` values from a zero-argument generator closure.
@@ -3467,6 +3469,92 @@ pub fn ends_with_by_projected(
         }
     }
     return true;
+}
+
+/// @brief Three-way lexicographical comparison result.
+/// @ingroup algorithm_ranges
+pub enum LexicographicalOrder : i32 {
+    Less = -1,
+    Equivalent = 0,
+    Greater = 1
+};
+
+/// @brief Return the full lexicographical ordering of two ranges.
+/// This is the C++20 `lexicographical_compare_three_way` result expressed as
+/// a named Mlang enum rather than a comparison-category type.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn lexicographical_compare_three_way(left: &list<T>, right: &list<U>)
+    -> LexicographicalOrder {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        if left[i] < right[i] { return LexicographicalOrder::Less; }
+        if left[i] > right[i] { return LexicographicalOrder::Greater; }
+    }
+    if left_len < right_len { return LexicographicalOrder::Less; }
+    if left_len > right_len { return LexicographicalOrder::Greater; }
+    return LexicographicalOrder::Equivalent;
+}
+
+/// @brief Return lexicographical ordering using a strict comparator.
+/// @ingroup algorithm_ranges
+generic<T, U, Less>
+pub fn lexicographical_compare_three_way_by(
+    left: &list<T>, right: &list<U>, less: Less) -> LexicographicalOrder {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        if less(left[i], right[i]) { return LexicographicalOrder::Less; }
+        if less(right[i], left[i]) { return LexicographicalOrder::Greater; }
+    }
+    if left_len < right_len { return LexicographicalOrder::Less; }
+    if left_len > right_len { return LexicographicalOrder::Greater; }
+    return LexicographicalOrder::Equivalent;
+}
+
+/// @brief Return lexicographical ordering after independent projections.
+/// @ingroup algorithm_ranges
+generic<T, U, LeftProjection, RightProjection>
+pub fn lexicographical_compare_three_way_projected(
+    left: &list<T>, right: &list<U>,
+    left_projection: LeftProjection, right_projection: RightProjection)
+    -> LexicographicalOrder {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        let left_key = left_projection(left[i]);
+        let right_key = right_projection(right[i]);
+        if left_key < right_key { return LexicographicalOrder::Less; }
+        if left_key > right_key { return LexicographicalOrder::Greater; }
+    }
+    if left_len < right_len { return LexicographicalOrder::Less; }
+    if left_len > right_len { return LexicographicalOrder::Greater; }
+    return LexicographicalOrder::Equivalent;
+}
+
+/// @brief Return projected lexicographical ordering using a strict comparator.
+/// @ingroup algorithm_ranges
+generic<T, U, Less, LeftProjection, RightProjection>
+pub fn lexicographical_compare_three_way_by_projected(
+    left: &list<T>, right: &list<U>, less: Less,
+    left_projection: LeftProjection, right_projection: RightProjection)
+    -> LexicographicalOrder {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        let left_key = left_projection(left[i]);
+        let right_key = right_projection(right[i]);
+        if less(left_key, right_key) { return LexicographicalOrder::Less; }
+        if less(right_key, left_key) { return LexicographicalOrder::Greater; }
+    }
+    if left_len < right_len { return LexicographicalOrder::Less; }
+    if left_len > right_len { return LexicographicalOrder::Greater; }
+    return LexicographicalOrder::Equivalent;
 }
 
 /// @brief Compare two lists in lexicographical order.
