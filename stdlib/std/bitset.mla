@@ -131,6 +131,18 @@ impl BitSet {
         return self.not_eq();
     }
 
+    /// @brief Shift set bits toward larger indices, discarding overflow bits.
+    /// A negative amount returns -1; an amount at least `len()` clears all bits.
+    pub fn shift_left(self: BitSet, amount: i64) -> i32 {
+        return __mlang_std_bitset_shift_left(self.handle, amount);
+    }
+
+    /// @brief Shift set bits toward smaller indices, discarding underflow bits.
+    /// A negative amount returns -1; an amount at least `len()` clears all bits.
+    pub fn shift_right(self: BitSet, amount: i64) -> i32 {
+        return __mlang_std_bitset_shift_right(self.handle, amount);
+    }
+
     /// @brief Return whether any active bit is set.
     pub fn any(self: BitSet) -> bool {
         return self.count_ones() != 0;

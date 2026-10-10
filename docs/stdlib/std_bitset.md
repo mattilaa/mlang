@@ -34,6 +34,8 @@ Examples:
 - `bit_set::set_all(self: bit_set) -> i32`
 - `bit_set::reset(self: bit_set) -> i32` (preserves length; unlike `clear`)
 - `bit_set::flip_all(self: bit_set) -> i32`
+- `bit_set::shift_left(self: bit_set, amount: i64) -> i32`
+- `bit_set::shift_right(self: bit_set, amount: i64) -> i32`
 - `bit_set::any(self: bit_set) -> bool`
 - `bit_set::none(self: bit_set) -> bool`
 - `bit_set::all(self: bit_set) -> bool` (true for an empty bitset)
@@ -46,5 +48,7 @@ Examples:
 
 ### Notes
 - `bit_set::len()` is measured in bits.
+- Shifts preserve the bitset length and discard bits shifted beyond either end.
+  Negative shift amounts return `-1`; amounts at least `len()` clear all bits.
 - `list<bool>` is a normal list container, not a packed specialization.
 - `std::simd` provides packed bitset reductions and in-place bitwise helpers.

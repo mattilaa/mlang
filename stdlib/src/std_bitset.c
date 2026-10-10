@@ -452,3 +452,71 @@ int32_t __mlang_std_bitset_not_eq(int64_t handle)
     bitset_mask_tail(b);
     return 0;
 }
+
+int32_t __mlang_std_bitset_shift_left(int64_t handle, int64_t amount)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b || amount < 0)
+    {
+        bitset_set_error("shift amount must be non-negative");
+        return -1;
+    }
+    size_t words = words_for_bits(b->len_bits);
+    if((uint64_t)amount >= (uint64_t)b->len_bits)
+    {
+        if(words > 0u)
+            memset(b->words, 0, words * sizeof(uint64_t));
+        return 0;
+    }
+
+    size_t whole_words = (size_t)amount / 64u;
+    unsigned int bit_shift = (unsigned int)((size_t)amount % 64u);
+    for(size_t i = words; i-- > 0u;)
+    {
+        uint64_t shifted = 0u;
+        if(i >= whole_words)
+        {
+            size_t source = i - whole_words;
+            shifted = b->words[source] << bit_shift;
+            if(bit_shift > 0u && source > 0u)
+                shifted |= b->words[source - 1u] >> (64u - bit_shift);
+        }
+        b->words[i] = shifted;
+    }
+    bitset_mask_tail(b);
+    return 0;
+}
+
+int32_t __mlang_std_bitset_shift_right(int64_t handle, int64_t amount)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b || amount < 0)
+    {
+        bitset_set_error("shift amount must be non-negative");
+        return -1;
+    }
+    size_t words = words_for_bits(b->len_bits);
+    if((uint64_t)amount >= (uint64_t)b->len_bits)
+    {
+        if(words > 0u)
+            memset(b->words, 0, words * sizeof(uint64_t));
+        return 0;
+    }
+
+    size_t whole_words = (size_t)amount / 64u;
+    unsigned int bit_shift = (unsigned int)((size_t)amount % 64u);
+    for(size_t i = 0u; i < words; ++i)
+    {
+        uint64_t shifted = 0u;
+        size_t source = i + whole_words;
+        if(source < words)
+        {
+            shifted = b->words[source] >> bit_shift;
+            if(bit_shift > 0u && source + 1u < words)
+                shifted |= b->words[source + 1u] << (64u - bit_shift);
+        }
+        b->words[i] = shifted;
+    }
+    bitset_mask_tail(b);
+    return 0;
+}

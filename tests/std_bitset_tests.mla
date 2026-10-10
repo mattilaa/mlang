@@ -80,6 +80,54 @@ fn test_bitset_bulk_set_reset_and_flip() {
 }
 
 #[test]
+fn test_bitset_shifts_across_word_boundaries() {
+    let r: result<BitSet, str8> = BitSet::new(130);
+    verify(!r.is_err());
+    let bits: BitSet = r.unwrap();
+    verify(bits.resize(130, false) == 0);
+    verify(bits.set(0, true) == 0);
+    verify(bits.set(63, true) == 0);
+    verify(bits.set(64, true) == 0);
+    verify(bits.set(129, true) == 0);
+
+    verify(bits.shift_left(1) == 0);
+    verify(bits.get_fast(0) == 0);
+    verify(bits.get_fast(1) == 1);
+    verify(bits.get_fast(64) == 1);
+    verify(bits.get_fast(65) == 1);
+    verify(bits.get_fast(129) == 0);
+    verify(bits.count() == 3);
+
+    verify(bits.shift_right(1) == 0);
+    verify(bits.get_fast(0) == 1);
+    verify(bits.get_fast(63) == 1);
+    verify(bits.get_fast(64) == 1);
+    verify(bits.count() == 3);
+
+    verify(bits.reset() == 0);
+    verify(bits.set(0, true) == 0);
+    verify(bits.set(63, true) == 0);
+    verify(bits.set(64, true) == 0);
+    verify(bits.shift_left(64) == 0);
+    verify(bits.get_fast(0) == 0);
+    verify(bits.get_fast(64) == 1);
+    verify(bits.get_fast(127) == 1);
+    verify(bits.get_fast(128) == 1);
+    verify(bits.shift_right(64) == 0);
+    verify(bits.get_fast(0) == 1);
+    verify(bits.get_fast(63) == 1);
+    verify(bits.get_fast(64) == 1);
+
+    verify(bits.shift_left(130) == 0);
+    verify(bits.none());
+    verify(bits.set(3, true) == 0);
+    verify(bits.shift_left(-1) == -1);
+    verify(bits.shift_right(-1) == -1);
+    verify(bits.get_fast(3) == 1);
+    bits.close();
+}
+
+#[test]
 fn test_bitset_push_pop_resize_and_bounds() {
     let r: result<BitSet, str8> = BitSet::new(0);
     verify(!r.is_err());
