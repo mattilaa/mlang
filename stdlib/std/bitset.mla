@@ -115,6 +115,22 @@ impl BitSet {
         return self.count_ones();
     }
 
+    /// @brief Set every active bit to one without changing the bitset length.
+    pub fn set_all(self: BitSet) -> i32 {
+        return __mlang_std_bitset_set_all(self.handle);
+    }
+
+    /// @brief Set every active bit to zero without changing the bitset length.
+    /// Unlike `clear`, this preserves the current length.
+    pub fn reset(self: BitSet) -> i32 {
+        return __mlang_std_bitset_reset(self.handle);
+    }
+
+    /// @brief Flip every active bit without changing the bitset length.
+    pub fn flip_all(self: BitSet) -> i32 {
+        return self.not_eq();
+    }
+
     /// @brief Return whether any active bit is set.
     pub fn any(self: BitSet) -> bool {
         return self.count_ones() != 0;

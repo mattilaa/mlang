@@ -306,6 +306,29 @@ int64_t __mlang_std_bitset_count_ones(int64_t handle)
     return (int64_t)total;
 }
 
+int32_t __mlang_std_bitset_set_all(int64_t handle)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b)
+        return -1;
+    size_t words = words_for_bits(b->len_bits);
+    for(size_t i = 0u; i < words; ++i)
+        b->words[i] = ~(uint64_t)0u;
+    bitset_mask_tail(b);
+    return 0;
+}
+
+int32_t __mlang_std_bitset_reset(int64_t handle)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b)
+        return -1;
+    size_t words = words_for_bits(b->len_bits);
+    if(words > 0u)
+        memset(b->words, 0, words * sizeof(uint64_t));
+    return 0;
+}
+
 int64_t __mlang_std_bitset_life_step_toroidal(int64_t current_handle, int64_t next_handle,
                                               int64_t width, int64_t height)
 {

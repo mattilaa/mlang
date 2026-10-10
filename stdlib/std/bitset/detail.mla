@@ -16,6 +16,8 @@ extern pub fn __mlang_std_bitset_toggle(handle: i64, index: i64) -> i32;
 extern pub fn __mlang_std_bitset_push(handle: i64, value: i32) -> i32;
 extern pub fn __mlang_std_bitset_pop(handle: i64) -> i32;
 extern pub fn __mlang_std_bitset_count_ones(handle: i64) -> i64;
+extern pub fn __mlang_std_bitset_set_all(handle: i64) -> i32;
+extern pub fn __mlang_std_bitset_reset(handle: i64) -> i32;
 extern pub fn __mlang_std_bitset_and_eq(lhs_handle: i64, rhs_handle: i64) -> i32;
 extern pub fn __mlang_std_bitset_or_eq(lhs_handle: i64, rhs_handle: i64) -> i32;
 extern pub fn __mlang_std_bitset_xor_eq(lhs_handle: i64, rhs_handle: i64) -> i32;

@@ -31,6 +31,9 @@ Examples:
 - `bit_set::pop(self: bit_set) -> result<bool, str8>`
 - `bit_set::count_ones(self: bit_set) -> i64`
 - `bit_set::count(self: bit_set) -> i64` (alias for `count_ones`)
+- `bit_set::set_all(self: bit_set) -> i32`
+- `bit_set::reset(self: bit_set) -> i32` (preserves length; unlike `clear`)
+- `bit_set::flip_all(self: bit_set) -> i32`
 - `bit_set::any(self: bit_set) -> bool`
 - `bit_set::none(self: bit_set) -> bool`
 - `bit_set::all(self: bit_set) -> bool` (true for an empty bitset)

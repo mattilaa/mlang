@@ -62,6 +62,24 @@ fn test_bitset_standard_queries_empty_and_full() {
 }
 
 #[test]
+fn test_bitset_bulk_set_reset_and_flip() {
+    let r: result<BitSet, str8> = BitSet::new(67);
+    verify(!r.is_err());
+    let bits: BitSet = r.unwrap();
+    verify(bits.resize(67, false) == 0);
+
+    verify(bits.set_all() == 0);
+    verify(bits.len() == 67 && bits.all() && bits.count() == 67);
+    verify(bits.flip_all() == 0);
+    verify(bits.none() && bits.count() == 0);
+
+    verify(bits.set(66, true) == 0);
+    verify(bits.reset() == 0);
+    verify(bits.len() == 67 && bits.none());
+    bits.close();
+}
+
+#[test]
 fn test_bitset_push_pop_resize_and_bounds() {
     let r: result<BitSet, str8> = BitSet::new(0);
     verify(!r.is_err());
