@@ -30,6 +30,10 @@ Examples:
 - `bit_set::push(self: bit_set, value: bool) -> i32`
 - `bit_set::pop(self: bit_set) -> result<bool, str8>`
 - `bit_set::count_ones(self: bit_set) -> i64`
+- `bit_set::count(self: bit_set) -> i64` (alias for `count_ones`)
+- `bit_set::any(self: bit_set) -> bool`
+- `bit_set::none(self: bit_set) -> bool`
+- `bit_set::all(self: bit_set) -> bool` (true for an empty bitset)
 - `bit_set::and_eq(self: bit_set, rhs_handle: i64) -> i32`
 - `bit_set::or_eq(self: bit_set, rhs_handle: i64) -> i32`
 - `bit_set::xor_eq(self: bit_set, rhs_handle: i64) -> i32`

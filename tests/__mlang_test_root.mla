@@ -110,6 +110,8 @@ mod pipe_operator_tests;
 use pipe_operator_tests::*;
 mod bit_sizeof_tests;
 use bit_sizeof_tests::*;
+mod std_bitset_tests;
+use std_bitset_tests::*;
 mod std_span_tests;
 use std_span_tests::*;
 mod std_mdspan_tests;

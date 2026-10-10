@@ -110,6 +110,26 @@ impl BitSet {
         return __mlang_std_bitset_count_ones(self.handle);
     }
 
+    /// @brief Count set bits, matching `std::bitset::count`.
+    pub fn count(self: BitSet) -> i64 {
+        return self.count_ones();
+    }
+
+    /// @brief Return whether any active bit is set.
+    pub fn any(self: BitSet) -> bool {
+        return self.count_ones() != 0;
+    }
+
+    /// @brief Return whether no active bits are set.
+    pub fn none(self: BitSet) -> bool {
+        return self.count_ones() == 0;
+    }
+
+    /// @brief Return whether every active bit is set (true for an empty set).
+    pub fn all(self: BitSet) -> bool {
+        return self.count_ones() == self.len();
+    }
+
     /// @brief In-place AND with `rhs_handle`; lengths must match.
     pub fn and_eq(self: BitSet, rhs_handle: i64) -> i32 {
         return __mlang_std_bitset_and_eq(self.handle, rhs_handle);

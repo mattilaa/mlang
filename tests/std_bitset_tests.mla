@@ -28,8 +28,37 @@ fn test_bitset_set_get_toggle_and_count() {
     let b3b: result<bool, str8> = bs.get(3);
     verify(!b3b.is_err() && !b3b.unwrap());
     verify_eq(2, bs.count_ones());
+    verify_eq(2, bs.count());
+    verify(bs.any());
+    verify(!bs.none());
+    verify(!bs.all());
 
     bs.close();
+}
+
+#[test]
+fn test_bitset_standard_queries_empty_and_full() {
+    let r: result<BitSet, str8> = BitSet::new(0);
+    verify(!r.is_err());
+    let bits: BitSet = r.unwrap();
+    verify(bits.none());
+    verify(!bits.any());
+    verify(bits.all());
+    verify_eq(0, bits.count());
+
+    verify(bits.resize(4, true) == 0);
+    verify(bits.all() && bits.any());
+    verify_eq(4, bits.count());
+
+    verify(bits.set(2, false) == 0);
+    verify(!bits.all() && bits.any() && !bits.none());
+    verify_eq(3, bits.count());
+
+    verify(bits.set(0, false) == 0);
+    verify(bits.set(1, false) == 0);
+    verify(bits.set(3, false) == 0);
+    verify(bits.none() && !bits.any());
+    bits.close();
 }
 
 #[test]
