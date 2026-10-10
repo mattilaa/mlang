@@ -397,6 +397,8 @@ use std::algorithm::ranges::zip_transform;
 use std::algorithm::ranges::zip_transform_projected;
 use std::algorithm::ranges::zip_transform3_projected;
 use std::algorithm::ranges::zip_transform4_projected;
+use std::algorithm::ranges::zip_transform5_projected;
+use std::algorithm::ranges::zip_transform6_projected;
 use std::algorithm::ranges::chunk_by;
 use std::algorithm::ranges::chunk_by_projected;
 use std::algorithm::ranges::unique;
@@ -3254,6 +3256,27 @@ fn test_algorithm_ranges_zip_transform_projected_three_and_four_inputs() {
         first_key, third_key, tens, ones);
     verify(combined.len() == 3 && combined[0] == 62 &&
            combined[1] == 84 && combined[2] == 106);
+
+    let fifth: list<i32> = [2, 3, 4, 5];
+    let combine_five = |a: i32, b: i32, c: i32, d: i32, e: i32| {
+        return a + b + c + d + e;
+    };
+    let combined_five: list<i32> = zip_transform5_projected(
+        first, second, third, fourth, fifth, combine_five,
+        first_key, second_key, third_key, tens, ones);
+    verify(combined_five.len() == 2 && combined_five[0] == 64 &&
+           combined_five[1] == 87);
+
+    let sixth: list<i32> = [9, 8, 7];
+    let sixth_key = |value: i32| { return value * 2; };
+    let combine_six = |a: i32, b: i32, c: i32, d: i32, e: i32, f: i32| {
+        return a + b + c + d + e + f;
+    };
+    let combined_six: list<i32> = zip_transform6_projected(
+        first, second, third, fourth, fifth, sixth, combine_six,
+        first_key, second_key, third_key, tens, ones, sixth_key);
+    verify(combined_six.len() == 2 && combined_six[0] == 82 &&
+           combined_six[1] == 103);
 
     let empty: list<i32> = [];
     let none: list<i32> = zip_transform3_projected(
