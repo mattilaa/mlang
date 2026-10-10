@@ -6,6 +6,8 @@ use std::date::DateTime;
 use std::date::CivilDate;
 use std::date::IsoWeekDate;
 use std::date::Weekday;
+use std::date::YearMonthWeekday;
+use std::date::YearMonthWeekdayLast;
 use std::date::TimeZone;
 use std::date::UtcOffset;
 use std::date::format_date;
@@ -40,6 +42,10 @@ use std::date::weekday_iso_encoding;
 use std::date::weekday_from_sys_days_typed;
 use std::date::weekday_of;
 use std::date::add_weekdays;
+use std::date::make_year_month_weekday;
+use std::date::resolve_year_month_weekday;
+use std::date::make_year_month_weekday_last;
+use std::date::resolve_year_month_weekday_last;
 use std::date::add_civil_days;
 use std::date::days_between;
 use std::date::add_civil_years;
@@ -283,6 +289,33 @@ fn test_civil_weekday_of_month() {
     verify(nth_weekday_of_month(2024, 1, 7, 1).is_none());
     verify(nth_weekday_of_month(2024, 1, 1, 0).is_none());
     verify(last_weekday_of_month(2024, 1, -1).is_none());
+}
+
+#[test]
+fn test_typed_year_month_weekday_calendar_values() {
+    let second_tuesday_option: option<YearMonthWeekday> =
+        make_year_month_weekday(2024, 7, Weekday::Tuesday, 2);
+    verify(second_tuesday_option.is_some());
+    let second_tuesday: CivilDate =
+        resolve_year_month_weekday(second_tuesday_option.unwrap()).unwrap();
+    verify(second_tuesday.year == 2024 && second_tuesday.month == 7 &&
+           second_tuesday.day == 9);
+
+    let absent_fifth: option<YearMonthWeekday> =
+        make_year_month_weekday(2021, 2, Weekday::Monday, 5);
+    verify(absent_fifth.is_some());
+    verify(resolve_year_month_weekday(absent_fifth.unwrap()).is_none());
+    verify(make_year_month_weekday(2024, 13, Weekday::Monday, 1).is_none());
+    verify(make_year_month_weekday(2024, 2, Weekday::Monday, 0).is_none());
+
+    let final_friday_option: option<YearMonthWeekdayLast> =
+        make_year_month_weekday_last(2024, 7, Weekday::Friday);
+    verify(final_friday_option.is_some());
+    let final_friday: CivilDate = resolve_year_month_weekday_last(
+        final_friday_option.unwrap()).unwrap();
+    verify(final_friday.year == 2024 && final_friday.month == 7 &&
+           final_friday.day == 26);
+    verify(make_year_month_weekday_last(2024, 0, Weekday::Friday).is_none());
 }
 
 #[test]

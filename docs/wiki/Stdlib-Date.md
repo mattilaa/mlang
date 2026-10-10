@@ -8,6 +8,7 @@ Module file: `stdlib/std/date.mla`
 - `date_time`
 - `civil_date`
 - `Weekday` (`Sunday` through `Saturday`, with Sunday=`0`)
+- `YearMonthWeekday` and `YearMonthWeekdayLast`
 - `utc_offset`
 - `time_zone`
 
@@ -57,6 +58,12 @@ Module file: `stdlib/std/date.mla`
 - `last_weekday_of_month(year, month, weekday)` returns the final occurrence
   of a weekday (`year_month_weekday_last` style). Weekday numbers use
   Sunday=`0` through Saturday=`6`.
+- `make_year_month_weekday(year, month, weekday, occurrence)` and
+  `make_year_month_weekday_last(year, month, weekday)` construct checked,
+  typed calendar specifications using `Weekday`. Resolve them with
+  `resolve_year_month_weekday` or `resolve_year_month_weekday_last`; resolution
+  returns `None` for invalid fields or a nonexistent nth occurrence (such as a
+  fifth Monday in a four-Monday month).
 - `to_iso_week_date(date)` and `from_iso_week_date(iso)` convert between civil
   dates and ISO week dates (Monday=`1` through Sunday=`7`), including week-year
   rollover at New Year. Invalid dates and nonexistent week 53 values return

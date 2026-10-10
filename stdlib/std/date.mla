@@ -43,6 +43,22 @@ pub enum Weekday : i32 {
     Saturday = 6
 };
 
+/// @brief One-based occurrence of a weekday within a civil month.
+/// The occurrence is in 1..5; resolution returns `None` if it does not exist.
+pub struct YearMonthWeekday {
+    var year: i32;
+    var month: i32;
+    var weekday: Weekday;
+    var occurrence: i32;
+};
+
+/// @brief Final occurrence of a weekday within a civil month.
+pub struct YearMonthWeekdayLast {
+    var year: i32;
+    var month: i32;
+    var weekday: Weekday;
+};
+
 /// @brief Fixed UTC offset in seconds, for example `+02:00` is `7200`.
 pub struct UtcOffset {
     var seconds: i32;
@@ -286,6 +302,43 @@ pub fn last_weekday_of_month(year: i32, month: i32,
     return Some<CivilDate>(CivilDate {
         year: year, month: month, day: last_day - distance
     });
+}
+
+/// @brief Construct a checked weekday-occurrence calendar value.
+pub fn make_year_month_weekday(year: i32, month: i32, weekday: Weekday,
+                               occurrence: i32)
+    -> option<YearMonthWeekday> {
+    if month < 1 || month > 12 || occurrence < 1 || occurrence > 5 {
+        return None<YearMonthWeekday>();
+    }
+    return Some<YearMonthWeekday>(YearMonthWeekday {
+        year: year, month: month, weekday: weekday, occurrence: occurrence
+    });
+}
+
+/// @brief Resolve a weekday occurrence to a civil date.
+/// Returns `None` when the requested occurrence is absent from that month.
+pub fn resolve_year_month_weekday(value: YearMonthWeekday)
+    -> option<CivilDate> {
+    return nth_weekday_of_month(value.year, value.month,
+                                weekday_c_encoding(value.weekday),
+                                value.occurrence);
+}
+
+/// @brief Construct a checked final-weekday calendar value.
+pub fn make_year_month_weekday_last(year: i32, month: i32, weekday: Weekday)
+    -> option<YearMonthWeekdayLast> {
+    if month < 1 || month > 12 { return None<YearMonthWeekdayLast>(); }
+    return Some<YearMonthWeekdayLast>(YearMonthWeekdayLast {
+        year: year, month: month, weekday: weekday
+    });
+}
+
+/// @brief Resolve the final occurrence of a weekday to a civil date.
+pub fn resolve_year_month_weekday_last(value: YearMonthWeekdayLast)
+    -> option<CivilDate> {
+    return last_weekday_of_month(value.year, value.month,
+                                 weekday_c_encoding(value.weekday));
 }
 
 /// @brief Add a signed day offset to a civil date.
