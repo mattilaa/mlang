@@ -16,6 +16,7 @@ use std::chrono::DurationUnit;
 use std::chrono::make_duration;
 use std::chrono::duration_cast;
 use std::chrono::duration_add;
+use std::chrono::duration_compare;
 
 let elapsed = make_duration(90, DurationUnit::Second).unwrap();
 let milliseconds: Duration =
@@ -23,6 +24,7 @@ let milliseconds: Duration =
 let total: Duration = duration_add(
     elapsed, make_duration(2, DurationUnit::Minute).unwrap(),
     DurationUnit::Second).unwrap(); // 210 seconds
+let order = duration_compare(elapsed, total).unwrap(); // Less
 ```
 
 - `make_duration(count, unit)` constructs a value for one of the declared
@@ -33,6 +35,11 @@ let total: Duration = duration_add(
 - `duration_add(left, right, unit)` and `duration_subtract(left, right, unit)`
   convert both operands to the requested unit before checked arithmetic. A
   conversion or arithmetic overflow returns `None`.
+- `duration_compare(left, right)` returns `Some(DurationOrder::Less)`,
+  `Some(DurationOrder::Equivalent)`, or `Some(DurationOrder::Greater)` for
+  exact cross-unit ordering. It avoids multiplying
+  full counts by conversion factors, so even extreme [`i64`](Quick-Guide#types) values can be
+  compared without overflow.
 
 `DurationUnit` contains `Nanosecond`, `Microsecond`, `Millisecond`, `Second`,
 `Minute`, `Hour`, `Day`, and `Week`. The module deliberately reports overflow

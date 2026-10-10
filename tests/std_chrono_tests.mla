@@ -3,10 +3,12 @@ mod std::testing;
 
 use std::chrono::Duration;
 use std::chrono::DurationUnit;
+use std::chrono::DurationOrder;
 use std::chrono::make_duration;
 use std::chrono::duration_cast;
 use std::chrono::duration_add;
 use std::chrono::duration_subtract;
+use std::chrono::duration_compare;
 use std::testing::verify;
 use std::testing::verify_eq_i64;
 
@@ -77,4 +79,45 @@ fn test_chrono_duration_reports_overflow() {
         -9223372036854775807 - 1, DurationUnit::Second).unwrap();
     verify(duration_subtract(smallest, one_second,
                              DurationUnit::Second).is_none());
+}
+
+#[test]
+fn test_chrono_duration_comparison_across_units() {
+    let minute: Duration = make_duration(1, DurationUnit::Minute).unwrap();
+    let sixty_seconds: Duration = make_duration(60, DurationUnit::Second).unwrap();
+    let ninety_seconds: Duration = make_duration(90, DurationUnit::Second).unwrap();
+    let less: option<DurationOrder> = duration_compare(minute, ninety_seconds);
+    let equal: option<DurationOrder> =
+        duration_compare(minute, sixty_seconds);
+    let greater: option<DurationOrder> =
+        duration_compare(ninety_seconds, minute);
+    verify(less.is_some() && less.unwrap() == DurationOrder::Less);
+    verify(equal.is_some() && equal.unwrap() == DurationOrder::Equivalent);
+    verify(greater.is_some() && greater.unwrap() == DurationOrder::Greater);
+
+    let negative_milliseconds: Duration =
+        make_duration(-59000, DurationUnit::Millisecond).unwrap();
+    let negative_minute: Duration =
+        make_duration(-1, DurationUnit::Minute).unwrap();
+    let negative_order: option<DurationOrder> =
+        duration_compare(negative_milliseconds, negative_minute);
+    verify(negative_order.is_some() &&
+           negative_order.unwrap() == DurationOrder::Greater);
+
+    let largest_nanoseconds: Duration = make_duration(
+        9223372036854775807, DurationUnit::Nanosecond).unwrap();
+    let largest_weeks: Duration = make_duration(
+        9223372036854775807, DurationUnit::Week).unwrap();
+    let extreme: option<DurationOrder> =
+        duration_compare(largest_nanoseconds, largest_weeks);
+    verify(extreme.is_some() && extreme.unwrap() == DurationOrder::Less);
+
+    let smallest_nanoseconds: Duration = make_duration(
+        -9223372036854775807 - 1, DurationUnit::Nanosecond).unwrap();
+    let smallest_weeks: Duration = make_duration(
+        -9223372036854775807 - 1, DurationUnit::Week).unwrap();
+    let negative_extreme: option<DurationOrder> =
+        duration_compare(smallest_nanoseconds, smallest_weeks);
+    verify(negative_extreme.is_some() &&
+           negative_extreme.unwrap() == DurationOrder::Greater);
 }

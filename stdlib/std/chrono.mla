@@ -17,6 +17,13 @@ pub enum DurationUnit : i32 {
     Week = 7
 };
 
+/// @brief Exact ordering of two durations after accounting for their units.
+pub enum DurationOrder : i32 {
+    Less = -1,
+    Equivalent = 0,
+    Greater = 1
+};
+
 /// @brief An integral count of a selected duration unit.
 pub struct Duration {
     var count: i64;
@@ -36,6 +43,46 @@ fn duration_unit_scale(unit: DurationUnit) -> i64 {
     if unit == DurationUnit::Day { return 86400000000000; }
     if unit == DurationUnit::Week { return 604800000000000; }
     return 0;
+}
+
+fn compare_fine_to_coarse(fine_count: i64, ratio: i64,
+                           coarse_count: i64) -> i32 {
+    let quotient: i64 = fine_count / ratio;
+    if quotient < coarse_count { return -1; }
+    if quotient > coarse_count { return 1; }
+    let remainder: i64 = fine_count % ratio;
+    if remainder < 0 { return -1; }
+    if remainder > 0 { return 1; }
+    return 0;
+}
+
+/// @brief Compare two durations exactly, even when their units differ.
+/// Returns `None` for a malformed unit. The comparison avoids multiplying a
+/// count by a large conversion factor, so extreme valid counts remain safe.
+pub fn duration_compare(left: Duration, right: Duration)
+    -> option<DurationOrder> {
+    let left_scale: i64 = duration_unit_scale(left.unit);
+    let right_scale: i64 = duration_unit_scale(right.unit);
+    if left_scale == 0 || right_scale == 0 {
+        return None<DurationOrder>();
+    }
+
+    var comparison: i32 = 0;
+    if left_scale == right_scale {
+        if left.count < right.count { comparison = -1; }
+        else if left.count > right.count { comparison = 1; }
+    } else if left_scale < right_scale {
+        let ratio: i64 = right_scale / left_scale;
+        comparison = compare_fine_to_coarse(left.count, ratio, right.count);
+    } else {
+        let ratio: i64 = left_scale / right_scale;
+        comparison = 0 - compare_fine_to_coarse(
+            right.count, ratio, left.count);
+    }
+
+    if comparison < 0 { return Some<DurationOrder>(DurationOrder::Less); }
+    if comparison > 0 { return Some<DurationOrder>(DurationOrder::Greater); }
+    return Some<DurationOrder>(DurationOrder::Equivalent);
 }
 
 /// @brief Construct a duration from an integral count and unit.
