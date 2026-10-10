@@ -23,6 +23,8 @@ use std::chrono::make_time_point;
 use std::chrono::time_point_add;
 use std::chrono::time_point_difference;
 use std::chrono::time_point_round;
+use std::chrono::HhMmSs;
+use std::chrono::make_hh_mm_ss;
 
 let elapsed = make_duration(90, DurationUnit::Second).unwrap();
 let milliseconds: Duration =
@@ -39,6 +41,7 @@ let later = time_point_add(
 let elapsed_between: Duration = time_point_difference(
     later, start, DurationUnit::Second).unwrap(); // 5 seconds
 let rounded_start = time_point_round(start, DurationUnit::Second).unwrap();
+let clock_fields: HhMmSs = make_hh_mm_ss(elapsed).unwrap();
 ```
 
 - `make_duration(count, unit)` constructs a value for one of the declared
@@ -77,3 +80,10 @@ cannot be compared. `steady_now()` returns a monotonic nanosecond point;
 `time_point_round` convert or round the since-epoch duration while retaining
 the original clock identity. Their checked integral rounding follows the
 corresponding C++20 chrono operations.
+
+`make_hh_mm_ss(duration)` decomposes an integral duration into a separate sign,
+non-negative total hours, minute and second fields in `0..60`, and a
+non-negative fractional remainder expressed in the source unit. This follows
+C++20 `std::chrono::hh_mm_ss` decomposition while retaining Mlang's runtime
+duration precision. It returns `None` if the absolute total hours cannot fit
+in `i64`.

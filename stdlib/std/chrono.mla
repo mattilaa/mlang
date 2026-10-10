@@ -47,8 +47,18 @@ pub struct TimePoint {
     var clock: ClockKind;
 };
 
+/// @brief Sign-separated hours, minutes, seconds, and fractional remainder.
+pub struct HhMmSs {
+    var is_negative: bool;
+    var hours: i64;
+    var minutes: i32;
+    var seconds: i32;
+    var subseconds: Duration;
+};
+
 /// @brief Lowercase alias for `Duration`.
 use type duration = Duration;
+use type hh_mm_ss = HhMmSs;
 
 fn duration_unit_scale(unit: DurationUnit) -> i64 {
     if unit == DurationUnit::Nanosecond { return 1; }
@@ -60,6 +70,89 @@ fn duration_unit_scale(unit: DurationUnit) -> i64 {
     if unit == DurationUnit::Day { return 86400000000000; }
     if unit == DurationUnit::Week { return 604800000000000; }
     return 0;
+}
+
+/// @brief Decompose a duration into a sign, total hours, minute/second parts,
+/// and a fractional remainder in the source unit. Values whose absolute hour
+/// count cannot fit in i64 return `None`.
+pub fn make_hh_mm_ss(value: Duration) -> option<HhMmSs> {
+    if duration_unit_scale(value.unit) == 0 { return None<HhMmSs>(); }
+
+    let negative: bool = value.count < 0;
+    var signed_hours: i64 = 0;
+    var signed_minutes: i64 = 0;
+    var signed_seconds: i64 = 0;
+    var signed_subseconds: i64 = 0;
+
+    if value.unit == DurationUnit::Week {
+        let factor: i64 = 168;
+        let maximum: i64 = 9223372036854775807;
+        let minimum: i64 = -9223372036854775807 - 1;
+        if value.count > 0 && value.count > maximum / factor {
+            return None<HhMmSs>();
+        }
+        if value.count < 0 && value.count < minimum / factor {
+            return None<HhMmSs>();
+        }
+        signed_hours = value.count * factor;
+    } else if value.unit == DurationUnit::Day {
+        let factor: i64 = 24;
+        let maximum: i64 = 9223372036854775807;
+        let minimum: i64 = -9223372036854775807 - 1;
+        if value.count > 0 && value.count > maximum / factor {
+            return None<HhMmSs>();
+        }
+        if value.count < 0 && value.count < minimum / factor {
+            return None<HhMmSs>();
+        }
+        signed_hours = value.count * factor;
+    } else if value.unit == DurationUnit::Hour {
+        signed_hours = value.count;
+    } else if value.unit == DurationUnit::Minute {
+        signed_hours = value.count / 60;
+        signed_minutes = value.count % 60;
+    } else if value.unit == DurationUnit::Second {
+        signed_hours = value.count / 3600;
+        let remainder: i64 = value.count % 3600;
+        signed_minutes = remainder / 60;
+        signed_seconds = remainder % 60;
+    } else {
+        let scale: i64 = duration_unit_scale(value.unit);
+        let ticks_per_second: i64 = 1000000000 / scale;
+        let ticks_per_minute: i64 = ticks_per_second * 60;
+        let ticks_per_hour: i64 = ticks_per_minute * 60;
+        signed_hours = value.count / ticks_per_hour;
+        let after_hours: i64 = value.count % ticks_per_hour;
+        signed_minutes = after_hours / ticks_per_minute;
+        let after_minutes: i64 = after_hours % ticks_per_minute;
+        signed_seconds = after_minutes / ticks_per_second;
+        signed_subseconds = after_minutes % ticks_per_second;
+    }
+
+    if signed_hours == -9223372036854775807 - 1 {
+        return None<HhMmSs>();
+    }
+    var hours: i64 = signed_hours;
+    var minutes: i64 = signed_minutes;
+    var seconds: i64 = signed_seconds;
+    var subseconds: i64 = signed_subseconds;
+    if negative {
+        hours = 0 - signed_hours;
+        minutes = 0 - signed_minutes;
+        seconds = 0 - signed_seconds;
+        subseconds = 0 - signed_subseconds;
+    }
+
+    return Some<HhMmSs>(HhMmSs {
+        is_negative: negative,
+        hours: hours,
+        minutes: i32(minutes),
+        seconds: i32(seconds),
+        subseconds: Duration {
+            count: subseconds,
+            unit: value.unit
+        }
+    });
 }
 
 fn compare_fine_to_coarse(fine_count: i64, ratio: i64,

@@ -6,6 +6,7 @@ use std::chrono::DurationUnit;
 use std::chrono::DurationOrder;
 use std::chrono::ClockKind;
 use std::chrono::TimePoint;
+use std::chrono::HhMmSs;
 use std::chrono::make_duration;
 use std::chrono::duration_cast;
 use std::chrono::duration_floor;
@@ -26,6 +27,7 @@ use std::chrono::time_point_ceil;
 use std::chrono::time_point_round;
 use std::chrono::steady_now;
 use std::chrono::system_now;
+use std::chrono::make_hh_mm_ss;
 use std::testing::verify;
 use std::testing::verify_eq_i64;
 
@@ -268,4 +270,41 @@ fn test_chrono_clock_now_functions() {
     let wall_clock: TimePoint = system_now();
     verify(wall_clock.clock == ClockKind::System);
     verify(time_since_epoch(wall_clock).unwrap().unit == DurationUnit::Second);
+}
+
+#[test]
+fn test_chrono_hh_mm_ss_decomposition() {
+    let exact: Duration = make_duration(90061, DurationUnit::Second).unwrap();
+    let exact_parts: HhMmSs = make_hh_mm_ss(exact).unwrap();
+    verify(!exact_parts.is_negative);
+    verify(exact_parts.hours == 25);
+    verify(exact_parts.minutes == 1 && exact_parts.seconds == 1);
+    verify(exact_parts.subseconds.count == 0);
+
+    let precise: Duration =
+        make_duration(-1234567, DurationUnit::Millisecond).unwrap();
+    let precise_parts: HhMmSs = make_hh_mm_ss(precise).unwrap();
+    verify(precise_parts.is_negative && precise_parts.hours == 0);
+    verify(precise_parts.minutes == 20 && precise_parts.seconds == 34);
+    verify(precise_parts.subseconds.count == 567);
+    verify(precise_parts.subseconds.unit == DurationUnit::Millisecond);
+
+    let weeks: HhMmSs = make_hh_mm_ss(
+        make_duration(2, DurationUnit::Week).unwrap()).unwrap();
+    verify(weeks.hours == 336 && weeks.minutes == 0 && weeks.seconds == 0);
+
+    let minimum_nanoseconds: HhMmSs = make_hh_mm_ss(
+        make_duration(-9223372036854775807 - 1,
+                      DurationUnit::Nanosecond).unwrap()).unwrap();
+    verify(minimum_nanoseconds.is_negative &&
+           minimum_nanoseconds.hours == 2562047);
+    verify(minimum_nanoseconds.subseconds.count >= 0 &&
+           minimum_nanoseconds.subseconds.count < 1000000000);
+
+    let huge_weeks: Duration = make_duration(
+        9223372036854775807, DurationUnit::Week).unwrap();
+    let minimum_hours: Duration = make_duration(
+        -9223372036854775807 - 1, DurationUnit::Hour).unwrap();
+    verify(make_hh_mm_ss(huge_weeks).is_none());
+    verify(make_hh_mm_ss(minimum_hours).is_none());
 }
