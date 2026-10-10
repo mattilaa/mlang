@@ -1,0 +1,80 @@
+mod std::chrono;
+mod std::testing;
+
+use std::chrono::Duration;
+use std::chrono::DurationUnit;
+use std::chrono::make_duration;
+use std::chrono::duration_cast;
+use std::chrono::duration_add;
+use std::chrono::duration_subtract;
+use std::testing::verify;
+use std::testing::verify_eq_i64;
+
+#[test]
+fn test_chrono_duration_casts_and_truncation() {
+    let ninety_seconds: option<Duration> =
+        make_duration(90, DurationUnit::Second);
+    verify(ninety_seconds.is_some());
+    let seconds: Duration = ninety_seconds.unwrap();
+
+    let milliseconds: option<Duration> =
+        duration_cast(seconds, DurationUnit::Millisecond);
+    verify(milliseconds.is_some());
+    verify_eq_i64(90000, milliseconds.unwrap().count);
+
+    let fractional_minute: option<Duration> =
+        duration_cast(milliseconds.unwrap(), DurationUnit::Minute);
+    verify(fractional_minute.is_some());
+    verify_eq_i64(1, fractional_minute.unwrap().count);
+
+    let negative: Duration = make_duration(-90001, DurationUnit::Millisecond)
+        .unwrap();
+    let negative_minutes: option<Duration> =
+        duration_cast(negative, DurationUnit::Minute);
+    verify(negative_minutes.is_some());
+    verify_eq_i64(-1, negative_minutes.unwrap().count);
+
+    let microseconds: option<Duration> =
+        duration_cast(make_duration(4, DurationUnit::Millisecond).unwrap(),
+                      DurationUnit::Microsecond);
+    verify(microseconds.is_some());
+    verify_eq_i64(4000, microseconds.unwrap().count);
+}
+
+#[test]
+fn test_chrono_duration_arithmetic_uses_requested_unit() {
+    let ninety_seconds: Duration =
+        make_duration(90, DurationUnit::Second).unwrap();
+    let two_minutes: Duration = make_duration(2, DurationUnit::Minute).unwrap();
+    let total: option<Duration> =
+        duration_add(ninety_seconds, two_minutes, DurationUnit::Second);
+    verify(total.is_some());
+    verify_eq_i64(210, total.unwrap().count);
+    verify(total.unwrap().unit == DurationUnit::Second);
+
+    let difference: option<Duration> =
+        duration_subtract(two_minutes, ninety_seconds,
+                          DurationUnit::Millisecond);
+    verify(difference.is_some());
+    verify_eq_i64(30000, difference.unwrap().count);
+    verify(difference.unwrap().unit == DurationUnit::Millisecond);
+}
+
+#[test]
+fn test_chrono_duration_reports_overflow() {
+    let largest_milliseconds: Duration = make_duration(
+        9223372036854775807, DurationUnit::Millisecond).unwrap();
+    verify(duration_cast(largest_milliseconds,
+                         DurationUnit::Nanosecond).is_none());
+
+    let largest_seconds: Duration = make_duration(
+        9223372036854775807, DurationUnit::Second).unwrap();
+    let one_second: Duration = make_duration(1, DurationUnit::Second).unwrap();
+    verify(duration_add(largest_seconds, one_second,
+                        DurationUnit::Second).is_none());
+
+    let smallest: Duration = make_duration(
+        -9223372036854775807 - 1, DurationUnit::Second).unwrap();
+    verify(duration_subtract(smallest, one_second,
+                             DurationUnit::Second).is_none());
+}

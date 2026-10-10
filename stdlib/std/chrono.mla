@@ -1,0 +1,114 @@
+/// \file chrono.mla
+/// \brief Checked duration arithmetic inspired by C++20 <chrono>.
+///
+/// Mlang represents a duration as an i64 count paired with a runtime unit.
+/// This is intentionally explicit rather than pretending to provide C++'
+/// compile-time ratio parameter, which Mlang does not currently support.
+
+/// @brief Supported fixed duration units, from nanoseconds through weeks.
+pub enum DurationUnit : i32 {
+    Nanosecond = 0,
+    Microsecond = 1,
+    Millisecond = 2,
+    Second = 3,
+    Minute = 4,
+    Hour = 5,
+    Day = 6,
+    Week = 7
+};
+
+/// @brief An integral count of a selected duration unit.
+pub struct Duration {
+    var count: i64;
+    var unit: DurationUnit;
+};
+
+/// @brief Lowercase alias for `Duration`.
+use type duration = Duration;
+
+fn duration_unit_scale(unit: DurationUnit) -> i64 {
+    if unit == DurationUnit::Nanosecond { return 1; }
+    if unit == DurationUnit::Microsecond { return 1000; }
+    if unit == DurationUnit::Millisecond { return 1000000; }
+    if unit == DurationUnit::Second { return 1000000000; }
+    if unit == DurationUnit::Minute { return 60000000000; }
+    if unit == DurationUnit::Hour { return 3600000000000; }
+    if unit == DurationUnit::Day { return 86400000000000; }
+    if unit == DurationUnit::Week { return 604800000000000; }
+    return 0;
+}
+
+/// @brief Construct a duration from an integral count and unit.
+/// Every declared unit is valid; `None` protects against invalid enum values.
+pub fn make_duration(count: i64, unit: DurationUnit) -> option<Duration> {
+    if duration_unit_scale(unit) == 0 { return None<Duration>(); }
+    return Some<Duration>(Duration { count: count, unit: unit });
+}
+
+/// @brief Convert a duration to `unit`, truncating toward zero.
+/// This matches integral C++ chrono duration-cast rounding. Multiplication
+/// overflow or an invalid unit returns `None`.
+pub fn duration_cast(value: Duration, unit: DurationUnit)
+    -> option<Duration> {
+    let source_scale: i64 = duration_unit_scale(value.unit);
+    let target_scale: i64 = duration_unit_scale(unit);
+    if source_scale == 0 || target_scale == 0 {
+        return None<Duration>();
+    }
+
+    var converted: i64 = value.count;
+    if source_scale > target_scale {
+        if source_scale % target_scale != 0 { return None<Duration>(); }
+        let multiplier: i64 = source_scale / target_scale;
+        let maximum: i64 = 9223372036854775807;
+        let minimum: i64 = -9223372036854775807 - 1;
+        if converted > 0 && converted > maximum / multiplier {
+            return None<Duration>();
+        }
+        if converted < 0 && converted < minimum / multiplier {
+            return None<Duration>();
+        }
+        converted = converted * multiplier;
+    } else if source_scale < target_scale {
+        if target_scale % source_scale != 0 { return None<Duration>(); }
+        converted = converted / (target_scale / source_scale);
+    }
+
+    return Some<Duration>(Duration { count: converted, unit: unit });
+}
+
+/// @brief Add durations after converting both to the requested unit.
+/// Conversion or result overflow returns `None`.
+pub fn duration_add(left: Duration, right: Duration, unit: DurationUnit)
+    -> option<Duration> {
+    let converted_left: option<Duration> = duration_cast(left, unit);
+    let converted_right: option<Duration> = duration_cast(right, unit);
+    if converted_left.is_none() || converted_right.is_none() {
+        return None<Duration>();
+    }
+    let a: i64 = converted_left.unwrap().count;
+    let b: i64 = converted_right.unwrap().count;
+    let maximum: i64 = 9223372036854775807;
+    let minimum: i64 = -9223372036854775807 - 1;
+    if b > 0 && a > maximum - b { return None<Duration>(); }
+    if b < 0 && a < minimum - b { return None<Duration>(); }
+    return Some<Duration>(Duration { count: a + b, unit: unit });
+}
+
+/// @brief Subtract durations after converting both to the requested unit.
+/// Conversion or result overflow returns `None`.
+pub fn duration_subtract(left: Duration, right: Duration,
+                         unit: DurationUnit) -> option<Duration> {
+    let converted_left: option<Duration> = duration_cast(left, unit);
+    let converted_right: option<Duration> = duration_cast(right, unit);
+    if converted_left.is_none() || converted_right.is_none() {
+        return None<Duration>();
+    }
+    let a: i64 = converted_left.unwrap().count;
+    let b: i64 = converted_right.unwrap().count;
+    let maximum: i64 = 9223372036854775807;
+    let minimum: i64 = -9223372036854775807 - 1;
+    if b > 0 && a < minimum + b { return None<Duration>(); }
+    if b < 0 && a > maximum + b { return None<Duration>(); }
+    return Some<Duration>(Duration { count: a - b, unit: unit });
+}

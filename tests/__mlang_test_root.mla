@@ -24,6 +24,8 @@ mod std_io_traits_tests;
 use std_io_traits_tests::*;
 mod std_date_tests;
 use std_date_tests::*;
+mod std_chrono_tests;
+use std_chrono_tests::*;
 mod std_utility_tests;
 use std_utility_tests::*;
 mod type_name_property_tests;

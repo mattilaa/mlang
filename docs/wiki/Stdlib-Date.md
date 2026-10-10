@@ -82,7 +82,7 @@ Module file: `stdlib/std/date.mla`
   `resolve_month_day_last(value, year)` represent and resolve the final day of
   a month, accounting for leap years.
 - `to_sys_days(year, month, day) -> option<i64>` converts a valid Gregorian
-  date to days since 1970-01-01, following C++20 [`std::chrono::sys_days`](Stdlib-Module-API).
+  date to days since 1970-01-01, following C++20 [`std::chrono::sys_days`](Stdlib-Chrono).
 - `from_sys_days(days: i64) -> option<civil_date>` performs the inverse and
   returns `None` when the year is outside the representable [`i32`](Quick-Guide#types) range.
 - `weekday_from_sys_days(days: i64) -> i32` returns Sunday as `0` through

@@ -1,0 +1,37 @@
+# `std::chrono`
+
+Module file: `stdlib/std/chrono.mla`
+
+Checked integral durations with explicit runtime units, inspired by C++20
+`std::chrono::duration`. Mlang currently uses a `Duration { count, unit }`
+value instead of a compile-time period parameter. Supported units range from
+nanoseconds through weeks.
+
+```mla
+mod std::chrono;
+use std::chrono::Duration;
+use std::chrono::DurationUnit;
+use std::chrono::make_duration;
+use std::chrono::duration_cast;
+use std::chrono::duration_add;
+
+let elapsed = make_duration(90, DurationUnit::Second).unwrap();
+let milliseconds: Duration =
+    duration_cast(elapsed, DurationUnit::Millisecond).unwrap();
+let total: Duration = duration_add(
+    elapsed, make_duration(2, DurationUnit::Minute).unwrap(),
+    DurationUnit::Second).unwrap(); // 210 seconds
+```
+
+- `make_duration(count, unit)` constructs a value for one of the declared
+  `DurationUnit` alternatives.
+- `duration_cast(value, unit)` converts to the requested unit. Conversions to
+  coarser units truncate toward zero, like integral C++ `duration_cast`;
+  conversions that overflow `i64` return `None`.
+- `duration_add(left, right, unit)` and `duration_subtract(left, right, unit)`
+  convert both operands to the requested unit before checked arithmetic. A
+  conversion or arithmetic overflow returns `None`.
+
+`DurationUnit` contains `Nanosecond`, `Microsecond`, `Millisecond`, `Second`,
+`Minute`, `Hour`, `Day`, and `Week`. The module deliberately reports overflow
+through `option` rather than wrapping counts.

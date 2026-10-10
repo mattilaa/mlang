@@ -49,6 +49,7 @@
 - [[std::bits|Stdlib-Bits]]
 - [[std::bitset|Stdlib-Bitset]]
 - [[std::bytes|Stdlib-Bytes]]
+- [[std::chrono|Stdlib-Chrono]]
 - [[std::compiler|Stdlib-Compiler]]
 - [[std::date|Stdlib-Date]]
 - [[std::env|Stdlib-Env]]
