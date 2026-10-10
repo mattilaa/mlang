@@ -10,6 +10,15 @@ mod std::math::detail;
 use std::math::detail::*;
 mod std::ops;
 use std::ops::*;
+mod std::algorithm::numeric;
+use std::algorithm::numeric::midpoint_i8 as numeric_midpoint_i8;
+use std::algorithm::numeric::midpoint_i16 as numeric_midpoint_i16;
+use std::algorithm::numeric::midpoint_i32 as numeric_midpoint_i32;
+use std::algorithm::numeric::midpoint_i64 as numeric_midpoint_i64;
+use std::algorithm::numeric::midpoint_u8 as numeric_midpoint_u8;
+use std::algorithm::numeric::midpoint_u16 as numeric_midpoint_u16;
+use std::algorithm::numeric::midpoint_u32 as numeric_midpoint_u32;
+use std::algorithm::numeric::midpoint_u64 as numeric_midpoint_u64;
 /// \endcond
 
 /// @brief Add two values.
@@ -864,20 +873,41 @@ pub fn lerp(a: f64, b: f64, t: f64) -> f64 {
     return value < b ? value : b;
 }
 
-extern pub fn __mlang_std_math_midpoint_i32(a: i32, b: i32) -> i32;
-extern pub fn __mlang_std_math_midpoint_i64(a: i64, b: i64) -> i64;
+/// @brief Overflow-safe integer midpoint, rounded toward the first argument.
+/// C++20 `std::midpoint` equivalent.
+pub fn midpoint(a: i8, b: i8) -> i8 { return numeric_midpoint_i8(a, b); }
+
+/// @brief Overflow-safe integer midpoint, rounded toward the first argument.
+/// C++20 `std::midpoint` equivalent.
+pub fn midpoint(a: i16, b: i16) -> i16 { return numeric_midpoint_i16(a, b); }
 
 /// @brief Overflow-safe integer midpoint, rounded toward the first argument.
 /// C++20 `std::midpoint` equivalent.
 pub fn midpoint(a: i32, b: i32) -> i32 {
-    return __mlang_std_math_midpoint_i32(a, b);
+    return numeric_midpoint_i32(a, b);
 }
 
 /// @brief Overflow-safe integer midpoint, rounded toward the first argument.
 /// C++20 `std::midpoint` equivalent.
 pub fn midpoint(a: i64, b: i64) -> i64 {
-    return __mlang_std_math_midpoint_i64(a, b);
+    return numeric_midpoint_i64(a, b);
 }
+
+/// @brief Overflow-safe integer midpoint, rounded toward the first argument.
+/// C++20 `std::midpoint` equivalent.
+pub fn midpoint(a: u8, b: u8) -> u8 { return numeric_midpoint_u8(a, b); }
+
+/// @brief Overflow-safe integer midpoint, rounded toward the first argument.
+/// C++20 `std::midpoint` equivalent.
+pub fn midpoint(a: u16, b: u16) -> u16 { return numeric_midpoint_u16(a, b); }
+
+/// @brief Overflow-safe integer midpoint, rounded toward the first argument.
+/// C++20 `std::midpoint` equivalent.
+pub fn midpoint(a: u32, b: u32) -> u32 { return numeric_midpoint_u32(a, b); }
+
+/// @brief Overflow-safe integer midpoint, rounded toward the first argument.
+/// C++20 `std::midpoint` equivalent.
+pub fn midpoint(a: u64, b: u64) -> u64 { return numeric_midpoint_u64(a, b); }
 
 /// @brief Floating-point midpoint without overflowing for opposite signs.
 /// C++20 `std::midpoint` equivalent.
