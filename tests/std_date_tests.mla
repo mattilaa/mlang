@@ -33,6 +33,7 @@ use std::date::from_sys_days;
 use std::date::weekday_from_sys_days;
 use std::date::add_civil_days;
 use std::date::days_between;
+use std::date::add_civil_months;
 use std::strbuf::eq;
 use std::strbuf::len;
 use std::testing::verify;
@@ -161,6 +162,42 @@ fn test_civil_date_day_arithmetic() {
     };
     verify(add_civil_days(last_supported, 1).is_none());
     verify(add_civil_days(first_supported, -1).is_none());
+}
+
+#[test]
+fn test_civil_date_month_arithmetic() {
+    let middle_of_month: CivilDate =
+        CivilDate { year: 2024, month: 1, day: 15 };
+    let next_month: CivilDate = add_civil_months(middle_of_month, 1).unwrap();
+    verify(next_month.year == 2024 && next_month.month == 2 &&
+           next_month.day == 15);
+    let previous_year: CivilDate = add_civil_months(middle_of_month, -13).unwrap();
+    verify(previous_year.year == 2022 && previous_year.month == 12 &&
+           previous_year.day == 15);
+
+    let month_end: CivilDate = CivilDate { year: 2024, month: 1, day: 31 };
+    let invalid_february: CivilDate = add_civil_months(month_end, 1).unwrap();
+    verify(invalid_february.year == 2024 && invalid_february.month == 2 &&
+           invalid_february.day == 31);
+    verify(!is_valid_civil_date(invalid_february.year,
+                                invalid_february.month,
+                                invalid_february.day));
+    let leap_day: CivilDate = CivilDate { year: 2024, month: 2, day: 29 };
+    let next_year: CivilDate = add_civil_months(leap_day, 12).unwrap();
+    verify(next_year.year == 2025 && next_year.month == 2 &&
+           next_year.day == 29);
+    verify(!is_valid_civil_date(next_year.year, next_year.month, next_year.day));
+
+    let invalid: CivilDate = CivilDate { year: 2023, month: 2, day: 29 };
+    verify(add_civil_months(invalid, 1).is_none());
+    let max_date: CivilDate = CivilDate {
+        year: 2147483647, month: 12, day: 31
+    };
+    let min_date: CivilDate = CivilDate {
+        year: -2147483648, month: 1, day: 1
+    };
+    verify(add_civil_months(max_date, 1).is_none());
+    verify(add_civil_months(min_date, -1).is_none());
 }
 
 #[test]

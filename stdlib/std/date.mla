@@ -151,6 +151,34 @@ pub fn days_between(first: CivilDate, last: CivilDate) -> option<i64> {
     return Some<i64>(last_day.unwrap() - first_day.unwrap());
 }
 
+/// @brief Add calendar months while preserving the day field.
+/// Invalid input or a year outside `i32` returns `None`. As with C++20
+/// `year_month_day + months`, the returned date can be invalid when the target
+/// month is shorter; check it with `is_valid_civil_date` before conversion.
+pub fn add_civil_months(date: CivilDate, offset: i64) -> option<CivilDate> {
+    if !is_valid_civil_date(date.year, date.month, date.day) {
+        return None<CivilDate>();
+    }
+    let current_month: i64 = i64(date.year) * 12 + i64(date.month) - 1;
+    let minimum_month: i64 = i64(-2147483648) * 12;
+    let maximum_month: i64 = i64(2147483647) * 12 + 11;
+    if offset > 0 && current_month > maximum_month - offset {
+        return None<CivilDate>();
+    }
+    if offset < 0 && current_month < minimum_month - offset {
+        return None<CivilDate>();
+    }
+    let target_month: i64 = current_month + offset;
+    var target_year: i64 = target_month / 12;
+    if target_month < 0 && target_month % 12 != 0 {
+        target_year = target_year - 1;
+    }
+    let target_month_of_year: i64 = target_month - target_year * 12 + 1;
+    return Some<CivilDate>(CivilDate {
+        year: i32(target_year), month: i32(target_month_of_year), day: date.day
+    });
+}
+
 
 /// @brief Return current local date-time.
 pub fn now() -> DateTime {

@@ -46,6 +46,10 @@ Module file: `stdlib/std/date.mla`
   the resulting year is outside [`i32`](Quick-Guide#types).
 - `days_between(first, last) -> option<i64>` returns the signed day distance
   from the first valid date to the second.
+- `add_civil_months(date, offset) -> option<civil_date>` adds calendar months
+  while preserving the day field, like C++20 `year_month_day + months`. The
+  result may be invalid when the destination month is shorter; validate it
+  with `is_valid_civil_date` before converting it to epoch days.
 
 [`std::date`](Stdlib-Date) supports Unix UTC timestamps in whole seconds. Timezone support is
 provided as fixed UTC offsets (`utc_offset`), system-local conversions, and named
