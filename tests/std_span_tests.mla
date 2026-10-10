@@ -9,6 +9,8 @@ use std::span::size;
 use std::span::size_bytes;
 use std::span::empty;
 use std::span::get;
+use std::span::front;
+use std::span::back;
 use std::span::first;
 use std::span::last;
 use std::span::subspan;
@@ -133,4 +135,11 @@ fn test_span_size_bytes_and_safe_get() {
     let empty_values: Span<i32> = [];
     let absent: option<i32> = get(empty_values, 0);
     verify(absent.is_none());
+    let first_value: option<i32> = front(integers);
+    let last_value: option<i32> = back(integers);
+    verify(first_value.is_some() && first_value.unwrap() == 8);
+    verify(last_value.is_some() && last_value.unwrap() == 21);
+    let no_front: option<i32> = front(empty_values);
+    let no_back: option<i32> = back(empty_values);
+    verify(no_front.is_none() && no_back.is_none());
 }

@@ -66,6 +66,23 @@ pub fn get(data: &Span<T>, index: i64) -> option<T> {
     return Some<T>(data[index]);
 }
 
+/// @brief Return the first element, or None for an empty span.
+/// C++20 `std::span::front` accessor with checked Mlang semantics.
+generic<T>
+pub fn front(data: &Span<T>) -> option<T> {
+    if data.len() == 0 { return None<T>(); }
+    return Some<T>(data[0]);
+}
+
+/// @brief Return the last element, or None for an empty span.
+/// C++20 `std::span::back` accessor with checked Mlang semantics.
+generic<T>
+pub fn back(data: &Span<T>) -> option<T> {
+    let len: i64 = data.len();
+    if len == 0 { return None<T>(); }
+    return Some<T>(data[len - 1]);
+}
+
 /// @brief Return a copied prefix of at most `count` elements.
 /// Non-positive counts produce an empty list; oversized counts clamp to size.
 /// @ingroup span
