@@ -91,6 +91,8 @@ use std::algorithm::ranges::find;
 use std::algorithm::ranges::find_option;
 use std::algorithm::ranges::find_if_option;
 use std::algorithm::ranges::find_if_projected_option;
+use std::algorithm::ranges::find_if_not_option;
+use std::algorithm::ranges::find_if_not_projected_option;
 use std::algorithm::ranges::find_last_option;
 use std::algorithm::ranges::find_last_projected_option;
 use std::algorithm::ranges::find_last_by_option;
@@ -3992,9 +3994,16 @@ fn test_algorithm_ranges_optional_find_indices() {
     let projected: option<i64> =
         find_if_projected_option(values, key_is_two, tens);
     verify(projected.is_some() && projected.unwrap() == 2);
+    let first_even: option<i64> = find_if_not_option(values, odd);
+    verify(first_even.is_some() && first_even.unwrap() == 0);
+    let first_not_one: option<i64> =
+        find_if_not_projected_option(values, key_is_two, tens);
+    verify(first_not_one.is_some() && first_not_one.unwrap() == 0);
     let empty: list<i32> = [];
     verify(find_option(empty, 1).is_none());
     verify(find_if_option(empty, odd).is_none());
+    verify(find_if_not_option(empty, odd).is_none());
+    verify(find_if_not_projected_option(empty, key_is_two, tens).is_none());
 }
 
 #[test]

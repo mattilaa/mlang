@@ -47,7 +47,8 @@ fn example() {
 
 - `find`, `find_last`, `adjacent_find`, `count`, and `contains` search for a
   value; `adjacent_find` returns the first index of equal neighbors or `-1`.
-- `find_option`, `find_if_option`, and `find_if_projected_option` return
+- `find_option`, `find_if_option`, `find_if_projected_option`,
+  `find_if_not_option`, and `find_if_not_projected_option` return
   matching indices as `option<i64>`, providing an explicit `None` result
   instead of the `-1` sentinel used by the compatibility APIs.
 - `find_last_option`, `find_last_projected_option`, `find_last_by_option`,

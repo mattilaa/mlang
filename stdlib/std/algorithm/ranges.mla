@@ -1946,6 +1946,26 @@ pub fn find_if_not_projected(data: &list<T>, predicate: Predicate,
     return -1;
 }
 
+/// @brief Return the first predicate-rejected index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn find_if_not_option(data: &list<T>, predicate: Predicate)
+    -> option<i64> {
+    let index: i64 = find_if_not(data, predicate);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the first projected predicate-rejected index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn find_if_not_projected_option(data: &list<T>, predicate: Predicate,
+                                    projection: Projection) -> option<i64> {
+    let index: i64 = find_if_not_projected(data, predicate, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
 /// @brief Return the last index rejected by `predicate`, or -1.
 /// C++23 `std::ranges::find_last_if_not` semantics.
 /// @ingroup algorithm_ranges
