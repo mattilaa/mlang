@@ -44,11 +44,21 @@ fn test_mdspan_rank_extents_and_row_major_access() {
     let past_extent: list<i64> = [2, 0];
     let first_value: option<i32> = view.get(first);
     let last_value: option<i32> = view.get(last);
+    let first_offset: option<i64> = view.linear_index(first);
+    let last_offset: option<i64> = view.linear_index(last);
     let wrong_rank_value: option<i32> = view.get(wrong_rank);
     let before_start_value: option<i32> = view.get(before_start);
     let past_extent_value: option<i32> = view.get(past_extent);
+    let wrong_rank_offset: option<i64> = view.linear_index(wrong_rank);
+    let before_start_offset: option<i64> = view.linear_index(before_start);
+    let past_extent_offset: option<i64> = view.linear_index(past_extent);
     verify(first_value.is_some() && first_value.unwrap() == 10);
     verify(last_value.is_some() && last_value.unwrap() == 60);
+    verify(first_offset.is_some() && first_offset.unwrap() == 0);
+    verify(last_offset.is_some() && last_offset.unwrap() == 5);
+    verify(wrong_rank_offset.is_none());
+    verify(before_start_offset.is_none());
+    verify(past_extent_offset.is_none());
     verify(wrong_rank_value.is_none());
     verify(before_start_value.is_none());
     verify(past_extent_value.is_none());
@@ -107,9 +117,11 @@ fn test_mdspan_layout_left_column_major_access() {
     let a: option<i32> = left.get(first_column_second_row);
     let b: option<i32> = left.get(second_column_first_row);
     let c: option<i32> = left.get(last);
+    let mapped_offset: option<i64> = left.linear_index(first_column_second_row);
     verify(a.is_some() && a.unwrap() == 20);
     verify(b.is_some() && b.unwrap() == 30);
     verify(c.is_some() && c.unwrap() == 60);
+    verify(mapped_offset.is_some() && mapped_offset.unwrap() == 1);
     verify(data[0] == 10 && data[1] == 20 && data[2] == 30);
 
     let bad_shape: list<i64> = [2, 4];
@@ -139,9 +151,11 @@ fn test_mdspan_layout_stride_custom_mapping() {
     let a: option<i32> = view.get(a_indices);
     let b: option<i32> = view.get(b_indices);
     let c: option<i32> = view.get(c_indices);
+    let c_offset: option<i64> = view.linear_index(c_indices);
     verify(a.is_some() && a.unwrap() == 40);
     verify(b.is_some() && b.unwrap() == 30);
     verify(c.is_some() && c.unwrap() == 80);
+    verify(c_offset.is_some() && c_offset.unwrap() == 7);
 }
 
 #[test]
