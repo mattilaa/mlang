@@ -4,6 +4,8 @@ mod std::algorithm::ranges;
 use std::testing::verify;
 use std::testing::verify_eq_i32;
 use std::flat_map::FlatMap;
+use std::flat_map::keys as flat_map_keys;
+use std::flat_map::values as flat_map_values;
 use std::flat_map::erase_if;
 use std::flat_map::merge;
 use std::algorithm::ranges::zip;
@@ -40,6 +42,14 @@ fn test_flat_map_sorted_insert_lookup_and_replace() {
 
     verify(prices.value_at(0) == 10 && prices.value_at(1) == 31 &&
            prices.value_at(2) == 40);
+    let key_snapshot: list<i32> = flat_map_keys(prices);
+    let value_snapshot: list<i32> = flat_map_values(prices);
+    verify(key_snapshot.len() == 3 && key_snapshot[0] == 1 &&
+           key_snapshot[2] == 4);
+    verify(value_snapshot.len() == 3 && value_snapshot[0] == 10 &&
+           value_snapshot[1] == 31 && value_snapshot[2] == 40);
+    key_snapshot.push(9);
+    verify(key_snapshot.len() == 4 && prices.len() == 3);
 }
 
 #[test]
