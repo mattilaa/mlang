@@ -294,6 +294,11 @@ fn example() {
   paired-range overload takes two lists and stops at the shorter one. Both
   forms allow heterogeneous input, projected-term, and accumulator types and
   return `init` unchanged when no elements are consumed.
+- `inclusive_scan` and `exclusive_scan` materialize prefix results, with seeded
+  overloads supporting an accumulator/output type different from the input.
+  `transform_inclusive_scan` and `transform_exclusive_scan` additionally
+  project each input before folding. Empty inputs produce empty outputs, and
+  exclusive scans emit the seed before consuming each element.
 - `fill(data, value)` returns a new list of the same length with every item set
   to `value`; the source list is unchanged, matching the result of applying
   C++20 [`std::ranges::fill`](Stdlib-Module-API) to an equal-sized destination range.

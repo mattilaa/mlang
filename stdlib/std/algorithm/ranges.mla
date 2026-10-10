@@ -626,6 +626,104 @@ pub fn transform_reduce(left: &list<T>, right: &list<V>, init: U,
     return acc;
 }
 
+/// @brief Materialize an inclusive prefix scan using `operation`.
+/// The first input value seeds the output; empty input produces an empty list.
+/// @ingroup algorithm_ranges
+generic<T, Operation>
+pub fn inclusive_scan(data: &list<T>, operation: Operation) -> list<T> {
+    let n: i64 = data.len();
+    if n == 0 { return []; }
+    var out: list<T> = [];
+    var acc: T = data[0];
+    out.push(acc);
+    for i in 1..n {
+        acc = operation(acc, data[i]);
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Materialize seeded inclusive prefixes; output type may differ from T.
+/// Each output incorporates the corresponding input element before emission.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation>
+pub fn inclusive_scan(data: &list<T>, init: U, operation: Operation)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, data[i]);
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Emit the accumulator before incorporating each element.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation>
+pub fn exclusive_scan(data: &list<T>, init: U, operation: Operation)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        out.push(acc);
+        acc = operation(acc, data[i]);
+    }
+    return out;
+}
+
+/// @brief Project values and materialize inclusive accumulated prefixes.
+/// Without an initial value, the first projected element seeds the result.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation, Projection>
+pub fn transform_inclusive_scan(data: &list<T>, operation: Operation,
+                                project: Projection) -> list<U> {
+    let n: i64 = data.len();
+    if n == 0 { return []; }
+    var out: list<U> = [];
+    var acc: U = project(data[0]);
+    out.push(acc);
+    for i in 1..n {
+        acc = operation(acc, project(data[i]));
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Project values into seeded inclusive accumulated prefixes.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation, Projection>
+pub fn transform_inclusive_scan(data: &list<T>, init: U,
+                                operation: Operation, project: Projection)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, project(data[i]));
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Emit each accumulator before folding in the projected input value.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation, Projection>
+pub fn transform_exclusive_scan(data: &list<T>, init: U,
+                                operation: Operation, project: Projection)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        out.push(acc);
+        acc = operation(acc, project(data[i]));
+    }
+    return out;
+}
+
 /// @brief Fold a range from right to left with an explicit initial value.
 /// `operation(element, accumulator)` returns the next accumulator. C++23
 /// `std::ranges::fold_right` equivalent.

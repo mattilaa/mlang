@@ -42,6 +42,10 @@ use std::algorithm::ranges::fold_left_first as ranges_fold_left_first;
 use std::algorithm::ranges::fold_left_first_with_iter as ranges_fold_left_first_with_iter;
 use std::algorithm::ranges::fold_right_last as ranges_fold_right_last;
 use std::algorithm::ranges::transform_reduce as ranges_transform_reduce;
+use std::algorithm::ranges::inclusive_scan as ranges_inclusive_scan;
+use std::algorithm::ranges::exclusive_scan as ranges_exclusive_scan;
+use std::algorithm::ranges::transform_inclusive_scan as ranges_transform_inclusive_scan;
+use std::algorithm::ranges::transform_exclusive_scan as ranges_transform_exclusive_scan;
 use std::algorithm::numeric::transform_reduce;
 use std::algorithm::numeric::inclusive_scan;
 use std::algorithm::numeric::exclusive_scan;
@@ -3893,6 +3897,45 @@ fn test_algorithm_ranges_transform_reduce() {
     let empty: list<i32> = [];
     verify(ranges_transform_reduce(empty, 13, add, square) == 13);
     verify(ranges_transform_reduce(left, empty, 17, add, multiply) == 17);
+}
+
+#[test]
+fn test_algorithm_ranges_scans() {
+    let values: list<i32> = [1, 2, 3, 4];
+    let add = |acc: i64, value: i32| { return acc + value; };
+    let add_i64 = |acc: i64, value: i64| { return acc + value; };
+    let add_i32 = |acc: i32, value: i32| { return acc + value; };
+    let square = |value: i32| { return i64(value * value); };
+
+    let inclusive: list<i32> = ranges_inclusive_scan(values, add_i32);
+    verify(inclusive.len() == 4 && inclusive[0] == 1 &&
+           inclusive[2] == 6 && inclusive[3] == 10);
+    let seeded: list<i64> = ranges_inclusive_scan(values, 10, add);
+    verify(seeded[0] == 11 && seeded[3] == 20);
+    let exclusive: list<i64> = ranges_exclusive_scan(values, 10, add);
+    verify(exclusive[0] == 10 && exclusive[1] == 11 &&
+           exclusive[3] == 16);
+
+    let transformed: list<i64> =
+        ranges_transform_inclusive_scan(values, add_i64, square);
+    verify(transformed[0] == 1 && transformed[1] == 5 &&
+           transformed[3] == 30);
+    let seeded_transformed: list<i64> =
+        ranges_transform_inclusive_scan(values, 10, add_i64, square);
+    verify(seeded_transformed[0] == 11 && seeded_transformed[3] == 40);
+    let exclusive_transformed: list<i64> =
+        ranges_transform_exclusive_scan(values, 10, add_i64, square);
+    verify(exclusive_transformed[0] == 10 &&
+           exclusive_transformed[1] == 11 &&
+           exclusive_transformed[3] == 24);
+
+    let empty: list<i32> = [];
+    verify(ranges_inclusive_scan(empty, add_i32).len() == 0);
+    verify(ranges_inclusive_scan(empty, 7, add).len() == 0);
+    verify(ranges_exclusive_scan(empty, 7, add).len() == 0);
+    verify(ranges_transform_inclusive_scan(empty, add_i64, square).len() == 0);
+    verify(ranges_transform_inclusive_scan(empty, 7, add_i64, square).len() == 0);
+    verify(ranges_transform_exclusive_scan(empty, 7, add_i64, square).len() == 0);
 }
 
 #[test]
