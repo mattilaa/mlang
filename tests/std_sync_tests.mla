@@ -9,6 +9,7 @@ use std::strbuf::contains;
 use std::sync::Channel;
 use std::sync::Condvar;
 use std::sync::AtomicI64;
+use std::sync::AtomicBool;
 use std::sync::AtomicFlag;
 use std::sync::AtomicOrder;
 use std::sync::Barrier;
@@ -49,6 +50,15 @@ fn atomic_i64_wait_for_one_worker(raw_handle: i64) -> i32 {
     let current: result<i64, str8> = counter.load();
     if current.is_err() { return 2; }
     return current.unwrap() == 2 ? 0 : 3;
+}
+
+fn atomic_bool_wait_worker(raw_handle: i64) -> i32 {
+    let value: AtomicBool = AtomicBool { handle: raw_handle };
+    let waited: result<i32, str8> = value.wait(false);
+    if waited.is_err() { return 1; }
+    let current: result<bool, str8> = value.load();
+    if current.is_err() { return 2; }
+    return current.unwrap() ? 0 : 3;
 }
 
 fn latch_arrive_worker(raw_handle: i64) -> i32 {
@@ -212,6 +222,52 @@ fn test_atomic_i64_operations_impl() -> i32 {
 #[test]
 fn test_atomic_i64_operations() {
     verify(test_atomic_i64_operations_impl() == 0);
+}
+
+#[test]
+fn test_atomic_bool_operations_and_compare_exchange() {
+    let created: result<AtomicBool, str8> = AtomicBool::new(false);
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let value: AtomicBool = created.unwrap();
+    verify(value.is_valid());
+
+    let initial: result<bool, str8> = value.load_with_order(AtomicOrder::Acquire);
+    let stored: result<i32, str8> = value.store_with_order(true, AtomicOrder::Release);
+    let loaded: result<bool, str8> = value.load();
+    let success: result<tuple<bool, bool>, str8> =
+        value.compare_exchange(false, true);
+    let failure: result<tuple<bool, bool>, str8> =
+        value.compare_exchange(false, false);
+    let exchanged: result<bool, str8> = value.exchange(false);
+    let invalid_load: result<bool, str8> =
+        value.load_with_order(AtomicOrder::Release);
+    let final_value: result<bool, str8> = value.load();
+    let closed: i32 = value.close();
+
+    verify(initial.is_ok() && !initial.unwrap());
+    verify(stored.is_ok() && loaded.is_ok() && loaded.unwrap());
+    verify(success.is_ok() && success.unwrap().0 && !success.unwrap().1);
+    verify(failure.is_ok() && !failure.unwrap().0 && failure.unwrap().1);
+    verify(exchanged.is_ok() && exchanged.unwrap());
+    verify(invalid_load.is_err() && final_value.is_ok() && !final_value.unwrap());
+    verify(closed == 0);
+}
+
+#[test]
+fn test_atomic_bool_wait_notify() {
+    let created: result<AtomicBool, str8> = AtomicBool::new(false);
+    verify(created.is_ok());
+    if created.is_err() { return; }
+    let value: AtomicBool = created.unwrap();
+    let worker: std::thread::thread =
+        thread::spawn(atomic_bool_wait_worker, value.handle);
+    let stored: result<i32, str8> = value.store(true);
+    let notified: result<i32, str8> = value.notify_all();
+    let worker_status: i32 = join(worker);
+    let closed: i32 = value.close();
+    verify(stored.is_ok() && notified.is_ok() && worker_status == 0);
+    verify(closed == 0);
 }
 
 #[test]

@@ -7,7 +7,7 @@
 /// - Channel (string message queue)
 /// - LockFreeQueue (string SPSC lock-free queue)
 /// - SpscQueue<T> (preallocated, fixed-size event queue)
-/// - AtomicI64 and AtomicFlag
+/// - AtomicI64, AtomicBool, and AtomicFlag
 
 
 /// \cond INTERNAL_IMPORTS
@@ -69,6 +69,12 @@ pub enum AtomicOrder : i32 {
 /// Handle copies share the same atomic object. Call close exactly once after
 /// all threads have stopped using it.
 pub struct AtomicI64 {
+    var handle: i64;
+};
+
+/// @brief Shared C++20-style atomic boolean value.
+/// Handle copies share the value; call close exactly once after all users stop.
+pub struct AtomicBool {
     var handle: i64;
 };
 
@@ -252,6 +258,117 @@ impl AtomicI64 {
 
     /// @brief Free this shared atomic after all users have stopped.
     pub fn close(self: AtomicI64) -> i32 {
+        return __mlang_std_sync_atomic_i64_free(self.handle);
+    }
+}
+
+impl AtomicBool {
+    /// @brief Create an atomic boolean, or return the backend error.
+    pub fn new(initial: bool) -> result<AtomicBool, str8> {
+        let initial_value: i64 = initial ? 1 : 0;
+        let handle: i64 = __mlang_std_sync_atomic_i64_new(initial_value);
+        if handle == 0 { return Err<AtomicBool, str8>(last_error()); }
+        return Ok<AtomicBool, str8>(AtomicBool { handle: handle });
+    }
+
+    pub fn is_valid(self: AtomicBool) -> bool {
+        return self.handle != 0;
+    }
+
+    /// @brief Load with sequentially consistent ordering.
+    pub fn load(self: AtomicBool) -> result<bool, str8> {
+        return self.load_with_order(AtomicOrder::SeqCst);
+    }
+
+    pub fn load_with_order(self: AtomicBool, order: AtomicOrder)
+        -> result<bool, str8> {
+        var output: i64 = 0;
+        let rc: i32 = __mlang_std_sync_atomic_i64_load(
+            self.handle, atomic_order_value(order), &output);
+        if rc != 0 { return Err<bool, str8>(last_error()); }
+        return Ok<bool, str8>(output != 0);
+    }
+
+    /// @brief Store with sequentially consistent ordering.
+    pub fn store(self: AtomicBool, value: bool) -> result<i32, str8> {
+        return self.store_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn store_with_order(self: AtomicBool, value: bool, order: AtomicOrder)
+        -> result<i32, str8> {
+        let raw_value: i64 = value ? 1 : 0;
+        let rc: i32 = __mlang_std_sync_atomic_i64_store(
+            self.handle, raw_value, atomic_order_value(order));
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Replace the value and return its previous boolean state.
+    pub fn exchange(self: AtomicBool, value: bool) -> result<bool, str8> {
+        return self.exchange_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn exchange_with_order(self: AtomicBool, value: bool,
+                               order: AtomicOrder) -> result<bool, str8> {
+        var output: i64 = 0;
+        let raw_value: i64 = value ? 1 : 0;
+        let rc: i32 = __mlang_std_sync_atomic_i64_exchange(
+            self.handle, raw_value, atomic_order_value(order), &output);
+        if rc != 0 { return Err<bool, str8>(last_error()); }
+        return Ok<bool, str8>(output != 0);
+    }
+
+    /// @brief Strong compare/exchange with sequentially consistent ordering.
+    /// Returns `(exchanged, expected_after)`, where a failed operation updates
+    /// `expected_after` to the observed value as C++ compare-exchange does.
+    pub fn compare_exchange(self: AtomicBool, expected: bool, desired: bool)
+        -> result<tuple<bool, bool>, str8> {
+        return self.compare_exchange_with_order(
+            expected, desired, AtomicOrder::SeqCst);
+    }
+
+    pub fn compare_exchange_with_order(self: AtomicBool, expected: bool,
+                                      desired: bool, order: AtomicOrder)
+        -> result<tuple<bool, bool>, str8> {
+        var expected_value: i64 = expected ? 1 : 0;
+        let desired_value: i64 = desired ? 1 : 0;
+        let rc: i32 = __mlang_std_sync_atomic_i64_compare_exchange(
+            self.handle, &expected_value, desired_value,
+            atomic_order_value(order));
+        if rc < 0 {
+            return Err<tuple<bool, bool>, str8>(last_error());
+        }
+        return Ok<tuple<bool, bool>, str8>((rc == 1, expected_value != 0));
+    }
+
+    /// @brief Block while the value equals `old_value`, then recheck it.
+    pub fn wait(self: AtomicBool, old_value: bool) -> result<i32, str8> {
+        return self.wait_with_order(old_value, AtomicOrder::SeqCst);
+    }
+
+    pub fn wait_with_order(self: AtomicBool, old_value: bool,
+                           order: AtomicOrder) -> result<i32, str8> {
+        let raw_value: i64 = old_value ? 1 : 0;
+        let rc: i32 = __mlang_std_sync_atomic_i64_wait(
+            self.handle, raw_value, atomic_order_value(order));
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn notify_one(self: AtomicBool) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_sync_atomic_i64_notify_one(self.handle);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn notify_all(self: AtomicBool) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_sync_atomic_i64_notify_all(self.handle);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Free after all threads have stopped using this atomic.
+    pub fn close(self: AtomicBool) -> i32 {
         return __mlang_std_sync_atomic_i64_free(self.handle);
     }
 }

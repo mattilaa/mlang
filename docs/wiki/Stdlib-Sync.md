@@ -10,6 +10,7 @@ Module file: `stdlib/std/sync.mla`
 - `channel`
 - `lock_free_queue` (SPSC str8 queue)
 - `AtomicI64` (shared 64-bit atomic integer)
+- `AtomicBool` (shared atomic boolean value)
 - `AtomicFlag` (guaranteed lock-free boolean flag)
 - `Latch` (one-shot countdown latch)
 - `Barrier` (reusable phase barrier)
@@ -143,6 +144,43 @@ handle, not the underlying integer. Share the handle between threads, and call
 with all atomics, relaxed ordering makes the atomic value race-free but does
 not publish unrelated data; use acquire/release or sequential consistency for
 that synchronization.
+
+### AtomicBool
+
+`AtomicBool` provides a typed boolean counterpart to C++20 [`std::atomic<bool>`](Stdlib-Module-API).
+It supports `load`, `store`, `exchange`, `compare_exchange`, `wait`,
+`notify_one`, and `notify_all`, including explicit memory-order overloads for
+load/store/exchange/wait/CAS. Operations without an order use sequential
+consistency. The `store` methods return `result<i32, str8>` for invalid handles
+or memory orders. `compare_exchange` returns
+`result<tuple<bool, bool>, str8>` containing `(exchanged, expected_after)`;
+the second value is updated to the observed value on failure, matching the
+C++ compare-exchange rule without requiring an in/out boolean pointer.
+
+The implementation currently stores the boolean as an atomic integer, so
+lock-free behavior is not promised. A notification does not itself change the
+value; update it before notifying, and keep rechecking the application-level
+condition after `wait` returns. Close exactly once after every shared handle
+and waiter is finished.
+
+```rust
+mod std::sync;
+use std::sync::AtomicBool;
+use std::sync::AtomicOrder;
+
+fn main() -> i32 {
+    let created: result<AtomicBool, str8> = AtomicBool::new(false);
+    if created.is_err() { return 1; }
+    let ready: AtomicBool = created.unwrap();
+    let stored: result<i32, str8> =
+        ready.store_with_order(true, AtomicOrder::Release);
+    let observed: result<bool, str8> =
+        ready.load_with_order(AtomicOrder::Acquire);
+    ready.close();
+    if stored.is_err() || observed.is_err() { return 1; }
+    return observed.unwrap() ? 0 : 1;
+}
+```
 
 ### AtomicFlag
 
