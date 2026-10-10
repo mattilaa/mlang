@@ -124,6 +124,82 @@ pub fn duration_cast(value: Duration, unit: DurationUnit)
     return Some<Duration>(Duration { count: converted, unit: unit });
 }
 
+/// @brief Round a duration down to a requested unit.
+/// Unlike `duration_cast`, negative fractional values round away from zero.
+/// Returns `None` if conversion or the downward adjustment overflows.
+pub fn duration_floor(value: Duration, unit: DurationUnit)
+    -> option<Duration> {
+    let converted: option<Duration> = duration_cast(value, unit);
+    if converted.is_none() { return None<Duration>(); }
+    var result: Duration = converted.unwrap();
+    let source_scale: i64 = duration_unit_scale(value.unit);
+    let target_scale: i64 = duration_unit_scale(unit);
+    if source_scale >= target_scale { return Some<Duration>(result); }
+    let divisor: i64 = target_scale / source_scale;
+    if value.count % divisor < 0 {
+        if result.count == -9223372036854775807 - 1 {
+            return None<Duration>();
+        }
+        result.count = result.count - 1;
+    }
+    return Some<Duration>(result);
+}
+
+/// @brief Round a duration up to a requested unit.
+/// Unlike `duration_cast`, positive fractional values round away from zero.
+/// Returns `None` if conversion or the upward adjustment overflows.
+pub fn duration_ceil(value: Duration, unit: DurationUnit)
+    -> option<Duration> {
+    let converted: option<Duration> = duration_cast(value, unit);
+    if converted.is_none() { return None<Duration>(); }
+    var result: Duration = converted.unwrap();
+    let source_scale: i64 = duration_unit_scale(value.unit);
+    let target_scale: i64 = duration_unit_scale(unit);
+    if source_scale >= target_scale { return Some<Duration>(result); }
+    let divisor: i64 = target_scale / source_scale;
+    if value.count % divisor > 0 {
+        if result.count == 9223372036854775807 {
+            return None<Duration>();
+        }
+        result.count = result.count + 1;
+    }
+    return Some<Duration>(result);
+}
+
+/// @brief Round to the nearest requested unit, with ties going to even.
+/// This follows C++ chrono `round`; conversion or adjustment overflow returns
+/// `None`.
+pub fn duration_round(value: Duration, unit: DurationUnit)
+    -> option<Duration> {
+    let converted: option<Duration> = duration_cast(value, unit);
+    if converted.is_none() { return None<Duration>(); }
+    var result: Duration = converted.unwrap();
+    let source_scale: i64 = duration_unit_scale(value.unit);
+    let target_scale: i64 = duration_unit_scale(unit);
+    if source_scale >= target_scale { return Some<Duration>(result); }
+
+    let divisor: i64 = target_scale / source_scale;
+    var remainder: i64 = value.count % divisor;
+    if remainder < 0 { remainder = 0 - remainder; }
+    let twice_remainder: i64 = remainder * 2;
+    let round_away: bool = twice_remainder > divisor ||
+        (twice_remainder == divisor && result.count % 2 != 0);
+    if !round_away { return Some<Duration>(result); }
+
+    if value.count > 0 {
+        if result.count == 9223372036854775807 {
+            return None<Duration>();
+        }
+        result.count = result.count + 1;
+    } else if value.count < 0 {
+        if result.count == -9223372036854775807 - 1 {
+            return None<Duration>();
+        }
+        result.count = result.count - 1;
+    }
+    return Some<Duration>(result);
+}
+
 /// @brief Add durations after converting both to the requested unit.
 /// Conversion or result overflow returns `None`.
 pub fn duration_add(left: Duration, right: Duration, unit: DurationUnit)

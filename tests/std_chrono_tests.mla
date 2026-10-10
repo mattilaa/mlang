@@ -6,6 +6,9 @@ use std::chrono::DurationUnit;
 use std::chrono::DurationOrder;
 use std::chrono::make_duration;
 use std::chrono::duration_cast;
+use std::chrono::duration_floor;
+use std::chrono::duration_ceil;
+use std::chrono::duration_round;
 use std::chrono::duration_add;
 use std::chrono::duration_subtract;
 use std::chrono::duration_compare;
@@ -120,4 +123,44 @@ fn test_chrono_duration_comparison_across_units() {
         duration_compare(smallest_nanoseconds, smallest_weeks);
     verify(negative_extreme.is_some() &&
            negative_extreme.unwrap() == DurationOrder::Greater);
+}
+
+#[test]
+fn test_chrono_duration_rounding() {
+    let positive: Duration = make_duration(90001, DurationUnit::Millisecond)
+        .unwrap();
+    let negative: Duration = make_duration(-90001, DurationUnit::Millisecond)
+        .unwrap();
+    let floor_positive: option<Duration> =
+        duration_floor(positive, DurationUnit::Minute);
+    let ceil_positive: option<Duration> =
+        duration_ceil(positive, DurationUnit::Minute);
+    let floor_negative: option<Duration> =
+        duration_floor(negative, DurationUnit::Minute);
+    let ceil_negative: option<Duration> =
+        duration_ceil(negative, DurationUnit::Minute);
+    verify(floor_positive.unwrap().count == 1);
+    verify(ceil_positive.unwrap().count == 2);
+    verify(floor_negative.unwrap().count == -2);
+    verify(ceil_negative.unwrap().count == -1);
+
+    let one_half: Duration = make_duration(90, DurationUnit::Second).unwrap();
+    let two_half: Duration = make_duration(150, DurationUnit::Second).unwrap();
+    let negative_one_half: Duration =
+        make_duration(-90, DurationUnit::Second).unwrap();
+    let negative_two_half: Duration =
+        make_duration(-150, DurationUnit::Second).unwrap();
+    verify(duration_round(one_half, DurationUnit::Minute).unwrap().count == 2);
+    verify(duration_round(two_half, DurationUnit::Minute).unwrap().count == 2);
+    verify(duration_round(negative_one_half, DurationUnit::Minute)
+               .unwrap().count == -2);
+    verify(duration_round(negative_two_half, DurationUnit::Minute)
+               .unwrap().count == -2);
+
+    let largest_subsecond: Duration = make_duration(
+        9223372036854775807, DurationUnit::Nanosecond).unwrap();
+    verify(duration_ceil(largest_subsecond, DurationUnit::Week).is_some());
+    let min_value: Duration = make_duration(
+        -9223372036854775807 - 1, DurationUnit::Nanosecond).unwrap();
+    verify(duration_floor(min_value, DurationUnit::Week).is_some());
 }
