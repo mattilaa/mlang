@@ -25,6 +25,13 @@ pub struct CivilDate {
     var day: i32;
 };
 
+/// @brief ISO-8601 week date (week-year, week number, Monday-based weekday).
+pub struct IsoWeekDate {
+    var year: i32;
+    var week: i32;
+    var weekday: i32;
+};
+
 /// @brief Fixed UTC offset in seconds, for example `+02:00` is `7200`.
 pub struct UtcOffset {
     var seconds: i32;
@@ -44,6 +51,9 @@ alias date_time = DateTime;
 
 /// @brief Lowercase stdlib type alias for `CivilDate`.
 alias civil_date = CivilDate;
+
+/// @brief Lowercase stdlib type alias for `IsoWeekDate`.
+alias iso_week_date = IsoWeekDate;
 
 /// @brief Lowercase stdlib type alias for `UtcOffset`.
 alias utc_offset = UtcOffset;
@@ -121,6 +131,55 @@ pub fn weekday_from_sys_days(days: i64) -> i32 {
     var weekday: i64 = (days % 7 + 4) % 7;
     if weekday < 0 { weekday = weekday + 7; }
     return i32(weekday);
+}
+
+/// @brief Convert a civil date to an ISO week date.
+/// ISO weekdays use Monday=1 through Sunday=7. Invalid dates and edge dates
+/// whose ISO week-year does not fit in `i32` return `None`.
+pub fn to_iso_week_date(date: CivilDate) -> option<IsoWeekDate> {
+    let day_count: option<i64> = to_sys_days(date.year, date.month, date.day);
+    if day_count.is_none() { return None<IsoWeekDate>(); }
+    let days: i64 = day_count.unwrap();
+    let sunday_based: i32 = weekday_from_sys_days(days);
+    let weekday: i32 = sunday_based == 0 ? 7 : sunday_based;
+    let thursday: option<CivilDate> =
+        from_sys_days(days + i64(4 - weekday));
+    if thursday.is_none() { return None<IsoWeekDate>(); }
+    let iso_year: i32 = thursday.unwrap().year;
+    let jan_fourth: i64 = to_sys_days(iso_year, 1, 4).unwrap();
+    let jan_fourth_sunday_based: i32 = weekday_from_sys_days(jan_fourth);
+    let jan_fourth_weekday: i32 =
+        jan_fourth_sunday_based == 0 ? 7 : jan_fourth_sunday_based;
+    let first_monday: i64 = jan_fourth - i64(jan_fourth_weekday - 1);
+    let week: i32 = i32((days - first_monday) / 7 + 1);
+    return Some<IsoWeekDate>(IsoWeekDate {
+        year: iso_year, week: week, weekday: weekday
+    });
+}
+
+/// @brief Convert an ISO week date to a civil date.
+/// Returns `None` for invalid weekdays/weeks, including nonexistent week 53.
+pub fn from_iso_week_date(iso: IsoWeekDate) -> option<CivilDate> {
+    if iso.week < 1 || iso.week > 53 || iso.weekday < 1 || iso.weekday > 7 {
+        return None<CivilDate>();
+    }
+    let jan_fourth: i64 = to_sys_days(iso.year, 1, 4).unwrap();
+    let jan_fourth_sunday_based: i32 = weekday_from_sys_days(jan_fourth);
+    let jan_fourth_weekday: i32 =
+        jan_fourth_sunday_based == 0 ? 7 : jan_fourth_sunday_based;
+    let first_monday: i64 = jan_fourth - i64(jan_fourth_weekday - 1);
+    let target_day: i64 = first_monday + i64((iso.week - 1) * 7 +
+                                              iso.weekday - 1);
+    let civil: option<CivilDate> = from_sys_days(target_day);
+    if civil.is_none() { return None<CivilDate>(); }
+    let round_trip: option<IsoWeekDate> = to_iso_week_date(civil.unwrap());
+    if round_trip.is_none() { return None<CivilDate>(); }
+    let actual: IsoWeekDate = round_trip.unwrap();
+    if actual.year != iso.year || actual.week != iso.week ||
+       actual.weekday != iso.weekday {
+        return None<CivilDate>();
+    }
+    return civil;
 }
 
 /// @brief Find the `occurrence`th weekday in a month.

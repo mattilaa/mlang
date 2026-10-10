@@ -47,6 +47,10 @@ Module file: `stdlib/std/date.mla`
 - `last_weekday_of_month(year, month, weekday)` returns the final occurrence
   of a weekday (`year_month_weekday_last` style). Weekday numbers use
   Sunday=`0` through Saturday=`6`.
+- `to_iso_week_date(date)` and `from_iso_week_date(iso)` convert between civil
+  dates and ISO week dates (Monday=`1` through Sunday=`7`), including week-year
+  rollover at New Year. Invalid dates and nonexistent week 53 values return
+  `None`.
 - `add_civil_days(date: civil_date, offset: i64) -> option<civil_date>` adds
   days using calendar arithmetic and returns `None` when the date is invalid or
   the resulting year is outside [`i32`](Quick-Guide#types).

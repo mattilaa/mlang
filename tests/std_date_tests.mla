@@ -4,6 +4,7 @@ mod std::strbuf;
 
 use std::date::DateTime;
 use std::date::CivilDate;
+use std::date::IsoWeekDate;
 use std::date::TimeZone;
 use std::date::UtcOffset;
 use std::date::format_date;
@@ -36,6 +37,8 @@ use std::date::days_between;
 use std::date::add_civil_months;
 use std::date::nth_weekday_of_month;
 use std::date::last_weekday_of_month;
+use std::date::to_iso_week_date;
+use std::date::from_iso_week_date;
 use std::strbuf::eq;
 use std::strbuf::len;
 use std::testing::verify;
@@ -222,6 +225,43 @@ fn test_civil_weekday_of_month() {
     verify(nth_weekday_of_month(2024, 1, 7, 1).is_none());
     verify(nth_weekday_of_month(2024, 1, 1, 0).is_none());
     verify(last_weekday_of_month(2024, 1, -1).is_none());
+}
+
+#[test]
+fn test_iso_week_date_conversion() {
+    let new_year_eve: CivilDate = CivilDate {
+        year: 2020, month: 12, day: 31
+    };
+    let iso_new_year_eve: IsoWeekDate =
+        to_iso_week_date(new_year_eve).unwrap();
+    verify(iso_new_year_eve.year == 2020 && iso_new_year_eve.week == 53 &&
+           iso_new_year_eve.weekday == 4);
+
+    let friday: CivilDate = CivilDate { year: 2021, month: 1, day: 1 };
+    let iso_friday: IsoWeekDate = to_iso_week_date(friday).unwrap();
+    verify(iso_friday.year == 2020 && iso_friday.week == 53 &&
+           iso_friday.weekday == 5);
+    let round_trip: CivilDate = from_iso_week_date(iso_friday).unwrap();
+    verify(round_trip.year == 2021 && round_trip.month == 1 &&
+           round_trip.day == 1);
+
+    let first_monday: IsoWeekDate = IsoWeekDate {
+        year: 2021, week: 1, weekday: 1
+    };
+    let monday: CivilDate = from_iso_week_date(first_monday).unwrap();
+    verify(monday.year == 2021 && monday.month == 1 && monday.day == 4);
+    let invalid_week: IsoWeekDate = IsoWeekDate {
+        year: 2021, week: 53, weekday: 1
+    };
+    let invalid_weekday: IsoWeekDate = IsoWeekDate {
+        year: 2024, week: 1, weekday: 0
+    };
+    verify(from_iso_week_date(invalid_week).is_none());
+    verify(from_iso_week_date(invalid_weekday).is_none());
+    let invalid_civil: CivilDate = CivilDate {
+        year: 2023, month: 2, day: 29
+    };
+    verify(to_iso_week_date(invalid_civil).is_none());
 }
 
 #[test]
