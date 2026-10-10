@@ -41,6 +41,7 @@ use std::algorithm::ranges::fold_right_with_iter as ranges_fold_right_with_iter;
 use std::algorithm::ranges::fold_left_first as ranges_fold_left_first;
 use std::algorithm::ranges::fold_left_first_with_iter as ranges_fold_left_first_with_iter;
 use std::algorithm::ranges::fold_right_last as ranges_fold_right_last;
+use std::algorithm::ranges::transform_reduce as ranges_transform_reduce;
 use std::algorithm::numeric::transform_reduce;
 use std::algorithm::numeric::inclusive_scan;
 use std::algorithm::numeric::exclusive_scan;
@@ -3875,6 +3876,23 @@ fn test_algorithm_ranges_folds() {
     verify(singleton_result.is_some());
     let singleton_fold: tuple<i64, i32> = singleton_result.unwrap();
     verify(singleton_fold.0 == 1 && singleton_fold.1 == 7);
+}
+
+#[test]
+fn test_algorithm_ranges_transform_reduce() {
+    let values: list<i32> = [1, 2, 3];
+    let add = |acc: i64, value: i64| { return acc + value; };
+    let square = |value: i32| { return i64(value * value); };
+    verify(ranges_transform_reduce(values, 5, add, square) == 19);
+
+    let left: list<i32> = [1, 2, 3];
+    let right: list<i16> = [4, 5];
+    let multiply = |a: i32, b: i16| { return i64(a * i32(b)); };
+    verify(ranges_transform_reduce(left, right, 7, add, multiply) == 21);
+
+    let empty: list<i32> = [];
+    verify(ranges_transform_reduce(empty, 13, add, square) == 13);
+    verify(ranges_transform_reduce(left, empty, 17, add, multiply) == 17);
 }
 
 #[test]

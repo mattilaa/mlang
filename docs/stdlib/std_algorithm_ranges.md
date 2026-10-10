@@ -287,6 +287,11 @@ fn example() {
   `Some((consumed, accumulator))` for nonempty input and `None` for empty
   input. The output accumulator can differ from the input element type, which
   is useful for widening reductions.
+- `transform_reduce(data, init, reduce, project)` applies a projection to each
+  element and folds each projected term into an accumulator in one pass. Its
+  paired-range overload takes two lists and stops at the shorter one. Both
+  forms allow heterogeneous input, projected-term, and accumulator types and
+  return `init` unchanged when no elements are consumed.
 - `fill(data, value)` returns a new list of the same length with every item set
   to `value`; the source list is unchanged, matching the result of applying
   C++20 `std::ranges::fill` to an equal-sized destination range.

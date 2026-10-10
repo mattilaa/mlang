@@ -591,6 +591,41 @@ pub fn fold_left(data: &list<T>, init: U, operation: Operation) -> U {
     return acc;
 }
 
+/// @brief Project each range element before folding it into the accumulator.
+/// The accumulator type may differ from the input and projected element types.
+/// This eager ranges counterpart to `std::transform_reduce` visits each value
+/// once in input order.
+/// @ingroup algorithm_ranges
+generic<T, U, Reduce, Project>
+pub fn transform_reduce(data: &list<T>, init: U, reduce: Reduce,
+                        project: Project) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = reduce(acc, project(data[i]));
+    }
+    return acc;
+}
+
+/// @brief Project paired elements from two ranges and fold each projected term.
+/// Stops at the shorter input; input and accumulator types may differ.
+/// @ingroup algorithm_ranges
+///
+/// `project(left, right)` creates a term and `reduce(accumulator, term)` folds
+/// it into the result.
+generic<T, V, U, Reduce, Project>
+pub fn transform_reduce(left: &list<T>, right: &list<V>, init: U,
+                        reduce: Reduce, project: Project) -> U {
+    var acc: U = init;
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        acc = reduce(acc, project(left[i], right[i]));
+    }
+    return acc;
+}
+
 /// @brief Fold a range from right to left with an explicit initial value.
 /// `operation(element, accumulator)` returns the next accumulator. C++23
 /// `std::ranges::fold_right` equivalent.
