@@ -1,0 +1,213 @@
+/// \file flat_multimap.mla
+/// \brief Sorted list-backed associative multimap inspired by C++23.
+///
+/// Key/value pairs use contiguous storage sorted by key. Equivalent keys are
+/// retained, with insertion order preserved within each equivalent-key group.
+
+/// @brief Sorted associative map that permits equivalent keys.
+pub struct FlatMultiMap<K, V> {
+    var entries: list<tuple<K, V>>;
+};
+
+/// @brief Lowercase stdlib spelling for `FlatMultiMap<K, V>`.
+alias flat_multimap<K, V> = FlatMultiMap<K, V>;
+
+impl<K, V> FlatMultiMap {
+    /// @brief Construct an empty flat multimap.
+    pub fn new() -> FlatMultiMap<K, V> {
+        return FlatMultiMap<K, V> { entries: [] };
+    }
+
+    /// @brief Number of key/value pairs, including duplicate keys.
+    pub fn len(self: &FlatMultiMap<K, V>) -> i64 {
+        return self.entries.len();
+    }
+
+    /// @brief Whether the container has no entries.
+    pub fn is_empty(self: &FlatMultiMap<K, V>) -> bool {
+        return self.entries.len() == 0;
+    }
+
+    /// @brief First entry whose key is not less than `key`.
+    pub fn lower_bound(self: &FlatMultiMap<K, V>, key: K) -> i64 {
+        var first: i64 = 0;
+        var count: i64 = self.entries.len();
+        while count > 0 {
+            let step: i64 = count / 2;
+            let middle: i64 = first + step;
+            let entry: tuple<K, V> = self.entries[middle];
+            if entry.0 < key {
+                first = middle + 1;
+                count = count - step - 1;
+            } else {
+                count = step;
+            }
+        }
+        return first;
+    }
+
+    /// @brief First entry whose key is greater than `key`.
+    pub fn upper_bound(self: &FlatMultiMap<K, V>, key: K) -> i64 {
+        var first: i64 = 0;
+        var count: i64 = self.entries.len();
+        while count > 0 {
+            let step: i64 = count / 2;
+            let middle: i64 = first + step;
+            let entry: tuple<K, V> = self.entries[middle];
+            if !(key < entry.0) {
+                first = middle + 1;
+                count = count - step - 1;
+            } else {
+                count = step;
+            }
+        }
+        return first;
+    }
+
+    /// @brief Half-open index range of entries equivalent to `key`.
+    pub fn equal_range(self: &FlatMultiMap<K, V>, key: K)
+        -> tuple<i64, i64> {
+        return (self.lower_bound(key), self.upper_bound(key));
+    }
+
+    /// @brief Number of entries with a key equivalent to `key`.
+    pub fn count(self: &FlatMultiMap<K, V>, key: K) -> i64 {
+        return self.upper_bound(key) - self.lower_bound(key);
+    }
+
+    /// @brief Whether any entry has a key equivalent to `key`.
+    pub fn contains(self: &FlatMultiMap<K, V>, key: K) -> bool {
+        return self.count(key) != 0;
+    }
+
+    /// @brief Return the value at the first equivalent key, or None.
+    pub fn get(self: &FlatMultiMap<K, V>, key: K) -> option<V> {
+        let index: i64 = self.lower_bound(key);
+        if index >= self.entries.len() { return None<V>(); }
+        let entry: tuple<K, V> = self.entries[index];
+        if !(entry.0 < key) && !(key < entry.0) {
+            return Some<V>(entry.1);
+        }
+        return None<V>();
+    }
+
+    /// @brief Insert a key/value pair after existing equivalent keys.
+    pub fn insert(self: &mut FlatMultiMap<K, V>, key: K, value: V) -> void {
+        let index: i64 = self.upper_bound(key);
+        let count: i64 = self.entries.len();
+        var updated: list<tuple<K, V>> = [];
+        for i in 0..index { updated.push(self.entries[i]); }
+        updated.push((key, value));
+        for i in index..count { updated.push(self.entries[i]); }
+        self.entries = updated;
+    }
+
+    /// @brief Insert each pair, preserving duplicate keys and input order.
+    /// Returns the number of input pairs inserted.
+    pub fn insert_range(self: &mut FlatMultiMap<K, V>,
+                        range: &list<tuple<K, V>>) -> i64 {
+        let count: i64 = range.len();
+        for i in 0..count {
+            let entry: tuple<K, V> = range[i];
+            self.insert(entry.0, entry.1);
+        }
+        return count;
+    }
+
+    /// @brief Replace both sequences when lengths match and keys are sorted.
+    /// Nondecreasing keys are valid; invalid input leaves entries unchanged.
+    pub fn replace(self: &mut FlatMultiMap<K, V>, keys: &list<K>,
+                   values: &list<V>) -> bool {
+        let count: i64 = keys.len();
+        if values.len() != count { return false; }
+        for i in 1..count {
+            if keys[i] < keys[i - 1] { return false; }
+        }
+        var updated: list<tuple<K, V>> = [];
+        for i in 0..count { updated.push((keys[i], values[i])); }
+        self.entries = updated;
+        return true;
+    }
+
+    /// @brief Erase every entry with equivalent key; return count removed.
+    pub fn remove(self: &mut FlatMultiMap<K, V>, key: K) -> i64 {
+        let first: i64 = self.lower_bound(key);
+        let last: i64 = self.upper_bound(key);
+        let removed: i64 = last - first;
+        if removed == 0 { return 0; }
+        var updated: list<tuple<K, V>> = [];
+        let count: i64 = self.entries.len();
+        for i in 0..first { updated.push(self.entries[i]); }
+        for i in last..count { updated.push(self.entries[i]); }
+        self.entries = updated;
+        return removed;
+    }
+
+    /// @brief Remove every entry.
+    pub fn clear(self: &mut FlatMultiMap<K, V>) -> void {
+        self.entries = [];
+    }
+
+    /// @brief Return the key at sorted position `index`.
+    pub fn key_at(self: &FlatMultiMap<K, V>, index: i64) -> K {
+        let entry: tuple<K, V> = self.entries[index];
+        return entry.0;
+    }
+
+    /// @brief Return the value at sorted position `index`.
+    pub fn value_at(self: &FlatMultiMap<K, V>, index: i64) -> V {
+        let entry: tuple<K, V> = self.entries[index];
+        return entry.1;
+    }
+}
+
+/// @brief Erase entries accepted by a key/value predicate.
+generic<K, V, Predicate>
+pub fn erase_if(container: &mut FlatMultiMap<K, V>, predicate: Predicate)
+    -> i64 {
+    var retained: list<tuple<K, V>> = [];
+    var removed: i64 = 0;
+    for i in 0..container.entries.len() {
+        let entry: tuple<K, V> = container.entries[i];
+        if predicate(entry.0, entry.1) { removed = removed + 1; }
+        else { retained.push(entry); }
+    }
+    container.entries = retained;
+    return removed;
+}
+
+/// @brief Transfer all source pairs into destination in key order.
+/// Unlike unique-key `flat_map`, equivalent pairs all transfer; source is
+/// emptied and the returned count is its original size.
+generic<K, V>
+pub fn merge(destination: &mut FlatMultiMap<K, V>,
+             source: &mut FlatMultiMap<K, V>) -> i64 {
+    var merged: list<tuple<K, V>> = [];
+    let destination_len: i64 = destination.entries.len();
+    let source_len: i64 = source.entries.len();
+    var destination_index: i64 = 0;
+    var source_index: i64 = 0;
+    while destination_index < destination_len && source_index < source_len {
+        let destination_entry: tuple<K, V> =
+            destination.entries[destination_index];
+        let source_entry: tuple<K, V> = source.entries[source_index];
+        if source_entry.0 < destination_entry.0 {
+            merged.push(source_entry);
+            source_index = source_index + 1;
+        } else {
+            merged.push(destination_entry);
+            destination_index = destination_index + 1;
+        }
+    }
+    while destination_index < destination_len {
+        merged.push(destination.entries[destination_index]);
+        destination_index = destination_index + 1;
+    }
+    while source_index < source_len {
+        merged.push(source.entries[source_index]);
+        source_index = source_index + 1;
+    }
+    destination.entries = merged;
+    source.entries = [];
+    return source_len;
+}

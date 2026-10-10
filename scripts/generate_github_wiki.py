@@ -85,6 +85,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::flat_map", "std_flat_map.md"),
     ("std::flat_set", "std_flat_set.md"),
     ("std::flat_multiset", "std_flat_multiset.md"),
+    ("std::flat_multimap", "std_flat_multimap.md"),
     ("std::stop_token", "std_stop_token.md"),
     ("std::strbuf", "std_strbuf.md"),
     ("std::sync", "std_sync.md"),
