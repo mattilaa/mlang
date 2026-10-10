@@ -89,6 +89,12 @@ use std::algorithm::ranges::find;
 use std::algorithm::ranges::find_option;
 use std::algorithm::ranges::find_if_option;
 use std::algorithm::ranges::find_if_projected_option;
+use std::algorithm::ranges::find_last_option;
+use std::algorithm::ranges::find_last_projected_option;
+use std::algorithm::ranges::find_last_by_option;
+use std::algorithm::ranges::find_last_by_projected_option;
+use std::algorithm::ranges::find_last_if_option;
+use std::algorithm::ranges::find_last_if_projected_option;
 use std::algorithm::ranges::find_by;
 use std::algorithm::ranges::find_by_projected;
 use std::algorithm::ranges::find_projected;
@@ -3807,6 +3813,38 @@ fn test_algorithm_ranges_optional_find_indices() {
     let empty: list<i32> = [];
     verify(find_option(empty, 1).is_none());
     verify(find_if_option(empty, odd).is_none());
+}
+
+#[test]
+fn test_algorithm_ranges_optional_last_find_indices() {
+    let values: list<i32> = [11, 22, 33, 44, 35];
+    let found: option<i64> = find_last_option(values, 33);
+    verify(found.is_some() && found.unwrap() == 2);
+    verify(find_last_option(values, 99).is_none());
+
+    let tens = |value: i32| { return value / 10; };
+    let projected: option<i64> = find_last_projected_option(values, 3, tens);
+    verify(projected.is_some() && projected.unwrap() == 4);
+
+    let same = |left: i32, right: i32| { return left == right; };
+    let by_key: option<i64> = find_last_by_option(values, 35, same);
+    verify(by_key.is_some() && by_key.unwrap() == 4);
+    let equivalent_key = |left: i32, right: i32| { return left == right; };
+    let by_projected_key: option<i64> =
+        find_last_by_projected_option(values, 3, equivalent_key, tens);
+    verify(by_projected_key.is_some() && by_projected_key.unwrap() == 4);
+
+    let is_even = |value: i32| { return value % 2 == 0; };
+    let last_even: option<i64> = find_last_if_option(values, is_even);
+    verify(last_even.is_some() && last_even.unwrap() == 3);
+    let key_is_three = |key: i32| { return key == 3; };
+    let last_projected: option<i64> =
+        find_last_if_projected_option(values, key_is_three, tens);
+    verify(last_projected.is_some() && last_projected.unwrap() == 4);
+
+    let empty: list<i32> = [];
+    verify(find_last_option(empty, 1).is_none());
+    verify(find_last_if_option(empty, is_even).is_none());
 }
 
 #[test]

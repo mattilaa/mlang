@@ -50,6 +50,9 @@ fn example() {
 - `find_option`, `find_if_option`, and `find_if_projected_option` return
   matching indices as `option<i64>`, providing an explicit `None` result
   instead of the `-1` sentinel used by the compatibility APIs.
+- `find_last_option`, `find_last_projected_option`, `find_last_by_option`,
+  `find_last_by_projected_option`, and the two `find_last_if_*_option` forms
+  provide the same explicit absence state for last-match searches.
 - `find_last_if` and `find_last_if_not` return the last index accepted or
   rejected by a predicate, respectively, or `-1` when no element matches.
 - `find_last_by(data, key, equivalent)` searches backward and returns the last

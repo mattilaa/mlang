@@ -135,6 +135,47 @@ pub fn find_last_by_projected(data: &list<T>, value: U,
     return -1;
 }
 
+/// @brief Return the last matching index as an option instead of a sentinel.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn find_last_option(data: &list<T>, value: U) -> option<i64> {
+    let index: i64 = find_last(data, value);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last projected matching index as an option.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn find_last_projected_option(data: &list<T>, value: U,
+                                  projection: Projection) -> option<i64> {
+    let index: i64 = find_last_projected(data, value, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last equivalent index as an option.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn find_last_by_option(data: &list<T>, value: U,
+                           equivalent: Equivalent) -> option<i64> {
+    let index: i64 = find_last_by(data, value, equivalent);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last projected equivalent index as an option.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, Projection>
+pub fn find_last_by_projected_option(data: &list<T>, value: U,
+                                     equivalent: Equivalent,
+                                     projection: Projection) -> option<i64> {
+    let index: i64 = find_last_by_projected(data, value, equivalent,
+                                            projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
 /// @brief Return the first index whose value equals its immediate successor.
 /// Returns -1 when the range has fewer than two elements or no adjacent match.
 /// C++20 ranges-style `adjacent_find`.
@@ -491,6 +532,26 @@ pub fn find_last_if_projected(data: &list<T>, predicate: Predicate,
         if predicate(projection(data[i])) { return i; }
     }
     return -1;
+}
+
+/// @brief Return the last predicate-matching index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn find_last_if_option(data: &list<T>, predicate: Predicate)
+    -> option<i64> {
+    let index: i64 = find_last_if(data, predicate);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
+}
+
+/// @brief Return the last projected predicate-matching index as an option.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn find_last_if_projected_option(data: &list<T>, predicate: Predicate,
+                                     projection: Projection) -> option<i64> {
+    let index: i64 = find_last_if_projected(data, predicate, projection);
+    if index < 0 { return None<i64>(); }
+    return Some<i64>(index);
 }
 
 /// @brief Count elements accepted by `predicate` (C++20 `ranges::count_if`).
