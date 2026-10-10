@@ -1179,6 +1179,42 @@ pub fn copy_if_projected(data: &list<T>, predicate: Predicate,
     return selected;
 }
 
+/// @brief Filter and transform in one pass, preserving the selected order.
+/// Eager equivalent of composing C++20 `views::filter` and
+/// `views::transform`, without materializing an intermediate list.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Operation>
+pub fn filter_transform(data: &list<T>, predicate: Predicate,
+                        operation: Operation) -> list<Output> {
+    var transformed: list<Output> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            transformed.push(operation(data[i]));
+        }
+    }
+    return transformed;
+}
+
+/// @brief Filter by projected keys and transform selected original elements.
+/// Predicate and operation each run at most once per element; the projection
+/// runs exactly once per element.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Operation, Projection>
+pub fn filter_transform_projected(data: &list<T>, predicate: Predicate,
+                                  operation: Operation,
+                                  projection: Projection) -> list<Output> {
+    var transformed: list<Output> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let key = projection(data[i]);
+        if predicate(key) {
+            transformed.push(operation(data[i]));
+        }
+    }
+    return transformed;
+}
+
 /// @brief Transform every element into a new list using `operation`.
 /// The output element type is inferred from the operation's return type,
 /// so input and output ranges may have different element types.

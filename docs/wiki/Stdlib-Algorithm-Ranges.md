@@ -405,6 +405,10 @@ fn example() {
 
 ### Transforms and sequence creation
 
+- `filter_transform(data, predicate, operation)` eagerly composes filter and
+  transform in one pass, without allocating an intermediate selected list.
+  The output type may differ from the input type. The projected form tests a
+  projected key while transforming the original selected element.
 - `remove`, `take`, `drop`, `unique`, `unique_stable`, and `clamp` return a
   transformed copy. `unique` removes only adjacent duplicates;
   `unique_stable` keeps the first occurrence of each value.
