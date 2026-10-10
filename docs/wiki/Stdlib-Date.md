@@ -41,6 +41,12 @@ Module file: `stdlib/std/date.mla`
   returns `None` when the year is outside the representable [`i32`](Quick-Guide#types) range.
 - `weekday_from_sys_days(days: i64) -> i32` returns Sunday as `0` through
   Saturday as `6`.
+- `nth_weekday_of_month(year, month, weekday, occurrence)` returns an optional
+  date for the first through fifth occurrence of a weekday
+  (`year_month_weekday` style); nonexistent fifth occurrences return `None`.
+- `last_weekday_of_month(year, month, weekday)` returns the final occurrence
+  of a weekday (`year_month_weekday_last` style). Weekday numbers use
+  Sunday=`0` through Saturday=`6`.
 - `add_civil_days(date: civil_date, offset: i64) -> option<civil_date>` adds
   days using calendar arithmetic and returns `None` when the date is invalid or
   the resulting year is outside [`i32`](Quick-Guide#types).

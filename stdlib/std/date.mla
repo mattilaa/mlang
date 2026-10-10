@@ -123,6 +123,41 @@ pub fn weekday_from_sys_days(days: i64) -> i32 {
     return i32(weekday);
 }
 
+/// @brief Find the `occurrence`th weekday in a month.
+/// `weekday` uses Sunday=0 through Saturday=6; occurrence is 1 through 5.
+/// Returns `None` when the occurrence does not exist.
+/// C++20 `year_month_weekday` counterpart.
+pub fn nth_weekday_of_month(year: i32, month: i32, weekday: i32,
+                            occurrence: i32) -> option<CivilDate> {
+    if month < 1 || month > 12 || weekday < 0 || weekday > 6 ||
+       occurrence < 1 || occurrence > 5 {
+        return None<CivilDate>();
+    }
+    let first_day: i64 = to_sys_days(year, month, 1).unwrap();
+    let first_weekday: i32 = weekday_from_sys_days(first_day);
+    let offset: i32 = (weekday - first_weekday + 7) % 7;
+    let day: i32 = 1 + offset + 7 * (occurrence - 1);
+    if day > days_in_month(year, month) { return None<CivilDate>(); }
+    return Some<CivilDate>(CivilDate { year: year, month: month, day: day });
+}
+
+/// @brief Find the last occurrence of `weekday` in a month.
+/// `weekday` uses Sunday=0 through Saturday=6.
+/// C++20 `year_month_weekday_last` counterpart.
+pub fn last_weekday_of_month(year: i32, month: i32,
+                             weekday: i32) -> option<CivilDate> {
+    if month < 1 || month > 12 || weekday < 0 || weekday > 6 {
+        return None<CivilDate>();
+    }
+    let last_day: i32 = days_in_month(year, month);
+    let day_count: i64 = to_sys_days(year, month, last_day).unwrap();
+    let last_weekday: i32 = weekday_from_sys_days(day_count);
+    let distance: i32 = (last_weekday - weekday + 7) % 7;
+    return Some<CivilDate>(CivilDate {
+        year: year, month: month, day: last_day - distance
+    });
+}
+
 /// @brief Add a signed day offset to a civil date.
 /// Returns `None` for an invalid date or when the resulting year does not fit
 /// in `i32`. This is civil-date arithmetic equivalent to adding `days` to

@@ -34,6 +34,8 @@ use std::date::weekday_from_sys_days;
 use std::date::add_civil_days;
 use std::date::days_between;
 use std::date::add_civil_months;
+use std::date::nth_weekday_of_month;
+use std::date::last_weekday_of_month;
 use std::strbuf::eq;
 use std::strbuf::len;
 use std::testing::verify;
@@ -198,6 +200,28 @@ fn test_civil_date_month_arithmetic() {
     };
     verify(add_civil_months(max_date, 1).is_none());
     verify(add_civil_months(min_date, -1).is_none());
+}
+
+#[test]
+fn test_civil_weekday_of_month() {
+    let second_tuesday: CivilDate = nth_weekday_of_month(2024, 7, 2, 2).unwrap();
+    verify(second_tuesday.year == 2024 && second_tuesday.month == 7 &&
+           second_tuesday.day == 9);
+    let last_friday: CivilDate = last_weekday_of_month(2024, 7, 5).unwrap();
+    verify(last_friday.day == 26);
+
+    let fifth_thursday: CivilDate =
+        nth_weekday_of_month(2024, 2, 4, 5).unwrap();
+    verify(fifth_thursday.day == 29);
+    verify(nth_weekday_of_month(2021, 2, 1, 5).is_none());
+    let leap_february_last_sunday: CivilDate =
+        last_weekday_of_month(2024, 2, 0).unwrap();
+    verify(leap_february_last_sunday.day == 25);
+
+    verify(nth_weekday_of_month(2024, 13, 1, 1).is_none());
+    verify(nth_weekday_of_month(2024, 1, 7, 1).is_none());
+    verify(nth_weekday_of_month(2024, 1, 1, 0).is_none());
+    verify(last_weekday_of_month(2024, 1, -1).is_none());
 }
 
 #[test]
