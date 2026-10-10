@@ -30,6 +30,37 @@ pub fn midpoint_u64(first: u64, second: u64) -> u64 {
     return middle;
 }
 
+/// @brief Return the greatest common divisor of two integers.
+/// Inputs must have magnitudes representable by `T`; the result is nonnegative.
+/// C++ `std::gcd` equivalent.
+generic<T>
+pub fn gcd(a: T, b: T) -> T {
+    var left: T = a;
+    var right: T = b;
+    if left < 0 { left = 0 - left; }
+    if right < 0 { right = 0 - right; }
+    while right != 0 {
+        let remainder: T = left % right;
+        left = right;
+        right = remainder;
+    }
+    return left;
+}
+
+/// @brief Return the least common multiple of two integers.
+/// Returns zero if either input is zero. The result must fit in `T`.
+/// C++ `std::lcm` equivalent.
+generic<T>
+pub fn lcm(a: T, b: T) -> T {
+    if a == 0 || b == 0 { return 0; }
+    let divisor: T = gcd(a, b);
+    var left: T = a / divisor;
+    var right: T = b;
+    if left < 0 { left = 0 - left; }
+    if right < 0 { right = 0 - right; }
+    return left * right;
+}
+
 extern pub fn __mlang_std_midpoint_f32(first: f32, second: f32) -> f32;
 extern pub fn __mlang_std_midpoint_f64(first: f64, second: f64) -> f64;
 

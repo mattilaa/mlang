@@ -17,6 +17,8 @@ use dsp::fft::forward;
 use dsp::fft::inverse;
 use dsp::fft::is_power_of_two;
 use std::algorithm::numeric::accumulate_i64;
+use std::algorithm::numeric::gcd;
+use std::algorithm::numeric::lcm;
 use std::algorithm::numeric::midpoint_i64;
 use std::algorithm::numeric::midpoint_u64;
 use std::algorithm::numeric::midpoint_f32;
@@ -4039,6 +4041,22 @@ fn test_algorithm_numeric_accumulate_and_inner_product() {
     verify(accumulate_i64(a, 0) == 10);
     verify(accumulate_i64(a, 5) == 15);
     verify(inner_product_i64(a, b, 7) == (7 + 10 + 40 + 90));
+}
+
+#[test]
+fn test_algorithm_numeric_gcd_lcm() {
+    verify(gcd(54, 24) == 6);
+    verify(gcd(-54, 24) == 6);
+    verify(gcd(0, 24) == 24);
+    verify(gcd(0, 0) == 0);
+    let unsigned_gcd: u32 = gcd(48u32, 18u32);
+    verify(unsigned_gcd == 6u32);
+
+    verify(lcm(6, 8) == 24);
+    verify(lcm(-6, 8) == 24);
+    verify(lcm(0, 8) == 0);
+    let unsigned_lcm: u64 = lcm(21u64, 6u64);
+    verify(unsigned_lcm == 42u64);
 }
 
 #[test]

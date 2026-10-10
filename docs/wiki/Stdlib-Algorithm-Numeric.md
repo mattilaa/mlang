@@ -7,6 +7,11 @@ Module file: `stdlib/std/algorithm/numeric.mla`
 Numeric sequence helpers for integer lists, including generic list folds.
 
 ### API
+- `gcd(a, b)` and `lcm(a, b)` provide generic integer greatest-common-divisor
+  and least-common-multiple operations ([`std::gcd`](Stdlib-Module-API) / [`std::lcm`](Stdlib-Module-API)). GCD returns
+  a nonnegative result; input magnitudes must be representable by their type,
+  and the LCM result must fit its type. LCM returns zero if either input is
+  zero.
 - `midpoint_i64(first, second)` and `midpoint_u64(first, second)` compute an
   overflow-safe integral midpoint, rounding a tie toward `first` (C++20
   [`std::midpoint`](Stdlib-Module-API)). `midpoint_f32` and `midpoint_f64` provide overflow-safe
