@@ -280,7 +280,13 @@ use std::algorithm::ranges::adjacent_transform;
 use std::algorithm::ranges::adjacent_transform3;
 use std::algorithm::ranges::adjacent_transform4;
 use std::algorithm::ranges::adjacent5;
+use std::algorithm::ranges::adjacent6;
+use std::algorithm::ranges::adjacent7;
+use std::algorithm::ranges::adjacent8;
 use std::algorithm::ranges::adjacent_transform5;
+use std::algorithm::ranges::adjacent_transform6;
+use std::algorithm::ranges::adjacent_transform7;
+use std::algorithm::ranges::adjacent_transform8;
 use std::algorithm::ranges::adjacent_transform5_projected;
 use std::algorithm::ranges::adjacent_transform_projected;
 use std::algorithm::ranges::adjacent_transform3_projected;
@@ -2862,6 +2868,46 @@ fn test_algorithm_ranges_adjacent_five_element_windows() {
     verify(no_windows.len() == 0 && no_sums.len() == 0 &&
            no_projected.len() == 0);
     verify(values[0] == 2 && values[5] == 12);
+}
+
+#[test]
+fn test_algorithm_ranges_adjacent_wide_windows() {
+    let values: list<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let six: list<tuple<i32, i32, i32, i32, i32, i32>> = adjacent6(values);
+    let seven: list<tuple<i32, i32, i32, i32, i32, i32, i32>> = adjacent7(values);
+    let eight: list<tuple<i32, i32, i32, i32, i32, i32, i32, i32>> =
+        adjacent8(values);
+    verify(six.len() == 4 && seven.len() == 3 && eight.len() == 2);
+    let six_first = six[0];
+    let six_last = six[3];
+    let seven_first = seven[0];
+    let eight_last = eight[1];
+    verify(six_first.0 == 1 && six_first.5 == 6 &&
+           six_last.0 == 4 && six_last.5 == 9);
+    verify(seven_first.0 == 1 && seven_first.6 == 7);
+    verify(eight_last.0 == 2 && eight_last.7 == 9);
+
+    let sum6 = |a: i32, b: i32, c: i32, d: i32, e: i32, f: i32| {
+        return a + b + c + d + e + f;
+    };
+    let sum7 = |a: i32, b: i32, c: i32, d: i32, e: i32, f: i32, g: i32| {
+        return a + b + c + d + e + f + g;
+    };
+    let sum8 = |a: i32, b: i32, c: i32, d: i32,
+                e: i32, f: i32, g: i32, h: i32| {
+        return a + b + c + d + e + f + g + h;
+    };
+    let sums6: list<i32> = adjacent_transform6(values, sum6);
+    let sums7: list<i32> = adjacent_transform7(values, sum7);
+    let sums8: list<i32> = adjacent_transform8(values, sum8);
+    verify(sums6.len() == 4 && sums6[0] == 21 && sums6[3] == 39);
+    verify(sums7.len() == 3 && sums7[0] == 28 && sums7[2] == 42);
+    verify(sums8.len() == 2 && sums8[0] == 36 && sums8[1] == 44);
+
+    let short: list<i32> = [1, 2, 3, 4, 5, 6, 7];
+    verify(adjacent8(short).len() == 0 &&
+           adjacent_transform8(short, sum8).len() == 0);
+    verify(values[0] == 1 && values[8] == 9);
 }
 
 #[test]

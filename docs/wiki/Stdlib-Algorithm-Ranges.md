@@ -478,12 +478,12 @@ fn example() {
   input as one field.
 - `concat(left, right)` copies two same-typed ranges into one list (C++23
   `views::concat` style).
-- `zip` overloads for two through six ranges materialize heterogeneous
+- `zip` overloads for two through eight ranges materialize heterogeneous
   tuples, stopping at the shortest input (C++23 `views::zip` style).
 - `pairwise(data)` materializes tuples of each adjacent pair (C++23
   `views::pairwise` style); inputs shorter than two elements produce an empty
   list.
-- `adjacent3(data)`, `adjacent4(data)`, and `adjacent5(data)` materialize typed
+- `adjacent3(data)` through `adjacent8(data)` materialize typed
   tuples for each overlapping fixed-width window, analogous to C++23
   `views::adjacent<N>`; short inputs produce empty lists.
 - `adjacent_transform(data, operation)` applies a binary operation to each
@@ -493,11 +493,11 @@ fn example() {
 - `adjacent_transform3` and `adjacent_transform4` apply ternary or four-argument
   operations to each neighboring triple or group of four, inferring the output
   type and returning an empty list when the input is too short.
-- `adjacent_transform5` applies a five-argument operation to each neighboring
-  group of five. The `_projected` forms apply these operations to projected
-  keys while preserving the original source values.
-- The `_projected` adjacent-transform forms apply those operations to projected
-  keys while preserving the original source values.
+- `adjacent_transform5` through `adjacent_transform8` apply five- through
+  eight-argument operations to neighboring windows; each infers the output
+  type and returns an empty list when the input is too short. The `_projected`
+  adjacent-transform forms currently cover widths two through five and apply
+  operations to projected keys while preserving the original source values.
 - `enumerate(data)` materializes `(index, value)` tuples with zero-based indices
   (C++23 `views::enumerate` style).
 - `enumerate_from(data, first_index)` provides the same eager pairing with a
