@@ -48,6 +48,7 @@ use std::algorithm::ranges::transform_inclusive_scan as ranges_transform_inclusi
 use std::algorithm::ranges::transform_exclusive_scan as ranges_transform_exclusive_scan;
 use std::algorithm::ranges::inner_product as ranges_inner_product;
 use std::algorithm::ranges::inner_product_by as ranges_inner_product_by;
+use std::algorithm::ranges::reduce as ranges_reduce;
 use std::algorithm::numeric::transform_reduce;
 use std::algorithm::numeric::inclusive_scan;
 use std::algorithm::numeric::exclusive_scan;
@@ -3955,6 +3956,19 @@ fn test_algorithm_ranges_inner_product() {
     let empty: list<i32> = [];
     verify(ranges_inner_product(left, empty, 19) == 19);
     verify(ranges_inner_product_by(empty, right_wide, 23, add, product) == 23);
+}
+
+#[test]
+fn test_algorithm_ranges_reduce() {
+    let values: list<i32> = [1, 2, 3];
+    let total: i64 = ranges_reduce(values, 10);
+    verify(total == 16);
+
+    let append_digit = |acc: i64, value: i32| { return acc * 10 + value; };
+    verify(ranges_reduce(values, 4, append_digit) == 4123);
+    let empty: list<i32> = [];
+    verify(ranges_reduce(empty, 17) == 17);
+    verify(ranges_reduce(empty, 23, append_digit) == 23);
 }
 
 #[test]

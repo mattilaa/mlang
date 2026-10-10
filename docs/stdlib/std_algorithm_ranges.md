@@ -292,6 +292,10 @@ fn example() {
   paired-range overload takes two lists and stops at the shorter one. Both
   forms allow heterogeneous input, projected-term, and accumulator types and
   return `init` unchanged when no elements are consumed.
+- `reduce(data, init)` sums into the initial value; the operation overload
+  accepts a caller-defined fold. Both traverse sequentially in input order for
+  deterministic Mlang behavior (unlike `std::reduce`, no reordering occurs),
+  and support an accumulator type different from the input element type.
 - `inner_product(left, right, init)` sums pairwise products over the shared
   prefix, and its custom-operation overload accepts `reduce` and `product`
   closures. `inner_product_by` names the custom form explicitly. Inputs can be

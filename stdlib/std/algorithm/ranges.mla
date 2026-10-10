@@ -626,6 +626,34 @@ pub fn transform_reduce(left: &list<T>, right: &list<V>, init: U,
     return acc;
 }
 
+/// @brief Reduce a range into `init` using addition in input order.
+/// Mlang uses a deterministic sequential traversal; unlike a parallel
+/// `std::reduce`, operations are never reordered. The accumulator may differ
+/// from the input element type.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn reduce(data: &list<T>, init: U) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = acc + data[i];
+    }
+    return acc;
+}
+
+/// @brief Reduce a range with a caller-provided operation in input order.
+/// Empty input returns `init` unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation>
+pub fn reduce(data: &list<T>, init: U, operation: Operation) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, data[i]);
+    }
+    return acc;
+}
+
 /// @brief Compute the sum of pairwise products over the shared range prefix.
 /// The accumulator may use a different type from either input element type.
 /// This eager-list counterpart to `std::inner_product` stops at the shorter
