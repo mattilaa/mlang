@@ -1,0 +1,60 @@
+/// \file optional.mla
+/// \brief Monadic and fallback operations for the built-in option<T> type.
+///
+/// These free functions provide C++23 `std::optional`-style operations for
+/// Mlang's `option<T>` sum type.
+
+/// @brief Transform the contained value while preserving absence.
+/// C++23 `std::optional::transform` equivalent.
+/// @ingroup optional
+generic<T, Output, Operation>
+pub fn transform(input: option<T>, operation: Operation) -> option<Output> {
+    if input.is_some() {
+        return Some<Output>(operation(input.unwrap()));
+    }
+    return None<Output>();
+}
+
+/// @brief Chain an option-producing operation on the contained value.
+/// C++23 `std::optional::and_then` equivalent.
+/// @ingroup optional
+generic<T, Output, Operation>
+pub fn and_then(input: option<T>, operation: Operation) -> option<Output> {
+    if input.is_some() {
+        return operation(input.unwrap());
+    }
+    return None<Output>();
+}
+
+/// @brief Compute an option fallback only when the input is absent.
+/// C++23 `std::optional::or_else` equivalent.
+/// @ingroup optional
+generic<T, Fallback>
+pub fn or_else(input: option<T>, fallback: Fallback) -> option<T> {
+    if input.is_some() {
+        return input;
+    }
+    return fallback();
+}
+
+/// @brief Extract the contained value or use the supplied fallback.
+/// C++23 `std::optional::value_or` equivalent.
+/// @ingroup optional
+generic<T>
+pub fn value_or(input: option<T>, fallback: T) -> T {
+    if input.is_some() {
+        return input.unwrap();
+    }
+    return fallback;
+}
+
+/// @brief Lazily compute a value only when the input is absent.
+/// Convenience counterpart to `value_or` for expensive or effectful defaults.
+/// @ingroup optional
+generic<T, Fallback>
+pub fn value_or_else(input: option<T>, fallback: Fallback) -> T {
+    if input.is_some() {
+        return input.unwrap();
+    }
+    return fallback();
+}

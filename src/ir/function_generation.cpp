@@ -288,7 +288,13 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedPointerBorrowScopes = pointerBorrowScopes;
     auto savedVariableScopeDepthScopes = variableScopeDepthScopes;
     auto savedClosureVariables = closureVariables;
+    auto savedClosureCaptureAliases = closureCaptureAliases;
+    auto savedClosureCaptureTypes = closureCaptureTypes;
+    auto savedClosureConstCaptures = closureConstCaptures;
+    auto savedClosureCaptureReferenceAliases =
+        closureCaptureReferenceAliases;
     auto savedActiveInlineClosures = activeInlineClosures;
+    auto savedInlineClosureReturnStates = inlineClosureReturnStates;
     auto savedCurrentFunctionExceptionFrame = currentFunctionExceptionFrame;
     auto savedSemanticReturnType = currentSemanticReturnType;
     int savedUnsafeDepth = unsafeDepth;
@@ -307,7 +313,13 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     constantVariables.clear();
     movedVariables.clear();
     closureVariables.clear();
+    closureVariables = node->boundClosureParameters;
+    closureCaptureAliases = node->boundClosureCaptureAliases;
+    closureCaptureTypes = node->boundClosureCaptureTypes;
+    closureConstCaptures = node->boundClosureConstCaptures;
+    closureCaptureReferenceAliases.clear();
     activeInlineClosures.clear();
+    inlineClosureReturnStates.clear();
     pointerBorrowTarget.clear();
     pointerKnownNull.clear();
     activeBorrowers.clear();
@@ -609,7 +621,13 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     pointerBorrowScopes = std::move(savedPointerBorrowScopes);
     variableScopeDepthScopes = std::move(savedVariableScopeDepthScopes);
     closureVariables = std::move(savedClosureVariables);
+    closureCaptureAliases = std::move(savedClosureCaptureAliases);
+    closureCaptureTypes = std::move(savedClosureCaptureTypes);
+    closureConstCaptures = std::move(savedClosureConstCaptures);
+    closureCaptureReferenceAliases =
+        std::move(savedClosureCaptureReferenceAliases);
     activeInlineClosures = std::move(savedActiveInlineClosures);
+    inlineClosureReturnStates = std::move(savedInlineClosureReturnStates);
     currentFunctionExceptionFrame = savedCurrentFunctionExceptionFrame;
     currentSemanticReturnType = savedSemanticReturnType;
     unsafeDepth = savedUnsafeDepth;

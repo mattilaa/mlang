@@ -1,0 +1,19 @@
+mod std::testing;
+use std::testing::verify;
+
+generic<T, E>
+fn result_identity(value: result<T, E>) -> result<T, E> {
+    return value;
+}
+
+#[test]
+fn test_generic_type_arguments_inferred_from_monomorphized_result() {
+    let success: result<i32, str8> = Ok<i32, str8>(42);
+    let copied_success: result<i32, str8> = result_identity(success);
+    verify(copied_success.is_ok());
+    verify(copied_success.unwrap() == 42);
+
+    let failure: result<i32, str8> = Err<i32, str8>("missing");
+    let copied_failure: result<i32, str8> = result_identity(failure);
+    verify(copied_failure.is_err());
+}

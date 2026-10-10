@@ -1,0 +1,63 @@
+# std::mdspan
+
+Module file: `stdlib/std/mdspan.mla`
+
+`Mdspan<T>` is a checked, runtime-rank multidimensional descriptor
+inspired by C++23 `std::mdspan`. Mlang currently stores its own copy of the
+input data and extents; it is not a zero-copy view and does not implement C++
+accessor policies. `from_extents` uses C++ `layout_right` (row-major) mapping;
+`from_extents_left` uses C++ `layout_left` (column-major) mapping, and
+`from_extents_strided` accepts explicit strides like C++23 `layout_stride`.
+
+Use `from_extents(data, extents)` to construct a descriptor. Both arguments
+are borrowed and copied, so the caller retains its lists. It returns
+`Some(Mdspan<T>)` only when the extents are non-negative and their product
+matches the data size; malformed shapes return `None`. Rank zero represents a
+single scalar element.
+
+- `rank()`, `size()`, and `is_empty()` report descriptor properties.
+- `extent(dimension)` returns an optional extent.
+- `stride(dimension)` reports the element stride for a valid dimension, and
+  `required_span_size()` reports the complete backing span size.
+- `is_unique()`, `is_exhaustive()`, and `is_strided()` expose the mapping
+  properties; both supported layouts are unique, exhaustive, and strided.
+- `get(indices)` requires exactly one index per dimension and returns `None`
+  for invalid rank or out-of-bounds indices.
+- `linear_index(indices)` returns the mapped backing-list offset for a valid
+  coordinate, or `None` for invalid rank or bounds. This exposes the mapping
+  operation separately from loading the element.
+- `set(indices, value)` writes through a valid mapping and returns false for
+  invalid rank or coordinates. Since the Mlang descriptor owns a copy, writes
+  update that copy and leave the constructor's input list unchanged.
+- `from_extents_left(data, extents)` validates and copies the same inputs but
+  maps the leftmost extent contiguously, following C++23 `layout_left`.
+- `from_extents_strided(data, extents, strides)` copies all three lists and
+  accepts only non-negative extents, positive strides, a required span within
+  the backing data, and a unique index-to-offset mapping. Its required span
+  may be larger than its logical size; unused padding elements are allowed.
+  The constructor checks uniqueness by enumerating the mapping, so its cost is
+  proportional to the number of logical elements (plus sorting those offsets).
+- `mdspan<T>` is a lowercase type alias for `Mdspan<T>`.
+
+Example:
+
+```mla
+mod std::mdspan;
+use std::mdspan::Mdspan;
+use std::mdspan::from_extents;
+use std::mdspan::from_extents_strided;
+
+let data: list<i32> = [10, 20, 30, 40, 50, 60];
+let shape: list<i64> = [2, 3];
+let result: option<Mdspan<i32>> = from_extents(data, shape);
+let view: Mdspan<i32> = result.unwrap();
+let value: option<i32> = view.get([1, 2]); // Some(60), row-major
+
+let padded: list<i32> = [10, 20, 30, 40, 50, 60, 70, 80];
+let padded_shape: list<i64> = [2, 3];
+let padded_strides: list<i64> = [3, 2];
+let strided: option<Mdspan<i32>> =
+    from_extents_strided(padded, padded_shape, padded_strides);
+```
+
+Run the regression suite with `build/mlang test tests/std_mdspan_tests.mla`.

@@ -1,0 +1,264 @@
+/// \file flat_multiset.mla
+/// \brief Sorted list-backed associative multiset inspired by C++23.
+///
+/// Keys occupy contiguous list storage in ascending order. Equivalent keys
+/// are retained; lookup uses binary search and updates rebuild the list.
+
+/// @brief Sorted associative multiset that permits equivalent keys.
+pub struct FlatMultiSet<T> {
+    var keys: list<T>;
+};
+
+/// @brief Lowercase stdlib spelling for `FlatMultiSet<T>`.
+alias flat_multiset<T> = FlatMultiSet<T>;
+
+impl<T> FlatMultiSet {
+    /// @brief Construct an empty multiset.
+    pub fn new() -> FlatMultiSet<T> {
+        return FlatMultiSet<T> { keys: [] };
+    }
+
+    /// @brief Number of stored keys, including duplicates.
+    pub fn len(self: &FlatMultiSet<T>) -> i64 {
+        return self.keys.len();
+    }
+
+    /// @brief Whether the multiset has no keys.
+    pub fn is_empty(self: &FlatMultiSet<T>) -> bool {
+        return self.keys.len() == 0;
+    }
+
+    /// @brief Return the first index whose key is not less than `key`.
+    pub fn lower_bound(self: &FlatMultiSet<T>, key: T) -> i64 {
+        var first: i64 = 0;
+        var count: i64 = self.keys.len();
+        while count > 0 {
+            let step: i64 = count / 2;
+            let middle: i64 = first + step;
+            if self.keys[middle] < key {
+                first = middle + 1;
+                count = count - step - 1;
+            } else {
+                count = step;
+            }
+        }
+        return first;
+    }
+
+    /// @brief Return the first index whose key is greater than `key`.
+    pub fn upper_bound(self: &FlatMultiSet<T>, key: T) -> i64 {
+        var first: i64 = 0;
+        var count: i64 = self.keys.len();
+        while count > 0 {
+            let step: i64 = count / 2;
+            let middle: i64 = first + step;
+            if !(key < self.keys[middle]) {
+                first = middle + 1;
+                count = count - step - 1;
+            } else {
+                count = step;
+            }
+        }
+        return first;
+    }
+
+    /// @brief Return the half-open index range of keys equivalent to `key`.
+    pub fn equal_range(self: &FlatMultiSet<T>, key: T) -> tuple<i64, i64> {
+        return (self.lower_bound(key), self.upper_bound(key));
+    }
+
+    /// @brief Count keys equivalent to `key` under ordering equivalence.
+    pub fn count(self: &FlatMultiSet<T>, key: T) -> i64 {
+        return self.upper_bound(key) - self.lower_bound(key);
+    }
+
+    /// @brief Whether an equivalent key is present.
+    pub fn contains(self: &FlatMultiSet<T>, key: T) -> bool {
+        return self.count(key) != 0;
+    }
+
+    /// @brief Insert a key after existing equivalent keys.
+    pub fn insert(self: &mut FlatMultiSet<T>, key: T) -> void {
+        let index: i64 = self.upper_bound(key);
+        let count: i64 = self.keys.len();
+        var updated: list<T> = [];
+        for i in 0..index { updated.push(self.keys[i]); }
+        updated.push(key);
+        for i in index..count { updated.push(self.keys[i]); }
+        self.keys = updated;
+    }
+
+    /// @brief Insert every key from `range` and return the number inserted.
+    pub fn insert_range(self: &mut FlatMultiSet<T>, range: &list<T>) -> i64 {
+        let count: i64 = range.len();
+        for i in 0..count { self.insert(range[i]); }
+        return count;
+    }
+
+    /// @brief Replace contents if keys are in nondecreasing order.
+    /// Equal adjacent keys are valid; invalid input leaves the set unchanged.
+    pub fn replace(self: &mut FlatMultiSet<T>, keys: &list<T>) -> bool {
+        let count: i64 = keys.len();
+        for i in 1..count {
+            if keys[i] < keys[i - 1] { return false; }
+        }
+        var replacement: list<T> = [];
+        for i in 0..count { replacement.push(keys[i]); }
+        self.keys = replacement;
+        return true;
+    }
+
+    /// @brief Erase all keys equivalent to `key` and return their count.
+    pub fn remove(self: &mut FlatMultiSet<T>, key: T) -> i64 {
+        let first: i64 = self.lower_bound(key);
+        let last: i64 = self.upper_bound(key);
+        let removed: i64 = last - first;
+        if removed == 0 { return 0; }
+        var updated: list<T> = [];
+        let count: i64 = self.keys.len();
+        for i in 0..first { updated.push(self.keys[i]); }
+        for i in last..count { updated.push(self.keys[i]); }
+        self.keys = updated;
+        return removed;
+    }
+
+    /// @brief Remove all keys.
+    pub fn clear(self: &mut FlatMultiSet<T>) -> void {
+        self.keys = [];
+    }
+
+    /// @brief Return the key at sorted position `index`.
+    pub fn key_at(self: &FlatMultiSet<T>, index: i64) -> T {
+        return self.keys[index];
+    }
+}
+
+/// @brief Find the first stored key not ordered before a heterogeneous query.
+generic<T, Query, LessKeyQuery>
+pub fn lower_bound_by(container: &FlatMultiSet<T>, query: Query,
+                      less_key_query: LessKeyQuery) -> i64 {
+    var first: i64 = 0;
+    var count: i64 = container.keys.len();
+    while count > 0 {
+        let step: i64 = count / 2;
+        let middle: i64 = first + step;
+        if less_key_query(container.keys[middle], query) {
+            first = middle + 1;
+            count = count - step - 1;
+        } else {
+            count = step;
+        }
+    }
+    return first;
+}
+
+/// @brief Find the first stored key ordered after a heterogeneous query.
+generic<T, Query, LessQueryKey>
+pub fn upper_bound_by(container: &FlatMultiSet<T>, query: Query,
+                      less_query_key: LessQueryKey) -> i64 {
+    var first: i64 = 0;
+    var count: i64 = container.keys.len();
+    while count > 0 {
+        let step: i64 = count / 2;
+        let middle: i64 = first + step;
+        if !less_query_key(query, container.keys[middle]) {
+            first = middle + 1;
+            count = count - step - 1;
+        } else {
+            count = step;
+        }
+    }
+    return first;
+}
+
+/// @brief Return the half-open index range matching a heterogeneous query.
+generic<T, Query, LessKeyQuery, LessQueryKey>
+pub fn equal_range_by(container: &FlatMultiSet<T>, query: Query,
+                      less_key_query: LessKeyQuery,
+                      less_query_key: LessQueryKey) -> tuple<i64, i64> {
+    return (lower_bound_by(container, query, less_key_query),
+            upper_bound_by(container, query, less_query_key));
+}
+
+/// @brief Count keys matching a heterogeneous query by ordering equivalence.
+generic<T, Query, LessKeyQuery, LessQueryKey>
+pub fn count_by(container: &FlatMultiSet<T>, query: Query,
+                less_key_query: LessKeyQuery,
+                less_query_key: LessQueryKey) -> i64 {
+    return upper_bound_by(container, query, less_query_key) -
+           lower_bound_by(container, query, less_key_query);
+}
+
+/// @brief Whether any key matches a heterogeneous query.
+generic<T, Query, LessKeyQuery, LessQueryKey>
+pub fn contains_by(container: &FlatMultiSet<T>, query: Query,
+                   less_key_query: LessKeyQuery,
+                   less_query_key: LessQueryKey) -> bool {
+    return count_by(container, query, less_key_query, less_query_key) != 0;
+}
+
+/// @brief Erase all keys matching a heterogeneous query; return count removed.
+generic<T, Query, LessKeyQuery, LessQueryKey>
+pub fn remove_by(container: &mut FlatMultiSet<T>, query: Query,
+                 less_key_query: LessKeyQuery,
+                 less_query_key: LessQueryKey) -> i64 {
+    let first: i64 = lower_bound_by(container, query, less_key_query);
+    let last: i64 = upper_bound_by(container, query, less_query_key);
+    let removed: i64 = last - first;
+    if removed == 0 { return 0; }
+    var updated: list<T> = [];
+    let count: i64 = container.keys.len();
+    for i in 0..first { updated.push(container.keys[i]); }
+    for i in last..count { updated.push(container.keys[i]); }
+    container.keys = updated;
+    return removed;
+}
+
+/// @brief Erase keys accepted by `predicate` and return the removal count.
+generic<T, Predicate>
+pub fn erase_if(container: &mut FlatMultiSet<T>, predicate: Predicate) -> i64 {
+    var retained: list<T> = [];
+    var removed: i64 = 0;
+    for i in 0..container.keys.len() {
+        let key: T = container.keys[i];
+        if predicate(key) { removed = removed + 1; }
+        else { retained.push(key); }
+    }
+    container.keys = retained;
+    return removed;
+}
+
+/// @brief Transfer all keys from `source` into `destination` in sorted order.
+/// Both containers retain their equivalent keys; returns the transferred
+/// source size (associative multi-container `merge` semantics).
+generic<T>
+pub fn merge(destination: &mut FlatMultiSet<T>,
+             source: &mut FlatMultiSet<T>) -> i64 {
+    var merged: list<T> = [];
+    let destination_len: i64 = destination.keys.len();
+    let source_len: i64 = source.keys.len();
+    var destination_index: i64 = 0;
+    var source_index: i64 = 0;
+    while destination_index < destination_len && source_index < source_len {
+        let destination_key: T = destination.keys[destination_index];
+        let source_key: T = source.keys[source_index];
+        if source_key < destination_key {
+            merged.push(source_key);
+            source_index = source_index + 1;
+        } else {
+            merged.push(destination_key);
+            destination_index = destination_index + 1;
+        }
+    }
+    while destination_index < destination_len {
+        merged.push(destination.keys[destination_index]);
+        destination_index = destination_index + 1;
+    }
+    while source_index < source_len {
+        merged.push(source.keys[source_index]);
+        source_index = source_index + 1;
+    }
+    destination.keys = merged;
+    source.keys = [];
+    return source_len;
+}

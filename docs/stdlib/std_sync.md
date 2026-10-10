@@ -7,6 +7,11 @@ Module file: `stdlib/std/sync.mla`
 - `condvar`
 - `channel`
 - `lock_free_queue` (SPSC str8 queue)
+- `AtomicI64` (shared 64-bit atomic integer)
+- `AtomicFlag` (guaranteed lock-free boolean flag)
+- `Latch` (one-shot countdown latch)
+- `Barrier` (reusable phase barrier)
+- `CountingSemaphore` (bounded permit counter)
 
 ### mutex
 - `mutex::new() -> result<mutex, str8>`
@@ -95,3 +100,129 @@ See `examples/spsc_sequencer_events.mla` for typed event dispatch and
 `tests/std_spsc_tests.mla` for capacity, wraparound, and concurrent delivery tests.
 The older `LockFreeQueue` is string-based and allocates on send/frees on receive;
 use `SpscQueue<T>` for fixed-size audio commands.
+
+### AtomicI64
+
+`AtomicI64` provides a C11 atomic signed 64-bit integer; the implementation may
+use a lock-backed runtime operation on targets where native 64-bit atomics are
+not lock-free. Construction returns `result<AtomicI64, str8>` and reports
+allocation failures. It offers `load`, `store`,
+`exchange`, `fetch_add`, `fetch_sub`, `fetch_and`, `fetch_or`, `fetch_xor`, and
+strong `compare_exchange`. Operations without an explicit order use
+sequentially consistent ordering. The `_with_order` variants accept
+`AtomicOrder::{Relaxed, Consume, Acquire, Release, AcqRel, SeqCst}`; invalid
+load/store/wait orderings are rejected and returned as errors. `wait(old)`
+blocks while the value remains equal to `old`, while `notify_one()` and
+`notify_all()` wake waiters. A notification is not itself a condition: waiters
+must recheck the value, and stores/RMW operations must be followed by an
+explicit notification when a waiter should wake. Do not close the atomic while
+any thread is waiting on it.
+
+```mlang
+mod std::sync;
+use std::sync::AtomicI64;
+use std::sync::AtomicOrder;
+
+fn main() -> i32 {
+    let created: result<AtomicI64, str8> = AtomicI64::new(0);
+    if created.is_err() { return 1; }
+    let counter: AtomicI64 = created.unwrap();
+    let previous: result<i64, str8> = counter.fetch_add_with_order(1, AtomicOrder::Relaxed);
+    let observed: result<i64, str8> = counter.load();
+    counter.close(); // exactly once, after all threads stop using it
+    if previous.is_err() || observed.is_err() { return 1; }
+    return observed.unwrap() == 1 ? 0 : 1;
+}
+```
+
+The value is stored in an opaque shared handle: copying `AtomicI64` copies the
+handle, not the underlying integer. Share the handle between threads, and call
+`close()` exactly once only after every thread has stopped accessing it. As
+with all atomics, relaxed ordering makes the atomic value race-free but does
+not publish unrelated data; use acquire/release or sequential consistency for
+that synchronization.
+
+### AtomicFlag
+
+`AtomicFlag` wraps C11 `atomic_flag`, whose representation is guaranteed
+lock-free. `test_and_set()` atomically sets the flag and reports whether it was
+already set; `clear()` resets it. Both default to sequential consistency and
+have `_with_order` variants. `clear` rejects acquire-like memory orders. This
+supports small spin-lock/state-flag use cases; prefer `mutex` when waiting
+threads should sleep instead of spin. Close the flag only after all users stop.
+
+### Barrier
+
+`Barrier` is a reusable C++20-style phase barrier for a fixed participant
+group. `arrive()` returns a phase token without blocking; pass it to `wait()`
+to wait for that phase, or use `arrive_and_wait()` for the common combined
+operation. The final arrival advances the phase and wakes all waiters.
+`arrive_by(n)` accounts for multiple participants in one arrival, and
+`arrive_and_drop()` participates in the current phase while reducing the
+expected participant count for future phases. The participant count must be
+positive at construction. Do not close the barrier while any participant is
+arriving or waiting.
+
+```mlang
+mod std::sync;
+use std::sync::Barrier;
+
+fn main() -> i32 {
+    let created: result<Barrier, str8> = Barrier::new(1);
+    if created.is_err() { return 1; }
+    let barrier: Barrier = created.unwrap();
+    let completed: result<i32, str8> = barrier.arrive_and_wait();
+    barrier.close();
+    return completed.is_ok() ? 0 : 1;
+}
+```
+
+### Latch
+
+`Latch` is a one-shot C++20-style countdown latch. Construct it with the number
+of arrivals to wait for; zero starts ready. Each participant calls
+`count_down()` or `count_down_by(n)`, while waiters call `wait()`. `try_wait()`
+checks readiness without blocking, and `arrive_and_wait()` records one arrival
+before waiting. Invalid or excessive decrements return an error instead of
+underflowing the count. Reaching zero wakes every waiter. Call `close()` only
+after all participants and waiters have finished.
+
+```mlang
+mod std::sync;
+use std::sync::Latch;
+
+fn main() -> i32 {
+    let created: result<Latch, str8> = Latch::new(1);
+    if created.is_err() { return 1; }
+    let latch: Latch = created.unwrap();
+    let arrived: result<i32, str8> = latch.count_down();
+    let waited: result<i32, str8> = latch.wait();
+    latch.close();
+    return arrived.is_ok() && waited.is_ok() ? 0 : 1;
+}
+```
+
+### CountingSemaphore
+
+`CountingSemaphore` is a C++20-style counting semaphore backed by a mutex and
+condition variable. Create it with an initial permit count and a positive
+maximum. `acquire()` blocks until it consumes one permit; `try_acquire()` is
+nonblocking and returns false when empty. `release()` adds one permit, while
+`release_by(n)` adds several. Invalid initial counts, nonpositive releases,
+and releases that would exceed the configured maximum return errors. Call
+`close()` only after all blocked/acquiring threads have finished.
+
+```mlang
+mod std::sync;
+use std::sync::CountingSemaphore;
+
+fn main() -> i32 {
+    let created: result<CountingSemaphore, str8> = CountingSemaphore::new(1, 4);
+    if created.is_err() { return 1; }
+    let permits: CountingSemaphore = created.unwrap();
+    let acquired: result<bool, str8> = permits.try_acquire();
+    let released: result<i32, str8> = permits.release();
+    permits.close();
+    return acquired.is_ok() && acquired.unwrap() && released.is_ok() ? 0 : 1;
+}
+```

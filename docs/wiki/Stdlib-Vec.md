@@ -7,7 +7,8 @@ Module file: `stdlib/std/vec.mla`
 [`Vec<T>`](Stdlib-Vec) is a type alias for [`list<T>`](Quick-Guide#types). The two are interchangeable in all
 contexts. Methods listed below are compiler intrinsics backed by `libmlang_std`
 and are also summarized in "Built-in Collection Methods (Compiler Intrinsics)"
-above.
+above. The free `erase` and range-modifier helpers are generic library
+operations for in-place Vec updates.
 
 ### Constructors
 
@@ -29,6 +30,17 @@ above.
 - `v.pop() -> T` — remove and return the last element; known-empty arrays are
   rejected at compile time, otherwise empty containers abort at runtime
 - `v.clear()` — remove all elements (Vec remains valid for further pushes)
+- `erase(v, value) -> i64` — remove all matching values (C++20
+  [`std::erase(vector, value)`](Stdlib-Module-API)); returns the number removed
+- `erase_if(v, predicate) -> i64` — remove values accepted by a predicate
+  (C++20 [`std::erase_if(vector, predicate)`](Stdlib-Module-API)); preserves survivor order and
+  returns the number removed
+- `append_range(&mut v, source) -> i64` — append a snapshot of `source`
+  (C++23 `vector::append_range`); returns the appended count
+- `assign_range(&mut v, source) -> i64` — replace all values from a snapshot
+  (C++23 `vector::assign_range`); returns the assigned count
+- `insert_range(&mut v, index, source) -> i64` — insert a snapshot at a
+  clamped index (C++23 `vector::insert_range`); returns the actual index
 - `set_f32(values, index, value) -> i32` — replace one [`f32`](Quick-Guide#types) element without
   changing list length or allocating; returns `-1` for an invalid index
 

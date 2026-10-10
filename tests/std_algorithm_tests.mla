@@ -17,13 +17,44 @@ use dsp::fft::forward;
 use dsp::fft::inverse;
 use dsp::fft::is_power_of_two;
 use std::algorithm::numeric::accumulate_i64;
+use std::algorithm::numeric::midpoint_i64;
+use std::algorithm::numeric::midpoint_u64;
+use std::algorithm::numeric::midpoint_f32;
+use std::algorithm::numeric::midpoint_f64;
+use std::algorithm::numeric::midpoint_i8;
+use std::algorithm::numeric::midpoint_i16;
+use std::algorithm::numeric::midpoint_i32;
+use std::algorithm::numeric::midpoint_u8;
+use std::algorithm::numeric::midpoint_u16;
+use std::algorithm::numeric::midpoint_u32;
 use std::algorithm::numeric::accumulate;
+use std::algorithm::numeric::accumulate_by;
+use std::algorithm::numeric::reduce;
+use std::algorithm::numeric::fold_left;
+use std::algorithm::numeric::fold_right;
+use std::algorithm::numeric::fold_left_first;
+use std::algorithm::numeric::fold_right_last;
+use std::algorithm::ranges::fold_left as ranges_fold_left;
+use std::algorithm::ranges::fold_right as ranges_fold_right;
+use std::algorithm::ranges::fold_left_with_iter as ranges_fold_left_with_iter;
+use std::algorithm::ranges::fold_right_with_iter as ranges_fold_right_with_iter;
+use std::algorithm::ranges::fold_left_first as ranges_fold_left_first;
+use std::algorithm::ranges::fold_left_first_with_iter as ranges_fold_left_first_with_iter;
+use std::algorithm::ranges::fold_right_last as ranges_fold_right_last;
+use std::algorithm::numeric::transform_reduce;
+use std::algorithm::numeric::inclusive_scan;
+use std::algorithm::numeric::exclusive_scan;
+use std::algorithm::numeric::transform_inclusive_scan;
+use std::algorithm::numeric::transform_exclusive_scan;
 use std::algorithm::numeric::adjacent_difference_i64;
 use std::algorithm::numeric::inner_product_i64;
 use std::algorithm::numeric::inner_product;
+use std::algorithm::numeric::inner_product_by;
 use std::algorithm::numeric::partial_sum_i64;
 use std::algorithm::numeric::partial_sum;
+use std::algorithm::numeric::partial_sum_by;
 use std::algorithm::numeric::adjacent_difference;
+use std::algorithm::numeric::adjacent_difference_by;
 use std::algorithm::order::binary_search_i64;
 use std::algorithm::order::is_sorted_i64;
 use std::algorithm::order::lower_bound_i64;
@@ -41,48 +72,354 @@ use std::algorithm::ranges::unique_i64;
 use std::algorithm::ranges::unique_stable_i64;
 use std::algorithm::ranges::clamp_i64;
 use std::algorithm::ranges::contains;
+use std::algorithm::ranges::contains_by;
+use std::algorithm::ranges::contains_by_projected;
 use std::algorithm::ranges::count;
+use std::algorithm::ranges::count_by;
+use std::algorithm::ranges::count_by_projected;
 use std::algorithm::ranges::find;
+use std::algorithm::ranges::find_by;
+use std::algorithm::ranges::find_by_projected;
+use std::algorithm::ranges::find_projected;
+use std::algorithm::ranges::find_last_projected;
+use std::algorithm::ranges::adjacent_find_projected;
+use std::algorithm::ranges::find_first_of_projected;
+use std::algorithm::ranges::count_projected;
+use std::algorithm::ranges::contains_projected;
 use std::algorithm::ranges::find_last;
+use std::algorithm::ranges::find_last_by;
+use std::algorithm::ranges::find_last_by_projected;
 use std::algorithm::ranges::adjacent_find;
+use std::algorithm::ranges::adjacent_find_by;
+use std::algorithm::ranges::adjacent_find_by_projected;
 use std::algorithm::ranges::find_first_of;
+use std::algorithm::ranges::find_first_of_by;
+use std::algorithm::ranges::find_first_of_by_projected;
 use std::algorithm::ranges::includes;
+use std::algorithm::ranges::includes_projected;
+use std::algorithm::ranges::includes_by;
+use std::algorithm::ranges::includes_by_projected;
 use std::algorithm::ranges::size;
 use std::algorithm::ranges::empty;
 use std::algorithm::ranges::equal;
+use std::algorithm::ranges::equal_projected;
+use std::algorithm::ranges::mismatch;
+use std::algorithm::ranges::mismatch_projected;
+use std::algorithm::ranges::mismatch_by;
+use std::algorithm::ranges::mismatch_by_projected;
+use std::algorithm::ranges::equal_by;
+use std::algorithm::ranges::equal_by_projected;
 use std::algorithm::ranges::is_permutation;
+use std::algorithm::ranges::is_permutation_projected;
+use std::algorithm::ranges::is_permutation_by_projected;
+use std::algorithm::ranges::is_permutation_by;
 use std::algorithm::ranges::starts_with;
+use std::algorithm::ranges::starts_with_projected;
+use std::algorithm::ranges::starts_with_by;
+use std::algorithm::ranges::starts_with_by_projected;
 use std::algorithm::ranges::search;
+use std::algorithm::ranges::search_projected;
+use std::algorithm::ranges::search_by;
+use std::algorithm::ranges::search_by_projected;
+use std::algorithm::ranges::search_n;
+use std::algorithm::ranges::search_n_projected;
+use std::algorithm::ranges::search_n_by;
+use std::algorithm::ranges::search_n_by_projected;
+use std::algorithm::ranges::find_end;
+use std::algorithm::ranges::find_end_projected;
+use std::algorithm::ranges::find_end_by;
+use std::algorithm::ranges::find_end_by_projected;
 use std::algorithm::ranges::contains_subrange;
+use std::algorithm::ranges::contains_subrange_projected;
+use std::algorithm::ranges::contains_subrange_by;
+use std::algorithm::ranges::contains_subrange_by_projected;
 use std::algorithm::ranges::ends_with;
+use std::algorithm::ranges::ends_with_projected;
+use std::algorithm::ranges::ends_with_by;
+use std::algorithm::ranges::ends_with_by_projected;
 use std::algorithm::ranges::lexicographical_compare;
+use std::algorithm::ranges::lexicographical_compare_projected;
+use std::algorithm::ranges::lexicographical_compare_by;
+use std::algorithm::ranges::lexicographical_compare_by_projected;
 use std::algorithm::ranges::is_sorted;
 use std::algorithm::ranges::is_sorted_until;
+use std::algorithm::ranges::is_sorted_projected;
+use std::algorithm::ranges::is_sorted_until_projected;
+use std::algorithm::ranges::is_heap;
+use std::algorithm::ranges::is_heap_until;
+use std::algorithm::ranges::is_heap_by;
+use std::algorithm::ranges::is_heap_until_by;
+use std::algorithm::ranges::is_heap_projected;
+use std::algorithm::ranges::is_heap_until_projected;
+use std::algorithm::ranges::is_heap_by_projected;
+use std::algorithm::ranges::is_heap_until_by_projected;
+use std::algorithm::ranges::make_heap;
+use std::algorithm::ranges::make_heap_by;
+use std::algorithm::ranges::make_heap_projected;
+use std::algorithm::ranges::make_heap_by_projected;
+use std::algorithm::ranges::push_heap;
+use std::algorithm::ranges::push_heap_by;
+use std::algorithm::ranges::push_heap_projected;
+use std::algorithm::ranges::push_heap_by_projected;
+use std::algorithm::ranges::pop_heap;
+use std::algorithm::ranges::pop_heap_by;
+use std::algorithm::ranges::pop_heap_projected;
+use std::algorithm::ranges::pop_heap_by_projected;
+use std::algorithm::ranges::sort_heap;
+use std::algorithm::ranges::sort_heap_by;
+use std::algorithm::ranges::sort_heap_projected;
+use std::algorithm::ranges::sort_heap_by_projected;
+use std::algorithm::ranges::partial_sort;
+use std::algorithm::ranges::partial_sort_by;
+use std::algorithm::ranges::partial_sort_projected;
+use std::algorithm::ranges::partial_sort_by_projected;
+use std::algorithm::ranges::partial_sort_copy;
+use std::algorithm::ranges::partial_sort_copy_projected;
+use std::algorithm::ranges::partial_sort_copy_by;
+use std::algorithm::ranges::partial_sort_copy_by_projected;
+use std::algorithm::ranges::nth_element;
+use std::algorithm::ranges::nth_element_by;
+use std::algorithm::ranges::nth_element_projected;
+use std::algorithm::ranges::nth_element_by_projected;
+use std::algorithm::ranges::merged;
+use std::algorithm::ranges::merged_projected;
+use std::algorithm::ranges::union_sorted;
+use std::algorithm::ranges::union_sorted_projected;
+use std::algorithm::ranges::intersection_sorted;
+use std::algorithm::ranges::intersection_sorted_projected;
+use std::algorithm::ranges::difference_sorted;
+use std::algorithm::ranges::difference_sorted_projected;
+use std::algorithm::ranges::symmetric_difference_sorted;
+use std::algorithm::ranges::symmetric_difference_sorted_projected;
+use std::algorithm::ranges::merged_by;
+use std::algorithm::ranges::merged_by_projected;
+use std::algorithm::ranges::inplace_merge;
+use std::algorithm::ranges::inplace_merge_by;
+use std::algorithm::ranges::inplace_merge_projected;
+use std::algorithm::ranges::inplace_merge_by_projected;
+use std::algorithm::ranges::union_sorted_by;
+use std::algorithm::ranges::intersection_sorted_by;
+use std::algorithm::ranges::difference_sorted_by;
+use std::algorithm::ranges::symmetric_difference_sorted_by;
+use std::algorithm::ranges::union_sorted_by_projected;
+use std::algorithm::ranges::intersection_sorted_by_projected;
+use std::algorithm::ranges::difference_sorted_by_projected;
+use std::algorithm::ranges::symmetric_difference_sorted_by_projected;
 use std::algorithm::ranges::lower_bound;
+use std::algorithm::ranges::lower_bound_projected;
+use std::algorithm::ranges::lower_bound_by_projected;
 use std::algorithm::ranges::upper_bound;
+use std::algorithm::ranges::upper_bound_projected;
+use std::algorithm::ranges::upper_bound_by_projected;
+use std::algorithm::ranges::equal_range;
+use std::algorithm::ranges::equal_range_projected;
+use std::algorithm::ranges::equal_range_by_projected;
 use std::algorithm::ranges::binary_search;
+use std::algorithm::ranges::binary_search_projected;
+use std::algorithm::ranges::binary_search_by_projected;
+use std::algorithm::ranges::is_sorted_by;
+use std::algorithm::ranges::is_sorted_until_by;
+use std::algorithm::ranges::is_sorted_by_projected;
+use std::algorithm::ranges::is_sorted_until_by_projected;
+use std::algorithm::ranges::lower_bound_by;
+use std::algorithm::ranges::upper_bound_by;
+use std::algorithm::ranges::equal_range_by;
+use std::algorithm::ranges::binary_search_by;
 use std::algorithm::ranges::sorted;
+use std::algorithm::ranges::sorted_by;
+use std::algorithm::ranges::sorted_projected;
+use std::algorithm::ranges::sorted_by_projected;
+use std::algorithm::ranges::next_permutation;
+use std::algorithm::ranges::next_permutation_by;
+use std::algorithm::ranges::next_permutation_projected;
+use std::algorithm::ranges::next_permutation_by_projected;
+use std::algorithm::ranges::prev_permutation;
+use std::algorithm::ranges::prev_permutation_by;
+use std::algorithm::ranges::prev_permutation_projected;
+use std::algorithm::ranges::prev_permutation_by_projected;
 use std::algorithm::ranges::reversed;
+use std::algorithm::ranges::reverse_copy;
 use std::algorithm::ranges::rotate_left;
+use std::algorithm::ranges::rotate;
+use std::algorithm::ranges::rotate_copy;
+use std::algorithm::ranges::shift_left;
+use std::algorithm::ranges::shift_right;
 use std::algorithm::ranges::chunked;
+use std::algorithm::ranges::chunk;
 use std::algorithm::ranges::windows;
+use std::algorithm::ranges::slide;
 use std::algorithm::ranges::strided;
+use std::algorithm::ranges::stride;
 use std::algorithm::ranges::joined;
+use std::algorithm::ranges::join;
+use std::algorithm::ranges::joined_with;
+use std::algorithm::ranges::join_with;
+use std::algorithm::ranges::split;
 use std::algorithm::ranges::concat;
+use std::algorithm::ranges::zip;
+use std::algorithm::ranges::enumerate;
+use std::algorithm::ranges::enumerate_from;
+use std::algorithm::ranges::keys;
+use std::algorithm::ranges::values;
+use std::algorithm::ranges::cartesian_product;
+use std::algorithm::ranges::pairwise;
+use std::algorithm::ranges::adjacent3;
+use std::algorithm::ranges::adjacent4;
+use std::algorithm::ranges::adjacent_transform;
+use std::algorithm::ranges::adjacent_transform3;
+use std::algorithm::ranges::adjacent_transform4;
+use std::algorithm::ranges::adjacent5;
+use std::algorithm::ranges::adjacent_transform5;
+use std::algorithm::ranges::adjacent_transform5_projected;
+use std::algorithm::ranges::adjacent_transform_projected;
+use std::algorithm::ranges::adjacent_transform3_projected;
+use std::algorithm::ranges::adjacent_transform4_projected;
 use std::algorithm::ranges::replace;
+use std::algorithm::ranges::replace_projected;
+use std::algorithm::ranges::replace_by;
+use std::algorithm::ranges::replace_by_projected;
 use std::algorithm::ranges::all_of;
+use std::algorithm::ranges::all_of_projected;
 use std::algorithm::ranges::any_of;
+use std::algorithm::ranges::any_of_projected;
 use std::algorithm::ranges::none_of;
+use std::algorithm::ranges::none_of_projected;
+use std::algorithm::ranges::find_if;
+use std::algorithm::ranges::find_if_projected;
+use std::algorithm::ranges::find_last_if;
+use std::algorithm::ranges::find_last_if_projected;
+use std::algorithm::ranges::count_if;
+use std::algorithm::ranges::count_if_projected;
+use std::algorithm::ranges::for_each;
+use std::algorithm::ranges::for_each_projected;
+use std::algorithm::ranges::for_each_n;
+use std::algorithm::ranges::for_each_n_projected;
+use std::algorithm::ranges::for_each_n_count;
+use std::algorithm::ranges::for_each_n_projected_count;
+use std::algorithm::ranges::generate_n;
+use std::algorithm::ranges::generate;
+use std::algorithm::ranges::fill;
+use std::algorithm::ranges::fill_n;
+use std::algorithm::ranges::copy_n;
+use std::algorithm::ranges::copy_n_with_count;
+use std::algorithm::ranges::copy as ranges_copy;
+use std::algorithm::ranges::swap_ranges;
+use std::algorithm::ranges::filter;
+use std::algorithm::ranges::copy_if_projected;
+use std::algorithm::ranges::is_partitioned;
+use std::algorithm::ranges::is_partitioned_projected;
+use std::algorithm::ranges::partition_point;
+use std::algorithm::ranges::partition_point_projected;
+use std::algorithm::ranges::stable_partition;
+use std::algorithm::ranges::stable_partition_projected;
+use std::algorithm::ranges::partition as ranges_partition;
+use std::algorithm::ranges::partition_projected;
+use std::algorithm::ranges::partition_copy;
+use std::algorithm::ranges::partition_copy_projected;
+use std::algorithm::ranges::find_if_not;
+use std::algorithm::ranges::find_if_not_projected;
+use std::algorithm::ranges::find_last_if_not;
+use std::algorithm::ranges::find_last_if_not_projected;
+use std::algorithm::ranges::remove_if;
+use std::algorithm::ranges::remove_if_projected;
+use std::algorithm::ranges::copy_if;
+use std::algorithm::ranges::sample as ranges_sample;
+use std::algorithm::ranges::shuffle as ranges_shuffle;
+use std::algorithm::ranges::remove_copy;
+use std::algorithm::ranges::remove_copy_by;
+use std::algorithm::ranges::remove_copy_by_projected;
+use std::algorithm::ranges::remove_copy_projected;
+use std::algorithm::ranges::remove_copy_if;
+use std::algorithm::ranges::remove_copy_if_projected;
+use std::algorithm::ranges::replace_copy;
+use std::algorithm::ranges::replace_copy_projected;
+use std::algorithm::ranges::replace_copy_by;
+use std::algorithm::ranges::replace_copy_by_projected;
+use std::algorithm::ranges::replace_copy_if;
+use std::algorithm::ranges::replace_copy_if_projected;
+use std::algorithm::ranges::replace_if;
+use std::algorithm::ranges::replace_if_projected;
+use std::algorithm::ranges::unique_by;
+use std::algorithm::ranges::unique_copy_by;
+use std::algorithm::ranges::unique_projected;
+use std::algorithm::ranges::unique_copy_projected;
+use std::algorithm::ranges::unique_by_projected;
+use std::algorithm::ranges::unique_copy_by_projected;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
+use std::algorithm::ranges::minmax_element_index;
+use std::algorithm::ranges::min_element_value;
+use std::algorithm::ranges::max_element_value;
+use std::algorithm::ranges::minmax_element_value;
+use std::algorithm::ranges::min_element;
+use std::algorithm::ranges::max_element;
+use std::algorithm::ranges::minmax_element;
+use std::algorithm::ranges::min_element_by;
+use std::algorithm::ranges::max_element_by;
+use std::algorithm::ranges::minmax_element_by;
+use std::algorithm::ranges::min_element_projected;
+use std::algorithm::ranges::max_element_projected;
+use std::algorithm::ranges::minmax_element_projected;
+use std::algorithm::ranges::min_element_by_projected;
+use std::algorithm::ranges::max_element_by_projected;
+use std::algorithm::ranges::minmax_element_by_projected;
+use std::algorithm::ranges::min_element_index_by;
+use std::algorithm::ranges::max_element_index_by;
+use std::algorithm::ranges::minmax_element_index_by;
+use std::algorithm::ranges::min_element_value_by;
+use std::algorithm::ranges::max_element_value_by;
+use std::algorithm::ranges::minmax_element_value_by;
+use std::algorithm::ranges::min_element_index_projected;
+use std::algorithm::ranges::max_element_index_projected;
+use std::algorithm::ranges::minmax_element_index_projected;
+use std::algorithm::ranges::min_element_value_projected;
+use std::algorithm::ranges::max_element_value_projected;
+use std::algorithm::ranges::minmax_element_value_projected;
+use std::algorithm::ranges::min_element_index_by_projected;
+use std::algorithm::ranges::max_element_index_by_projected;
+use std::algorithm::ranges::minmax_element_index_by_projected;
+use std::algorithm::ranges::min_element_value_by_projected;
+use std::algorithm::ranges::max_element_value_by_projected;
+use std::algorithm::ranges::minmax_element_value_by_projected;
 use std::algorithm::ranges::remove;
+use std::algorithm::ranges::remove_by;
+use std::algorithm::ranges::remove_by_projected;
+use std::algorithm::ranges::remove_projected;
 use std::algorithm::ranges::take;
+use std::algorithm::ranges::take_last;
+use std::algorithm::ranges::subrange;
 use std::algorithm::ranges::iota;
+use std::algorithm::ranges::iota_by;
+use std::algorithm::ranges::iota_range;
+use std::algorithm::ranges::iota_range_by;
+use std::algorithm::ranges::repeat as repeat_range;
+use std::algorithm::ranges::single as single_range;
 use std::algorithm::ranges::drop;
+use std::algorithm::ranges::drop_last;
+use std::algorithm::ranges::take_while;
+use std::algorithm::ranges::drop_while;
+use std::algorithm::ranges::take_while_projected;
+use std::algorithm::ranges::drop_while_projected;
+use std::algorithm::ranges::transform;
+use std::algorithm::ranges::transform_with_count;
+use std::algorithm::ranges::transform_projected;
+use std::algorithm::ranges::transform_projected_with_count;
+use std::algorithm::ranges::zip_transform;
+use std::algorithm::ranges::zip_transform_projected;
+use std::algorithm::ranges::zip_transform3_projected;
+use std::algorithm::ranges::zip_transform4_projected;
+use std::algorithm::ranges::zip_transform5_projected;
+use std::algorithm::ranges::zip_transform6_projected;
+use std::algorithm::ranges::chunk_by;
+use std::algorithm::ranges::chunk_by_projected;
 use std::algorithm::ranges::unique;
+use std::algorithm::ranges::unique_copy;
 use std::algorithm::ranges::unique_stable;
 use std::algorithm::ranges::clamp;
+use std::algorithm::ranges::clamp_projected;
+use std::algorithm::ranges::clamp_by;
+use std::algorithm::ranges::clamp_by_projected;
 use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
@@ -100,6 +437,12 @@ use std::strbuf::eq;
 use std::strbuf::free;
 use std::strbuf::sub;
 use std::testing::verify;
+use std::testing::verify_eq_i32;
+
+struct AlgorithmRangeItem {
+    var key: i32;
+    var payload: i32;
+};
 
 #[test]
 fn test_algorithm_fuzzy_match_and_score() {
@@ -201,6 +544,49 @@ fn test_algorithm_ranges_unique_variants() {
 }
 
 #[test]
+fn test_algorithm_ranges_rotate_at_middle() {
+    let values: list<i32> = [1, 2, 3, 4, 5];
+    let rotated: list<i32> = rotate(values, 2);
+    verify(rotated.len() == 5 && rotated[0] == 3 && rotated[1] == 4 &&
+           rotated[2] == 5 && rotated[3] == 1 && rotated[4] == 2);
+    let unchanged: list<i32> = rotate(values, 0);
+    verify(unchanged[0] == 1 && unchanged[4] == 5);
+    let end: list<i32> = rotate(values, 5);
+    verify(end[0] == 1 && end[4] == 5);
+    let low: list<i32> = rotate(values, -8);
+    let high: list<i32> = rotate(values, 99);
+    verify(low[0] == 1 && high[4] == 5);
+    let empty: list<i32> = [];
+    let empty_rotated: list<i32> = rotate(empty, 3);
+    verify(empty_rotated.len() == 0);
+
+    let copied: list<i32> = rotate_copy(values, 2);
+    verify(copied.len() == 5 && copied[0] == 3 && copied[1] == 4 &&
+           copied[2] == 5 && copied[3] == 1 && copied[4] == 2);
+    let copied_end: list<i32> = rotate_copy(values, 5);
+    verify(copied_end[0] == 1 && copied_end[4] == 5);
+}
+
+#[test]
+fn test_algorithm_ranges_shift_algorithms() {
+    let values: list<i32> = [1, 2, 3, 4, 5];
+    let left: list<i32> = shift_left(values, 2);
+    let right: list<i32> = shift_right(values, 2);
+    verify(left.len() == 3 && left[0] == 3 && left[1] == 4 && left[2] == 5);
+    verify(right.len() == 3 && right[0] == 1 && right[1] == 2 && right[2] == 3);
+
+    let left_noop: list<i32> = shift_left(values, -1);
+    let right_noop: list<i32> = shift_right(values, 0);
+    verify(left_noop.len() == 5 && right_noop.len() == 5);
+    let left_empty: list<i32> = shift_left(values, 5);
+    let right_empty: list<i32> = shift_right(values, 8);
+    verify(left_empty.len() == 0 && right_empty.len() == 0);
+    let empty: list<i32> = [];
+    let shifted_empty: list<i32> = shift_left(empty, 1);
+    verify(shifted_empty.len() == 0);
+}
+
+#[test]
 fn test_algorithm_ranges_generic_find_count_contains() {
     let numbers: list<i32> = [3, 4, 4, 8];
     verify(find(numbers, 4) == 1);
@@ -218,6 +604,77 @@ fn test_algorithm_ranges_generic_find_count_contains() {
 }
 
 #[test]
+fn test_algorithm_ranges_find_last_by_equivalence() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let same_decade = |item: i32, key: i32| { return item / 10 == key / 10; };
+    verify(find_last_by(values, 20, same_decade) == 2);
+    verify(find_last_by(values, 90, same_decade) == -1);
+    let empty: list<i32> = [];
+    verify(find_last_by(empty, 20, same_decade) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_find_last_by_projected_heterogeneous_key() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let same_decade = |item: i32, key: i32| { return item == key; };
+    let project_tens = |item: i32| { return item / 10; };
+    verify(find_last_by_projected(values, 2, same_decade, project_tens) == 2);
+    verify(find_last_by_projected(values, 9, same_decade, project_tens) == -1);
+    let empty: list<i32> = [];
+    verify(find_last_by_projected(empty, 2, same_decade, project_tens) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_equivalence_lookup_and_removal() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let same_decade = |item: i32, key: i32| { return item / 10 == key / 10; };
+    verify(find_by(values, 20, same_decade) == 1);
+    verify(count_by(values, 20, same_decade) == 2);
+    verify(contains_by(values, 40, same_decade));
+    verify(!contains_by(values, 90, same_decade));
+
+    let removed: list<i32> = remove_by(values, 20, same_decade);
+    let removed_copy: list<i32> = remove_copy_by(values, 20, same_decade);
+    verify(removed.len() == 3 && removed[0] == 11 &&
+           removed[1] == 31 && removed[2] == 42);
+    verify(removed_copy.len() == 3 && removed_copy[0] == 11 &&
+           removed_copy[2] == 42);
+    verify(values.len() == 5 && values[1] == 22 && values[2] == 29);
+
+    let empty: list<i32> = [];
+    verify(find_by(empty, 20, same_decade) == -1);
+    verify(count_by(empty, 20, same_decade) == 0);
+    let empty_removed: list<i32> = remove_by(empty, 20, same_decade);
+    verify(empty_removed.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_equivalence_lookup_and_removal() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let project_tens = |value: i32| { return value / 10; };
+    let same_residue = |left: i32, right: i32| {
+        return left % 3 == right % 3;
+    };
+    verify(find_by_projected(values, 5, same_residue, project_tens) == 1);
+    verify(count_by_projected(values, 5, same_residue, project_tens) == 2);
+    verify(contains_by_projected(values, 8, same_residue, project_tens));
+    verify(contains_by_projected(values, 9, same_residue, project_tens));
+
+    let removed: list<i32> = remove_by_projected(
+        values, 5, same_residue, project_tens);
+    let removed_copy: list<i32> = remove_copy_by_projected(
+        values, 5, same_residue, project_tens);
+    verify(removed.len() == 3 && removed[0] == 11 && removed[1] == 31 &&
+           removed[2] == 42);
+    verify(removed_copy.len() == 3 && removed_copy[0] == 11 &&
+           removed_copy[1] == 31 && removed_copy[2] == 42);
+    verify(values.len() == 5 && values[1] == 22 && values[4] == 42);
+    let empty: list<i32> = [];
+    verify(!contains_by_projected(empty, 9, same_residue, project_tens));
+    verify(find_by_projected(empty, 9, same_residue, project_tens) == -1);
+}
+
+#[test]
 fn test_algorithm_ranges_generic_adjacent_find() {
     let values: list<i32> = [4, 7, 7, 9, 9];
     verify(adjacent_find(values) == 1);
@@ -231,6 +688,20 @@ fn test_algorithm_ranges_generic_adjacent_find() {
 }
 
 #[test]
+fn test_algorithm_ranges_adjacent_find_by_equivalence() {
+    let grouped: list<i32> = [11, 22, 29, 31];
+    let separated: list<i32> = [11, 22, 31];
+    let one: list<i32> = [12];
+    let empty: list<i32> = [];
+    let by_tens = |a: i32, b: i32| { return a / 10 == b / 10; };
+
+    verify(adjacent_find_by(grouped, by_tens) == 1);
+    verify(adjacent_find_by(separated, by_tens) == -1);
+    verify(adjacent_find_by(one, by_tens) == -1);
+    verify(adjacent_find_by(empty, by_tens) == -1);
+}
+
+#[test]
 fn test_algorithm_ranges_generic_find_first_of() {
     let values: list<i32> = [8, 6, 4, 2];
     let candidates: list<i64> = [2, 6];
@@ -239,6 +710,42 @@ fn test_algorithm_ranges_generic_find_first_of() {
     let empty: list<i32> = [];
     verify(find_first_of(values, none) == -1);
     verify(find_first_of(empty, candidates) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_find_first_of_by_heterogeneous_predicate() {
+    let values: list<i32> = [11, 22, 23, 34];
+    let candidates: list<i64> = [19, 20];
+    let absent: list<i64> = [49, 58];
+    let empty: list<i64> = [];
+    let same_decade = |value: i32, candidate: i64| {
+        return value / 10 == candidate / 10;
+    };
+
+    verify(find_first_of_by(values, candidates, same_decade) == 0);
+    verify(find_first_of_by(values, absent, same_decade) == -1);
+    verify(find_first_of_by(values, empty, same_decade) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_lookup_family() {
+    let values: list<i32> = [11, 21, 29, 31, 34];
+    let candidates: list<i32> = [28, 43];
+    let absent: list<i32> = [48];
+    let empty: list<i32> = [];
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(find_last_projected(values, 3, project_tens) == 4);
+    verify(find_last_projected(values, 8, project_tens) == -1);
+    verify(adjacent_find_projected(values, project_tens) == 1);
+    verify(adjacent_find_projected(absent, project_tens) == -1);
+    verify(adjacent_find_projected(empty, project_tens) == -1);
+    verify(find_first_of_projected(
+        values, candidates, project_tens, project_tens) == 1);
+    verify(find_first_of_projected(
+        values, absent, project_tens, project_tens) == -1);
+    verify(find_first_of_projected(
+        values, empty, project_tens, project_tens) == -1);
 }
 
 #[test]
@@ -256,6 +763,34 @@ fn test_algorithm_ranges_generic_includes() {
 }
 
 #[test]
+fn test_algorithm_ranges_includes_by_comparator() {
+    let range: list<i32> = [9, 7, 7, 3, 1];
+    let subset: list<i32> = [7, 3];
+    let too_many: list<i32> = [7, 7, 7];
+    let empty: list<i32> = [];
+    let greater = |a: i32, b: i32| { return a > b; };
+    verify(includes_by(range, subset, greater));
+    verify(!includes_by(range, too_many, greater));
+    verify(includes_by(range, empty, greater));
+}
+
+#[test]
+fn test_algorithm_ranges_includes_projected() {
+    let range: list<i32> = [11, 21, 22, 41];
+    let subset: list<i32> = [19, 28];
+    let too_many: list<i32> = [12, 29, 27, 28];
+    let absent: list<i32> = [18, 39];
+    let empty: list<i32> = [];
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(includes_projected(range, subset, project_tens, project_tens));
+    verify(!includes_projected(range, too_many, project_tens, project_tens));
+    verify(!includes_projected(range, absent, project_tens, project_tens));
+    verify(includes_projected(range, empty, project_tens, project_tens));
+    verify(range[0] == 11 && range[2] == 22);
+}
+
+#[test]
 fn test_algorithm_ranges_generic_size_empty_equal() {
     let numbers: list<i32> = [2, 4, 6];
     let same_values: list<i32> = [2, 4, 6];
@@ -268,6 +803,62 @@ fn test_algorithm_ranges_generic_size_empty_equal() {
     verify(equal(numbers, same_values));
     verify(equal(numbers, different_values) == false);
     verify(equal(numbers, no_values) == false);
+    let mixed_numbers: list<i64> = [2, 4, 6];
+    verify(equal(numbers, mixed_numbers));
+
+    let equal_prefix: tuple<i64, i64> = mismatch(numbers, mixed_numbers);
+    verify(equal_prefix.0 == 3 && equal_prefix.1 == 3);
+    let differing: list<i64> = [2, 9, 6, 8];
+    let first_difference: tuple<i64, i64> = mismatch(numbers, differing);
+    verify(first_difference.0 == 1 && first_difference.1 == 1);
+    let shorter: list<i32> = [2, 4];
+    let end_of_shorter: tuple<i64, i64> = mismatch(numbers, shorter);
+    verify(end_of_shorter.0 == 2 && end_of_shorter.1 == 2);
+}
+
+#[test]
+fn test_algorithm_ranges_equal_by_equivalence() {
+    let left: list<i32> = [11, 12, 23];
+    let same_keys: list<i32> = [19, 10, 29];
+    let different_keys: list<i32> = [19, 20, 29];
+    let shorter: list<i32> = [19, 10];
+    let by_tens = |a: i32, b: i32| { return a / 10 == b / 10; };
+
+    verify(equal_by(left, same_keys, by_tens));
+    verify(!equal_by(left, different_keys, by_tens));
+    verify(!equal_by(left, shorter, by_tens));
+
+    let mismatch_indices: tuple<i64, i64> = mismatch_by(left, same_keys, by_tens);
+    verify(mismatch_indices.0 == 3 && mismatch_indices.1 == 3);
+    let mismatch_at_one: tuple<i64, i64> = mismatch_by(left, different_keys, by_tens);
+    verify(mismatch_at_one.0 == 1 && mismatch_at_one.1 == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_equal_and_mismatch_by_projected() {
+    let left: list<i32> = [11, 12, 23];
+    let same_keys: list<i64> = [19, 10, 29];
+    let different_keys: list<i64> = [19, 20, 29];
+    let shorter: list<i64> = [19, 10];
+    let identity = |value: i32| { return value; };
+    let identity_wide = |value: i64| { return i32(value); };
+    let same_decade = |a: i32, b: i32| { return a / 10 == b / 10; };
+
+    verify(equal_by_projected(
+        left, same_keys, same_decade, identity, identity_wide));
+    verify(!equal_by_projected(
+        left, different_keys, same_decade, identity, identity_wide));
+    verify(!equal_by_projected(
+        left, shorter, same_decade, identity, identity_wide));
+    let end: tuple<i64, i64> = mismatch_by_projected(
+        left, same_keys, same_decade, identity, identity_wide);
+    let first_difference: tuple<i64, i64> = mismatch_by_projected(
+        left, different_keys, same_decade, identity, identity_wide);
+    let short_end: tuple<i64, i64> = mismatch_by_projected(
+        left, shorter, same_decade, identity, identity_wide);
+    verify(end.0 == 3 && end.1 == 3);
+    verify(first_difference.0 == 1 && first_difference.1 == 1);
+    verify(short_end.0 == 2 && short_end.1 == 2);
 }
 
 #[test]
@@ -285,6 +876,78 @@ fn test_algorithm_ranges_generic_is_permutation() {
 }
 
 #[test]
+fn test_algorithm_ranges_projected_comparisons() {
+    let left: list<i32> = [11, 21, 32, 43];
+    let equal_keys: list<i32> = [19, 28, 38, 47];
+    let mismatch_keys: list<i32> = [19, 38, 47];
+    let project_left = |value: i32| { return value / 10; };
+    let project_right = |value: i32| { return value / 10; };
+
+    verify(equal_projected(left, equal_keys, project_left, project_right));
+    let no_mismatch: tuple<i64, i64> = mismatch_projected(
+        left, equal_keys, project_left, project_right);
+    verify(no_mismatch.0 == 4 && no_mismatch.1 == 4);
+    let mismatch_at_one: tuple<i64, i64> = mismatch_projected(
+        left, mismatch_keys, project_left, project_right);
+    verify(mismatch_at_one.0 == 1 && mismatch_at_one.1 == 1);
+
+    let perm_left: list<i32> = [11, 21, 32, 14];
+    let perm_right: list<i32> = [19, 13, 28, 35];
+    verify(is_permutation_projected(
+        perm_left, perm_right, project_left, project_right));
+    let wrong_counts: list<i32> = [19, 13, 28, 46];
+    verify(!is_permutation_projected(
+        perm_left, wrong_counts, project_left, project_right));
+
+    let less_tens = |a: i32, b: i32| { return a / 10 < b / 10; };
+    let identity = |value: i32| { return value; };
+    let identity_wide = |value: i64| { return i32(value); };
+    let comparator_perm_left: list<i32> = [11, 19, 22, 25];
+    let comparator_perm_right: list<i64> = [12, 28, 18, 29];
+    verify(is_permutation_by_projected(
+        comparator_perm_left, comparator_perm_right, less_tens,
+        identity, identity_wide));
+    let wrong_comparator_perm: list<i64> = [12, 18, 14, 29];
+    verify(!is_permutation_by_projected(
+        comparator_perm_left, wrong_comparator_perm, less_tens,
+        identity, identity_wide));
+
+    let prefix: list<i32> = [19, 28];
+    let wrong_prefix: list<i32> = [19, 39];
+    let suffix: list<i32> = [31, 44];
+    verify(starts_with_projected(left, prefix, project_left, project_right));
+    verify(!starts_with_projected(
+        left, wrong_prefix, project_left, project_right));
+    verify(ends_with_projected(left, suffix, project_left, project_right));
+}
+
+#[test]
+fn test_algorithm_ranges_is_permutation_by_equivalence() {
+    let values: list<i32> = [11, 12, 12, 23];
+    let reordered: list<i32> = [19, 10, 29, 12];
+    let wrong_counts: list<i32> = [19, 20, 29, 12];
+    let different_size: list<i32> = [19, 10, 29];
+    let by_tens = |a: i32, b: i32| { return a / 10 == b / 10; };
+
+    verify(is_permutation_by(values, reordered, by_tens));
+    verify(!is_permutation_by(values, wrong_counts, by_tens));
+    verify(!is_permutation_by(values, different_size, by_tens));
+}
+
+#[test]
+fn test_algorithm_ranges_predicate_comparisons_heterogeneous() {
+    let same_decade = |left: i32, right: i64| {
+        return left / 10 == right / 10;
+    };
+    let left: list<i32> = [11, 22, 23, 14];
+    let equal_right: list<i64> = [19, 29, 21, 10];
+    let unequal_right: list<i64> = [19, 29, 31, 10];
+    verify(equal_by(left, equal_right, same_decade));
+    verify(!equal_by(left, unequal_right, same_decade));
+
+}
+
+#[test]
 fn test_algorithm_ranges_generic_starts_with() {
     let values: list<i32> = [3, 5, 8, 13];
     let prefix: list<i32> = [3, 5];
@@ -296,6 +959,8 @@ fn test_algorithm_ranges_generic_starts_with() {
     verify(starts_with(values, mismatch) == false);
     verify(starts_with(values, too_long) == false);
     verify(starts_with(values, empty));
+    let mixed_prefix: list<i64> = [3, 5, 8];
+    verify(starts_with(values, mixed_prefix));
 }
 
 #[test]
@@ -320,6 +985,206 @@ fn test_algorithm_ranges_generic_search_subrange() {
 }
 
 #[test]
+fn test_algorithm_ranges_generic_find_end() {
+    let data: list<i32> = [1, 2, 1, 2, 1];
+    let pattern: list<i64> = [1, 2, 1];
+    let missing: list<i32> = [2, 2];
+    let empty: list<i32> = [];
+    verify(find_end(data, pattern) == 2);
+    verify(find_end(data, missing) == -1);
+    verify(find_end(data, empty) == 5);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_pattern_search() {
+    let data: list<i32> = [11, 22, 19, 28, 31, 14, 26];
+    let pattern: list<i32> = [15, 29];
+    let one_key: list<i32> = [18];
+    let absent: list<i32> = [18, 49];
+    let empty: list<i32> = [];
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(search_projected(data, pattern, project_tens, project_tens) == 0);
+    verify(find_end_projected(data, pattern, project_tens, project_tens) == 5);
+    verify(contains_subrange_projected(
+        data, pattern, project_tens, project_tens));
+    verify(find_end_projected(data, one_key, project_tens, project_tens) == 5);
+    verify(search_projected(data, absent, project_tens, project_tens) == -1);
+    verify(!contains_subrange_projected(
+        data, absent, project_tens, project_tens));
+    verify(search_projected(data, empty, project_tens, project_tens) == 0);
+    verify(find_end_projected(data, empty, project_tens, project_tens) == 7);
+    verify(contains_subrange_projected(
+        empty, empty, project_tens, project_tens));
+}
+
+#[test]
+fn test_algorithm_ranges_search_by_equivalence() {
+    let data: list<i32> = [11, 22, 23, 34, 21, 29];
+    let pattern: list<i32> = [20, 29];
+    let by_tens = |a: i32, b: i32| { return a / 10 == b / 10; };
+
+    verify(search_by(data, pattern, by_tens) == 1);
+
+    let mixed_pattern: list<i64> = [20, 29];
+    let mixed_by_tens = |a: i32, b: i64| { return a / 10 == b / 10; };
+    verify(search_by(data, mixed_pattern, mixed_by_tens) == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_find_end_by_equivalence() {
+    let data: list<i32> = [11, 22, 23, 34, 21, 29];
+    let pattern: list<i32> = [20, 29];
+    let by_tens = |a: i32, b: i32| { return a / 10 == b / 10; };
+    verify(find_end_by(data, pattern, by_tens) == 4);
+
+    let mixed_pattern: list<i64> = [20, 29];
+    let mixed_by_tens = |a: i32, b: i64| { return a / 10 == b / 10; };
+    verify(find_end_by(data, mixed_pattern, mixed_by_tens) == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_subrange_search_by_edges() {
+    let data: list<i32> = [11, 22, 23, 34, 21, 29];
+    let absent: list<i32> = [45, 44];
+    let too_long: list<i32> = [11, 22, 23, 34, 21, 29, 30];
+    let empty: list<i32> = [];
+    let by_tens = |a: i32, b: i32| { return a / 10 == b / 10; };
+    verify(search_by(data, absent, by_tens) == -1);
+    verify(find_end_by(data, absent, by_tens) == -1);
+    verify(search_by(data, too_long, by_tens) == -1);
+    verify(search_by(data, empty, by_tens) == 0);
+    verify(find_end_by(data, empty, by_tens) == data.len());
+}
+
+#[test]
+fn test_algorithm_ranges_contains_subrange_by() {
+    let values: list<i32> = [11, 22, 34, 45, 58];
+    let matching: list<i32> = [29, 38];
+    let absent: list<i32> = [19, 39];
+    let empty: list<i32> = [];
+    let same_decade = |value: i32, candidate: i32| {
+        return value / 10 == candidate / 10;
+    };
+
+    verify(contains_subrange_by(values, matching, same_decade));
+    verify(!contains_subrange_by(values, absent, same_decade));
+    verify(contains_subrange_by(values, empty, same_decade));
+    verify(contains_subrange_by(empty, empty, same_decade));
+}
+
+#[test]
+fn test_algorithm_ranges_subrange_search_by_projected() {
+    let data: list<i32> = [11, 22, 23, 34, 21, 29];
+    let pattern: list<i64> = [20, 29];
+    let absent: list<i64> = [45, 44];
+    let too_long: list<i64> = [11, 22, 23, 34, 21, 29, 30];
+    let empty: list<i64> = [];
+    let identity = |value: i32| { return value; };
+    let narrow = |value: i64| { return i32(value); };
+    let same_decade = |left: i32, right: i32| {
+        return left / 10 == right / 10;
+    };
+
+    verify(search_by_projected(data, pattern, same_decade,
+                               identity, narrow) == 1);
+    verify(find_end_by_projected(data, pattern, same_decade,
+                                 identity, narrow) == 4);
+    verify(contains_subrange_by_projected(
+        data, pattern, same_decade, identity, narrow));
+    verify(search_by_projected(data, absent, same_decade,
+                               identity, narrow) == -1);
+    verify(find_end_by_projected(data, too_long, same_decade,
+                                 identity, narrow) == -1);
+    verify(!contains_subrange_by_projected(
+        data, absent, same_decade, identity, narrow));
+    verify(search_by_projected(data, empty, same_decade,
+                               identity, narrow) == 0);
+    verify(find_end_by_projected(data, empty, same_decade,
+                                 identity, narrow) == data.len());
+    verify(contains_subrange_by_projected(
+        empty, empty, same_decade, identity, narrow));
+    verify(data[0] == 11 && data[5] == 29);
+}
+
+#[test]
+fn test_algorithm_ranges_search_n_repeated_value() {
+    let values: list<i32> = [1, 2, 2, 2, 3, 2, 2];
+    verify(search_n(values, 3, 2) == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_search_n_single_value() {
+    let values: list<i32> = [1, 2, 2, 2, 3, 2, 2];
+    verify(search_n(values, 1, 3) == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_search_n_missing() {
+    let values: list<i32> = [1, 2, 2, 2, 3, 2, 2];
+    verify(search_n(values, 3, 4) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_search_n_zero_count() {
+    let values: list<i32> = [1, 2, 2, 2, 3, 2, 2];
+    verify(search_n(values, 0, 99) == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_search_n_by_equivalence() {
+    let by_tens = |left: i32, right: i32| { return left / 10 == right / 10; };
+    let grouped: list<i32> = [11, 12, 21, 22, 23];
+    let key_nineteen: i32 = 19;
+    let key_twenty_nine: i32 = 29;
+    verify(search_n_by(grouped, 2, key_nineteen, by_tens) == 0);
+    verify(search_n_by(grouped, 3, key_twenty_nine, by_tens) == 2);
+    verify(search_n_by(grouped, 4, key_twenty_nine, by_tens) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_search_n_empty() {
+    let empty: list<i32> = [];
+    verify(search_n(empty, 1, 0) == -1);
+    verify(search_n(empty, 0, 0) == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_search_n_projected() {
+    let values: list<i32> = [11, 12, 21, 22, 23, 31];
+    let project_tens = |value: i32| { return value / 10; };
+    verify(search_n_projected(values, 3, 2, project_tens) == 2);
+    verify(search_n_projected(values, 4, 2, project_tens) == -1);
+    verify(search_n_projected(values, 1, 3, project_tens) == 5);
+    verify(search_n_projected(values, 0, 9, project_tens) == 0);
+    verify(search_n_projected(values, -2, 9, project_tens) == 0);
+    let empty: list<i32> = [];
+    verify(search_n_projected(empty, 1, 1, project_tens) == -1);
+    verify(search_n_projected(empty, 0, 1, project_tens) == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_search_n_by_projected() {
+    let values: list<i32> = [11, 12, 19, 21, 22, 23, 34];
+    let empty: list<i32> = [];
+    let project_tens = |value: i32| { return value / 10; };
+    let same_key = |key: i32, value: i32| { return key == value; };
+    verify(search_n_by_projected(
+        values, 3, 2, same_key, project_tens) == 3);
+    verify(search_n_by_projected(
+        values, 4, 2, same_key, project_tens) == -1);
+    verify(search_n_by_projected(
+        values, 1, 3, same_key, project_tens) == 6);
+    verify(search_n_by_projected(
+        values, 0, 9, same_key, project_tens) == 0);
+    verify(search_n_by_projected(
+        values, -2, 9, same_key, project_tens) == 0);
+    verify(search_n_by_projected(
+        empty, 1, 1, same_key, project_tens) == -1);
+    verify(values[0] == 11 && values[6] == 34);
+}
+
+#[test]
 fn test_algorithm_ranges_generic_ends_with() {
     let values: list<i32> = [3, 5, 8, 13];
     let suffix: list<i32> = [8, 13];
@@ -331,6 +1196,86 @@ fn test_algorithm_ranges_generic_ends_with() {
     verify(ends_with(values, mismatch) == false);
     verify(ends_with(values, too_long) == false);
     verify(ends_with(values, empty));
+    let mixed_suffix: list<i64> = [8, 13];
+    verify(ends_with(values, mixed_suffix));
+}
+
+#[test]
+fn test_algorithm_ranges_starts_ends_with_by_predicate() {
+    let values: list<i32> = [21, 25, 31, 38];
+    let same_decade = |left: i32, right: i32| {
+        return left / 10 == right / 10;
+    };
+    let prefix: list<i32> = [29, 20];
+    let wrong_prefix: list<i32> = [17];
+    let suffix: list<i32> = [30, 39];
+    let wrong_suffix: list<i32> = [30, 49];
+    let too_long: list<i32> = [10, 20, 30, 40, 50];
+    let empty: list<i32> = [];
+
+    verify(starts_with_by(values, prefix, same_decade));
+    verify(!starts_with_by(values, wrong_prefix, same_decade));
+    verify(!starts_with_by(values, too_long, same_decade));
+    verify(starts_with_by(values, empty, same_decade));
+
+    verify(ends_with_by(values, suffix, same_decade));
+    verify(!ends_with_by(values, wrong_suffix, same_decade));
+    verify(!ends_with_by(values, too_long, same_decade));
+    verify(ends_with_by(values, empty, same_decade));
+}
+
+#[test]
+fn test_algorithm_ranges_predicate_searches_by_projected() {
+    let identity = |value: i32| { return value; };
+    let narrow = |value: i64| { return i32(value); };
+    let same_decade = |left: i32, right: i32| {
+        return left / 10 == right / 10;
+    };
+
+    let adjacent: list<i32> = [11, 19, 22, 29];
+    let separated: list<i32> = [11, 22, 31];
+    let one: list<i32> = [12];
+    let empty: list<i32> = [];
+    verify(adjacent_find_by_projected(
+        adjacent, same_decade, identity) == 0);
+    verify(adjacent_find_by_projected(
+        separated, same_decade, identity) == -1);
+    verify(adjacent_find_by_projected(one, same_decade, identity) == -1);
+    verify(adjacent_find_by_projected(empty, same_decade, identity) == -1);
+
+    let values: list<i32> = [11, 22, 23, 34];
+    let candidates: list<i64> = [29, 20];
+    let absent: list<i64> = [49, 58];
+    let none: list<i64> = [];
+    verify(find_first_of_by_projected(
+        values, candidates, same_decade, identity, narrow) == 1);
+    verify(find_first_of_by_projected(
+        values, absent, same_decade, identity, narrow) == -1);
+    verify(find_first_of_by_projected(
+        values, none, same_decade, identity, narrow) == -1);
+
+    let sequence: list<i32> = [21, 25, 31, 38];
+    let prefix: list<i64> = [29, 20];
+    let wrong_prefix: list<i64> = [17];
+    let suffix: list<i64> = [30, 39];
+    let wrong_suffix: list<i64> = [30, 49];
+    let too_long: list<i64> = [10, 20, 30, 40, 50];
+    verify(starts_with_by_projected(
+        sequence, prefix, same_decade, identity, narrow));
+    verify(!starts_with_by_projected(
+        sequence, wrong_prefix, same_decade, identity, narrow));
+    verify(!starts_with_by_projected(
+        sequence, too_long, same_decade, identity, narrow));
+    verify(starts_with_by_projected(
+        sequence, none, same_decade, identity, narrow));
+    verify(ends_with_by_projected(
+        sequence, suffix, same_decade, identity, narrow));
+    verify(!ends_with_by_projected(
+        sequence, wrong_suffix, same_decade, identity, narrow));
+    verify(!ends_with_by_projected(
+        sequence, too_long, same_decade, identity, narrow));
+    verify(ends_with_by_projected(
+        sequence, none, same_decade, identity, narrow));
 }
 
 #[test]
@@ -346,6 +1291,63 @@ fn test_algorithm_ranges_generic_lexicographical_compare() {
     verify(lexicographical_compare(first, equal_values) == false);
     verify(lexicographical_compare(empty, first));
     verify(lexicographical_compare(first, empty) == false);
+    let mixed: list<i64> = [1, 2, 10];
+    verify(lexicographical_compare(first, mixed));
+    verify(lexicographical_compare(mixed, first) == false);
+}
+
+#[test]
+fn test_algorithm_ranges_lexicographical_compare_projected() {
+    let left: list<i32> = [21, 39, 52];
+    let before: list<i32> = [29, 40, 50];
+    let same_keys: list<i32> = [28, 31, 59];
+    let extended: list<i32> = [29, 40, 50, 60];
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(lexicographical_compare_projected(
+        left, before, project_tens, project_tens));
+    verify(!lexicographical_compare_projected(
+        before, left, project_tens, project_tens));
+    verify(!lexicographical_compare_projected(
+        left, same_keys, project_tens, project_tens));
+    verify(lexicographical_compare_projected(
+        left, extended, project_tens, project_tens));
+}
+
+#[test]
+fn test_algorithm_ranges_lexicographical_compare_by() {
+    let first: list<i32> = [9, 7];
+    let before: list<i32> = [9, 6];
+    let after: list<i32> = [9, 8];
+    let extended: list<i32> = [9, 7, 3];
+    let greater = |a: i32, b: i32| { return a > b; };
+    verify(lexicographical_compare_by(first, before, greater));
+    verify(!lexicographical_compare_by(first, after, greater));
+    verify(lexicographical_compare_by(first, extended, greater));
+    verify(!lexicographical_compare_by(extended, first, greater));
+
+    let equivalent: list<i32> = [9, 7];
+    verify(!lexicographical_compare_by(first, equivalent, greater));
+}
+
+#[test]
+fn test_algorithm_ranges_lexicographical_compare_by_projected() {
+    let left: list<i32> = [39, 11];
+    let right: list<i64> = [29, 21];
+    let project_left = |value: i32| { return value / 10; };
+    let project_right = |value: i64| { return i32(value / 10); };
+    let greater = |a: i32, b: i32| { return a > b; };
+    verify(lexicographical_compare_by_projected(
+        left, right, greater, project_left, project_right));
+    verify(!lexicographical_compare_by_projected(
+        right, left, greater, project_right, project_left));
+
+    let prefix: list<i32> = [29];
+    let extended: list<i64> = [20, 19];
+    verify(lexicographical_compare_by_projected(
+        prefix, extended, greater, project_left, project_right));
+    verify(!lexicographical_compare_by_projected(
+        extended, prefix, greater, project_right, project_left));
 }
 
 #[test]
@@ -371,6 +1373,465 @@ fn test_algorithm_ranges_generic_is_sorted_until() {
     verify(is_sorted_until(unsorted_values) == 2);
     verify(is_sorted_until(empty) == 0);
     verify(is_sorted_until(one) == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_heap_queries() {
+    let heap: list<i32> = [9, 7, 8, 2, 3, 1];
+    let invalid: list<i32> = [9, 7, 8, 10, 2];
+    let empty: list<i32> = [];
+    let one: list<i32> = [4];
+    verify(is_heap(heap) && is_heap_until(heap) == 6);
+    verify(!is_heap(invalid) && is_heap_until(invalid) == 3);
+    verify(is_heap(empty) && is_heap_until(empty) == 0);
+    verify(is_heap(one) && is_heap_until(one) == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_heap_queries() {
+    let min_heap: list<i32> = [1, 3, 2, 9, 8, 4];
+    let invalid: list<i32> = [1, 5, 2, 3];
+    let empty: list<i32> = [];
+    let one: list<i32> = [4];
+    let greater = |a: i32, b: i32| { return a > b; };
+    verify(is_heap_by(min_heap, greater));
+    verify(is_heap_until_by(min_heap, greater) == 6);
+    verify(!is_heap_by(invalid, greater));
+    verify(is_heap_until_by(invalid, greater) == 3);
+    verify(is_heap_by(empty, greater));
+    verify(is_heap_until_by(empty, greater) == 0);
+    verify(is_heap_by(one, greater) && is_heap_until_by(one, greater) == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_heap_algorithms() {
+    let values: list<i32> = [3, 1, 8, 4, 2];
+    let heap: list<i32> = make_heap(values);
+    verify(is_heap(heap) && heap[0] == 8);
+    verify(values[0] == 3 && values[2] == 8);
+
+    var appended: list<i32> = take(heap, heap.len());
+    appended.push(10);
+    let pushed: list<i32> = push_heap(appended);
+    verify(is_heap(pushed) && pushed[0] == 10);
+
+    let popped: list<i32> = pop_heap(pushed);
+    let popped_prefix: list<i32> = take(popped, popped.len() - 1);
+    verify(popped[popped.len() - 1] == 10 && is_heap(popped_prefix));
+    let ordered: list<i32> = sort_heap(heap);
+    verify(ordered.len() == 5 && ordered[0] == 1 && ordered[4] == 8);
+
+    let greater = |a: i32, b: i32| { return a > b; };
+    let min_heap: list<i32> = make_heap_by(values, greater);
+    verify(is_heap_by(min_heap, greater) && min_heap[0] == 1);
+    var min_appended: list<i32> = take(min_heap, min_heap.len());
+    min_appended.push(0);
+    let min_pushed: list<i32> = push_heap_by(min_appended, greater);
+    verify(is_heap_by(min_pushed, greater) && min_pushed[0] == 0);
+    let min_popped: list<i32> = pop_heap_by(min_pushed, greater);
+    verify(min_popped[min_popped.len() - 1] == 0);
+    let descending: list<i32> = sort_heap_by(min_heap, greater);
+    verify(descending[0] == 8 && descending[4] == 1);
+
+    let empty: list<i32> = [];
+    let empty_heap: list<i32> = make_heap(empty);
+    let empty_pushed: list<i32> = push_heap(empty);
+    let empty_popped: list<i32> = pop_heap(empty);
+    let empty_sorted: list<i32> = sort_heap(empty);
+    verify(empty_heap.len() == 0 && empty_pushed.len() == 0);
+    verify(empty_popped.len() == 0 && empty_sorted.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_partial_sort() {
+    let values: list<i32> = [9, 1, 7, 3, 6, 2];
+    let smallest: list<i32> = partial_sort(values, 3);
+    verify(smallest.len() == 3 && smallest[0] == 1 &&
+           smallest[1] == 2 && smallest[2] == 3);
+    verify(values[0] == 9 && values[1] == 1);
+
+    let greatest = |a: i32, b: i32| { return a > b; };
+    let largest: list<i32> = partial_sort_by(values, 2, greatest);
+    verify(largest.len() == 2 && largest[0] == 9 && largest[1] == 7);
+
+    let none: list<i32> = partial_sort(values, -4);
+    let all: list<i32> = partial_sort(values, 100);
+    verify(none.len() == 0 && all.len() == 6);
+    verify(all[0] == 1 && all[5] == 9);
+    let empty: list<i32> = [];
+    let empty_sorted: list<i32> = partial_sort(empty, 2);
+    verify(empty_sorted.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_partial_sort_by_projection() {
+    let values: list<i32> = [42, 11, 23, 31, 19, 5];
+    let project_tens = |value: i32| { return value / 10; };
+    let first_three: list<i32> =
+        partial_sort_projected(values, 3, project_tens);
+    verify(first_three.len() == 3);
+    verify(first_three[0] == 5 &&
+           ((first_three[1] == 11 && first_three[2] == 19) ||
+            (first_three[1] == 19 && first_three[2] == 11)));
+
+    let none: list<i32> = partial_sort_projected(values, -2, project_tens);
+    let all: list<i32> = partial_sort_projected(values, 99, project_tens);
+    verify(none.len() == 0 && all.len() == values.len());
+    verify(is_sorted_projected(all, project_tens));
+    verify(values[0] == 42 && values[5] == 5);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_heap_operations() {
+    let values: list<i32> = [41, 12, 35, 24, 58, 17];
+    let project_tens = |value: i32| { return value / 10; };
+    let heap: list<i32> = make_heap_projected(values, project_tens);
+    verify(is_heap_projected(heap, project_tens));
+    verify(heap[0] == 58);
+
+    let appended: list<i32> = [heap[0], heap[1], heap[2], heap[3], heap[4],
+                               heap[5], 99];
+    let pushed: list<i32> = push_heap_projected(appended, project_tens);
+    verify(is_heap_projected(pushed, project_tens) && pushed[0] == 99);
+    let popped: list<i32> = pop_heap_projected(pushed, project_tens);
+    verify(popped[popped.len() - 1] == 99);
+    verify(is_heap_until_projected(popped, project_tens) == popped.len() - 1);
+
+    let ordered: list<i32> = sort_heap_projected(heap, project_tens);
+    verify(is_sorted_projected(ordered, project_tens));
+    verify(ordered[0] == 12 && ordered[5] == 58);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_projected_heap_operations() {
+    let values: list<i32> = [41, 12, 35, 24, 58, 17];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let project_tens = |value: i32| { return value / 10; };
+    let heap: list<i32> = make_heap_by_projected(values, greater,
+                                                  project_tens);
+    verify(is_heap_by_projected(heap, greater, project_tens));
+    verify(is_heap_until_by_projected(heap, greater, project_tens) ==
+           heap.len());
+    verify(project_tens(heap[0]) == 1);
+
+    var appended: list<i32> = take(heap, heap.len());
+    appended.push(9);
+    let pushed: list<i32> = push_heap_by_projected(appended, greater,
+                                                   project_tens);
+    verify(is_heap_by_projected(pushed, greater, project_tens));
+    verify(pushed[0] == 9);
+    let popped: list<i32> = pop_heap_by_projected(pushed, greater,
+                                                  project_tens);
+    verify(popped[popped.len() - 1] == 9);
+    verify(is_heap_until_by_projected(popped, greater, project_tens) ==
+           popped.len() - 1);
+
+    let ordered: list<i32> = sort_heap_by_projected(heap, greater,
+                                                     project_tens);
+    verify(is_sorted_by_projected(ordered, greater, project_tens));
+    verify(ordered[0] == 58 &&
+           project_tens(ordered[ordered.len() - 1]) == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_partial_sort_comparator_projection() {
+    let values: list<i32> = [42, 11, 23, 31, 19, 55];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let project_tens = |value: i32| { return value / 10; };
+    let largest: list<i32> = partial_sort_by_projected(
+        values, 3, greater, project_tens);
+    verify(largest.len() == 3 && largest[0] == 55 &&
+           largest[1] == 42 && largest[2] == 31);
+    verify(is_sorted_by_projected(largest, greater, project_tens));
+
+    let copied: list<i32> = partial_sort_copy_by_projected(
+        values, 2, greater, project_tens);
+    verify(copied.len() == 2 && copied[0] == 55 && copied[1] == 42);
+    let empty: list<i32> = partial_sort_by_projected(
+        values, -1, greater, project_tens);
+    verify(empty.len() == 0 && values[0] == 42);
+}
+
+#[test]
+fn test_algorithm_ranges_partial_sort_copy_capacity() {
+    let input: list<i32> = [8, 2, 5, 1, 7];
+    let small_output: list<i32> = partial_sort_copy(input, 3);
+    verify(small_output.len() == 3 && small_output[0] == 1 &&
+           small_output[1] == 2 && small_output[2] == 5);
+
+    let greatest = |a: i32, b: i32| { return a > b; };
+    let largest: list<i32> = partial_sort_copy_by(input, 2, greatest);
+    verify(largest.len() == 2 && largest[0] == 8 && largest[1] == 7);
+    let no_output: list<i32> = partial_sort_copy(input, 0);
+    let empty_input: list<i32> = [];
+    let no_input: list<i32> = partial_sort_copy(empty_input, 4);
+    verify(no_output.len() == 0 && no_input.len() == 0);
+    verify(input[0] == 8 && input[3] == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_partial_sort_copy_projected() {
+    let input: list<i32> = [38, 12, 56, 21, 49];
+    let project_tens = |value: i32| { return value / 10; };
+    let selected: list<i32> = partial_sort_copy_projected(
+        input, 3, project_tens);
+    verify(selected.len() == 3 && selected[0] == 12 &&
+           selected[1] == 21 && selected[2] == 38);
+    let all: list<i32> = partial_sort_copy_projected(
+        input, 9, project_tens);
+    verify(all.len() == 5 && all[0] == 12 && all[1] == 21 &&
+           all[2] == 38 && all[3] == 49 && all[4] == 56);
+    let none: list<i32> = partial_sort_copy_projected(
+        input, -2, project_tens);
+    verify(none.len() == 0 && input[0] == 38);
+}
+
+#[test]
+fn test_algorithm_ranges_nth_element() {
+    let values: list<i32> = [7, 2, 9, 1, 5, 3];
+    let partitioned: list<i32> = nth_element(values, 2);
+    verify(partitioned.len() == 6 && partitioned[2] == 3);
+    for i in 0..2 { verify(partitioned[i] <= partitioned[2]); }
+    for i in 3..6 { verify(partitioned[i] >= partitioned[2]); }
+    verify(values[0] == 7 && values[1] == 2);
+
+    let greater = |left: i32, right: i32| { return left > right; };
+    let reverse_partition: list<i32> = nth_element_by(values, 1, greater);
+    verify(reverse_partition[1] == 7);
+    for i in 0..1 { verify(reverse_partition[i] >= reverse_partition[1]); }
+    for i in 2..6 { verify(reverse_partition[i] <= reverse_partition[1]); }
+
+    let invalid_low: list<i32> = nth_element(values, -1);
+    let invalid_high: list<i32> = nth_element(values, 6);
+    let empty: list<i32> = [];
+    let invalid_empty: list<i32> = nth_element(empty, 0);
+    verify(invalid_low.len() == 0 && invalid_high.len() == 0 &&
+           invalid_empty.len() == 0);
+
+    let repeated: list<i32> = [5, 1, 5, 2, 5];
+    let repeated_partition: list<i32> = nth_element(repeated, 3);
+    verify(repeated_partition[3] == 5);
+    for i in 0..3 { verify(repeated_partition[i] <= 5); }
+    verify(repeated_partition[4] >= 5);
+}
+
+#[test]
+fn test_algorithm_ranges_nth_element_by_projection() {
+    let values: list<i32> = [42, 11, 23, 31, 19, 5];
+    let project_tens = |value: i32| { return value / 10; };
+    let partitioned: list<i32> =
+        nth_element_projected(values, 2, project_tens);
+    let selected_key: i32 = project_tens(partitioned[2]);
+    verify(partitioned.len() == values.len());
+    for i in 0..2 {
+        verify(project_tens(partitioned[i]) <= selected_key);
+    }
+    for i in 3..partitioned.len() {
+        verify(project_tens(partitioned[i]) >= selected_key);
+    }
+    verify(values[0] == 42 && values[5] == 5);
+
+    let invalid: list<i32> = nth_element_projected(values, 6, project_tens);
+    verify(invalid.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_nth_element_comparator_projection() {
+    let values: list<i32> = [42, 11, 23, 31, 19, 5];
+    let greater = |left: i32, right: i32| { return left > right; };
+    let project_tens = |value: i32| { return value / 10; };
+    let partitioned: list<i32> = nth_element_by_projected(
+        values, 2, greater, project_tens);
+    let selected_key: i32 = project_tens(partitioned[2]);
+    verify(partitioned.len() == values.len() && selected_key == 2);
+    for i in 0..2 {
+        verify(project_tens(partitioned[i]) >= selected_key);
+    }
+    for i in 3..partitioned.len() {
+        verify(project_tens(partitioned[i]) <= selected_key);
+    }
+    verify(values[0] == 42 && values[5] == 5);
+
+    let invalid_low: list<i32> = nth_element_by_projected(
+        values, -1, greater, project_tens);
+    let invalid_high: list<i32> = nth_element_by_projected(
+        values, values.len(), greater, project_tens);
+    verify(invalid_low.len() == 0 && invalid_high.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_merged() {
+    let left: list<i32> = [1, 3, 3, 8];
+    let right: list<i32> = [2, 3, 7];
+    let result: list<i32> = merged(left, right);
+    verify(result.len() == 7);
+    verify(result[0] == 1 && result[1] == 2 && result[2] == 3);
+    verify(result[3] == 3 && result[4] == 3 && result[5] == 7 && result[6] == 8);
+    verify(left[0] == 1 && right[0] == 2);
+    let empty: list<i32> = [];
+    let one_side: list<i32> = merged(empty, right);
+    verify(one_side.len() == 3 && one_side[2] == 7);
+}
+
+#[test]
+fn test_algorithm_ranges_inplace_merge_copy() {
+    let values: list<i32> = [1, 3, 3, 2, 3, 7];
+    let merged_values: list<i32> = inplace_merge(values, 3);
+    verify(merged_values.len() == 6 && merged_values[0] == 1 &&
+           merged_values[1] == 2 && merged_values[2] == 3 &&
+           merged_values[3] == 3 && merged_values[4] == 3 &&
+           merged_values[5] == 7);
+    verify(values[0] == 1 && values[3] == 2);
+
+    let reversed: list<i32> = [9, 7, 3, 8, 4, 1];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let descending: list<i32> = inplace_merge_by(reversed, 3, greater);
+    verify(descending[0] == 9 && descending[1] == 8 &&
+           descending[2] == 7 && descending[3] == 4 &&
+           descending[4] == 3 && descending[5] == 1);
+
+    let sorted_values: list<i32> = [1, 2, 3];
+    let negative_split: list<i32> = inplace_merge(sorted_values, -5);
+    let past_end_split: list<i32> = inplace_merge(sorted_values, 99);
+    verify(negative_split.len() == 3 && negative_split[0] == 1 &&
+           past_end_split.len() == 3 && past_end_split[2] == 3);
+
+    let empty: list<i32> = [];
+    let empty_result: list<i32> = inplace_merge(empty, 5);
+    verify(empty_result.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_inplace_merge_projected() {
+    let values: list<i32> = [11, 29, 22, 18, 31, 39];
+    let project_tens = |value: i32| { return value / 10; };
+    let merged_values: list<i32> = inplace_merge_projected(
+        values, 3, project_tens);
+    verify(merged_values.len() == 6 && merged_values[0] == 11 &&
+           merged_values[1] == 18 && merged_values[2] == 29 &&
+           merged_values[3] == 22 && merged_values[4] == 31 &&
+           merged_values[5] == 39);
+    verify(values[0] == 11 && values[1] == 29 && values[3] == 18);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_union_sorted() {
+    let left: list<i32> = [1, 2, 2, 5];
+    let right: list<i32> = [2, 3, 5, 5];
+    let result: list<i32> = union_sorted(left, right);
+    verify(result.len() == 6);
+    verify(result[0] == 1 && result[1] == 2 && result[2] == 2);
+    verify(result[3] == 3 && result[4] == 5 && result[5] == 5);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_intersection_sorted() {
+    let left: list<i32> = [1, 2, 2, 2, 5, 7];
+    let right: list<i32> = [2, 2, 3, 5, 5];
+    let result: list<i32> = intersection_sorted(left, right);
+    verify(result.len() == 3);
+    verify(result[0] == 2 && result[1] == 2 && result[2] == 5);
+    let empty: list<i32> = [];
+    let none: list<i32> = intersection_sorted(left, empty);
+    verify(none.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_difference_sorted() {
+    let left: list<i32> = [1, 2, 2, 2, 4, 6];
+    let right: list<i32> = [2, 3, 6, 6];
+    let result: list<i32> = difference_sorted(left, right);
+    verify(result.len() == 4);
+    verify(result[0] == 1 && result[1] == 2 && result[2] == 2 && result[3] == 4);
+    let empty: list<i32> = [];
+    let unchanged: list<i32> = difference_sorted(left, empty);
+    verify(unchanged.len() == left.len() && unchanged[2] == 2);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_symmetric_difference_sorted() {
+    let left: list<i32> = [1, 2, 2, 2, 5];
+    let right: list<i32> = [2, 2, 3, 5, 5];
+    let result: list<i32> = symmetric_difference_sorted(left, right);
+    verify(result.len() == 4);
+    verify(result[0] == 1 && result[1] == 2 && result[2] == 3 && result[3] == 5);
+    let empty: list<i32> = [];
+    let unchanged: list<i32> = symmetric_difference_sorted(left, empty);
+    verify(unchanged.len() == left.len() && unchanged[2] == 2);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_merge_and_set_operations() {
+    let left: list<i32> = [11, 12, 21, 22, 41];
+    let right: list<i32> = [13, 22, 23, 31, 41, 42];
+    let project_tens = |value: i32| { return value / 10; };
+
+    let merged_values: list<i32> =
+        merged_projected(left, right, project_tens);
+    verify(merged_values.len() == 11);
+    verify(is_sorted_projected(merged_values, project_tens));
+    verify(merged_values[0] == 11 && merged_values[1] == 12 &&
+           merged_values[2] == 13);
+
+    let union_values: list<i32> =
+        union_sorted_projected(left, right, project_tens);
+    verify(union_values.len() == 7);
+    verify(is_sorted_projected(union_values, project_tens));
+    verify(union_values[0] == 11 && union_values[1] == 12);
+
+    let intersection_values: list<i32> =
+        intersection_sorted_projected(left, right, project_tens);
+    verify(intersection_values.len() == 4);
+    verify(intersection_values[0] == 11 && intersection_values[1] == 21 &&
+           intersection_values[2] == 22 && intersection_values[3] == 41);
+
+    let difference_values: list<i32> =
+        difference_sorted_projected(left, right, project_tens);
+    verify(difference_values.len() == 1 && difference_values[0] == 12);
+
+    let symmetric_values: list<i32> =
+        symmetric_difference_sorted_projected(left, right, project_tens);
+    verify(symmetric_values.len() == 3);
+    verify(symmetric_values[0] == 12 && symmetric_values[1] == 31 &&
+           symmetric_values[2] == 42);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_projected_set_operations() {
+    let left: list<i32> = [59, 52, 41, 28, 24];
+    let right: list<i32> = [58, 53, 42, 33, 22];
+    let subset: list<i32> = [59, 41, 28];
+    let too_many: list<i32> = [59, 52, 51];
+    let empty: list<i32> = [];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(includes_by_projected(left, subset, greater, project_tens));
+    verify(!includes_by_projected(left, too_many, greater, project_tens));
+    verify(includes_by_projected(left, empty, greater, project_tens));
+
+    let union_values: list<i32> = union_sorted_by_projected(
+        left, right, greater, project_tens);
+    verify(union_values.len() == 6 && union_values[0] == 59 &&
+           union_values[1] == 52 && union_values[2] == 41 &&
+           union_values[3] == 33 && union_values[4] == 28 &&
+           union_values[5] == 24);
+    verify(is_sorted_by_projected(union_values, greater, project_tens));
+
+    let intersection_values: list<i32> = intersection_sorted_by_projected(
+        left, right, greater, project_tens);
+    verify(intersection_values.len() == 4 && intersection_values[0] == 59 &&
+           intersection_values[1] == 52 && intersection_values[2] == 41 &&
+           intersection_values[3] == 28);
+    let difference_values: list<i32> = difference_sorted_by_projected(
+        left, right, greater, project_tens);
+    verify(difference_values.len() == 1 && difference_values[0] == 24);
+    let symmetric_values: list<i32> =
+        symmetric_difference_sorted_by_projected(
+            left, right, greater, project_tens);
+    verify(symmetric_values.len() == 2 && symmetric_values[0] == 33 &&
+           symmetric_values[1] == 24);
+    verify(left[0] == 59 && right[0] == 58);
 }
 
 #[test]
@@ -400,6 +1861,19 @@ fn test_algorithm_ranges_generic_upper_bound() {
 }
 
 #[test]
+fn test_algorithm_ranges_generic_equal_range() {
+    let values: list<i32> = [1, 3, 3, 7, 9];
+    let threes: tuple<i64, i64> = equal_range(values, 3);
+    let absent: tuple<i64, i64> = equal_range(values, 4);
+    verify(threes.0 == 1 && threes.1 == 3);
+    verify(absent.0 == 3 && absent.1 == 3);
+
+    let empty: list<i32> = [];
+    let empty_result: tuple<i64, i64> = equal_range(empty, 4);
+    verify(empty_result.0 == 0 && empty_result.1 == 0);
+}
+
+#[test]
 fn test_algorithm_ranges_generic_binary_search() {
     let values: list<i32> = [1, 3, 3, 7, 9];
     verify(binary_search(values, 1));
@@ -409,6 +1883,178 @@ fn test_algorithm_ranges_generic_binary_search() {
     let words: list<str8> = ["ant", "bee", "fox"];
     verify(binary_search(words, "bee"));
     verify(binary_search(words, "cat") == false);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_order_queries() {
+    let records: list<i32> = [11, 19, 20, 28, 31];
+    let project_tens = |value: i32| { return value / 10; };
+    verify(is_sorted_projected(records, project_tens));
+    verify(is_sorted_until_projected(records, project_tens) == 5);
+    verify(lower_bound_projected(records, 2, project_tens) == 2);
+    verify(upper_bound_projected(records, 2, project_tens) == 4);
+    let twos: tuple<i64, i64> =
+        equal_range_projected(records, 2, project_tens);
+    verify(twos.0 == 2 && twos.1 == 4);
+    verify(binary_search_projected(records, 2, project_tens));
+    verify(!binary_search_projected(records, 4, project_tens));
+
+    let broken: list<i32> = [11, 21, 19, 30];
+    let empty_values: list<i32> = [];
+    verify(!is_sorted_projected(broken, project_tens));
+    verify(is_sorted_until_projected(broken, project_tens) == 2);
+    verify(is_sorted_projected(empty_values, project_tens));
+    verify(is_sorted_until_projected(empty_values, project_tens) == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_order_queries() {
+    let descending: list<i32> = [9, 7, 7, 3, 1];
+    let broken: list<i32> = [9, 7, 8, 3];
+    let empty: list<i32> = [];
+    let greater = |left: i32, right: i32| { return left > right; };
+
+    verify(is_sorted_by(descending, greater));
+    verify(!is_sorted_by(broken, greater));
+    verify(is_sorted_until_by(descending, greater) == 5);
+    verify(is_sorted_until_by(broken, greater) == 2);
+    verify(is_sorted_by(empty, greater));
+    verify(is_sorted_until_by(empty, greater) == 0);
+
+    verify(lower_bound_by(descending, 7, greater) == 1);
+    verify(upper_bound_by(descending, 7, greater) == 3);
+    let equal_sevens: tuple<i64, i64> = equal_range_by(descending, 7, greater);
+    verify(equal_sevens.0 == 1 && equal_sevens.1 == 3);
+    verify(lower_bound_by(descending, 10, greater) == 0);
+    verify(upper_bound_by(descending, 0, greater) == 5);
+    verify(binary_search_by(descending, 7, greater));
+    verify(!binary_search_by(descending, 8, greater));
+    verify(lower_bound_by(empty, 4, greater) == 0);
+    verify(upper_bound_by(empty, 4, greater) == 0);
+    verify(!binary_search_by(empty, 4, greater));
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_projected_order_queries() {
+    let descending: list<i32> = [38, 31, 29, 22, 11];
+    let broken: list<i32> = [38, 22, 31];
+    let empty: list<i32> = [];
+    let greater = |left: i32, right: i32| { return left > right; };
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(is_sorted_by_projected(descending, greater, project_tens));
+    verify(!is_sorted_by_projected(broken, greater, project_tens));
+    verify(is_sorted_until_by_projected(
+        descending, greater, project_tens) == 5);
+    verify(is_sorted_until_by_projected(
+        broken, greater, project_tens) == 2);
+    verify(is_sorted_by_projected(empty, greater, project_tens));
+    verify(is_sorted_until_by_projected(empty, greater, project_tens) == 0);
+
+    verify(lower_bound_by_projected(
+        descending, 2, greater, project_tens) == 2);
+    verify(upper_bound_by_projected(
+        descending, 2, greater, project_tens) == 4);
+    let twos: tuple<i64, i64> = equal_range_by_projected(
+        descending, 2, greater, project_tens);
+    verify(twos.0 == 2 && twos.1 == 4);
+    verify(binary_search_by_projected(
+        descending, 2, greater, project_tens));
+    verify(!binary_search_by_projected(
+        descending, 4, greater, project_tens));
+    verify(lower_bound_by_projected(
+        empty, 2, greater, project_tens) == 0);
+    verify(!binary_search_by_projected(
+        empty, 2, greater, project_tens));
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_merged() {
+    let left: list<i32> = [9, 7, 7, 3, 1];
+    let right: list<i32> = [8, 7, 4, 3, 3];
+    let greater = |a: i32, b: i32| { return a > b; };
+
+    let merged_values: list<i32> = merged_by(left, right, greater);
+    verify(merged_values.len() == 10);
+    verify(merged_values[0] == 9 && merged_values[1] == 8);
+    verify(merged_values[2] == 7 && merged_values[3] == 7 &&
+           merged_values[4] == 7);
+    verify(merged_values[5] == 4 && merged_values[6] == 3);
+    verify(merged_values[7] == 3 && merged_values[8] == 3);
+    verify(merged_values[9] == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_projected_merge() {
+    let left: list<i32> = [29, 22, 11];
+    let right: list<i32> = [28, 24, 19];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let project_tens = |value: i32| { return value / 10; };
+
+    let merged_values: list<i32> = merged_by_projected(
+        left, right, greater, project_tens);
+    verify(merged_values.len() == 6 && merged_values[0] == 29 &&
+           merged_values[1] == 22 && merged_values[2] == 28 &&
+           merged_values[3] == 24 && merged_values[4] == 11 &&
+           merged_values[5] == 19);
+    verify(is_sorted_by_projected(merged_values, greater, project_tens));
+
+    let halves: list<i32> = [29, 22, 28, 24, 19, 11];
+    let inplace: list<i32> = inplace_merge_by_projected(
+        halves, 3, greater, project_tens);
+    verify(inplace.len() == 6 && inplace[0] == 29 && inplace[1] == 22 &&
+           inplace[2] == 28 && inplace[3] == 24 && inplace[4] == 19 &&
+           inplace[5] == 11);
+    verify(halves[0] == 29 && halves[3] == 24);
+    let clamped: list<i32> = inplace_merge_by_projected(
+        left, 99, greater, project_tens);
+    verify(clamped.len() == left.len() && clamped[0] == 29);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_union_sorted() {
+    let left: list<i32> = [9, 7, 7, 3, 1];
+    let right: list<i32> = [8, 7, 4, 3, 3];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let union_values: list<i32> = union_sorted_by(left, right, greater);
+    verify(union_values.len() == 8);
+    verify(union_values[0] == 9 && union_values[1] == 8);
+    verify(union_values[2] == 7 && union_values[3] == 7);
+    verify(union_values[4] == 4 && union_values[5] == 3);
+    verify(union_values[6] == 3 && union_values[7] == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_intersection_sorted() {
+    let left: list<i32> = [9, 7, 7, 3, 1];
+    let right: list<i32> = [8, 7, 4, 3, 3];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let intersection_values: list<i32> = intersection_sorted_by(left, right, greater);
+    verify(intersection_values.len() == 2);
+    verify(intersection_values[0] == 7 && intersection_values[1] == 3);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_difference_sorted() {
+    let left: list<i32> = [9, 7, 7, 3, 1];
+    let right: list<i32> = [8, 7, 4, 3, 3];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let difference_values: list<i32> = difference_sorted_by(left, right, greater);
+    verify(difference_values.len() == 3);
+    verify(difference_values[0] == 9 && difference_values[1] == 7 &&
+           difference_values[2] == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_symmetric_difference_sorted() {
+    let left: list<i32> = [9, 7, 7, 3, 1];
+    let right: list<i32> = [8, 7, 4, 3, 3];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let symmetric_values: list<i32> = symmetric_difference_sorted_by(left, right, greater);
+    verify(symmetric_values.len() == 6);
+    verify(symmetric_values[0] == 9 && symmetric_values[1] == 8);
+    verify(symmetric_values[2] == 7 && symmetric_values[3] == 4);
+    verify(symmetric_values[4] == 3 && symmetric_values[5] == 1);
 }
 
 #[test]
@@ -428,12 +2074,168 @@ fn test_algorithm_ranges_generic_sorted_copy() {
 }
 
 #[test]
+fn test_algorithm_ranges_sorted_by_comparator() {
+    let values: list<i32> = [2, 5, 1, 5, 9];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let descending: list<i32> = sorted_by(values, greater);
+    verify(descending.len() == 5);
+    verify(descending[0] == 9 && descending[1] == 5);
+    verify(descending[2] == 5 && descending[3] == 2 && descending[4] == 1);
+    verify(values[0] == 2 && values[4] == 9);
+
+    let grouped: list<i32> = [21, 22, 12, 11, 3];
+    let by_tens = |a: i32, b: i32| { return a / 10 < b / 10; };
+    let stable: list<i32> = sorted_by(grouped, by_tens);
+    verify(stable[0] == 3 && stable[1] == 12 && stable[2] == 11);
+    verify(stable[3] == 21 && stable[4] == 22);
+
+    let empty: list<i32> = [];
+    let empty_sorted: list<i32> = sorted_by(empty, greater);
+    verify(empty_sorted.len() == 0);
+    let one: list<i32> = [7];
+    let one_sorted: list<i32> = sorted_by(one, greater);
+    verify(one_sorted[0] == 7);
+}
+
+#[test]
+fn test_algorithm_ranges_sorted_by_projection() {
+    let values: list<i32> = [22, 11, 21, 12, 3, 19];
+    let project_tens = |value: i32| { return value / 10; };
+    let ordered: list<i32> = sorted_projected(values, project_tens);
+    verify(ordered.len() == 6);
+    verify(ordered[0] == 3 && ordered[1] == 11 && ordered[2] == 12);
+    verify(ordered[3] == 19 && ordered[4] == 22 && ordered[5] == 21);
+    verify(is_sorted_projected(ordered, project_tens));
+    verify(values[0] == 22 && values[5] == 19);
+
+    let empty: list<i32> = [];
+    let one: list<i32> = [7];
+    let empty_sorted: list<i32> = sorted_projected(empty, project_tens);
+    let one_sorted: list<i32> = sorted_projected(one, project_tens);
+    verify(empty_sorted.len() == 0);
+    verify(one_sorted[0] == 7);
+}
+
+#[test]
+fn test_algorithm_ranges_sorted_by_projected_comparator() {
+    let values: list<i32> = [32, 19, 21, 14, 28, 11];
+    let greater = |left: i32, right: i32| { return left > right; };
+    let project_tens = |value: i32| { return value / 10; };
+    let ordered: list<i32> = sorted_by_projected(
+        values, greater, project_tens);
+    verify(ordered.len() == 6 && ordered[0] == 32 &&
+           ordered[1] == 21 && ordered[2] == 28 &&
+           ordered[3] == 19 && ordered[4] == 14 && ordered[5] == 11);
+    verify(is_sorted_by_projected(ordered, greater, project_tens));
+    verify(values[0] == 32 && values[1] == 19 && values[5] == 11);
+
+    let empty: list<i32> = [];
+    let empty_sorted: list<i32> = sorted_by_projected(
+        empty, greater, project_tens);
+    verify(empty_sorted.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_permutations() {
+    let ascending: list<i32> = [1, 2, 3];
+    let next: tuple<bool, list<i32>> = next_permutation(ascending);
+    let next_values: list<i32> = next.1;
+    verify(next.0 && next_values[0] == 1 && next_values[1] == 3 && next_values[2] == 2);
+
+    let previous: tuple<bool, list<i32>> = prev_permutation(ascending);
+    let previous_values: list<i32> = previous.1;
+    verify(!previous.0 && previous_values[0] == 3 && previous_values[1] == 2 && previous_values[2] == 1);
+
+    let descending: list<i32> = [3, 2, 1];
+    let wrapped: tuple<bool, list<i32>> = next_permutation(descending);
+    let wrapped_values: list<i32> = wrapped.1;
+    verify(!wrapped.0 && wrapped_values[0] == 1 && wrapped_values[1] == 2 && wrapped_values[2] == 3);
+
+    let duplicate_values: list<i32> = [1, 2, 2];
+    let duplicate_next: tuple<bool, list<i32>> = next_permutation(duplicate_values);
+    let duplicate_result: list<i32> = duplicate_next.1;
+    verify(duplicate_next.0 && duplicate_result[0] == 2 && duplicate_result[1] == 1 && duplicate_result[2] == 2);
+
+    let greater = |left: i32, right: i32| { return left > right; };
+    let custom_next: tuple<bool, list<i32>> = next_permutation_by(descending, greater);
+    let custom_values: list<i32> = custom_next.1;
+    verify(custom_next.0 && custom_values[0] == 3 && custom_values[1] == 1 && custom_values[2] == 2);
+    let custom_previous: tuple<bool, list<i32>> = prev_permutation_by(descending, greater);
+    let custom_wrapped: list<i32> = custom_previous.1;
+    verify(!custom_previous.0 && custom_wrapped[0] == 1 && custom_wrapped[2] == 3);
+
+    verify(ascending[0] == 1 && ascending[2] == 3);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_permutations() {
+    let values: list<i32> = [11, 19, 22];
+    let project_tens = |value: i32| { return value / 10; };
+    let next: tuple<bool, list<i32>> = next_permutation_projected(
+        values, project_tens);
+    let next_values: list<i32> = next.1;
+    verify(next.0 && next_values[0] == 11 &&
+           next_values[1] == 22 && next_values[2] == 19);
+
+    let previous: tuple<bool, list<i32>> = prev_permutation_projected(
+        next_values, project_tens);
+    let previous_values: list<i32> = previous.1;
+    verify(previous.0 && previous_values[0] == 11 &&
+           previous_values[1] == 19 && previous_values[2] == 22);
+
+    let descending: list<i32> = [32, 21, 19];
+    let wrapped: tuple<bool, list<i32>> = next_permutation_projected(
+        descending, project_tens);
+    let wrapped_values: list<i32> = wrapped.1;
+    verify(!wrapped.0 && wrapped_values[0] == 19 &&
+           wrapped_values[1] == 21 && wrapped_values[2] == 32);
+    verify(values[0] == 11 && values[2] == 22);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_projected_permutations() {
+    let values: list<i32> = [11, 21, 12];
+    let greater = |left: i32, right: i32| { return left > right; };
+    let project_tens = |value: i32| { return value / 10; };
+    let next: tuple<bool, list<i32>> = next_permutation_by_projected(
+        values, greater, project_tens);
+    let next_values: list<i32> = next.1;
+    verify(next.0 && project_tens(next_values[0]) == 1 &&
+           project_tens(next_values[1]) == 1 &&
+           project_tens(next_values[2]) == 2);
+
+    let previous: tuple<bool, list<i32>> = prev_permutation_by_projected(
+        next_values, greater, project_tens);
+    let previous_values: list<i32> = previous.1;
+    verify(previous.0 && previous_values[0] == values[0] &&
+           previous_values[1] == values[1] &&
+           previous_values[2] == values[2]);
+
+    let last: list<i32> = [12, 11, 21];
+    let wrapped_next: tuple<bool, list<i32>> = next_permutation_by_projected(
+        last, greater, project_tens);
+    let wrapped_next_values: list<i32> = wrapped_next.1;
+    verify(!wrapped_next.0 &&
+           project_tens(wrapped_next_values[0]) == 2 &&
+           project_tens(wrapped_next_values[2]) == 1);
+    let first: list<i32> = [21, 11, 12];
+    let wrapped_previous: tuple<bool, list<i32>> =
+        prev_permutation_by_projected(first, greater, project_tens);
+    let wrapped_previous_values: list<i32> = wrapped_previous.1;
+    verify(!wrapped_previous.0 &&
+           project_tens(wrapped_previous_values[0]) == 1 &&
+           project_tens(wrapped_previous_values[2]) == 2);
+}
+
+#[test]
 fn test_algorithm_ranges_generic_reversed_copy() {
     let values: list<i32> = [1, 2, 3, 4];
     let backwards: list<i32> = reversed(values);
     verify(backwards.len() == 4);
     verify(backwards[0] == 4 && backwards[1] == 3);
     verify(backwards[2] == 2 && backwards[3] == 1);
+    let standard_named: list<i32> = reverse_copy(values);
+    verify(standard_named[0] == 4 && standard_named[3] == 1);
     verify(values[0] == 1 && values[3] == 4);
 
     let empty: list<str8> = [];
@@ -514,6 +2316,99 @@ fn test_algorithm_ranges_generic_joined() {
 }
 
 #[test]
+fn test_algorithm_ranges_generic_joined_with() {
+    let nested: list<list<i32>> = [[1, 2], [], [3], [4, 5]];
+    let separator: list<i32> = [0, 0];
+    let flattened: list<i32> = joined_with(nested, separator);
+    verify(flattened.len() == 11);
+    verify(flattened[0] == 1 && flattened[1] == 2);
+    verify(flattened[2] == 0 && flattened[3] == 0);
+    verify(flattened[4] == 0 && flattened[5] == 0);
+    verify(flattened[6] == 3 && flattened[7] == 0);
+    verify(flattened[8] == 0 && flattened[9] == 4 && flattened[10] == 5);
+    verify(nested[0][0] == 1 && nested[3][1] == 5);
+
+    let no_lists: list<list<i32>> = [];
+    let no_flattened: list<i32> = joined_with(no_lists, separator);
+    verify(no_flattened.len() == 0);
+    let one_list: list<list<i32>> = [[7]];
+    let single: list<i32> = joined_with(one_list, separator);
+    verify(single.len() == 1 && single[0] == 7);
+    let empty_separator: list<i32> = [];
+    let without_separator: list<i32> = joined_with(nested, empty_separator);
+    verify(without_separator.len() == 5);
+    verify(without_separator[2] == 3 && without_separator[4] == 5);
+}
+
+#[test]
+fn test_algorithm_ranges_standard_view_names() {
+    let values: list<i32> = [1, 2, 3, 4, 5];
+    let groups: list<list<i32>> = chunk(values, 2);
+    let final_group: list<i32> = groups[2];
+    verify(groups.len() == 3 && final_group.len() == 1 &&
+           final_group[0] == 5);
+    let windows_by_slide: list<list<i32>> = slide(values, 3);
+    let middle_window: list<i32> = windows_by_slide[1];
+    verify(windows_by_slide.len() == 3 && middle_window[0] == 2 &&
+           middle_window[2] == 4);
+    let every_other: list<i32> = stride(values, 2);
+    verify(every_other.len() == 3 && every_other[0] == 1 &&
+           every_other[2] == 5);
+
+    let nested: list<list<i32>> = [[1, 2], [], [3]];
+    let flattened: list<i32> = join(nested);
+    verify(flattened.len() == 3 && flattened[0] == 1 &&
+           flattened[2] == 3);
+    let separator: list<i32> = [0];
+    let flattened_with: list<i32> = join_with(nested, separator);
+    verify(flattened_with.len() == 5 && flattened_with[2] == 0 &&
+           flattened_with[4] == 3);
+    verify(values[0] == 1 && nested[2][0] == 3);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_split() {
+    let values: list<i32> = [1, 0, 0, 2, 0];
+    let delimiter: list<i64> = [0];
+    let fields: list<list<i32>> = split(values, delimiter);
+    verify(fields.len() == 4);
+    let field0: list<i32> = fields[0];
+    let field1: list<i32> = fields[1];
+    let field2: list<i32> = fields[2];
+    let field3: list<i32> = fields[3];
+    verify(field0.len() == 1 && field0[0] == 1);
+    verify(field1.len() == 0);
+    verify(field2.len() == 1 && field2[0] == 2);
+    verify(field3.len() == 0);
+
+    let pair_delimiter: list<i32> = [0, 0];
+    let pair_split: list<list<i32>> = split(values, pair_delimiter);
+    verify(pair_split.len() == 2);
+    let pair0: list<i32> = pair_split[0];
+    let pair1: list<i32> = pair_split[1];
+    verify(pair0.len() == 1 && pair0[0] == 1);
+    verify(pair1.len() == 2);
+    verify(pair1[0] == 2 && pair1[1] == 0);
+
+    let leading: list<i32> = [0, 7];
+    let leading_split: list<list<i32>> = split(leading, delimiter);
+    let leading0: list<i32> = leading_split[0];
+    let leading1: list<i32> = leading_split[1];
+    verify(leading_split.len() == 2 && leading0.len() == 0);
+    verify(leading1.len() == 1 && leading1[0] == 7);
+
+    let empty: list<i32> = [];
+    let no_fields: list<list<i32>> = split(empty, delimiter);
+    verify(no_fields.len() == 0);
+    let empty_delimiter: list<i32> = [];
+    let unsplit: list<list<i32>> = split(values, empty_delimiter);
+    let single_field: list<i32> = unsplit[0];
+    verify(unsplit.len() == 1 && single_field.len() == values.len());
+    verify(single_field[0] == 1 && single_field[4] == 0);
+    verify(values[0] == 1 && values[4] == 0);
+}
+
+#[test]
 fn test_algorithm_ranges_generic_concat() {
     let left: list<i32> = [1, 2];
     let right: list<i32> = [3, 4, 5];
@@ -527,6 +2422,386 @@ fn test_algorithm_ranges_generic_concat() {
 }
 
 #[test]
+fn test_algorithm_ranges_zip() {
+    let numbers: list<i32> = [4, 5, 6];
+    let words: list<str8> = ["four", "five"];
+    let pairs: list<tuple<i32, str8>> = zip(numbers, words);
+    verify(pairs.len() == 2);
+
+    let first: tuple<i32, str8> = pairs[0];
+    let second: tuple<i32, str8> = pairs[1];
+    verify(first.0 == 4);
+    verify(second.0 == 5);
+    verify(numbers.len() == 3 && words.len() == 2);
+
+    let offsets: list<i32> = [40, 50];
+    let numeric_pairs: list<tuple<i32, i32>> = zip(numbers, offsets);
+    let numeric_pair = numeric_pairs[1];
+    verify(numeric_pair.0 == 5 && numeric_pair.1 == 50);
+
+    let empty: list<i32> = [];
+    let no_pairs: list<tuple<i32, str8>> = zip(empty, words);
+    verify(no_pairs.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_zip_three_ranges() {
+    let numbers: list<i32> = [1, 2, 3];
+    let wide_numbers: list<i64> = [10, 20];
+    let flags: list<bool> = [true, false, true, false];
+    let triples: list<tuple<i32, i64, bool>> = zip(numbers, wide_numbers, flags);
+    verify(triples.len() == 2);
+    let first: tuple<i32, i64, bool> = triples[0];
+    let second: tuple<i32, i64, bool> = triples[1];
+    verify(first.0 == 1 && first.1 == 10 && first.2);
+    verify(second.0 == 2 && second.1 == 20 && !second.2);
+    verify(numbers.len() == 3 && wide_numbers.len() == 2 && flags.len() == 4);
+
+    let empty: list<i32> = [];
+    let no_triples: list<tuple<i32, i64, bool>> = zip(empty, wide_numbers, flags);
+    verify(no_triples.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_zip_four_ranges() {
+    let first_values: list<i32> = [1, 2, 3];
+    let second_values: list<i64> = [10, 20];
+    let third_values: list<bool> = [true, false, true, false];
+    let fourth_values: list<i32> = [100];
+    let rows: list<tuple<i32, i64, bool, i32>> =
+        zip(first_values, second_values, third_values, fourth_values);
+    verify(rows.len() == 1);
+    let first_row: tuple<i32, i64, bool, i32> = rows[0];
+    verify(first_row.0 == 1 && first_row.1 == 10 && first_row.2 &&
+           first_row.3 == 100);
+}
+
+#[test]
+fn test_algorithm_ranges_zip_five_ranges() {
+    let first_values: list<i32> = [1, 2, 3];
+    let second_values: list<i64> = [10, 20];
+    let third_values: list<bool> = [true, false, true];
+    let fourth_values: list<str8> = ["a", "b", "c"];
+    let fifth_values: list<i32> = [100, 200, 300, 400];
+    let rows: list<tuple<i32, i64, bool, str8, i32>> =
+        zip(first_values, second_values, third_values, fourth_values,
+            fifth_values);
+    verify(rows.len() == 2);
+    let first_row: tuple<i32, i64, bool, str8, i32> = rows[0];
+    verify(first_row.0 == 1 && first_row.1 == 10 && first_row.2 &&
+           eq(first_row.3, "a") == 1 && first_row.4 == 100);
+
+    let a: list<i32> = [1, 2, 3];
+    let b: list<i32> = [10, 20];
+    let c: list<i32> = [100, 200, 300];
+    let d: list<i32> = [1000, 2000, 3000];
+    let e: list<i32> = [10000, 20000, 30000];
+    let sum_five = |x: i32, y: i32, z: i32, w: i32, v: i32| {
+        return x + y + z + w + v;
+    };
+    let sums: list<i32> = zip_transform(a, b, c, d, e, sum_five);
+    verify(sums.len() == 2 && sums[0] == 11111 && sums[1] == 22222);
+
+    let f: list<i32> = [100000, 200000, 300000];
+    let sum_six = |x: i32, y: i32, z: i32, w: i32, v: i32, u: i32| {
+        return x + y + z + w + v + u;
+    };
+    let six_sums: list<i32> = zip_transform(a, b, c, d, e, f, sum_six);
+    verify(six_sums.len() == 2 && six_sums[0] == 111111 &&
+           six_sums[1] == 222222);
+
+    let sixth_values: list<i64> = [100000, 200000];
+    let six_rows: list<tuple<i32, i64, bool, str8, i32, i64>> =
+        zip(first_values, second_values, third_values, fourth_values,
+            fifth_values, sixth_values);
+    verify(six_rows.len() == 2);
+    let six_first: tuple<i32, i64, bool, str8, i32, i64> = six_rows[0];
+    verify(six_first.0 == 1 && six_first.1 == 10 && six_first.2 &&
+           eq(six_first.3, "a") == 1 && six_first.4 == 100 &&
+           six_first.5 == 100000);
+}
+
+#[test]
+fn test_algorithm_ranges_enumerate() {
+    let values: list<i32> = [7, 3, 9];
+    let indexed: list<tuple<i64, i32>> = enumerate(values);
+    verify(indexed.len() == 3);
+    let first = indexed[0];
+    let middle = indexed[1];
+    let last = indexed[2];
+    verify(first.0 == 0 && first.1 == 7);
+    verify(middle.0 == 1 && middle.1 == 3);
+    verify(last.0 == 2 && last.1 == 9);
+    verify(values[0] == 7 && values[2] == 9);
+
+    let empty: list<i32> = [];
+    let no_items: list<tuple<i64, i32>> = enumerate(empty);
+    verify(no_items.len() == 0);
+
+    let from_ten: list<tuple<i64, i32>> = enumerate_from(values, 10);
+    let from_ten_first = from_ten[0];
+    let from_ten_middle = from_ten[1];
+    let from_ten_last = from_ten[2];
+    verify(from_ten.len() == 3 && from_ten_first.0 == 10 &&
+           from_ten_last.0 == 12 && from_ten_middle.1 == 3);
+    let negative: list<tuple<i64, i32>> = enumerate_from(values, -2);
+    let negative_first = negative[0];
+    let negative_last = negative[2];
+    verify(negative_first.0 == -2 && negative_last.0 == 0);
+    let empty_from: list<tuple<i64, i32>> = enumerate_from(empty, 5);
+    verify(empty_from.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_cartesian_product() {
+    let left: list<i32> = [2, 4];
+    let right: list<i32> = [7, 9, 11];
+    let pairs: list<tuple<i32, i32>> = cartesian_product(left, right);
+    verify(pairs.len() == 6);
+
+    let first = pairs[0];
+    let second = pairs[1];
+    let third = pairs[2];
+    let fourth = pairs[3];
+    let last = pairs[5];
+    verify(first.0 == 2 && first.1 == 7);
+    verify(second.0 == 2 && second.1 == 9);
+    verify(third.0 == 2 && third.1 == 11);
+    verify(fourth.0 == 4 && fourth.1 == 7);
+    verify(last.0 == 4 && last.1 == 11);
+
+    let empty: list<i32> = [];
+    let no_pairs: list<tuple<i32, i32>> = cartesian_product(left, empty);
+    verify(no_pairs.len() == 0);
+
+    let middle: list<i64> = [10, 20];
+    let last_values: list<i32> = [100, 200];
+    let triples: list<tuple<i32, i64, i32>> =
+        cartesian_product(left, middle, last_values);
+    verify(triples.len() == 8);
+    let first_triple = triples[0];
+    let second_triple = triples[1];
+    let third_triple = triples[2];
+    let last_triple = triples[7];
+    verify(first_triple.0 == 2 && first_triple.1 == 10 && first_triple.2 == 100);
+    verify(second_triple.0 == 2 && second_triple.1 == 10 && second_triple.2 == 200);
+    verify(third_triple.0 == 2 && third_triple.1 == 20 && third_triple.2 == 100);
+    verify(last_triple.0 == 4 && last_triple.1 == 20 && last_triple.2 == 200);
+    let empty_values: list<i32> = [];
+    let no_triples: list<tuple<i32, i64, i32>> =
+        cartesian_product(left, middle, empty_values);
+    verify(no_triples.len() == 0);
+
+    let third_values: list<bool> = [true];
+    let fourth_values: list<i64> = [1000, 2000];
+    let quadruples: list<tuple<i32, i64, bool, i64>> =
+        cartesian_product(left, middle, third_values, fourth_values);
+    verify(quadruples.len() == 8);
+    let first_quadruple = quadruples[0];
+    let second_quadruple = quadruples[1];
+    let third_quadruple = quadruples[2];
+    let last_quadruple = quadruples[7];
+    verify(first_quadruple.0 == 2 && first_quadruple.1 == 10 &&
+           first_quadruple.2 && first_quadruple.3 == 1000);
+    verify(second_quadruple.0 == 2 && second_quadruple.1 == 10 &&
+           second_quadruple.3 == 2000);
+    verify(third_quadruple.0 == 2 && third_quadruple.1 == 20 &&
+           third_quadruple.3 == 1000);
+    verify(last_quadruple.0 == 4 && last_quadruple.1 == 20 &&
+           last_quadruple.3 == 2000);
+
+    let fifth_values: list<i32> = [10000, 20000];
+    let products: list<tuple<i32, i64, bool, i64, i32>> =
+        cartesian_product(left, middle, third_values, fourth_values,
+                          fifth_values);
+    verify(products.len() == 16);
+    let first_product: tuple<i32, i64, bool, i64, i32> = products[0];
+    let second_product: tuple<i32, i64, bool, i64, i32> = products[1];
+    let third_product: tuple<i32, i64, bool, i64, i32> = products[2];
+    let last_product: tuple<i32, i64, bool, i64, i32> = products[15];
+    verify(first_product.0 == 2 && first_product.1 == 10 &&
+           first_product.2 && first_product.3 == 1000 &&
+           first_product.4 == 10000);
+    verify(second_product.0 == 2 && second_product.1 == 10 &&
+           second_product.2 && second_product.4 == 20000);
+    verify(third_product.0 == 2 && third_product.1 == 10 &&
+           third_product.2 && third_product.3 == 2000 &&
+           third_product.4 == 10000);
+    verify(last_product.0 == 4 && last_product.1 == 20 &&
+           last_product.2 && last_product.4 == 20000);
+    let no_products: list<tuple<i32, i64, bool, i64, i32>> =
+        cartesian_product(left, middle, third_values, fourth_values,
+                          empty_values);
+    verify(no_products.len() == 0);
+
+    let sixth_values: list<i64> = [50000, 60000];
+    let six_products: list<tuple<i32, i64, bool, i64, i32, i64>> =
+        cartesian_product(left, middle, third_values, fourth_values,
+                          fifth_values, sixth_values);
+    verify(six_products.len() == 32);
+    let first_six: tuple<i32, i64, bool, i64, i32, i64> = six_products[0];
+    let last_six: tuple<i32, i64, bool, i64, i32, i64> = six_products[31];
+    verify(first_six.0 == 2 && first_six.1 == 10 && first_six.2 &&
+           first_six.3 == 1000 && first_six.4 == 10000 &&
+           first_six.5 == 50000);
+    verify(last_six.0 == 4 && last_six.1 == 20 && last_six.2 &&
+           last_six.3 == 2000 && last_six.4 == 20000 &&
+           last_six.5 == 60000);
+}
+
+#[test]
+fn test_algorithm_ranges_tuple_keys_and_values() {
+    let numbers: list<i32> = [4, 8, 15];
+    let offsets: list<i64> = [40, 80, 150];
+    let pairs: list<tuple<i32, i64>> = zip(numbers, offsets);
+
+    let selected_keys: list<i32> = keys(pairs);
+    let selected_values: list<i64> = values(pairs);
+    verify(selected_keys.len() == 3 && selected_keys[0] == 4);
+    verify(selected_keys[1] == 8 && selected_keys[2] == 15);
+    verify(selected_values.len() == 3);
+    verify(selected_values[0] == 40 && selected_values[2] == 150);
+    let original_pair: tuple<i32, i64> = pairs[1];
+    verify(original_pair.0 == 8 && original_pair.1 == 80);
+
+    let words: list<str8> = ["four", "eight"];
+    let word_pairs: list<tuple<i32, str8>> = zip(numbers, words);
+    let projected_words: list<str8> = values(word_pairs);
+    verify(eq(projected_words[0], "four") == 1);
+    verify(eq(projected_words[1], "eight") == 1);
+
+    let empty_pairs: list<tuple<i32, i64>> = [];
+    let no_keys: list<i32> = keys(empty_pairs);
+    let no_values: list<i64> = values(empty_pairs);
+    verify(no_keys.len() == 0 && no_values.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_pairwise() {
+    let values: list<i32> = [4, 6, 9];
+    let pairs: list<tuple<i32, i32>> = pairwise(values);
+    verify(pairs.len() == 2);
+    let first = pairs[0];
+    let second = pairs[1];
+    verify(first.0 == 4 && first.1 == 6);
+    verify(second.0 == 6 && second.1 == 9);
+
+    let singleton: list<i32> = [7];
+    let no_pairs: list<tuple<i32, i32>> = pairwise(singleton);
+    verify(no_pairs.len() == 0);
+
+    let sum_as_double = |left: i32, right: i32| {
+        return f64(left + right);
+    };
+    let adjacent_sums: list<f64> = adjacent_transform(values, sum_as_double);
+    verify(adjacent_sums.len() == 2);
+    verify(adjacent_sums[0] == 10.0 && adjacent_sums[1] == 15.0);
+
+    let values_four: list<i32> = [4, 6, 9, 13];
+    let triples: list<tuple<i32, i32, i32>> = adjacent3(values_four);
+    verify(triples.len() == 2);
+    let first_triple = triples[0];
+    let second_triple = triples[1];
+    verify(first_triple.0 == 4 && first_triple.1 == 6 && first_triple.2 == 9);
+    verify(second_triple.0 == 6 && second_triple.1 == 9 && second_triple.2 == 13);
+    let quadruples: list<tuple<i32, i32, i32, i32>> = adjacent4(values_four);
+    verify(quadruples.len() == 1);
+    let only_quadruple = quadruples[0];
+    verify(only_quadruple.0 == 4 && only_quadruple.1 == 6 &&
+           only_quadruple.2 == 9 && only_quadruple.3 == 13);
+    let no_triples: list<tuple<i32, i32, i32>> = adjacent3(singleton);
+    let no_quadruples: list<tuple<i32, i32, i32, i32>> = adjacent4(values);
+    verify(no_triples.len() == 0 && no_quadruples.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_adjacent_transform_wider_windows() {
+    let values: list<i32> = [2, 4, 6, 8, 10];
+    let sum_three = |a: i32, b: i32, c: i32| { return a + b + c; };
+    let sum_four = |a: i32, b: i32, c: i32, d: i32| {
+        return a + b + c + d;
+    };
+    let triples: list<i32> = adjacent_transform3(values, sum_three);
+    verify(triples.len() == 3 && triples[0] == 12 && triples[1] == 18 &&
+           triples[2] == 24);
+    let quadruples: list<i32> = adjacent_transform4(values, sum_four);
+    verify(quadruples.len() == 2 && quadruples[0] == 20 &&
+           quadruples[1] == 28);
+
+    let short: list<i32> = [7, 9];
+    let no_triples: list<i32> = adjacent_transform3(short, sum_three);
+    let no_quadruples: list<i32> = adjacent_transform4(short, sum_four);
+    verify(no_triples.len() == 0 && no_quadruples.len() == 0);
+    verify(values[0] == 2 && values[4] == 10);
+}
+
+#[test]
+fn test_algorithm_ranges_adjacent_five_element_windows() {
+    let values: list<i32> = [2, 4, 6, 8, 10, 12];
+    let windows: list<tuple<i32, i32, i32, i32, i32>> = adjacent5(values);
+    verify(windows.len() == 2);
+    let first: tuple<i32, i32, i32, i32, i32> = windows[0];
+    verify(first.0 == 2 && first.1 == 4 && first.2 == 6 && first.3 == 8 &&
+           first.4 == 10);
+
+    let sum_five = |a: i32, b: i32, c: i32, d: i32, e: i32| {
+        return a + b + c + d + e;
+    };
+    let sums: list<i32> = adjacent_transform5(values, sum_five);
+    verify(sums.len() == 2 && sums[0] == 30 && sums[1] == 40);
+
+    let double = |value: i32| { return value * 2; };
+    let projected: list<i32> =
+        adjacent_transform5_projected(values, sum_five, double);
+    verify(projected.len() == 2 && projected[0] == 60 && projected[1] == 80);
+
+    let short: list<i32> = [1, 2, 3, 4];
+    let no_windows: list<tuple<i32, i32, i32, i32, i32>> = adjacent5(short);
+    let no_sums: list<i32> = adjacent_transform5(short, sum_five);
+    let no_projected: list<i32> =
+        adjacent_transform5_projected(short, sum_five, double);
+    verify(no_windows.len() == 0 && no_sums.len() == 0 &&
+           no_projected.len() == 0);
+    verify(values[0] == 2 && values[5] == 12);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_adjacent_transform() {
+    let values: list<i32> = [11, 12, 19, 21, 25, 30];
+    let tens = |value: i32| { return value / 10; };
+    let sum_two = |a: i32, b: i32| { return a + b; };
+    let pairs: list<i32> = adjacent_transform_projected(values, sum_two, tens);
+    verify(pairs.len() == 5 && pairs[0] == 2 && pairs[2] == 3 && pairs[4] == 5);
+    verify(values[0] == 11 && values[5] == 30);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_adjacent_transform3() {
+    let values: list<i32> = [11, 12, 19, 21, 25, 30];
+    let tens = |value: i32| { return value / 10; };
+    let sum_three = |a: i32, b: i32, c: i32| { return a + b + c; };
+    let triples: list<i32> = adjacent_transform3_projected(values, sum_three, tens);
+    verify(triples.len() == 4 && triples[0] == 3 && triples[2] == 5);
+    let short: list<i32> = [11, 21];
+    let no_triples: list<i32> = adjacent_transform3_projected(short, sum_three, tens);
+    verify(no_triples.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_adjacent_transform4() {
+    let values: list<i32> = [11, 12, 19, 21, 25, 30];
+    let tens = |value: i32| { return value / 10; };
+    let sum_four = |a: i32, b: i32, c: i32, d: i32| {
+        return a + b + c + d;
+    };
+    let quadruples: list<i32> = adjacent_transform4_projected(values, sum_four, tens);
+    verify(quadruples.len() == 3 && quadruples[0] == 5 && quadruples[2] == 8);
+    let short: list<i32> = [11, 21];
+    let no_quadruples: list<i32> = adjacent_transform4_projected(short, sum_four, tens);
+    verify(no_quadruples.len() == 0);
+}
+
+#[test]
 fn test_algorithm_ranges_generic_replace() {
     let values: list<i32> = [1, 2, 2, 3, 2];
     let updated: list<i32> = replace(values, 2, 9);
@@ -537,7 +2812,164 @@ fn test_algorithm_ranges_generic_replace() {
     let words: list<str8> = ["red", "blue", "red"];
     let renamed: list<str8> = replace(words, "red", "green");
     verify(renamed[0] == "green" && renamed[1] == "blue");
+
 }
+
+#[test]
+fn test_algorithm_ranges_replace_if() {
+    let values: list<i32> = [1, 2, 2, 3, 2];
+    let is_even = |value: i32| { return value % 2 == 0; };
+    let replacement: i32 = 0;
+    let replaced: list<i32> = replace_if(values, is_even, replacement);
+    verify(replaced.len() == 5);
+    verify(replaced[0] == 1 && replaced[1] == 0 && replaced[2] == 0);
+    verify(replaced[3] == 3 && replaced[4] == 0);
+    verify(values[1] == 2 && values[2] == 2);
+    let empty: list<i32> = [];
+    let empty_replaced: list<i32> = replace_if(empty, is_even, replacement);
+    verify(empty_replaced.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_replace_if_projected() {
+    let values: list<i32> = [11, 22, 29, 31];
+    let tens = |value: i32| { return value / 10; };
+    let is_two = |key: i32| { return key == 2; };
+    let replaced: list<i32> = replace_if_projected(values, is_two, 99, tens);
+    verify(replaced.len() == 4);
+    verify(replaced[0] == 11 && replaced[1] == 99 &&
+           replaced[2] == 99 && replaced[3] == 31);
+}
+
+#[test]
+fn test_algorithm_ranges_copy_remove_replace_copy() {
+    let values: list<i32> = [1, 2, 3, 2, 4];
+    let is_even = |value: i32| { return value % 2 == 0; };
+
+    let selected: list<i32> = copy_if(values, is_even);
+    verify(selected.len() == 3);
+    verify(selected[0] == 2 && selected[1] == 2 && selected[2] == 4);
+
+    let without_two: list<i32> = remove_copy(values, 2);
+    verify(without_two.len() == 3);
+    verify(without_two[0] == 1 && without_two[1] == 3 && without_two[2] == 4);
+
+    let without_evens: list<i32> = remove_copy_if(values, is_even);
+    verify(without_evens.len() == 2);
+    verify(without_evens[0] == 1 && without_evens[1] == 3);
+
+    let replaced: list<i32> = replace_copy(values, 2, 9);
+    verify(replaced.len() == 5);
+    verify(replaced[0] == 1 && replaced[1] == 9 && replaced[2] == 3);
+    verify(replaced[3] == 9 && replaced[4] == 4);
+
+    let replaced_evens: list<i32> = replace_copy_if(values, is_even, 0);
+    verify(replaced_evens.len() == 5);
+    verify(replaced_evens[0] == 1 && replaced_evens[1] == 0);
+    verify(replaced_evens[2] == 3 && replaced_evens[3] == 0);
+    verify(replaced_evens[4] == 0);
+    verify(values[0] == 1 && values[1] == 2 && values[4] == 4);
+
+    let empty: list<i32> = [];
+    let empty_selected: list<i32> = copy_if(empty, is_even);
+    let empty_without_value: list<i32> = remove_copy(empty, 2);
+    let empty_without_predicate: list<i32> = remove_copy_if(empty, is_even);
+    let empty_replaced: list<i32> = replace_copy(empty, 2, 9);
+    let empty_replaced_if: list<i32> = replace_copy_if(empty, is_even, 0);
+    verify(empty_selected.len() == 0);
+    verify(empty_without_value.len() == 0);
+    verify(empty_without_predicate.len() == 0);
+    verify(empty_replaced.len() == 0);
+    verify(empty_replaced_if.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_remove_replace() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let project_tens = |value: i32| { return value / 10; };
+
+    let removed: list<i32> = remove_projected(values, 2, project_tens);
+    verify(removed.len() == 3 && removed[0] == 11 &&
+           removed[1] == 31 && removed[2] == 42);
+    let removed_copy: list<i32> = remove_copy_projected(
+        values, 2, project_tens);
+    verify(removed_copy.len() == 3 && removed_copy[0] == 11 &&
+           removed_copy[1] == 31 && removed_copy[2] == 42);
+
+    let replaced: list<i32> = replace_projected(
+        values, 2, 99, project_tens);
+    verify(replaced.len() == 5 && replaced[0] == 11 &&
+           replaced[1] == 99 && replaced[2] == 99 &&
+           replaced[3] == 31 && replaced[4] == 42);
+    let replaced_copy: list<i32> = replace_copy_projected(
+        values, 2, 99, project_tens);
+    verify(replaced_copy.len() == 5 && replaced_copy[1] == 99 &&
+           replaced_copy[2] == 99);
+    verify(values[1] == 22 && values[2] == 29);
+}
+
+#[test]
+fn test_algorithm_ranges_equivalence_replace() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let same_decade = |item: i32, key: i32| { return item / 10 == key / 10; };
+    let replaced: list<i32> = replace_by(values, 20, 99, same_decade);
+    let copied: list<i32> = replace_copy_by(values, 20, 99, same_decade);
+    verify(replaced.len() == 5 && replaced[0] == 11 &&
+           replaced[1] == 99 && replaced[2] == 99 &&
+           replaced[3] == 31 && replaced[4] == 42);
+    verify(copied.len() == 5 && copied[1] == 99 && copied[2] == 99);
+
+    let project_tens = |value: i32| { return value / 10; };
+    let same_parity = |left: i32, right: i32| {
+        return left % 2 == right % 2;
+    };
+    let replaced_projected: list<i32> = replace_by_projected(
+        values, 2, 99, same_parity, project_tens);
+    let copied_projected: list<i32> = replace_copy_by_projected(
+        values, 2, 99, same_parity, project_tens);
+    verify(replaced_projected.len() == 5 &&
+           replaced_projected[0] == 11 &&
+           replaced_projected[1] == 99 &&
+           replaced_projected[2] == 99 &&
+           replaced_projected[3] == 31 &&
+           replaced_projected[4] == 99);
+    verify(copied_projected.len() == 5 &&
+           copied_projected[1] == 99 && copied_projected[4] == 99);
+    verify(values[0] == 11 && values[1] == 22 && values[4] == 42);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_conditional_transforms() {
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let project_tens = |value: i32| { return value / 10; };
+    let key_at_least_three = |key: i32| { return key >= 3; };
+
+    let removed: list<i32> = remove_if_projected(
+        values, key_at_least_three, project_tens);
+    let removed_copy: list<i32> = remove_copy_if_projected(
+        values, key_at_least_three, project_tens);
+    verify(removed.len() == 3 && removed[0] == 11 &&
+           removed[1] == 22 && removed[2] == 29);
+    verify(removed_copy.len() == 3 && removed_copy[2] == 29);
+
+    let replaced: list<i32> = replace_if_projected(
+        values, key_at_least_three, 99, project_tens);
+    let replaced_copy: list<i32> = replace_copy_if_projected(
+        values, key_at_least_three, 99, project_tens);
+    verify(replaced.len() == 5 && replaced[0] == 11 &&
+           replaced[2] == 29 && replaced[3] == 99 && replaced[4] == 99);
+    verify(replaced_copy.len() == 5 && replaced_copy[3] == 99 &&
+           replaced_copy[4] == 99);
+    verify(values[3] == 31 && values[4] == 42);
+
+    let empty: list<i32> = [];
+    let empty_removed: list<i32> = remove_if_projected(
+        empty, key_at_least_three, project_tens);
+    let empty_replaced: list<i32> = replace_if_projected(
+        empty, key_at_least_three, 99, project_tens);
+    verify(empty_removed.len() == 0 && empty_replaced.len() == 0);
+}
+
 
 #[test]
 fn test_algorithm_ranges_predicate_queries() {
@@ -561,6 +2993,162 @@ fn test_algorithm_ranges_generic_element_extrema() {
     verify(max_element_index(values) == 2);
     verify(min_element_index(empty) == -1);
     verify(max_element_index(empty) == -1);
+    let extrema: tuple<i64, i64> = minmax_element_index(values);
+    let no_extrema: tuple<i64, i64> = minmax_element_index(empty);
+    verify(extrema.0 == 1 && extrema.1 == 3);
+    verify(no_extrema.0 == -1 && no_extrema.1 == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_element_values() {
+    let values: list<i32> = [8, -3, 11, 11, 4];
+    let safe_min: option<i32> = min_element(values);
+    let safe_max: option<i32> = max_element(values);
+    let safe_extrema: option<tuple<i32, i32>> = minmax_element(values);
+    verify(safe_min.is_some() && safe_min.unwrap() == -3);
+    verify(safe_max.is_some() && safe_max.unwrap() == 11);
+    verify(safe_extrema.is_some());
+    let safe_pair: tuple<i32, i32> = safe_extrema.unwrap();
+    verify(safe_pair.0 == -3 && safe_pair.1 == 11);
+    verify(min_element_value(values) == -3);
+    verify(max_element_value(values) == 11);
+    let values_extrema: tuple<i32, i32> = minmax_element_value(values);
+    verify(values_extrema.0 == -3 && values_extrema.1 == 11);
+    let words: list<str8> = ["pear", "apple", "plum"];
+    verify(min_element_value(words) == "apple");
+    verify(max_element_value(words) == "plum");
+    let empty: list<i32> = [];
+    verify(min_element(empty).is_none());
+    verify(max_element(empty).is_none());
+    verify(minmax_element(empty).is_none());
+}
+
+#[test]
+fn test_algorithm_ranges_safe_comparator_projected_extrema() {
+    let values: list<i32> = [21, 12, 23, 14];
+    let ascending = |left: i32, right: i32| { return left < right; };
+    let descending = |left: i32, right: i32| { return left > right; };
+    let tens = |value: i32| { return value / 10; };
+
+    let min_by: option<i32> = min_element_by(values, descending);
+    let max_by: option<i32> = max_element_by(values, descending);
+    let pair_by: option<tuple<i32, i32>> =
+        minmax_element_by(values, descending);
+    verify(min_by.is_some() && min_by.unwrap() == 23);
+    verify(max_by.is_some() && max_by.unwrap() == 12);
+    let pair: tuple<i32, i32> = pair_by.unwrap();
+    verify(pair.0 == 23 && pair.1 == 12);
+
+    let min_projected: option<i32> = min_element_projected(values, tens);
+    let max_projected: option<i32> = max_element_projected(values, tens);
+    let pair_projected: option<tuple<i32, i32>> =
+        minmax_element_projected(values, tens);
+    verify(min_projected.unwrap() == 12);
+    verify(max_projected.unwrap() == 21);
+    let projected_pair: tuple<i32, i32> = pair_projected.unwrap();
+    verify(projected_pair.0 == 12 && projected_pair.1 == 23);
+
+    let min_both: option<i32> = min_element_by_projected(
+        values, ascending, tens);
+    let max_both: option<i32> = max_element_by_projected(
+        values, ascending, tens);
+    let pair_both: option<tuple<i32, i32>> = minmax_element_by_projected(
+        values, ascending, tens);
+    verify(min_both.unwrap() == 12 && max_both.unwrap() == 21);
+    let both_pair: tuple<i32, i32> = pair_both.unwrap();
+    verify(both_pair.0 == 12 && both_pair.1 == 23);
+
+    let empty: list<i32> = [];
+    verify(min_element_by(empty, ascending).is_none());
+    verify(max_element_projected(empty, tens).is_none());
+    verify(minmax_element_by_projected(empty, ascending, tens).is_none());
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_element_extrema() {
+    let values: list<i32> = [22, 11, 21, 12, 3];
+    let empty: list<i32> = [];
+    let by_tens = |a: i32, b: i32| { return a / 10 < b / 10; };
+    verify(min_element_index_by(values, by_tens) == 4);
+    verify(max_element_index_by(values, by_tens) == 0);
+    verify(min_element_value_by(values, by_tens) == 3);
+    verify(max_element_value_by(values, by_tens) == 22);
+    let values_extrema: tuple<i32, i32> =
+        minmax_element_value_by(values, by_tens);
+    verify(values_extrema.0 == 3 && values_extrema.1 == 21);
+    verify(min_element_index_by(empty, by_tens) == -1);
+    verify(max_element_index_by(empty, by_tens) == -1);
+    let by_tens_extrema: tuple<i64, i64> =
+        minmax_element_index_by(values, by_tens);
+    verify(by_tens_extrema.0 == 4 && by_tens_extrema.1 == 2);
+
+    let tied: list<i32> = [12, 11, 19];
+    verify(min_element_index_by(tied, by_tens) == 0);
+    verify(max_element_index_by(tied, by_tens) == 0);
+    let tied_extrema: tuple<i64, i64> =
+        minmax_element_index_by(tied, by_tens);
+    verify(tied_extrema.0 == 0 && tied_extrema.1 == 2);
+    verify(min_element_value_by(tied, by_tens) == 12);
+    verify(max_element_value_by(tied, by_tens) == 12);
+
+    let descending = |a: i32, b: i32| { return a > b; };
+    verify(min_element_index_by(values, descending) == 0);
+    verify(max_element_index_by(values, descending) == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_element_extrema() {
+    let values: list<i32> = [23, 11, 19, 32, 38];
+    let empty: list<i32> = [];
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(min_element_index_projected(values, project_tens) == 1);
+    verify(max_element_index_projected(values, project_tens) == 3);
+    let indices: tuple<i64, i64> = minmax_element_index_projected(
+        values, project_tens);
+    verify(indices.0 == 1 && indices.1 == 4);
+    verify(min_element_index_projected(empty, project_tens) == -1);
+    verify(max_element_index_projected(empty, project_tens) == -1);
+    let empty_indices: tuple<i64, i64> = minmax_element_index_projected(
+        empty, project_tens);
+    verify(empty_indices.0 == -1 && empty_indices.1 == -1);
+
+    verify(min_element_value_projected(values, project_tens) == 11);
+    verify(max_element_value_projected(values, project_tens) == 32);
+    let extrema: tuple<i32, i32> = minmax_element_value_projected(
+        values, project_tens);
+    verify(extrema.0 == 11 && extrema.1 == 38);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_projected_element_extrema() {
+    let values: list<i32> = [22, 21, 11, 12, 3, 4];
+    let empty: list<i32> = [];
+    let greater = |left: i32, right: i32| { return left > right; };
+    let project_tens = |value: i32| { return value / 10; };
+
+    verify(min_element_index_by_projected(
+        values, greater, project_tens) == 0);
+    verify(max_element_index_by_projected(
+        values, greater, project_tens) == 4);
+    let indices: tuple<i64, i64> = minmax_element_index_by_projected(
+        values, greater, project_tens);
+    verify(indices.0 == 0 && indices.1 == 5);
+    verify(min_element_index_by_projected(
+        empty, greater, project_tens) == -1);
+    verify(max_element_index_by_projected(
+        empty, greater, project_tens) == -1);
+    let empty_indices: tuple<i64, i64> = minmax_element_index_by_projected(
+        empty, greater, project_tens);
+    verify(empty_indices.0 == -1 && empty_indices.1 == -1);
+
+    verify(min_element_value_by_projected(
+        values, greater, project_tens) == 22);
+    verify(max_element_value_by_projected(
+        values, greater, project_tens) == 3);
+    let extrema: tuple<i32, i32> = minmax_element_value_by_projected(
+        values, greater, project_tens);
+    verify(extrema.0 == 22 && extrema.1 == 4);
 }
 
 #[test]
@@ -580,6 +3168,251 @@ fn test_algorithm_ranges_generic_sequence_transforms() {
 }
 
 #[test]
+fn test_algorithm_ranges_take_drop_while() {
+    let values: list<i32> = [1, 2, 3, 0, 4];
+    let below_three = |value: i32| { return value < 3; };
+    let prefix: list<i32> = take_while(values, below_three);
+    let suffix: list<i32> = drop_while(values, below_three);
+    verify(prefix.len() == 2 && prefix[0] == 1 && prefix[1] == 2);
+    verify(suffix.len() == 3 && suffix[0] == 3 && suffix[1] == 0 && suffix[2] == 4);
+    verify(values.len() == 5 && values[0] == 1 && values[4] == 4);
+
+    let starts_rejected: list<i32> = [3, 1, 2];
+    let empty_prefix: list<i32> = take_while(starts_rejected, below_three);
+    let unchanged: list<i32> = drop_while(starts_rejected, below_three);
+    verify(empty_prefix.len() == 0);
+    verify(unchanged.len() == 3 && unchanged[0] == 3 && unchanged[2] == 2);
+
+    let empty: list<i32> = [];
+    let empty_prefix2: list<i32> = take_while(empty, below_three);
+    let empty_suffix2: list<i32> = drop_while(empty, below_three);
+    verify(empty_prefix2.len() == 0 && empty_suffix2.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_take_drop_while() {
+    let values: list<i32> = [11, 12, 19, 21, 25, 30];
+    let below_two = |key: i32| { return key < 2; };
+    let tens = |value: i32| { return value / 10; };
+    let prefix: list<i32> = take_while_projected(values, below_two, tens);
+    let suffix: list<i32> = drop_while_projected(values, below_two, tens);
+    verify(prefix.len() == 3 && prefix[0] == 11 && prefix[1] == 12 &&
+           prefix[2] == 19);
+    verify(suffix.len() == 3 && suffix[0] == 21 && suffix[1] == 25 &&
+           suffix[2] == 30);
+
+    let starts_rejected: list<i32> = [21, 11, 12];
+    let no_prefix: list<i32> =
+        take_while_projected(starts_rejected, below_two, tens);
+    let unchanged: list<i32> =
+        drop_while_projected(starts_rejected, below_two, tens);
+    verify(no_prefix.len() == 0 && unchanged.len() == 3 &&
+           unchanged[0] == 21 && unchanged[2] == 12);
+
+    let empty: list<i32> = [];
+    let empty_prefix: list<i32> =
+        take_while_projected(empty, below_two, tens);
+    let empty_suffix: list<i32> =
+        drop_while_projected(empty, below_two, tens);
+    verify(empty_prefix.len() == 0 && empty_suffix.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_transform_changes_element_type() {
+    let values: list<i32> = [1, 3, 2];
+    let to_double = |value: i32| { return f64(value); };
+    let converted: list<f64> = transform(values, to_double);
+    verify(converted.len() == 3);
+    verify(converted[0] == 1.0 && converted[1] == 3.0 && converted[2] == 2.0);
+
+    let add_one = |value: i32| { return value + 1; };
+    let incremented: list<i32> = transform(values, add_one);
+    verify(incremented.len() == 3);
+    verify(incremented[0] == 2 && incremented[1] == 4 && incremented[2] == 3);
+
+    let counted: tuple<i64, list<i32>> =
+        transform_with_count(values, add_one);
+    let counted_values: list<i32> = counted.1;
+    verify(counted.0 == 3 && counted_values[0] == 2 &&
+           counted_values[2] == 3);
+    let empty: list<i32> = [];
+    let empty_counted: tuple<i64, list<i32>> =
+        transform_with_count(empty, add_one);
+    let empty_values: list<i32> = empty_counted.1;
+    verify(empty_counted.0 == 0 && empty_values.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_binary_transform() {
+    let left: list<i32> = [1, 2, 3, 4];
+    let right: list<i32> = [10, 20, 30];
+    let add = |a: i32, b: i32| { return a + b; };
+    let sums: list<i32> = transform(left, right, add);
+    verify(sums.len() == 3 && sums[0] == 11 && sums[2] == 33);
+    verify(left.len() == 4 && right.len() == 3);
+
+    let empty: list<i32> = [];
+    let none: list<i32> = transform(empty, right, add);
+    verify(none.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_transform_projected() {
+    let values: list<i32> = [11, 22, 33];
+    let project_tens = |value: i32| { return value / 10; };
+    let square_as_float = |key: i32| { return f64(key * key); };
+    let squares: list<f64> = transform_projected(
+        values, square_as_float, project_tens);
+    verify(squares.len() == 3 && squares[0] == 1.0 &&
+           squares[1] == 4.0 && squares[2] == 9.0);
+    let counted_squares: tuple<i64, list<f64>> =
+        transform_projected_with_count(
+            values, square_as_float, project_tens);
+    let counted_square_values: list<f64> = counted_squares.1;
+    verify(counted_squares.0 == 3 && counted_square_values[2] == 9.0);
+
+    let other: list<i32> = [19, 28];
+    let add_keys = |left: i32, right: i32| { return left + right; };
+    let sums: list<i32> = zip_transform_projected(
+        values, other, add_keys, project_tens, project_tens);
+    verify(sums.len() == 2 && sums[0] == 2 && sums[1] == 4);
+    verify(values[0] == 11 && other.len() == 2);
+}
+
+#[test]
+fn test_algorithm_ranges_zip_transform() {
+    let counts: list<i32> = [10, 20, 30];
+    let offsets: list<f64> = [0.5, 1.5];
+    let combine = |count: i32, offset: f64| {
+        return f64(count) + offset;
+    };
+    let combined: list<f64> = zip_transform(counts, offsets, combine);
+    verify(combined.len() == 2);
+    verify(combined[0] == 10.5 && combined[1] == 21.5);
+}
+
+#[test]
+fn test_algorithm_ranges_zip_transform_three_inputs() {
+    let first: list<i32> = [1, 2, 3];
+    let second: list<i64> = [10, 20];
+    let third: list<i32> = [100, 200, 300, 400];
+    let sum_three = |a: i32, b: i64, c: i32| { return a + i32(b) + c; };
+    let sums: list<i32> = zip_transform(first, second, third, sum_three);
+    verify(sums.len() == 2);
+    verify(sums[0] == 111 && sums[1] == 222);
+    verify(first.len() == 3 && second.len() == 2 && third.len() == 4);
+
+    let empty: list<i32> = [];
+    let no_sums: list<i32> = zip_transform(first, second, empty, sum_three);
+    verify(no_sums.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_zip_transform_four_inputs() {
+    let first: list<i32> = [1, 2, 3];
+    let second: list<i32> = [10, 20];
+    let third: list<i32> = [100, 200, 300];
+    let fourth: list<i32> = [1000];
+    let combine = |a: i32, b: i32, c: i32, d: i32| {
+        return a + b + c + d;
+    };
+    let combined: list<i32> = zip_transform(first, second, third, fourth, combine);
+    verify(combined.len() == 1 && combined[0] == 1111);
+
+    let empty: list<i32> = [];
+    let none: list<i32> = zip_transform(first, second, third, empty, combine);
+    verify(none.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_zip_transform_projected_three_and_four_inputs() {
+    let first: list<i32> = [11, 22, 33];
+    let second: list<i64> = [19, 28];
+    let third: list<i32> = [5, 6, 7, 8];
+    let first_key = |value: i32| { return value / 10; };
+    let second_key = |value: i64| { return i32(value / 10); };
+    let third_key = |value: i32| { return value * 10; };
+    let sum_three = |a: i32, b: i32, c: i32| { return a + b + c; };
+    let sums: list<i32> = zip_transform3_projected(
+        first, second, third, sum_three, first_key, second_key, third_key);
+    verify(sums.len() == 2 && sums[0] == 52 && sums[1] == 64);
+
+    let fourth: list<i32> = [100, 200, 300];
+    let tens = |value: i32| { return value / 10; };
+    let ones = |value: i32| { return value % 10; };
+    let combine_four = |a: i32, b: i32, c: i32, d: i32| {
+        return a + b + c + d;
+    };
+    let combined: list<i32> = zip_transform4_projected(
+        first, third, fourth, first, combine_four,
+        first_key, third_key, tens, ones);
+    verify(combined.len() == 3 && combined[0] == 62 &&
+           combined[1] == 84 && combined[2] == 106);
+
+    let fifth: list<i32> = [2, 3, 4, 5];
+    let combine_five = |a: i32, b: i32, c: i32, d: i32, e: i32| {
+        return a + b + c + d + e;
+    };
+    let combined_five: list<i32> = zip_transform5_projected(
+        first, second, third, fourth, fifth, combine_five,
+        first_key, second_key, third_key, tens, ones);
+    verify(combined_five.len() == 2 && combined_five[0] == 64 &&
+           combined_five[1] == 87);
+
+    let sixth: list<i32> = [9, 8, 7];
+    let sixth_key = |value: i32| { return value * 2; };
+    let combine_six = |a: i32, b: i32, c: i32, d: i32, e: i32, f: i32| {
+        return a + b + c + d + e + f;
+    };
+    let combined_six: list<i32> = zip_transform6_projected(
+        first, second, third, fourth, fifth, sixth, combine_six,
+        first_key, second_key, third_key, tens, ones, sixth_key);
+    verify(combined_six.len() == 2 && combined_six[0] == 82 &&
+           combined_six[1] == 103);
+
+    let empty: list<i32> = [];
+    let none: list<i32> = zip_transform3_projected(
+        first, second, empty, sum_three, first_key, second_key, third_key);
+    verify(none.len() == 0 && first[0] == 11 && second[0] == 19);
+}
+
+#[test]
+fn test_algorithm_ranges_chunk_by() {
+    let values: list<i32> = [1, 2, 5, 6, 7, 10];
+    let consecutive = |left: i32, right: i32| { return right == left + 1; };
+    let groups: list<list<i32>> = chunk_by(values, consecutive);
+    verify(groups.len() == 3);
+    let first_group: list<i32> = groups[0];
+    let middle_group: list<i32> = groups[1];
+    let last_group: list<i32> = groups[2];
+    verify(first_group.len() == 2 && first_group[0] == 1 && first_group[1] == 2);
+    verify(middle_group.len() == 3 && middle_group[0] == 5 && middle_group[2] == 7);
+    verify(last_group.len() == 1 && last_group[0] == 10);
+
+    let empty: list<i32> = [];
+    let no_groups: list<list<i32>> = chunk_by(empty, consecutive);
+    verify(no_groups.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_chunk_by_projected() {
+    let values: list<i32> = [11, 12, 19, 21, 25, 30];
+    let equal_key = |left: i32, right: i32| { return left == right; };
+    let tens = |value: i32| { return value / 10; };
+    let groups: list<list<i32>> = chunk_by_projected(values, equal_key, tens);
+    verify(groups.len() == 3);
+    let first: list<i32> = groups[0];
+    let second: list<i32> = groups[1];
+    let third: list<i32> = groups[2];
+    verify(first.len() == 3 && first[0] == 11 && first[2] == 19);
+    verify(second.len() == 2 && second[0] == 21 && second[1] == 25);
+    verify(third.len() == 1 && third[0] == 30);
+    let empty: list<i32> = [];
+    let no_groups: list<list<i32>> = chunk_by_projected(empty, equal_key, tens);
+    verify(no_groups.len() == 0);
+}
+
+#[test]
 fn test_algorithm_ranges_iota() {
     let values: list<i64> = iota(-2, 3);
     verify(values.len() == 5);
@@ -589,6 +3422,79 @@ fn test_algorithm_ranges_iota() {
     let empty: list<i64> = iota(4, 4);
     let reversed: list<i64> = iota(5, 1);
     verify(empty.len() == 0 && reversed.len() == 0);
+
+    let stepped: list<i64> = iota_by(1, 10, 3);
+    verify(stepped.len() == 3);
+    verify(stepped[0] == 1 && stepped[1] == 4 && stepped[2] == 7);
+
+    let descending: list<i64> = iota_by(9, 0, -2);
+    verify(descending.len() == 5);
+    verify(descending[0] == 9 && descending[1] == 7 &&
+           descending[2] == 5 && descending[3] == 3 && descending[4] == 1);
+
+    let zero_step: list<i64> = iota_by(1, 10, 0);
+    let wrong_direction: list<i64> = iota_by(1, 10, -1);
+    verify(zero_step.len() == 0 && wrong_direction.len() == 0);
+
+    let near_max: list<i64> = iota_by(9223372036854775806,
+                                      9223372036854775807, 4);
+    verify(near_max.len() == 1 && near_max[0] == 9223372036854775806);
+
+    let first: i32 = 2;
+    let last: i32 = 6;
+    let typed: list<i32> = iota_range(first, last);
+    verify(typed.len() == 4 && typed[0] == 2 && typed[3] == 5);
+
+    let step: i32 = 3;
+    let stepped_end: i32 = 11;
+    let typed_stepped: list<i32> =
+        iota_range_by(first, stepped_end, step);
+    verify(typed_stepped.len() == 3 && typed_stepped[0] == 2 &&
+           typed_stepped[1] == 5 && typed_stepped[2] == 8);
+    let down_from: i32 = 9;
+    let down_to: i32 = 0;
+    let down_step: i32 = -2;
+    let typed_descending: list<i32> =
+        iota_range_by(down_from, down_to, down_step);
+    verify(typed_descending.len() == 5 && typed_descending[0] == 9 &&
+           typed_descending[4] == 1);
+    let zero_step_i32: i32 = 0;
+    let negative_step_i32: i32 = -1;
+    let no_step: list<i32> = iota_range_by(first, last, zero_step_i32);
+    let away: list<i32> = iota_range_by(first, last, negative_step_i32);
+    verify(no_step.is_empty() && away.is_empty());
+
+}
+
+
+#[test]
+fn test_algorithm_ranges_repeat_len() {
+    let seven: i32 = 7;
+    let repeated: list<i32> = repeat_range(seven, 4);
+    verify(repeated.len() == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_repeat_contents() {
+    let seven: i32 = 7;
+    let repeated: list<i32> = repeat_range(seven, 4);
+    verify_eq_i32(7, repeated[0]);
+    verify_eq_i32(7, repeated[3]);
+}
+
+#[test]
+fn test_algorithm_ranges_repeat_nonpositive_count() {
+    let nine: i32 = 9;
+    let none: list<i32> = repeat_range(nine, 0);
+    let negative: list<i32> = repeat_range(nine, -3);
+    verify(none.len() == 0 && negative.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_single_view() {
+    let value: i32 = 42;
+    let one: list<i32> = single_range(value);
+    verify(one.len() == 1 && one[0] == value);
 }
 
 #[test]
@@ -598,9 +3504,36 @@ fn test_algorithm_ranges_generic_unique_transforms() {
     verify(adjacent.len() == 5);
     verify(adjacent[0] == 1 && adjacent[1] == 2 && adjacent[2] == 3);
     verify(adjacent[3] == 1 && adjacent[4] == 4);
+    let copied: list<i32> = unique_copy(repeats);
+    verify(copied.len() == 5 && copied[0] == 1 && copied[4] == 4);
     let stable: list<i32> = unique_stable(repeats);
     verify(stable.len() == 4);
     verify(stable[0] == 1 && stable[1] == 2 && stable[2] == 3 && stable[3] == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_unique_by_projected() {
+    let values: list<i32> = [11, 31, 22, 42, 51, 71];
+    let project_tens = |value: i32| { return value / 10; };
+    let same_parity = |left: i32, right: i32| {
+        return left % 2 == right % 2;
+    };
+    let distinct_runs: list<i32> = unique_by_projected(
+        values, same_parity, project_tens);
+    verify(distinct_runs.len() == 3);
+    verify(distinct_runs[0] == 11 && distinct_runs[1] == 22 &&
+           distinct_runs[2] == 51);
+
+    let copied_runs: list<i32> = unique_copy_by_projected(
+        values, same_parity, project_tens);
+    verify(copied_runs.len() == 3 && copied_runs[0] == 11 &&
+           copied_runs[1] == 22 && copied_runs[2] == 51);
+    verify(values.len() == 6 && values[0] == 11 && values[5] == 71);
+
+    let empty: list<i32> = [];
+    let empty_runs: list<i32> = unique_by_projected(
+        empty, same_parity, project_tens);
+    verify(empty_runs.len() == 0);
 }
 
 #[test]
@@ -646,6 +3579,38 @@ fn test_algorithm_ranges_find_count_contains_remove_take_drop() {
 
     let drop4: list<i64> = drop_i64(data, 4);
     verify(drop4.len() == 2 && drop4[0] == 8 && drop4[1] == 6);
+
+    let last_three: list<i64> = take_last(data, 3);
+    verify(last_three.len() == 3 && last_three[0] == 7 &&
+           last_three[2] == 6);
+    let without_last_two: list<i64> = drop_last(data, 2);
+    verify(without_last_two.len() == 4 && without_last_two[0] == 5 &&
+           without_last_two[3] == 7);
+    let all_tail: list<i64> = take_last(data, 99);
+    let none_left: list<i64> = drop_last(data, 99);
+    let no_tail: list<i64> = take_last(data, 0);
+    let all_kept: list<i64> = drop_last(data, -2);
+    verify(all_tail.len() == 6 && none_left.len() == 0 && no_tail.len() == 0);
+    verify(all_kept.len() == 6 && all_kept[5] == 6);
+
+    let middle: list<i64> = subrange(data, 1, 4);
+    verify(middle.len() == 3 && middle[0] == 6 && middle[2] == 7);
+    let clamped: list<i64> = subrange(data, -3, 99);
+    verify(clamped.len() == 6 && clamped[0] == 5 && clamped[5] == 6);
+    let reversed_bounds: list<i64> = subrange(data, 5, 2);
+    let after_end: list<i64> = subrange(data, 99, 120);
+    verify(reversed_bounds.len() == 0 && after_end.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_lookup() {
+    let values: list<i32> = [13, 14, 27, 31, 19];
+    let project_tens = |value: i32| { return value / 10; };
+    verify(find_projected(values, 2, project_tens) == 2);
+    verify(find_projected(values, 9, project_tens) == -1);
+    verify(count_projected(values, 1, project_tens) == 3);
+    verify(contains_projected(values, 3, project_tens));
+    verify(!contains_projected(values, 4, project_tens));
 }
 
 #[test]
@@ -670,6 +3635,62 @@ fn test_algorithm_ranges_clamp() {
 }
 
 #[test]
+fn test_algorithm_ranges_clamp_by_comparator() {
+    let values: list<i32> = [4, 11, 35, 22];
+    let low: i32 = 30;
+    let high: i32 = 10;
+    let greater = |a: i32, b: i32| { return a > b; };
+    let bounded: list<i32> = clamp_by(values, low, high, greater);
+    verify(bounded.len() == 4);
+    verify(bounded[0] == 10 && bounded[1] == 11);
+    verify(bounded[2] == 30 && bounded[3] == 22);
+    verify(values[0] == 4 && values[2] == 35);
+
+    let empty: list<i32> = [];
+    let no_values: list<i32> = clamp_by(empty, low, high, greater);
+    verify(no_values.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_clamp_projected() {
+    let values: list<i32> = [11, 20, 29, 40, 51];
+    let low: i32 = 20;
+    let high: i32 = 40;
+    let project_tens = |value: i32| { return value / 10; };
+    let bounded: list<i32> = clamp_projected(
+        values, low, high, project_tens);
+    verify(bounded.len() == 5 && bounded[0] == 20 &&
+           bounded[1] == 20 && bounded[2] == 29 &&
+           bounded[3] == 40 && bounded[4] == 40);
+    verify(values[0] == 11 && values[4] == 51);
+
+    let empty: list<i32> = [];
+    let empty_bounded: list<i32> = clamp_projected(
+        empty, low, high, project_tens);
+    verify(empty_bounded.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_clamp_by_projected() {
+    let values: list<i32> = [11, 20, 29, 40, 51];
+    let low: i32 = 40;
+    let high: i32 = 20;
+    let greater = |a: i32, b: i32| { return a > b; };
+    let project_tens = |value: i32| { return value / 10; };
+    let bounded: list<i32> = clamp_by_projected(
+        values, low, high, greater, project_tens);
+    verify(bounded.len() == 5 && bounded[0] == 20 &&
+           bounded[1] == 20 && bounded[2] == 29 &&
+           bounded[3] == 40 && bounded[4] == 40);
+    verify(values[0] == 11 && values[4] == 51);
+
+    let empty: list<i32> = [];
+    let empty_bounded: list<i32> = clamp_by_projected(
+        empty, low, high, greater, project_tens);
+    verify(empty_bounded.len() == 0);
+}
+
+#[test]
 fn test_algorithm_numeric_accumulate_and_inner_product() {
     let a: list<i64> = [1, 2, 3, 4];
     let b: list<i64> = [10, 20, 30];
@@ -679,6 +3700,67 @@ fn test_algorithm_numeric_accumulate_and_inner_product() {
 }
 
 #[test]
+fn test_cpp20_integral_midpoint() {
+    verify_eq(5, midpoint_i64(4, 6));
+    verify_eq(4, midpoint_i64(5, 2));
+    verify_eq(3, midpoint_i64(2, 5));
+    verify_eq(-3, midpoint_i64(-3, -2));
+    verify_eq(-2, midpoint_i64(-2, -3));
+
+    let minimum: i64 = 0 - 9223372036854775807 - 1;
+    let maximum: i64 = 9223372036854775807;
+    verify_eq(-1, midpoint_i64(minimum, maximum));
+    verify_eq(0, midpoint_i64(maximum, minimum));
+    verify_eq(minimum, midpoint_i64(minimum, minimum));
+    verify_eq(maximum, midpoint_i64(maximum, maximum));
+
+    let unsigned_maximum: u64 = numeric_limits<u64>::max();
+    verify_eq(3, narrow_cast<i64>(midpoint_u64(2, 5)));
+    verify_eq(4, narrow_cast<i64>(midpoint_u64(5, 2)));
+    verify_eq(9223372036854775807, narrow_cast<i64>(midpoint_u64(0, unsigned_maximum)));
+    verify_eq(0 - 9223372036854775807 - 1,
+             narrow_cast<i64>(midpoint_u64(unsigned_maximum, 0)));
+    verify_eq(-1, narrow_cast<i64>(midpoint_u64(unsigned_maximum, unsigned_maximum)));
+}
+
+#[test]
+fn test_cpp20_floating_midpoint() {
+    verify(midpoint_f32(4.0f, 6.0f) == 5.0f);
+    verify(midpoint_f32(-4.0f, 6.0f) == 1.0f);
+    verify(midpoint_f32(6.0f, 4.0f) == 5.0f);
+    verify(midpoint_f32(300000000000000000000000000000000000000.0f,
+                        300000000000000000000000000000000000000.0f) ==
+           300000000000000000000000000000000000000.0f);
+    verify(midpoint_f32(300000000000000000000000000000000000000.0f,
+                        200000000000000000000000000000000000000.0f) >
+           200000000000000000000000000000000000000.0f);
+
+    verify(midpoint_f64(4.0, 6.0) == 5.0);
+    verify(midpoint_f64(-4.0, 6.0) == 1.0);
+    verify(midpoint_f64(6.0, 4.0) == 5.0);
+    verify(midpoint_f64(10000000000000000000.0,
+                        10000000000000000000.0) == 10000000000000000000.0);
+}
+
+#[test]
+fn test_cpp20_narrow_integer_midpoint() {
+    verify(midpoint_i8(-128, 127) == -1);
+    verify(midpoint_i8(127, -128) == 0);
+    verify(midpoint_i16(-32768, 32767) == -1);
+    verify(midpoint_i16(32767, -32768) == 0);
+    verify(midpoint_i32(-2147483648, 2147483647) == -1);
+    verify(midpoint_i32(2147483647, -2147483648) == 0);
+
+    verify(midpoint_u8(0, 255) == 127);
+    verify(midpoint_u8(255, 0) == 128);
+    verify(midpoint_u16(0, 65535) == 32767);
+    verify(midpoint_u16(65535, 0) == 32768);
+    verify(midpoint_u32(0, 4294967295) == 2147483647);
+    verify(midpoint_u32(4294967295, 0) == 2147483648);
+}
+
+
+#[test]
 fn test_algorithm_numeric_generic_accumulate() {
     let values: list<i32> = [2, 3, 5];
     let initial: i64 = 10;
@@ -686,6 +3768,202 @@ fn test_algorithm_numeric_generic_accumulate() {
     verify(sum == 20);
     let zero_initial: i64 = 0;
     verify(accumulate(values, zero_initial) == 10);
+
+    let subtract = |acc: i64, value: i32| { return acc - value; };
+    let initial_difference: i64 = 20;
+    verify(accumulate_by(values, initial_difference, subtract) == 10);
+    verify(accumulate(values, initial_difference, subtract) == 10);
+    let empty: list<i32> = [];
+    verify(accumulate_by(empty, initial_difference, subtract) == 20);
+    verify(accumulate(empty, initial_difference, subtract) == 20);
+
+    verify(reduce(values, initial) == 20);
+    let multiply = |acc: i64, value: i32| { return acc * value; };
+    let reduce_initial: i64 = 1;
+    verify(reduce(values, reduce_initial, multiply) == 30);
+    verify(reduce(empty, reduce_initial, multiply) == 1);
+}
+
+#[test]
+fn test_algorithm_numeric_folds() {
+    let values: list<i32> = [1, 2, 3];
+    let encode_left = |acc: i32, value: i32| { return acc * 10 + value; };
+    let encode_right = |value: i32, acc: i32| { return value + acc * 10; };
+    verify(fold_left(values, 4, encode_left) == 4123);
+    verify(fold_right(values, 4, encode_right) == 4321);
+
+    let empty: list<i32> = [];
+    verify(fold_left(empty, 17, encode_left) == 17);
+    verify(fold_right(empty, 23, encode_right) == 23);
+
+    let subtract = |acc: i32, value: i32| { return acc - value; };
+    verify(fold_left(values, 20, subtract) == 14);
+}
+
+#[test]
+fn test_algorithm_numeric_folds_without_initial_value() {
+    let values: list<i32> = [1, 2, 3];
+    let encode_left = |acc: i32, value: i32| { return acc * 10 + value; };
+    let encode_right = |value: i32, acc: i32| { return value + acc * 10; };
+    let left: option<i32> = fold_left_first(values, encode_left);
+    let right: option<i32> = fold_right_last(values, encode_right);
+    let left_value: i32 = match left {
+        Some(value) => value,
+        None => 0
+    };
+    let right_value: i32 = match right {
+        Some(value) => value,
+        None => 0
+    };
+    verify(left_value == 123 && right_value == 321);
+
+    let empty: list<i32> = [];
+    let empty_left: option<i32> = fold_left_first(empty, encode_left);
+    let empty_right: option<i32> = fold_right_last(empty, encode_right);
+    verify(empty_left.is_none() && empty_right.is_none());
+}
+
+#[test]
+fn test_algorithm_ranges_folds() {
+    let values: list<i32> = [1, 2, 3];
+    let encode_left = |acc: i32, value: i32| { return acc * 10 + value; };
+    let encode_right = |value: i32, acc: i32| { return value + acc * 10; };
+    verify(ranges_fold_left(values, 4, encode_left) == 4123);
+    verify(ranges_fold_right(values, 4, encode_right) == 4321);
+    let with_iter: tuple<i64, i32> = ranges_fold_left_with_iter(values, 4, encode_left);
+    verify(with_iter.0 == 3 && with_iter.1 == 4123);
+    let right_with_iter: tuple<i64, i32> =
+        ranges_fold_right_with_iter(values, 4, encode_right);
+    verify(right_with_iter.0 == 3 && right_with_iter.1 == 4321);
+
+    let add_to_i64 = |acc: i64, value: i32| { return acc + value; };
+    let heterogeneous: i64 = ranges_fold_left(values, 10, add_to_i64);
+    verify(heterogeneous == 16);
+
+    let left: option<i32> = ranges_fold_left_first(values, encode_left);
+    let right: option<i32> = ranges_fold_right_last(values, encode_right);
+    let left_with_iter: option<tuple<i64, i32>> =
+        ranges_fold_left_first_with_iter(values, encode_left);
+    verify(left_with_iter.is_some());
+    let left_result: tuple<i64, i32> = left_with_iter.unwrap();
+    verify(left_result.0 == 3 && left_result.1 == 123);
+    let encode_wide = |acc: i64, value: i32| { return acc * 10 + value; };
+    let wide_with_iter: option<tuple<i64, i64>> =
+        ranges_fold_left_first_with_iter(values, encode_wide);
+    verify(wide_with_iter.is_some());
+    let wide_result: tuple<i64, i64> = wide_with_iter.unwrap();
+    verify(wide_result.0 == 3 && wide_result.1 == 123);
+    let left_value: i32 = match left { Some(value) => value, None => 0 };
+    let right_value: i32 = match right { Some(value) => value, None => 0 };
+    verify(left_value == 123 && right_value == 321);
+
+    let empty: list<i32> = [];
+    verify(ranges_fold_left(empty, 17, encode_left) == 17);
+    verify(ranges_fold_right(empty, 23, encode_right) == 23);
+    let empty_with_iter: tuple<i64, i32> = ranges_fold_left_with_iter(empty, 29, encode_left);
+    verify(empty_with_iter.0 == 0 && empty_with_iter.1 == 29);
+    let empty_right_with_iter: tuple<i64, i32> =
+        ranges_fold_right_with_iter(empty, 31, encode_right);
+    verify(empty_right_with_iter.0 == 0 && empty_right_with_iter.1 == 31);
+    verify(ranges_fold_left_first(empty, encode_left).is_none());
+    verify(ranges_fold_left_first_with_iter(empty, encode_left).is_none());
+    verify(ranges_fold_right_last(empty, encode_right).is_none());
+
+    let singleton: list<i32> = [7];
+    let singleton_result: option<tuple<i64, i32>> =
+        ranges_fold_left_first_with_iter(singleton, encode_left);
+    verify(singleton_result.is_some());
+    let singleton_fold: tuple<i64, i32> = singleton_result.unwrap();
+    verify(singleton_fold.0 == 1 && singleton_fold.1 == 7);
+}
+
+#[test]
+fn test_algorithm_numeric_transform_reduce() {
+    let values: list<i32> = [1, 2, 3];
+    let add = |acc: i32, value: i32| { return acc + value; };
+    let square = |value: i32| { return value * value; };
+    verify(transform_reduce(values, 0, add, square) == 14);
+
+    let left: list<i32> = [1, 2, 3];
+    let right: list<i32> = [4, 5];
+    let multiply = |a: i32, b: i32| { return a * b; };
+    verify(transform_reduce(left, right, 7, add, multiply) == 21);
+
+    let empty: list<i32> = [];
+    verify(transform_reduce(empty, 9, add, square) == 9);
+    verify(transform_reduce(left, empty, 13, add, multiply) == 13);
+}
+
+#[test]
+fn test_algorithm_numeric_scans() {
+    let values: list<i32> = [1, 2, 3, 4];
+    let add = |acc: i32, value: i32| { return acc + value; };
+    let inclusive: list<i32> = inclusive_scan(values, add);
+    verify(inclusive.len() == 4);
+    verify(inclusive[0] == 1 && inclusive[1] == 3);
+    verify(inclusive[2] == 6 && inclusive[3] == 10);
+
+    let add_wide = |acc: f64, value: i32| { return acc + f64(value); };
+    let seeded: list<f64> = inclusive_scan(values, 0.5, add_wide);
+    verify(seeded.len() == 4);
+    verify(seeded[0] == 1.5 && seeded[1] == 3.5);
+    verify(seeded[2] == 6.5 && seeded[3] == 10.5);
+
+    let initial: i32 = 10;
+    let exclusive: list<i32> = exclusive_scan(values, initial, add);
+    verify(exclusive.len() == 4);
+    verify(exclusive[0] == 10 && exclusive[1] == 11);
+    verify(exclusive[2] == 13 && exclusive[3] == 16);
+
+    let subtract = |acc: i32, value: i32| { return acc - value; };
+    let ordered_input: list<i32> = [20, 3, 2];
+    let ordered: list<i32> = inclusive_scan(ordered_input, subtract);
+    verify(ordered[0] == 20 && ordered[1] == 17 && ordered[2] == 15);
+
+    let empty: list<i32> = [];
+    let empty_initial: i32 = 7;
+    let empty_inclusive: list<i32> = inclusive_scan(empty, add);
+    let empty_seeded: list<f64> = inclusive_scan(empty, 0.5, add_wide);
+    let empty_exclusive: list<i32> = exclusive_scan(empty, empty_initial, add);
+    verify(empty_inclusive.len() == 0 && empty_seeded.len() == 0 &&
+           empty_exclusive.len() == 0);
+    let one: list<i32> = [8];
+    let one_inclusive: list<i32> = inclusive_scan(one, add);
+    let one_exclusive: list<i32> = exclusive_scan(one, empty_initial, add);
+    verify(one_inclusive[0] == 8 && one_exclusive[0] == 7);
+
+    let add_wide = |acc: f64, value: i32| { return acc + f64(value); };
+    let wide_initial: f64 = 0.5;
+    let wide_exclusive: list<f64> = exclusive_scan(values, wide_initial, add_wide);
+    verify(wide_exclusive.len() == 4);
+    verify(wide_exclusive[0] == 0.5 && wide_exclusive[1] == 1.5);
+    verify(wide_exclusive[2] == 3.5 && wide_exclusive[3] == 6.5);
+}
+
+#[test]
+fn test_algorithm_numeric_transform_scans() {
+    let values: list<i32> = [2, 4, 6];
+    let project = |value: i32| { return f64(value) / 2.0; };
+    let add = |acc: f64, value: f64| { return acc + value; };
+
+    let inclusive: list<f64> = transform_inclusive_scan(values, add, project);
+    verify(inclusive.len() == 3);
+    verify(inclusive[0] == 1.0 && inclusive[1] == 3.0 && inclusive[2] == 6.0);
+
+    let seeded: list<f64> = transform_inclusive_scan(values, 0.5, add, project);
+    verify(seeded.len() == 3);
+    verify(seeded[0] == 1.5 && seeded[1] == 3.5 && seeded[2] == 6.5);
+
+    let exclusive: list<f64> = transform_exclusive_scan(values, 1.0, add, project);
+    verify(exclusive.len() == 3);
+    verify(exclusive[0] == 1.0 && exclusive[1] == 2.0 && exclusive[2] == 4.0);
+
+    let empty: list<i32> = [];
+    let empty_inclusive: list<f64> = transform_inclusive_scan(empty, add, project);
+    let empty_seeded: list<f64> = transform_inclusive_scan(empty, 0.5, add, project);
+    let empty_exclusive: list<f64> = transform_exclusive_scan(empty, 1.0, add, project);
+    verify(empty_inclusive.len() == 0);
+    verify(empty_seeded.len() == 0 && empty_exclusive.len() == 0);
 }
 
 #[test]
@@ -697,6 +3975,18 @@ fn test_algorithm_numeric_generic_inner_product() {
 
     let empty: list<i32> = [];
     verify(inner_product(left, empty, initial) == initial);
+
+    let wide_right: list<i64> = [10, 20, 30];
+    verify(inner_product(left, wide_right, initial) == 147);
+
+    let pair_term = |a: i32, b: i64| { return a + b; };
+    let decimal_fold = |acc: i64, term: i64| { return acc * 10 + term; };
+    verify(inner_product_by(left, wide_right, 0, decimal_fold, pair_term) ==
+           1353);
+    verify(inner_product(left, wide_right, 0, decimal_fold, pair_term) ==
+           1353);
+    let empty_wide: list<i64> = [];
+    verify(inner_product_by(left, empty_wide, 17, decimal_fold, pair_term) == 17);
 }
 
 #[test]
@@ -731,6 +4021,29 @@ fn test_algorithm_numeric_generic_partial_sum_and_adjacent_difference() {
     let empty_prefix: list<i32> = partial_sum(empty, init);
     let empty_diff: list<i32> = adjacent_difference(empty, init);
     verify(empty_prefix.len() == 0 && empty_diff.len() == 0);
+}
+
+#[test]
+fn test_algorithm_numeric_custom_partial_and_adjacent_operations() {
+    let values: list<i32> = [10, 3, 2, 8];
+    let subtract = |left: i32, right: i32| { return left - right; };
+    let prefixes: list<i32> = partial_sum_by(values, subtract);
+    verify(prefixes.len() == 4 && prefixes[0] == 10 && prefixes[1] == 7 &&
+           prefixes[2] == 5 && prefixes[3] == -3);
+    let differences: list<i32> = adjacent_difference_by(values, subtract);
+    verify(differences.len() == 4 && differences[0] == 10 &&
+           differences[1] == -7 && differences[2] == -1 &&
+           differences[3] == 6);
+
+    let empty: list<i32> = [];
+    let empty_prefixes: list<i32> = partial_sum_by(empty, subtract);
+    let empty_differences: list<i32> = adjacent_difference_by(empty, subtract);
+    verify(empty_prefixes.len() == 0 && empty_differences.len() == 0);
+    let singleton: list<i32> = [42];
+    let one_prefix: list<i32> = partial_sum_by(singleton, subtract);
+    let one_difference: list<i32> = adjacent_difference_by(singleton, subtract);
+    verify(one_prefix.len() == 1 && one_prefix[0] == 42 &&
+           one_difference.len() == 1 && one_difference[0] == 42);
 }
 
 #[test]
@@ -864,4 +4177,487 @@ fn test_algorithm_genetic_population_reproduction() {
             verify(next[idx] >= 0 && next[idx] <= 9);
         }
     }
+}
+
+#[test]
+fn test_algorithm_ranges_predicate_algorithms() {
+    let values: list<i32> = [-4, -1, 0, 2, 5, 8];
+    let is_even = |value: i32| {
+        return value % 2 == 0;
+    };
+    let less_than_ten = |value: i32| { return value < 10; };
+    let is_five = |value: i32| { return value == 5; };
+    let above_ten = |value: i32| { return value > 10; };
+
+    verify(find_if(values, is_even) == 0);
+    verify(find_last_if(values, is_even) == 5);
+    verify(find_last_if_not(values, is_even) == 4);
+    verify(count_if(values, is_even) == 4);
+    verify(all_of(values, less_than_ten));
+    verify(any_of(values, is_five));
+    verify(none_of(values, above_ten));
+
+    let threshold: i32 = 3;
+    let above_threshold = |value: i32| {
+        return value > threshold;
+    };
+    let selected: list<i32> = filter(values, above_threshold);
+    verify(selected.len() == 2);
+    verify(selected[0] == 5 && selected[1] == 8);
+    verify(values.len() == 6);
+
+    let no_values: list<i32> = [];
+    verify(find_if(no_values, is_even) == -1);
+    verify(find_last_if(no_values, is_even) == -1);
+    verify(find_last_if_not(no_values, is_even) == -1);
+    verify(count_if(no_values, is_even) == 0);
+    let no_selected: list<i32> = filter(no_values, is_even);
+    verify(no_selected.len() == 0);
+    verify(all_of(no_values, is_even));
+    verify(!any_of(no_values, is_even));
+    verify(none_of(no_values, is_even));
+}
+
+#[test]
+fn test_algorithm_ranges_projected_predicate_queries() {
+    let values: list<i32> = [11, 21, 32, 39, 44];
+    let project_tens = |value: i32| { return value / 10; };
+    let is_even = |key: i32| { return key % 2 == 0; };
+    let below_four = |key: i32| { return key < 4; };
+    let above_nine = |key: i32| { return key > 9; };
+
+    verify(!all_of_projected(values, is_even, project_tens));
+    verify(any_of_projected(values, is_even, project_tens));
+    verify(!none_of_projected(values, is_even, project_tens));
+    verify(find_if_projected(values, is_even, project_tens) == 1);
+    verify(find_if_not_projected(values, below_four, project_tens) == 4);
+    verify(count_if_projected(values, is_even, project_tens) == 2);
+    verify(find_if_projected(values, above_nine, project_tens) == -1);
+
+    let empty: list<i32> = [];
+    verify(all_of_projected(empty, is_even, project_tens));
+    verify(!any_of_projected(empty, is_even, project_tens));
+    verify(none_of_projected(empty, is_even, project_tens));
+    verify(find_if_projected(empty, is_even, project_tens) == -1);
+    verify(find_if_not_projected(empty, is_even, project_tens) == -1);
+    verify(count_if_projected(empty, is_even, project_tens) == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_reverse_predicate_search() {
+    let values: list<i32> = [11, 22, 29, 31, 44];
+    let project_tens = |value: i32| { return value / 10; };
+    let is_even = |key: i32| { return key % 2 == 0; };
+    let below_four = |key: i32| { return key < 4; };
+
+    verify(find_last_if_projected(values, is_even, project_tens) == 4);
+    verify(find_last_if_not_projected(values, below_four, project_tens) == 4);
+    verify(find_last_if_projected(values, below_four, project_tens) == 3);
+
+    let empty: list<i32> = [];
+    verify(find_last_if_projected(empty, is_even, project_tens) == -1);
+    verify(find_last_if_not_projected(empty, below_four, project_tens) == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_for_each() {
+    let values: list<i32> = [2, 3, 5];
+    var total: i32 = 0;
+    let add_to_total = |value: i32| {
+        total = total + value;
+    };
+    for_each(values, add_to_total);
+    verify(total == 10);
+
+    let empty: list<i32> = [];
+    for_each(empty, add_to_total);
+    verify(total == 10);
+}
+
+#[test]
+fn test_algorithm_ranges_for_each_n() {
+    let values: list<i32> = [3, 5, 7, 11];
+    var sum: i32 = 0;
+    var calls: i32 = 0;
+    let collect = |value: i32| {
+        sum = sum + value;
+        calls = calls + 1;
+    };
+
+    for_each_n(values, 2, collect);
+    verify(sum == 8 && calls == 2);
+    for_each_n(values, 99, collect);
+    verify(sum == 34 && calls == 6);
+    for_each_n(values, 0, collect);
+    for_each_n(values, -2, collect);
+    verify(sum == 34 && calls == 6);
+    verify(values[0] == 3 && values[3] == 11);
+}
+
+#[test]
+fn test_algorithm_ranges_for_each_n_returns_consumed_count() {
+    let values: list<i32> = [3, 5, 7, 11];
+    var total: i32 = 0;
+    let collect = |value: i32| { total = total + value; };
+
+    let first: i64 = for_each_n_count(values, 2, collect);
+    verify(first == 2 && total == 8);
+    let all: i64 = for_each_n_count(values, 99, collect);
+    verify(all == 4 && total == 34);
+    let none: i64 = for_each_n_count(values, -1, collect);
+    verify(none == 0 && total == 34);
+
+    let tens = |value: i32| { return value / 10; };
+    var projected_total: i32 = 0;
+    let collect_key = |key: i32| { projected_total = projected_total + key; };
+    let projected: i64 =
+        for_each_n_projected_count(values, 3, collect_key, tens);
+    verify(projected == 3 && projected_total == 0);
+    let projected_all: i64 =
+        for_each_n_projected_count(values, 99, collect_key, tens);
+    verify(projected_all == 4 && projected_total == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_for_each() {
+    let values: list<i32> = [11, 21, 32];
+    let project_tens = |value: i32| { return value / 10; };
+    var total: i32 = 0;
+    let add_key = |key: i32| { total = total + key; };
+
+    for_each_projected(values, add_key, project_tens);
+    verify(total == 6);
+    total = 0;
+    for_each_n_projected(values, 2, add_key, project_tens);
+    verify(total == 3);
+    total = 0;
+    for_each_n_projected(values, 8, add_key, project_tens);
+    verify(total == 6);
+    total = 0;
+    for_each_n_projected(values, -1, add_key, project_tens);
+    verify(total == 0);
+    verify(values[0] == 11 && values[2] == 32);
+}
+
+#[test]
+fn test_algorithm_ranges_generate_n() {
+    var next_value: i32 = 0;
+    let next = || {
+        next_value = next_value + 1;
+        return next_value;
+    };
+    let generated: list<i32> = generate_n(4, next);
+    verify(generated.len() == 4);
+    verify(generated[0] == 1 && generated[1] == 2);
+    verify(generated[2] == 3 && generated[3] == 4);
+    verify(next_value == 4);
+
+    let empty: list<i32> = generate_n(0, next);
+    let negative: list<i32> = generate_n(-3, next);
+    verify(empty.len() == 0 && negative.len() == 0);
+    verify(next_value == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_generate_shape() {
+    var next_value: i32 = 10;
+    let next = || {
+        next_value = next_value + 1;
+        return next_value;
+    };
+    let shape: list<bool> = [true, false, true];
+    let generated: list<i32> = generate(shape, next);
+    verify(generated.len() == 3 && generated[0] == 11 &&
+           generated[1] == 12 && generated[2] == 13);
+    verify(next_value == 13 && shape[0] && !shape[1] && shape[2]);
+
+    let empty: list<i32> = [];
+    let no_values: list<i32> = generate(empty, next);
+    verify(no_values.len() == 0 && next_value == 13);
+}
+
+#[test]
+fn test_algorithm_ranges_fill_copy() {
+    let shape: list<i32> = [1, 2, 3, 4];
+    let fill_value: i32 = 9;
+    let filled: list<i32> = fill(shape, fill_value);
+    verify(filled.len() == 4 && filled[0] == 9 && filled[1] == 9 &&
+           filled[2] == 9 && filled[3] == 9);
+    verify(shape[0] == 1 && shape[3] == 4);
+
+    let empty: list<i32> = [];
+    let no_values: list<i32> = fill(empty, fill_value);
+    verify(no_values.len() == 0);
+
+    let counted: list<i32> = fill_n(3, fill_value);
+    verify(counted.len() == 3 && counted[0] == 9 && counted[2] == 9);
+    let zero_count: list<i32> = fill_n(0, fill_value);
+    let negative_count: list<i32> = fill_n(-2, fill_value);
+    verify(zero_count.len() == 0 && negative_count.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_copy_n() {
+    let values: list<i32> = [4, 8, 15];
+    let complete: list<i32> = ranges_copy(values);
+    verify(complete.len() == 3 && complete[0] == 4 && complete[2] == 15);
+    complete.push(16);
+    verify(complete.len() == 4 && values.len() == 3);
+
+    let prefix: list<i32> = copy_n(values, 2);
+    verify(prefix.len() == 2 && prefix[0] == 4 && prefix[1] == 8);
+    let counted_prefix: tuple<i64, list<i32>> =
+        copy_n_with_count(values, 2);
+    let counted_prefix_values: list<i32> = counted_prefix.1;
+    verify(counted_prefix.0 == 2 && counted_prefix_values.len() == 2 &&
+           counted_prefix_values[1] == 8);
+
+    let all_values: list<i32> = copy_n(values, 10);
+    verify(all_values.len() == 3 && all_values[2] == 15);
+    let counted_all: tuple<i64, list<i32>> =
+        copy_n_with_count(values, 10);
+    let counted_all_values: list<i32> = counted_all.1;
+    verify(counted_all.0 == 3 && counted_all_values[2] == 15);
+    let no_values: list<i32> = copy_n(values, -2);
+    verify(no_values.len() == 0);
+    let counted_none: tuple<i64, list<i32>> =
+        copy_n_with_count(values, -2);
+    let counted_none_values: list<i32> = counted_none.1;
+    verify(counted_none.0 == 0 && counted_none_values.len() == 0);
+    let empty: list<i32> = [];
+    let empty_copy: list<i32> = ranges_copy(empty);
+    verify(empty_copy.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_swap_ranges_copy() {
+    let left: list<i32> = [1, 2, 3, 4];
+    let right: list<i32> = [8, 9];
+    let swapped: tuple<list<i32>, list<i32>> = swap_ranges(left, right);
+    let new_left: list<i32> = swapped.0;
+    let new_right: list<i32> = swapped.1;
+    verify(new_left.len() == 4 && new_left[0] == 8 &&
+           new_left[1] == 9 && new_left[2] == 3 && new_left[3] == 4);
+    verify(new_right.len() == 2 && new_right[0] == 1 && new_right[1] == 2);
+    verify(left[0] == 1 && left[3] == 4 && right[0] == 8 && right[1] == 9);
+
+    let empty: list<i32> = [];
+    let swapped_empty: tuple<list<i32>, list<i32>> = swap_ranges(empty, right);
+    let empty_left: list<i32> = swapped_empty.0;
+    let unchanged_right: list<i32> = swapped_empty.1;
+    verify(empty_left.len() == 0 && unchanged_right.len() == right.len());
+    verify(unchanged_right[0] == 8 && unchanged_right[1] == 9);
+}
+
+#[test]
+fn test_algorithm_ranges_sample_without_replacement() {
+    let values: list<i32> = [1, 2, 3, 4, 5, 6];
+    let choose_last = |bound: i64| { return bound - 1; };
+    let sampled: list<i32> = ranges_sample(values, 3, choose_last);
+    verify(sampled.len() == 3);
+    verify(sampled[0] == 4 && sampled[1] == 5 && sampled[2] == 6);
+    verify(values.len() == 6 && values[0] == 1 && values[5] == 6);
+
+    let all: list<i32> = ranges_sample(values, 20, choose_last);
+    verify(all.len() == values.len());
+    for i in 0..values.len() {
+        verify(all[i] == values[i]);
+    }
+
+    let empty_sample: list<i32> = ranges_sample(values, 0, choose_last);
+    let negative_sample: list<i32> = ranges_sample(values, -2, choose_last);
+    verify(empty_sample.len() == 0 && negative_sample.len() == 0);
+    let empty: list<i32> = [];
+    let sampled_empty: list<i32> = ranges_sample(empty, 3, choose_last);
+    verify(sampled_empty.len() == 0);
+
+    let records: list<AlgorithmRangeItem> = [
+        AlgorithmRangeItem { key: 1, payload: 10 },
+        AlgorithmRangeItem { key: 2, payload: 20 },
+        AlgorithmRangeItem { key: 3, payload: 30 },
+        AlgorithmRangeItem { key: 4, payload: 40 }
+    ];
+    let sampled_records: list<AlgorithmRangeItem> =
+        ranges_sample(records, 2, choose_last);
+    let first_record: AlgorithmRangeItem = sampled_records[0];
+    let second_record: AlgorithmRangeItem = sampled_records[1];
+    verify(sampled_records.len() == 2 && first_record.key == 3 &&
+           first_record.payload == 30 && second_record.key == 4 &&
+           second_record.payload == 40);
+}
+
+#[test]
+fn test_algorithm_ranges_shuffle_copy() {
+    let values: list<i32> = [1, 2, 3, 4];
+    let choose_last = |bound: i64| { return bound - 1; };
+    let shuffled: list<i32> = ranges_shuffle(values, choose_last);
+    verify(shuffled.len() == 4);
+    verify(shuffled[0] == 4 && shuffled[1] == 3 &&
+           shuffled[2] == 2 && shuffled[3] == 1);
+    verify(values[0] == 1 && values[3] == 4);
+
+    let empty: list<i32> = [];
+    let shuffled_empty: list<i32> = ranges_shuffle(empty, choose_last);
+    verify(shuffled_empty.len() == 0);
+    let singleton: list<i32> = [8];
+    let shuffled_singleton: list<i32> = ranges_shuffle(singleton, choose_last);
+    verify(shuffled_singleton.len() == 1 && shuffled_singleton[0] == 8);
+}
+
+
+#[test]
+fn test_algorithm_ranges_partition_algorithms() {
+    let values: list<i32> = [1, 3, 5, 2, 4, 6];
+    let is_odd = |value: i32| { return value % 2 == 1; };
+    let is_even = |value: i32| { return value % 2 == 0; };
+    verify(is_partitioned(values, is_odd));
+    verify(!is_partitioned(values, is_even));
+    verify(partition_point(values, is_odd) == 3);
+
+    let rearranged: list<i32> = stable_partition(values, is_odd);
+    verify(rearranged.len() == 6);
+    verify(rearranged[0] == 1 && rearranged[1] == 3 && rearranged[2] == 5);
+    verify(rearranged[3] == 2 && rearranged[4] == 4 && rearranged[5] == 6);
+    verify(values[0] == 1 && values[1] == 3 && values[2] == 5);
+
+    let partitioned: tuple<list<i32>, i64> = ranges_partition(values, is_odd);
+    let partitioned_values: list<i32> = partitioned.0;
+    verify(partitioned.1 == 3 && partitioned_values.len() == 6);
+    verify(partitioned_values[0] == 1 && partitioned_values[1] == 3 &&
+           partitioned_values[2] == 5 && partitioned_values[3] == 2 &&
+           partitioned_values[4] == 4 && partitioned_values[5] == 6);
+    verify(values[0] == 1 && values[1] == 3 && values[2] == 5);
+
+    var predicate_calls: i64 = 0;
+    let counted_odd = |value: i32| {
+        predicate_calls = predicate_calls + 1;
+        return value % 2 == 1;
+    };
+    let counted_partition: tuple<list<i32>, i64> =
+        ranges_partition(values, counted_odd);
+    verify(counted_partition.1 == 3 && predicate_calls == values.len());
+
+    let copies: tuple<list<i32>, list<i32>> = partition_copy(values, is_odd);
+    let odds: list<i32> = copies.0;
+    let evens: list<i32> = copies.1;
+    verify(odds.len() == 3 && odds[0] == 1 && odds[1] == 3 && odds[2] == 5);
+    verify(evens.len() == 3 && evens[0] == 2 && evens[1] == 4 && evens[2] == 6);
+
+    let no_values: list<i32> = [];
+    verify(is_partitioned(no_values, is_odd));
+    verify(partition_point(no_values, is_odd) == 0);
+    let empty_partition: list<i32> = stable_partition(no_values, is_odd);
+    verify(empty_partition.len() == 0);
+    let empty_copy: tuple<list<i32>, i64> = ranges_partition(no_values, is_odd);
+    let empty_values: list<i32> = empty_copy.0;
+    verify(empty_values.len() == 0 && empty_copy.1 == 0);
+
+    let all_match: list<i32> = [1, 3, 5];
+    verify(partition_point(all_match, is_odd) == all_match.len());
+    let none_match: list<i32> = [2, 4, 6];
+    verify(partition_point(none_match, is_odd) == 0);
+
+    let large: list<i64> = iota(0, 1024);
+    var calls: i32 = 0;
+    let below_midpoint = |value: i64| {
+        calls = calls + 1;
+        return value < 512;
+    };
+    verify(partition_point(large, below_midpoint) == 512);
+    verify(calls <= 11);
+}
+
+#[test]
+fn test_algorithm_ranges_projected_partition_algorithms() {
+    let values: list<i32> = [11, 21, 29, 31, 34, 42];
+    let project_tens = |value: i32| { return value / 10; };
+    let below_three = |key: i32| { return key < 3; };
+
+    verify(is_partitioned_projected(values, below_three, project_tens));
+    verify(partition_point_projected(values, below_three, project_tens) == 3);
+    let selected: list<i32> = copy_if_projected(
+        values, below_three, project_tens);
+    verify(selected.len() == 3 && selected[0] == 11 &&
+           selected[1] == 21 && selected[2] == 29);
+
+    let stable: list<i32> = stable_partition_projected(
+        values, below_three, project_tens);
+    verify(stable.len() == 6 && stable[0] == 11 && stable[1] == 21 &&
+           stable[2] == 29 && stable[3] == 31 && stable[4] == 34 &&
+           stable[5] == 42);
+    let split: tuple<list<i32>, i64> = partition_projected(
+        values, below_three, project_tens);
+    let split_values: list<i32> = split.0;
+    verify(split.1 == 3 && split_values[0] == 11 && split_values[2] == 29 &&
+           split_values[3] == 31 && split_values[5] == 42);
+    let groups: tuple<list<i32>, list<i32>> = partition_copy_projected(
+        values, below_three, project_tens);
+    let matches: list<i32> = groups.0;
+    let nonmatches: list<i32> = groups.1;
+    verify(matches.len() == 3 && matches[2] == 29);
+    verify(nonmatches.len() == 3 && nonmatches[0] == 31 &&
+           nonmatches[2] == 42);
+
+    let invalid: list<i32> = [11, 31, 21];
+    verify(!is_partitioned_projected(invalid, below_three, project_tens));
+    let empty: list<i32> = [];
+    verify(is_partitioned_projected(empty, below_three, project_tens));
+    verify(partition_point_projected(empty, below_three, project_tens) == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_predicate_removal_and_unique() {
+    let values: list<i32> = [-3, -1, 0, 2, 4];
+    let is_nonnegative = |value: i32| { return value >= 0; };
+    let is_negative = |value: i32| { return value < 0; };
+    verify(find_if_not(values, is_nonnegative) == 0);
+    verify(find_if_not(values, is_negative) == 2);
+
+    let kept: list<i32> = remove_if(values, is_negative);
+    verify(kept.len() == 3);
+    verify(kept[0] == 0 && kept[1] == 2 && kept[2] == 4);
+    let replacement: i32 = 9;
+    let replaced: list<i32> = replace_if(values, is_negative, replacement);
+    verify(replaced.len() == 5);
+    verify(replaced[0] == 9 && replaced[1] == 9 && replaced[2] == 0);
+    verify(values[0] == -3 && values[1] == -1);
+
+    let runs: list<i32> = [11, 21, 22, 32, 33, 43];
+    let same_last_digit = |left: i32, right: i32| {
+        return left % 10 == right % 10;
+    };
+    let compacted: list<i32> = unique_by(runs, same_last_digit);
+    verify(compacted.len() == 3);
+    verify(compacted[0] == 11 && compacted[1] == 22 && compacted[2] == 33);
+    let copied_runs: list<i32> = unique_copy_by(runs, same_last_digit);
+    verify(copied_runs.len() == 3 && copied_runs[0] == 11 &&
+           copied_runs[1] == 22 && copied_runs[2] == 33);
+
+    let empty: list<i32> = [];
+    let empty_kept: list<i32> = remove_if(empty, is_negative);
+    let empty_replaced: list<i32> =
+        replace_if(empty, is_negative, replacement);
+    let empty_unique: list<i32> = unique_by(empty, same_last_digit);
+    verify(find_if_not(empty, is_nonnegative) == -1);
+    verify(empty_kept.len() == 0 && empty_replaced.len() == 0);
+    verify(empty_unique.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_unique_projected() {
+    let values: list<i32> = [11, 12, 21, 22, 22, 31, 44];
+    let project_tens = |value: i32| { return value / 10; };
+    let unique_keys: list<i32> = unique_projected(values, project_tens);
+    verify(unique_keys.len() == 4);
+    verify(unique_keys[0] == 11 && unique_keys[1] == 21 &&
+           unique_keys[2] == 31 && unique_keys[3] == 44);
+    let copied: list<i32> = unique_copy_projected(values, project_tens);
+    verify(copied.len() == 4 && copied[0] == 11 && copied[1] == 21 &&
+           copied[2] == 31 && copied[3] == 44);
+    verify(values.len() == 7 && values[1] == 12);
+
+    let empty: list<i32> = [];
+    let empty_unique: list<i32> = unique_projected(empty, project_tens);
+    let empty_copy: list<i32> = unique_copy_projected(empty, project_tens);
+    verify(empty_unique.len() == 0 && empty_copy.len() == 0);
 }

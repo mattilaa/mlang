@@ -1,0 +1,269 @@
+mod std::testing;
+mod std::flat_map;
+mod std::algorithm::ranges;
+mod std::strbuf;
+use std::testing::verify;
+use std::testing::verify_eq_i32;
+use std::flat_map::FlatMap;
+use std::flat_map::keys as flat_map_keys;
+use std::flat_map::values as flat_map_values;
+use std::flat_map::lower_bound_by;
+use std::flat_map::upper_bound_by;
+use std::flat_map::equal_range_by;
+use std::flat_map::contains_by;
+use std::flat_map::get_by;
+use std::flat_map::remove_by;
+use std::flat_map::erase_if;
+use std::flat_map::merge;
+use std::algorithm::ranges::zip;
+use std::strbuf::eq;
+
+#[test]
+fn test_flat_map_sorted_insert_lookup_and_replace() {
+    var prices: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    verify(prices.is_empty());
+    verify(prices.insert(4, 40));
+    verify(prices.insert(1, 10));
+    verify(prices.insert(3, 30));
+    verify(!prices.insert(3, 31));
+    verify(prices.len() == 3);
+
+    verify(prices.key_at(0) == 1 && prices.key_at(1) == 3 && prices.key_at(2) == 4);
+    verify(prices.lower_bound(0) == 0);
+    verify(prices.lower_bound(2) == 1);
+    verify(prices.lower_bound(4) == 2);
+    verify(prices.lower_bound(9) == 3);
+    verify(prices.upper_bound(0) == 0);
+    verify(prices.upper_bound(1) == 1);
+    verify(prices.upper_bound(3) == 2);
+    verify(prices.upper_bound(9) == 3);
+    let present_range: tuple<i64, i64> = prices.equal_range(3);
+    let missing_range: tuple<i64, i64> = prices.equal_range(2);
+    verify(present_range.0 == 1 && present_range.1 == 2);
+    verify(missing_range.0 == 1 && missing_range.1 == 1);
+    verify(prices.contains(3) && !prices.contains(2));
+    let found: option<i32> = prices.get(3);
+    let found_value: i32 = found.unwrap();
+    verify(found.is_some() && found_value == 31);
+    let missing: option<i32> = prices.get(2);
+    verify(missing.is_none());
+
+    verify(prices.value_at(0) == 10 && prices.value_at(1) == 31 &&
+           prices.value_at(2) == 40);
+    let key_snapshot: list<i32> = flat_map_keys(prices);
+    let value_snapshot: list<i32> = flat_map_values(prices);
+    verify(key_snapshot.len() == 3 && key_snapshot[0] == 1 &&
+           key_snapshot[2] == 4);
+    verify(value_snapshot.len() == 3 && value_snapshot[0] == 10 &&
+           value_snapshot[1] == 31 && value_snapshot[2] == 40);
+    key_snapshot.push(9);
+    verify(key_snapshot.len() == 4 && prices.len() == 3);
+}
+
+#[test]
+fn test_flat_map_remove_and_clear() {
+    var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    values.insert(2, 20);
+    values.insert(1, 10);
+    values.insert(3, 30);
+    verify(values.remove(2));
+    verify(!values.remove(2));
+    verify(values.len() == 2 && values.key_at(0) == 1 && values.key_at(1) == 3);
+    values.clear();
+    verify(values.is_empty());
+}
+
+#[test]
+fn test_flat_map_try_emplace_and_insert_or_assign() {
+    var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    values.insert(2, 20);
+    values.insert(4, 40);
+
+    let inserted: tuple<i64, bool> = values.try_emplace(3, 30);
+    let unchanged: tuple<i64, bool> = values.try_emplace(3, 300);
+    verify(inserted.0 == 1 && inserted.1);
+    verify(unchanged.0 == 1 && !unchanged.1);
+    verify(values.key_at(1) == 3 && values.value_at(1) == 30);
+
+    let assigned: tuple<i64, bool> = values.insert_or_assign(3, 31);
+    let newly_inserted: tuple<i64, bool> = values.insert_or_assign(1, 10);
+    verify(assigned.0 == 1 && !assigned.1);
+    verify(newly_inserted.0 == 0 && newly_inserted.1);
+    verify(values.len() == 4 && values.key_at(0) == 1 &&
+           values.value_at(2) == 31 && values.key_at(3) == 4);
+}
+
+#[test]
+fn test_flat_map_heterogeneous_lookup() {
+    var values: FlatMap<i32, str8> = FlatMap<i32, str8>::new();
+    values.insert(10, "ten");
+    values.insert(30, "thirty");
+    values.insert(50, "fifty");
+    let key_before_query = |stored: i32, query: i64| {
+        return stored < i32(query);
+    };
+    let query_before_key = |query: i64, stored: i32| {
+        return i32(query) < stored;
+    };
+    let query_thirty: i64 = 30;
+    let query_thirty_one: i64 = 31;
+    let query_fifty: i64 = 50;
+    let query_forty: i64 = 40;
+    let query_ten: i64 = 10;
+
+    verify(lower_bound_by(values, query_thirty, key_before_query) == 1);
+    verify(lower_bound_by(values, query_thirty_one, key_before_query) == 2);
+    verify(upper_bound_by(values, query_thirty, query_before_key) == 2);
+    let present: tuple<i64, i64> = equal_range_by(
+        values, query_thirty, key_before_query, query_before_key);
+    let absent: tuple<i64, i64> = equal_range_by(
+        values, query_thirty_one, key_before_query, query_before_key);
+    verify(present.0 == 1 && present.1 == 2);
+    verify(absent.0 == 2 && absent.1 == 2);
+    verify(contains_by(values, query_fifty, key_before_query,
+                       query_before_key));
+    verify(!contains_by(values, query_forty, key_before_query,
+                        query_before_key));
+    let found: option<str8> = get_by(
+        values, query_thirty, key_before_query, query_before_key);
+    verify(found.is_some() && eq(found.unwrap(), "thirty") == 1);
+    verify(remove_by(&mut values, query_ten,
+                     key_before_query, query_before_key));
+    verify(!remove_by(&mut values, query_ten,
+                      key_before_query, query_before_key));
+    verify(values.len() == 2 && values.key_at(0) == 30);
+}
+
+#[test]
+fn test_flat_map_insert_range_counts_new_keys() {
+    var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    values.insert(2, 20);
+    let incoming_keys: list<i32> = [3, 1, 3, 2];
+    let incoming_values: list<i32> = [30, 10, 31, 22];
+    let incoming: list<tuple<i32, i32>> = zip(incoming_keys, incoming_values);
+    let first_entry: tuple<i32, i32> = incoming[0];
+    verify_eq_i32(30, first_entry.1);
+    let inserted: i64 = values.insert_range(incoming);
+    verify(inserted == 2 && values.len() == 3);
+}
+
+fn make_range_insert_map() -> FlatMap<i32, i32> {
+    var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    values.insert(2, 20);
+    let incoming_keys: list<i32> = [3, 1, 3, 2];
+    let incoming_values: list<i32> = [30, 10, 31, 22];
+    let incoming: list<tuple<i32, i32>> = zip(incoming_keys, incoming_values);
+    values.insert_range(incoming);
+    return values;
+}
+
+#[test]
+fn test_flat_map_insert_range_orders() {
+    let values: FlatMap<i32, i32> = make_range_insert_map();
+    verify(values.key_at(0) == 1);
+    verify(values.key_at(1) == 2);
+    verify(values.key_at(2) == 3);
+}
+
+#[test]
+fn test_flat_map_insert_range_assigns_first_value() {
+    let values: FlatMap<i32, i32> = make_range_insert_map();
+    verify_eq_i32(10, values.value_at(0));
+}
+
+#[test]
+fn test_flat_map_insert_range_assigns_existing_key() {
+    let values: FlatMap<i32, i32> = make_range_insert_map();
+    verify(values.value_at(1) == 22);
+}
+
+#[test]
+fn test_flat_map_insert_range_assigns_last_duplicate() {
+    let values: FlatMap<i32, i32> = make_range_insert_map();
+    verify(values.value_at(2) == 31);
+}
+
+#[test]
+fn test_flat_map_insert_range_empty() {
+    var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    values.insert(2, 20);
+    let empty: list<tuple<i32, i32>> = [];
+    verify(values.insert_range(empty) == 0 && values.len() == 1);
+}
+
+#[test]
+fn test_flat_map_erase_if_preserves_sorted_order() {
+    var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    values.insert(5, 50);
+    values.insert(2, 20);
+    values.insert(4, 40);
+    values.insert(1, 10);
+    values.insert(3, 30);
+    let erase_even_keys = |key: i32, value: i32| {
+        return key % 2 == 0 && value >= 0;
+    };
+    verify(erase_if(&mut values, erase_even_keys) == 2);
+    verify(values.len() == 3);
+    verify(values.key_at(0) == 1 && values.value_at(0) == 10);
+    verify(values.key_at(1) == 3 && values.value_at(1) == 30);
+    verify(values.key_at(2) == 5 && values.value_at(2) == 50);
+    verify(erase_if(&mut values, erase_even_keys) == 0);
+}
+
+#[test]
+fn test_flat_map_replace_validates_and_preserves_invariants() {
+    var values: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    values.insert(2, 20);
+    values.insert(4, 40);
+
+    let keys: list<i32> = [1, 3, 5];
+    let mapped: list<i32> = [10, 30, 50];
+    verify(values.replace(keys, mapped));
+    verify(values.len() == 3);
+    verify(values.key_at(0) == 1 && values.value_at(0) == 10);
+    verify(values.key_at(1) == 3 && values.value_at(1) == 30);
+    verify(values.key_at(2) == 5 && values.value_at(2) == 50);
+
+    let unsorted: list<i32> = [1, 5, 3];
+    let duplicate: list<i32> = [1, 3, 3];
+    let short_values: list<i32> = [7, 8];
+    verify(!values.replace(unsorted, mapped));
+    verify(!values.replace(duplicate, mapped));
+    verify(!values.replace(keys, short_values));
+    verify(values.len() == 3 && values.key_at(0) == 1 &&
+           values.key_at(1) == 3 && values.key_at(2) == 5);
+    verify(values.value_at(0) == 10 && values.value_at(1) == 30 &&
+           values.value_at(2) == 50);
+
+    let no_keys: list<i32> = [];
+    let no_values: list<i32> = [];
+    verify(values.replace(no_keys, no_values) && values.is_empty());
+}
+
+#[test]
+fn test_flat_map_merge_transfers_only_non_colliding_keys() {
+    var destination: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    destination.insert(1, 10);
+    destination.insert(3, 30);
+    destination.insert(6, 60);
+    var source: FlatMap<i32, i32> = FlatMap<i32, i32>::new();
+    source.insert(2, 200);
+    source.insert(3, 300);
+    source.insert(4, 400);
+    source.insert(6, 600);
+    source.insert(7, 700);
+
+    verify(merge(&mut destination, &mut source) == 3);
+    verify(destination.len() == 6 && source.len() == 2);
+    verify(destination.key_at(0) == 1 && destination.value_at(0) == 10);
+    verify(destination.key_at(1) == 2 && destination.value_at(1) == 200);
+    verify(destination.key_at(2) == 3 && destination.value_at(2) == 30);
+    verify(destination.key_at(3) == 4 && destination.value_at(3) == 400);
+    verify(destination.key_at(4) == 6 && destination.value_at(4) == 60);
+    verify(destination.key_at(5) == 7 && destination.value_at(5) == 700);
+    verify(source.key_at(0) == 3 && source.value_at(0) == 300);
+    verify(source.key_at(1) == 6 && source.value_at(1) == 600);
+
+    verify(merge(&mut destination, &mut source) == 0);
+    verify(destination.len() == 6 && source.len() == 2);
+}

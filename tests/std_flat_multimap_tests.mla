@@ -1,0 +1,142 @@
+mod std::testing;
+mod std::flat_multimap;
+mod std::algorithm::ranges;
+use std::testing::verify;
+use std::flat_multimap::FlatMultiMap;
+use std::flat_multimap::keys as flat_multimap_keys;
+use std::flat_multimap::values as flat_multimap_values;
+use std::flat_multimap::lower_bound_by;
+use std::flat_multimap::upper_bound_by;
+use std::flat_multimap::equal_range_by;
+use std::flat_multimap::count_by;
+use std::flat_multimap::contains_by;
+use std::flat_multimap::get_by;
+use std::flat_multimap::remove_by;
+use std::flat_multimap::erase_if;
+use std::flat_multimap::merge;
+use std::algorithm::ranges::zip;
+
+#[test]
+fn test_flat_multimap_insert_lookup_and_duplicate_bounds() {
+    var values: FlatMultiMap<i32, i32> = FlatMultiMap<i32, i32>::new();
+    verify(values.is_empty());
+    values.insert(4, 40);
+    values.insert(3, 30);
+    values.insert(3, 31);
+    values.insert(1, 10);
+    values.insert(3, 32);
+    verify(values.len() == 5 && values.key_at(0) == 1 &&
+           values.key_at(1) == 3 && values.key_at(3) == 3 &&
+           values.key_at(4) == 4);
+    verify(values.value_at(1) == 30 && values.value_at(2) == 31 &&
+           values.value_at(3) == 32);
+    verify(values.lower_bound(3) == 1 && values.upper_bound(3) == 4);
+    let equal: tuple<i64, i64> = values.equal_range(3);
+    let absent: tuple<i64, i64> = values.equal_range(2);
+    verify(equal.0 == 1 && equal.1 == 4 && values.count(3) == 3);
+    verify(absent.0 == 1 && absent.1 == 1 && values.count(2) == 0);
+    verify(values.contains(3) && !values.contains(2));
+    let first: option<i32> = values.get(3);
+    verify(first.is_some() && first.unwrap() == 30);
+    let missing: option<i32> = values.get(2);
+    verify(missing.is_none());
+    let key_snapshot: list<i32> = flat_multimap_keys(values);
+    let value_snapshot: list<i32> = flat_multimap_values(values);
+    verify(key_snapshot.len() == 5 && key_snapshot[1] == 3 &&
+           key_snapshot[3] == 3);
+    verify(value_snapshot.len() == 5 && value_snapshot[1] == 30 &&
+           value_snapshot[2] == 31 && value_snapshot[3] == 32);
+    key_snapshot.push(9);
+    verify(key_snapshot.len() == 6 && values.len() == 5);
+
+    let key_before_query = |stored: i32, query: i64| {
+        return stored < i32(query);
+    };
+    let query_before_key = |query: i64, stored: i32| {
+        return i32(query) < stored;
+    };
+    let query_three: i64 = 3;
+    let query_two: i64 = 2;
+    verify(lower_bound_by(values, query_three, key_before_query) == 1);
+    verify(upper_bound_by(values, query_three, query_before_key) == 4);
+    let matching: tuple<i64, i64> = equal_range_by(
+        values, query_three, key_before_query, query_before_key);
+    verify(matching.0 == 1 && matching.1 == 4);
+    verify(count_by(values, query_three, key_before_query,
+                    query_before_key) == 3);
+    verify(contains_by(values, query_three, key_before_query,
+                       query_before_key));
+    verify(!contains_by(values, query_two, key_before_query,
+                        query_before_key));
+    let matching_value: option<i32> = get_by(
+        values, query_three, key_before_query, query_before_key);
+    verify(matching_value.is_some() && matching_value.unwrap() == 30);
+    verify(remove_by(&mut values, query_three,
+                     key_before_query, query_before_key) == 3);
+    verify(count_by(values, query_three, key_before_query,
+                    query_before_key) == 0);
+}
+
+#[test]
+fn test_flat_multimap_range_replace_and_remove() {
+    var values: FlatMultiMap<i32, i32> = FlatMultiMap<i32, i32>::new();
+    let keys: list<i32> = [2, 1, 2, 3];
+    let mapped: list<i32> = [20, 10, 21, 30];
+    let entries: list<tuple<i32, i32>> = zip(keys, mapped);
+    verify(values.insert_range(entries) == 4);
+    verify(values.len() == 4 && values.key_at(0) == 1 &&
+           values.value_at(1) == 20 && values.value_at(2) == 21);
+
+    let replacement_keys: list<i32> = [1, 2, 2, 4];
+    let replacement_values: list<i32> = [10, 20, 22, 40];
+    verify(values.replace(replacement_keys, replacement_values));
+    let invalid_keys: list<i32> = [1, 4, 2, 4];
+    verify(!values.replace(invalid_keys, replacement_values));
+    let short_values: list<i32> = [1, 2];
+    verify(!values.replace(replacement_keys, short_values));
+    verify(values.len() == 4 && values.key_at(2) == 2 &&
+           values.value_at(2) == 22);
+
+    verify(values.remove(2) == 2 && values.remove(2) == 0);
+    verify(values.len() == 2 && values.key_at(0) == 1 &&
+           values.key_at(1) == 4);
+    values.clear();
+    verify(values.is_empty());
+}
+
+#[test]
+fn test_flat_multimap_erase_if_preserves_order() {
+    var values: FlatMultiMap<i32, i32> = FlatMultiMap<i32, i32>::new();
+    values.insert(1, 10);
+    values.insert(2, 20);
+    values.insert(2, 21);
+    values.insert(3, 30);
+    let erase_even_value = |key: i32, value: i32| {
+        return key == 2 && value % 2 == 0;
+    };
+    verify(erase_if(&mut values, erase_even_value) == 1);
+    verify(values.len() == 3 && values.key_at(0) == 1 &&
+           values.key_at(1) == 2 && values.value_at(1) == 21 &&
+           values.key_at(2) == 3);
+}
+
+#[test]
+fn test_flat_multimap_merge_transfers_all_pairs() {
+    var destination: FlatMultiMap<i32, i32> = FlatMultiMap<i32, i32>::new();
+    destination.insert(1, 10);
+    destination.insert(3, 30);
+    destination.insert(3, 31);
+    var source: FlatMultiMap<i32, i32> = FlatMultiMap<i32, i32>::new();
+    source.insert(2, 20);
+    source.insert(3, 32);
+    source.insert(4, 40);
+
+    verify(merge(&mut destination, &mut source) == 3);
+    verify(destination.len() == 6 && source.is_empty());
+    verify(destination.key_at(0) == 1 && destination.key_at(1) == 2 &&
+           destination.key_at(2) == 3 && destination.value_at(2) == 30 &&
+           destination.key_at(3) == 3 && destination.value_at(3) == 31 &&
+           destination.key_at(4) == 3 && destination.value_at(4) == 32 &&
+           destination.key_at(5) == 4);
+    verify(merge(&mut destination, &mut source) == 0);
+}

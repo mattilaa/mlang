@@ -52,10 +52,30 @@ use std::bits::byteswap_u64;
 use std::bits::byteswap_u32;
 use std::bits::byteswap_u16;
 use std::bits::byteswap_u8;
+use std::bits::byteswap_i64;
+use std::bits::byteswap_i32;
+use std::bits::byteswap_i16;
+use std::bits::byteswap_i8;
+use std::bits::Endian;
+use std::bits::native_endian;
+use std::bits::is_little_endian;
+use std::bits::is_big_endian;
 use std::bits::bit_cast_u32_from_f32;
 use std::bits::bit_cast_f32_from_u32;
 use std::bits::bit_cast_u64_from_f64;
 use std::bits::bit_cast_f64_from_u64;
+use std::bits::bit_cast_i32_from_f32;
+use std::bits::bit_cast_f32_from_i32;
+use std::bits::bit_cast_i64_from_f64;
+use std::bits::bit_cast_f64_from_i64;
+use std::bits::bit_cast_u32_from_i32;
+use std::bits::bit_cast_i32_from_u32;
+use std::bits::bit_cast_u64_from_i64;
+use std::bits::bit_cast_i64_from_u64;
+use std::bits::bit_cast_u8_from_i8;
+use std::bits::bit_cast_i8_from_u8;
+use std::bits::bit_cast_u16_from_i16;
+use std::bits::bit_cast_i16_from_u16;
 use std::bitset::BitSet;
 use std::testing::verify;
 use std::testing::verify_eq;
@@ -156,6 +176,18 @@ fn test_cpp20_unsigned_bit_utilities() {
 }
 
 #[test]
+fn test_cpp20_native_endian() {
+    let endian: Endian = native_endian();
+    let little: bool = endian == Endian::Little;
+    let big: bool = endian == Endian::Big;
+    let mixed: bool = endian == Endian::Mixed;
+    verify(little || big || mixed);
+    verify(is_little_endian() == little);
+    verify(is_big_endian() == big);
+    verify(!(is_little_endian() && is_big_endian()));
+}
+
+#[test]
 fn test_cpp20_unsigned_bit_utilities_u8_u16_u32() {
     let u8_zero: u8 = 0;
     let u8_one: u8 = 1;
@@ -211,6 +243,25 @@ fn test_cpp23_byteswap_unsigned_widths() {
 }
 
 #[test]
+fn test_cpp23_byteswap_signed_widths() {
+    let positive_i64: i64 = 72623859790382856;
+    let negative_i64: i64 = -2;
+    let positive_i32: i32 = 16909060;
+    let negative_i32: i32 = -2;
+    let positive_i16: i16 = 4660;
+    let negative_i16: i16 = -2;
+    let negative_i8: i8 = -42;
+
+    verify(byteswap_i64(positive_i64) == 578437695752307201);
+    verify(byteswap_i64(negative_i64) == -72057594037927937);
+    verify(byteswap_i32(positive_i32) == 67305985);
+    verify(byteswap_i32(negative_i32) == -16777217);
+    verify(byteswap_i16(positive_i16) == 13330);
+    verify(byteswap_i16(negative_i16) == -257);
+    verify(byteswap_i8(negative_i8) == negative_i8);
+}
+
+#[test]
 fn test_cpp20_bit_cast_float_integer_pairs() {
     let one_f32: f32 = 1.0f;
     let one_f32_bits: u32 = 1065353216;
@@ -221,6 +272,49 @@ fn test_cpp20_bit_cast_float_integer_pairs() {
     verify(bit_cast_f32_from_u32(one_f32_bits) == one_f32);
     verify(bit_cast_u64_from_f64(one_f64) == one_f64_bits);
     verify(bit_cast_f64_from_u64(one_f64_bits) == one_f64);
+}
+
+#[test]
+fn test_cpp20_bit_cast_float_signed_integer_pairs() {
+    let one_f32: f32 = 1.0f;
+    let negative_one_f32: f32 = -1.0f;
+    verify(bit_cast_i32_from_f32(one_f32) == 1065353216);
+    verify(bit_cast_f32_from_i32(1065353216) == one_f32);
+    verify(bit_cast_i32_from_f32(negative_one_f32) == -1082130432);
+    verify(bit_cast_f32_from_i32(-1082130432) == negative_one_f32);
+
+    let one_f64: f64 = 1.0;
+    let negative_one_f64: f64 = -1.0;
+    verify(bit_cast_i64_from_f64(one_f64) == 4607182418800017408);
+    verify(bit_cast_f64_from_i64(4607182418800017408) == one_f64);
+    verify(bit_cast_i64_from_f64(negative_one_f64) == -4616189618054758400);
+    verify(bit_cast_f64_from_i64(-4616189618054758400) == negative_one_f64);
+}
+
+#[test]
+fn test_cpp20_bit_cast_signed_unsigned_pairs() {
+    let negative_i8: i8 = -1;
+    let all_ones_u8: u8 = 255;
+    let bits_i8: u8 = bit_cast_u8_from_i8(negative_i8);
+    verify(bits_i8 == all_ones_u8);
+    verify(bit_cast_i8_from_u8(bits_i8) == negative_i8);
+
+    let negative_i16: i16 = -1;
+    let all_ones_u16: u16 = 65535;
+    let bits_i16: u16 = bit_cast_u16_from_i16(negative_i16);
+    verify(bits_i16 == all_ones_u16);
+    verify(bit_cast_i16_from_u16(bits_i16) == negative_i16);
+
+    let negative_i32: i32 = -1;
+    let all_ones_u32: u32 = 4294967295;
+    let bits_i32: u32 = bit_cast_u32_from_i32(negative_i32);
+    verify(bits_i32 == all_ones_u32);
+    verify(bit_cast_i32_from_u32(bits_i32) == negative_i32);
+
+    let negative_i64: i64 = -1;
+    let bits_i64: u64 = bit_cast_u64_from_i64(negative_i64);
+    verify(bits_i64 > 9223372036854775807);
+    verify(bit_cast_i64_from_u64(bits_i64) == negative_i64);
 }
 
 #[test]

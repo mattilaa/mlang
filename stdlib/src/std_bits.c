@@ -2,6 +2,18 @@
 #include <stdint.h>
 #include <string.h>
 
+int32_t __mlang_std_bits_native_endian(void)
+{
+    const uint32_t marker = UINT32_C(1);
+    unsigned char representation[sizeof(marker)];
+    memcpy(representation, &marker, sizeof(marker));
+    if(representation[0] == 1)
+        return 0;
+    if(representation[sizeof(marker) - 1] == 1)
+        return 1;
+    return 2;
+}
+
 _Static_assert(sizeof(float) == sizeof(uint32_t) && FLT_RADIX == 2 &&
                    FLT_MANT_DIG == 24 && FLT_MAX_EXP == 128,
                "f32 bit_cast requires IEEE-754 binary32");
@@ -296,6 +308,23 @@ uint8_t __mlang_std_bits_byteswap_u8(uint8_t value)
     return value;
 }
 
+#define DEFINE_SIGNED_BYTESWAP(suffix, signed_type, unsigned_type, unsigned_suffix) \
+    signed_type __mlang_std_bits_byteswap_##suffix(signed_type value)            \
+    {                                                                            \
+        unsigned_type bits;                                                      \
+        memcpy(&bits, &value, sizeof(bits));                                     \
+        bits = __mlang_std_bits_byteswap_u##unsigned_suffix(bits);               \
+        memcpy(&value, &bits, sizeof(value));                                    \
+        return value;                                                            \
+    }
+
+DEFINE_SIGNED_BYTESWAP(i64, int64_t, uint64_t, 64)
+DEFINE_SIGNED_BYTESWAP(i32, int32_t, uint32_t, 32)
+DEFINE_SIGNED_BYTESWAP(i16, int16_t, uint16_t, 16)
+DEFINE_SIGNED_BYTESWAP(i8, int8_t, uint8_t, 8)
+
+#undef DEFINE_SIGNED_BYTESWAP
+
 uint32_t __mlang_std_bits_f32_to_u32(float value)
 {
     uint32_t bits;
@@ -320,6 +349,90 @@ uint64_t __mlang_std_bits_f64_to_u64(double value)
 double __mlang_std_bits_u64_to_f64(uint64_t bits)
 {
     double value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+int32_t __mlang_std_bits_f32_to_i32(float value)
+{
+    int32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+float __mlang_std_bits_i32_to_f32(int32_t bits)
+{
+    float value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+int64_t __mlang_std_bits_f64_to_i64(double value)
+{
+    int64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+double __mlang_std_bits_i64_to_f64(int64_t bits)
+{
+    double value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+uint32_t __mlang_std_bits_i32_to_u32(int32_t value)
+{
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+int32_t __mlang_std_bits_u32_to_i32(uint32_t bits)
+{
+    int32_t value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+uint64_t __mlang_std_bits_i64_to_u64(int64_t value)
+{
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+int64_t __mlang_std_bits_u64_to_i64(uint64_t bits)
+{
+    int64_t value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+uint8_t __mlang_std_bits_i8_to_u8(int8_t value)
+{
+    uint8_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+int8_t __mlang_std_bits_u8_to_i8(uint8_t bits)
+{
+    int8_t value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+uint16_t __mlang_std_bits_i16_to_u16(int16_t value)
+{
+    uint16_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+int16_t __mlang_std_bits_u16_to_i16(uint16_t bits)
+{
+    int16_t value;
     memcpy(&value, &bits, sizeof(value));
     return value;
 }

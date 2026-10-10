@@ -45,6 +45,7 @@ mod std::jsonrpc;
 mod std::limits;
 mod std::log;
 mod std::math;
+mod std::numbers;
 mod std::matrix;
 mod std::multiarray;
 mod std::mutmultiarray;
@@ -60,6 +61,11 @@ mod std::sed;
 mod std::serde;
 mod std::simd;
 mod std::span;
+mod std::mdspan;
+mod std::flat_map;
+mod std::flat_set;
+mod std::flat_multiset;
+mod std::flat_multimap;
 mod std::strbuf;
 mod std::sync;
 mod std::term;
@@ -118,6 +124,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/serde.mla`
 - `stdlib/std/simd.mla`
 - `stdlib/std/span.mla`
+- `stdlib/std/mdspan.mla`
 - `stdlib/std/strbuf.mla`
 - `stdlib/std/sync.mla`
 - `stdlib/std/term.mla`
@@ -134,6 +141,7 @@ The source-of-truth implementation files are:
 - [std::midi](stdlib/std_midi.md)
 - [std::algorithm::numeric](stdlib/std_algorithm_numeric.md)
 - [std::math](stdlib/std_math.md)
+- [std::numbers](stdlib/std_numbers.md)
 - [std::rand](stdlib/std_rand.md)
 - [std::ringbuffer](stdlib/std_ringbuffer.md)
 - [std::simd](stdlib/std_simd.md)
@@ -155,6 +163,11 @@ The source-of-truth implementation files are:
 - [std::bytes](stdlib/std_bytes.md)
 - [std::serde](stdlib/std_serde.md)
 - [std::span](stdlib/std_span.md)
+- [std::mdspan](stdlib/std_mdspan.md)
+- [std::flat_map](stdlib/std_flat_map.md)
+- [std::flat_set](stdlib/std_flat_set.md)
+- [std::flat_multiset](stdlib/std_flat_multiset.md)
+- [std::flat_multimap](stdlib/std_flat_multimap.md)
 - [std::strbuf](stdlib/std_strbuf.md)
 - [std::unordered](stdlib/std_unordered.md)
 - [std::vec](stdlib/std_vec.md)
@@ -169,6 +182,7 @@ The source-of-truth implementation files are:
 - [std::event_loop](stdlib/std_event_loop.md)
 - [std::exceptions](stdlib/std_exceptions.md)
 - [std::platform](stdlib/std_platform.md)
+- [std::stop_token](stdlib/std_stop_token.md)
 - [std::sync](stdlib/std_sync.md)
 - [std::testing](stdlib/std_testing.md)
 - [std::thread](stdlib/std_thread.md)

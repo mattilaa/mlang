@@ -2,8 +2,8 @@
 /// \brief C++20-style `std::span` view alias for MLang.
 ///
 /// `Span<T>` and `span<T>` are compiler aliases for `list<T>`.
-/// They provide a lightweight non-owning view shape with the same runtime ABI
-/// and the same indexing/bounds behavior as `list<T>`.
+/// They therefore have list ownership and lifetime semantics; they are not
+/// lifetime-tracked non-owning C++ `std::span` objects.
 ///
 /// ```mlang
 /// mod std::span;
@@ -25,11 +25,9 @@
 /// }
 /// ```
 ///
-/// Safety:
-/// - `Span<T>` indexing uses the same compile-time and runtime bounds checks as
-///   `list<T>`.
-/// - `Span<T>` does not own the underlying storage; it is a view alias over the
-///   existing list container shape.
+/// The `first`, `last`, and `subspan` helpers below materialize copied lists.
+/// This preserves Mlang list safety but does not provide C++ span's zero-copy
+/// subview behavior.
 ///
 /// The aliases below are documentation anchors for IDE hover/go-to-definition.
 
@@ -38,3 +36,120 @@ use type Span<T> = list<T>;
 
 /// @brief Lowercase `std::span`-style alias.
 use type span<T> = list<T>;
+
+/// @brief Return the number of elements in a span alias.
+generic<T>
+pub fn size(data: &Span<T>) -> i64 {
+    return data.len();
+}
+
+/// @brief Return the number of bytes occupied by the elements.
+/// C++20 `std::span::size_bytes` counterpart.
+generic<T>
+pub fn size_bytes(data: &Span<T>) -> i64 {
+    return data.len() * size_of(T);
+}
+
+/// @brief Return whether a span alias contains no elements.
+generic<T>
+pub fn empty(data: &Span<T>) -> bool {
+    return data.len() == 0;
+}
+
+/// @brief Return an element when `index` is in bounds, otherwise `None`.
+/// This safe extension complements checked list indexing.
+generic<T>
+pub fn get(data: &Span<T>, index: i64) -> option<T> {
+    if index < 0 || index >= data.len() {
+        return None<T>();
+    }
+    return Some<T>(data[index]);
+}
+
+/// @brief Return the first element, or None for an empty span.
+/// C++20 `std::span::front` accessor with checked Mlang semantics.
+generic<T>
+pub fn front(data: &Span<T>) -> option<T> {
+    if data.len() == 0 { return None<T>(); }
+    return Some<T>(data[0]);
+}
+
+/// @brief Return the last element, or None for an empty span.
+/// C++20 `std::span::back` accessor with checked Mlang semantics.
+generic<T>
+pub fn back(data: &Span<T>) -> option<T> {
+    let len: i64 = data.len();
+    if len == 0 { return None<T>(); }
+    return Some<T>(data[len - 1]);
+}
+
+/// @brief Return a copied prefix of at most `count` elements.
+/// Non-positive counts produce an empty list; oversized counts clamp to size.
+/// @ingroup span
+generic<T>
+pub fn first(data: &Span<T>, count: i64) -> Span<T> {
+    var out: Span<T> = [];
+    let len: i64 = data.len();
+    var n: i64 = count;
+    if n < 0 {
+        n = 0;
+    }
+    if n > len {
+        n = len;
+    }
+    for i in 0..n {
+        out.push(data[i]);
+    }
+    return out;
+}
+
+/// @brief Return a copied suffix of at most `count` elements.
+/// Non-positive counts produce an empty list; oversized counts clamp to size.
+/// @ingroup span
+generic<T>
+pub fn last(data: &Span<T>, count: i64) -> Span<T> {
+    var out: Span<T> = [];
+    let len: i64 = data.len();
+    var n: i64 = count;
+    if n < 0 {
+        n = 0;
+    }
+    if n > len {
+        n = len;
+    }
+    let start: i64 = len - n;
+    for i in start..len {
+        out.push(data[i]);
+    }
+    return out;
+}
+
+/// @brief Return a copied subrange beginning at `offset`.
+/// A negative count means through the end. Invalid offsets return an empty list;
+/// counts extending past the end are clamped.
+/// @ingroup span
+generic<T>
+pub fn subspan(data: &Span<T>, offset: i64, count: i64) -> Span<T> {
+    var out: Span<T> = [];
+    let len: i64 = data.len();
+    if offset < 0 || offset > len {
+        return out;
+    }
+    var end: i64 = len;
+    if count >= 0 && count < (len - offset) {
+        end = offset + count;
+    }
+    for i in offset..end {
+        out.push(data[i]);
+    }
+    return out;
+}
+
+/// @brief Return a copied suffix beginning at `offset`.
+/// This is the dynamic-extent `subspan(offset)` form; invalid offsets return
+/// an empty list.
+/// @ingroup span
+generic<T>
+pub fn subspan(data: &Span<T>, offset: i64) -> Span<T> {
+    return subspan(data, offset, -1);
+}

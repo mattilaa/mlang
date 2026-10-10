@@ -1,0 +1,423 @@
+/// \file flat_map.mla
+/// \brief Sorted list-backed associative map inspired by C++23 std::flat_map.
+///
+/// Entries are stored as a sorted `list<tuple<K, V>>`. Updates mutate the
+/// container through `&mut self`; reads use binary search. This eager Mlang
+/// container intentionally exposes key/value snapshots instead of C++ proxy
+/// iterators.
+
+/// @brief Sorted associative map with unique keys.
+pub struct FlatMap<K, V> {
+    var entries: list<tuple<K, V>>;
+};
+
+/// @brief Lowercase stdlib spelling for `FlatMap<K, V>`.
+alias flat_map<K, V> = FlatMap<K, V>;
+
+impl<K, V> FlatMap {
+    /// @brief Construct an empty flat map.
+    pub fn new() -> FlatMap<K, V> {
+        return FlatMap<K, V> { entries: [] };
+    }
+
+    /// @brief Number of key/value pairs.
+    pub fn len(self: &FlatMap<K, V>) -> i64 {
+        return self.entries.len();
+    }
+
+    /// @brief Whether the map has no entries.
+    pub fn is_empty(self: &FlatMap<K, V>) -> bool {
+        return self.entries.len() == 0;
+    }
+
+    /// @brief Return the first index whose key is not less than `key`.
+    /// Returns `len()` if every stored key is less than the query.
+    pub fn lower_bound(self: &FlatMap<K, V>, key: K) -> i64 {
+        var first: i64 = 0;
+        var count: i64 = self.entries.len();
+        while count > 0 {
+            let step: i64 = count / 2;
+            let middle: i64 = first + step;
+            let entry: tuple<K, V> = self.entries[middle];
+            if entry.0 < key {
+                first = middle + 1;
+                count = count - step - 1;
+            } else {
+                count = step;
+            }
+        }
+        return first;
+    }
+
+    /// @brief Return the first index whose key is greater than `key`.
+    /// Returns `len()` when no stored key is greater than the query.
+    pub fn upper_bound(self: &FlatMap<K, V>, key: K) -> i64 {
+        var first: i64 = 0;
+        var count: i64 = self.entries.len();
+        while count > 0 {
+            let step: i64 = count / 2;
+            let middle: i64 = first + step;
+            let entry: tuple<K, V> = self.entries[middle];
+            if !(key < entry.0) {
+                first = middle + 1;
+                count = count - step - 1;
+            } else {
+                count = step;
+            }
+        }
+        return first;
+    }
+
+    /// @brief Return the half-open index range containing `key`.
+    /// For this unique-key map, the range is empty when the key is absent and
+    /// contains exactly one entry when it is present.
+    pub fn equal_range(self: &FlatMap<K, V>, key: K) -> tuple<i64, i64> {
+        return (self.lower_bound(key), self.upper_bound(key));
+    }
+
+    /// @brief Whether the map contains `key`.
+    pub fn contains(self: &FlatMap<K, V>, key: K) -> bool {
+        let index: i64 = self.lower_bound(key);
+        if index >= self.entries.len() { return false; }
+        let entry: tuple<K, V> = self.entries[index];
+        return entry.0 == key;
+    }
+
+    /// @brief Find a value, returning `None` when the key is absent.
+    pub fn get(self: &FlatMap<K, V>, key: K) -> option<V> {
+        let index: i64 = self.lower_bound(key);
+        if index >= self.entries.len() { return None<V>(); }
+        let entry: tuple<K, V> = self.entries[index];
+        if entry.0 == key { return Some<V>(entry.1); }
+        return None<V>();
+    }
+
+    /// @brief Insert a new key or replace its existing value.
+    /// Returns `true` only when a new key was inserted.
+    pub fn insert(self: &mut FlatMap<K, V>, key: K, value: V) -> bool {
+        var updated: list<tuple<K, V>> = [];
+        var inserted: bool = true;
+        var placed: bool = false;
+        let count: i64 = self.entries.len();
+        for i in 0..count {
+            let entry: tuple<K, V> = self.entries[i];
+            if entry.0 == key {
+                updated.push((key, value));
+                inserted = false;
+                placed = true;
+            } else {
+                if !placed && key < entry.0 {
+                    updated.push((key, value));
+                    placed = true;
+                }
+                updated.push(entry);
+            }
+        }
+        if !placed { updated.push((key, value)); }
+        self.entries = updated;
+        return inserted;
+    }
+
+    /// @brief Insert only when `key` is absent; preserve an existing value.
+    /// Returns `(sorted_index, inserted)`. The value argument is evaluated by
+    /// the caller even when the key already exists (unlike lazy C++ arguments).
+    pub fn try_emplace(self: &mut FlatMap<K, V>, key: K, value: V)
+        -> tuple<i64, bool> {
+        let index: i64 = self.lower_bound(key);
+        let count: i64 = self.entries.len();
+        if index < count {
+            let entry: tuple<K, V> = self.entries[index];
+            if !(entry.0 < key) && !(key < entry.0) {
+                return (index, false);
+            }
+        }
+        var updated: list<tuple<K, V>> = [];
+        for i in 0..index { updated.push(self.entries[i]); }
+        updated.push((key, value));
+        for i in index..count { updated.push(self.entries[i]); }
+        self.entries = updated;
+        return (index, true);
+    }
+
+    /// @brief Insert `key` or replace its value and report its sorted position.
+    /// Returns `(sorted_index, inserted)`, where inserted is false when an
+    /// existing value was assigned.
+    pub fn insert_or_assign(self: &mut FlatMap<K, V>, key: K, value: V)
+        -> tuple<i64, bool> {
+        let index: i64 = self.lower_bound(key);
+        let count: i64 = self.entries.len();
+        if index < count {
+            let existing: tuple<K, V> = self.entries[index];
+            if !(existing.0 < key) && !(key < existing.0) {
+                var updated: list<tuple<K, V>> = [];
+                for i in 0..index { updated.push(self.entries[i]); }
+                updated.push((key, value));
+                for i in (index + 1)..count {
+                    updated.push(self.entries[i]);
+                }
+                self.entries = updated;
+                return (index, false);
+            }
+        }
+        var updated: list<tuple<K, V>> = [];
+        for i in 0..index { updated.push(self.entries[i]); }
+        updated.push((key, value));
+        for i in index..count { updated.push(self.entries[i]); }
+        self.entries = updated;
+        return (index, true);
+    }
+
+    /// @brief Insert or assign every key/value pair in `range`.
+    /// Entries are processed in input order, so the last occurrence of a
+    /// duplicate key supplies its final value. Return the number of distinct
+    /// keys that were new to this map (C++23 `insert_range` counterpart).
+    pub fn insert_range(self: &mut FlatMap<K, V>,
+                        range: &list<tuple<K, V>>) -> i64 {
+        var inserted_count: i64 = 0;
+        for i in 0..range.len() {
+            let entry: tuple<K, V> = range[i];
+            if self.insert(entry.0, entry.1) {
+                inserted_count = inserted_count + 1;
+            }
+        }
+        return inserted_count;
+    }
+
+    /// @brief Replace the key and value sequences together.
+    /// The sequences must have equal lengths and keys must be strictly
+    /// increasing. Invalid input returns false and leaves the map unchanged;
+    /// valid input is copied into the map (C++23 `flat_map::replace` style).
+    pub fn replace(self: &mut FlatMap<K, V>, keys: &list<K>,
+                   values: &list<V>) -> bool {
+        let count: i64 = keys.len();
+        if values.len() != count { return false; }
+        for i in 1..count {
+            if !(keys[i - 1] < keys[i]) { return false; }
+        }
+        var updated: list<tuple<K, V>> = [];
+        for i in 0..count {
+            updated.push((keys[i], values[i]));
+        }
+        self.entries = updated;
+        return true;
+    }
+
+    /// @brief Erase a key, returning whether it was present.
+    pub fn remove(self: &mut FlatMap<K, V>, key: K) -> bool {
+        var updated: list<tuple<K, V>> = [];
+        var removed: bool = false;
+        let count: i64 = self.entries.len();
+        for i in 0..count {
+            let entry: tuple<K, V> = self.entries[i];
+            if entry.0 == key {
+                removed = true;
+            } else {
+                updated.push(entry);
+            }
+        }
+        self.entries = updated;
+        return removed;
+    }
+
+    /// @brief Remove every entry.
+    pub fn clear(self: &mut FlatMap<K, V>) -> void {
+        self.entries = [];
+    }
+
+    /// @brief Return the key at sorted position `index`.
+    pub fn key_at(self: &FlatMap<K, V>, index: i64) -> K {
+        let entry: tuple<K, V> = self.entries[index];
+        return entry.0;
+    }
+
+    /// @brief Return the value at sorted position `index`.
+    pub fn value_at(self: &FlatMap<K, V>, index: i64) -> V {
+        let entry: tuple<K, V> = self.entries[index];
+        return entry.1;
+    }
+}
+
+/// @brief Copy keys in ascending map order (C++23 `flat_map::keys` analogue).
+generic<K, V>
+pub fn keys(container: &FlatMap<K, V>) -> list<K> {
+    var result: list<K> = [];
+    for i in 0..container.entries.len() {
+        let entry: tuple<K, V> = container.entries[i];
+        result.push(entry.0);
+    }
+    return result;
+}
+
+/// @brief Copy mapped values in the corresponding key order.
+generic<K, V>
+pub fn values(container: &FlatMap<K, V>) -> list<V> {
+    var result: list<V> = [];
+    for i in 0..container.entries.len() {
+        let entry: tuple<K, V> = container.entries[i];
+        result.push(entry.1);
+    }
+    return result;
+}
+
+/// @brief Find the first key not ordered before a heterogeneous query.
+generic<K, V, Query, LessKeyQuery>
+pub fn lower_bound_by(container: &FlatMap<K, V>, query: Query,
+                      less_key_query: LessKeyQuery) -> i64 {
+    var first: i64 = 0;
+    var count: i64 = container.entries.len();
+    while count > 0 {
+        let step: i64 = count / 2;
+        let middle: i64 = first + step;
+        let entry: tuple<K, V> = container.entries[middle];
+        if less_key_query(entry.0, query) {
+            first = middle + 1;
+            count = count - step - 1;
+        } else {
+            count = step;
+        }
+    }
+    return first;
+}
+
+/// @brief Find the first key ordered after a heterogeneous query.
+generic<K, V, Query, LessQueryKey>
+pub fn upper_bound_by(container: &FlatMap<K, V>, query: Query,
+                      less_query_key: LessQueryKey) -> i64 {
+    var first: i64 = 0;
+    var count: i64 = container.entries.len();
+    while count > 0 {
+        let step: i64 = count / 2;
+        let middle: i64 = first + step;
+        let entry: tuple<K, V> = container.entries[middle];
+        if !less_query_key(query, entry.0) {
+            first = middle + 1;
+            count = count - step - 1;
+        } else {
+            count = step;
+        }
+    }
+    return first;
+}
+
+/// @brief Return the heterogeneous query's half-open index range.
+generic<K, V, Query, LessKeyQuery, LessQueryKey>
+pub fn equal_range_by(container: &FlatMap<K, V>, query: Query,
+                      less_key_query: LessKeyQuery,
+                      less_query_key: LessQueryKey) -> tuple<i64, i64> {
+    return (lower_bound_by(container, query, less_key_query),
+            upper_bound_by(container, query, less_query_key));
+}
+
+/// @brief Whether a heterogeneous query matches a stored key by ordering.
+generic<K, V, Query, LessKeyQuery, LessQueryKey>
+pub fn contains_by(container: &FlatMap<K, V>, query: Query,
+                   less_key_query: LessKeyQuery,
+                   less_query_key: LessQueryKey) -> bool {
+    let index: i64 = lower_bound_by(container, query, less_key_query);
+    if index >= container.entries.len() { return false; }
+    let entry: tuple<K, V> = container.entries[index];
+    return !less_key_query(entry.0, query) &&
+           !less_query_key(query, entry.0);
+}
+
+/// @brief Find a mapped value for a heterogeneous query, or return None.
+generic<K, V, Query, LessKeyQuery, LessQueryKey>
+pub fn get_by(container: &FlatMap<K, V>, query: Query,
+              less_key_query: LessKeyQuery,
+              less_query_key: LessQueryKey) -> option<V> {
+    let index: i64 = lower_bound_by(container, query, less_key_query);
+    if index >= container.entries.len() { return None<V>(); }
+    let entry: tuple<K, V> = container.entries[index];
+    if !less_key_query(entry.0, query) && !less_query_key(query, entry.0) {
+        return Some<V>(entry.1);
+    }
+    return None<V>();
+}
+
+/// @brief Erase the entry equivalent to a heterogeneous query, if present.
+generic<K, V, Query, LessKeyQuery, LessQueryKey>
+pub fn remove_by(container: &mut FlatMap<K, V>, query: Query,
+                 less_key_query: LessKeyQuery,
+                 less_query_key: LessQueryKey) -> bool {
+    let index: i64 = lower_bound_by(container, query, less_key_query);
+    let count: i64 = container.entries.len();
+    if index >= count { return false; }
+    let entry: tuple<K, V> = container.entries[index];
+    if less_key_query(entry.0, query) || less_query_key(query, entry.0) {
+        return false;
+    }
+    var updated: list<tuple<K, V>> = [];
+    for i in 0..index { updated.push(container.entries[i]); }
+    for i in (index + 1)..count { updated.push(container.entries[i]); }
+    container.entries = updated;
+    return true;
+}
+
+/// @brief Transfer non-colliding entries from `source` into `destination`.
+/// Destination values win for equivalent keys; colliding source entries stay
+/// in the source. Return the number of transferred entries (associative
+/// container `merge` semantics).
+generic<K, V>
+pub fn merge(destination: &mut FlatMap<K, V>,
+             source_map: &mut FlatMap<K, V>) -> i64 {
+    var merged: list<tuple<K, V>> = [];
+    var retained_source: list<tuple<K, V>> = [];
+    let destination_len: i64 = destination.entries.len();
+    let source_len: i64 = source_map.entries.len();
+    var destination_index: i64 = 0;
+    var source_index: i64 = 0;
+    var transferred: i64 = 0;
+
+    while destination_index < destination_len && source_index < source_len {
+        let destination_entry: tuple<K, V> =
+            destination.entries[destination_index];
+        let source_entry: tuple<K, V> = source_map.entries[source_index];
+        if destination_entry.0 < source_entry.0 {
+            merged.push(destination_entry);
+            destination_index = destination_index + 1;
+        } else if source_entry.0 < destination_entry.0 {
+            merged.push(source_entry);
+            transferred = transferred + 1;
+            source_index = source_index + 1;
+        } else {
+            merged.push(destination_entry);
+            retained_source.push(source_entry);
+            destination_index = destination_index + 1;
+            source_index = source_index + 1;
+        }
+    }
+
+    while destination_index < destination_len {
+        merged.push(destination.entries[destination_index]);
+        destination_index = destination_index + 1;
+    }
+    while source_index < source_len {
+        merged.push(source_map.entries[source_index]);
+        transferred = transferred + 1;
+        source_index = source_index + 1;
+    }
+
+    destination.entries = merged;
+    source_map.entries = retained_source;
+    return transferred;
+}
+
+/// @brief Remove entries accepted by `predicate` and return the removal count.
+/// The predicate receives a key and value as two arguments, matching C++20
+/// associative-container `erase_if`.
+generic<K, V, Predicate>
+pub fn erase_if(container: &mut FlatMap<K, V>, predicate: Predicate) -> i64 {
+    var retained: list<tuple<K, V>> = [];
+    var removed_count: i64 = 0;
+    let count: i64 = container.entries.len();
+    for i in 0..count {
+        let entry: tuple<K, V> = container.entries[i];
+        if predicate(entry.0, entry.1) {
+            removed_count = removed_count + 1;
+        } else {
+            retained.push(entry);
+        }
+    }
+    container.entries = retained;
+    return removed_count;
+}

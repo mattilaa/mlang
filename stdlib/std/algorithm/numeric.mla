@@ -8,6 +8,109 @@
 /// @brief Numeric sequence algorithms.
 /// @{
 
+/// @brief Compute the signed midpoint without overflowing.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_i64(first: i64, second: i64) -> i64 {
+    var middle: i64 = first / 2 + second / 2;
+    let remainder: i64 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == -2 { return middle - 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    if remainder == -1 && first < second { return middle - 1; }
+    return middle;
+}
+
+/// @brief Compute the unsigned midpoint without overflowing.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_u64(first: u64, second: u64) -> u64 {
+    var middle: u64 = first / 2 + second / 2;
+    let remainder: u64 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    return middle;
+}
+
+extern pub fn __mlang_std_midpoint_f32(first: f32, second: f32) -> f32;
+extern pub fn __mlang_std_midpoint_f64(first: f64, second: f64) -> f64;
+
+/// @brief Compute the floating-point midpoint without overflowing.
+/// Implements the C++20 `std::midpoint` floating overload for `f32`.
+pub fn midpoint_f32(first: f32, second: f32) -> f32 {
+    return __mlang_std_midpoint_f32(first, second);
+}
+
+/// @brief Compute the floating-point midpoint without overflowing.
+/// Implements the C++20 `std::midpoint` floating overload for `f64`.
+pub fn midpoint_f64(first: f64, second: f64) -> f64 {
+    return __mlang_std_midpoint_f64(first, second);
+}
+
+/// @brief Compute the signed 8-bit midpoint without overflow.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_i8(first: i8, second: i8) -> i8 {
+    var middle: i8 = first / 2 + second / 2;
+    let remainder: i8 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == -2 { return middle - 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    if remainder == -1 && first < second { return middle - 1; }
+    return middle;
+}
+
+/// @brief Compute the signed 16-bit midpoint without overflow.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_i16(first: i16, second: i16) -> i16 {
+    var middle: i16 = first / 2 + second / 2;
+    let remainder: i16 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == -2 { return middle - 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    if remainder == -1 && first < second { return middle - 1; }
+    return middle;
+}
+
+/// @brief Compute the signed 32-bit midpoint without overflow.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_i32(first: i32, second: i32) -> i32 {
+    var middle: i32 = first / 2 + second / 2;
+    let remainder: i32 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == -2 { return middle - 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    if remainder == -1 && first < second { return middle - 1; }
+    return middle;
+}
+
+/// @brief Compute the unsigned 8-bit midpoint without overflow.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_u8(first: u8, second: u8) -> u8 {
+    var middle: u8 = first / 2 + second / 2;
+    let remainder: u8 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    return middle;
+}
+
+/// @brief Compute the unsigned 16-bit midpoint without overflow.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_u16(first: u16, second: u16) -> u16 {
+    var middle: u16 = first / 2 + second / 2;
+    let remainder: u16 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    return middle;
+}
+
+/// @brief Compute the unsigned 32-bit midpoint without overflow.
+/// A half-way result rounds toward `first`, as in C++20 `std::midpoint`.
+pub fn midpoint_u32(first: u32, second: u32) -> u32 {
+    var middle: u32 = first / 2 + second / 2;
+    let remainder: u32 = first % 2 + second % 2;
+    if remainder == 2 { return middle + 1; }
+    if remainder == 1 && first > second { return middle + 1; }
+    return middle;
+}
+
 /// @brief Sum all elements with an initial value.
 /// @ingroup algorithm_numeric
 pub fn accumulate_i64(data: &list<i64>, init: i64) -> i64 {
@@ -31,10 +134,155 @@ pub fn accumulate(data: &list<T>, init: U) -> U {
     return acc;
 }
 
-/// @brief Generic inner product over the shared prefix of two lists.
+/// @brief Fold a list into an accumulator using a caller-defined operation.
+/// `operation(accumulator, element)` returns the next accumulator, which may
+/// have a different type from the list elements. C++ `std::accumulate` binary
+/// operation overload equivalent.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation>
+pub fn accumulate_by(data: &list<T>, init: U, operation: Operation) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, data[i]);
+    }
+    return acc;
+}
+
+/// @brief C++-style custom-operation overload of `accumulate`.
+/// The operation receives `(accumulator, element)` and the accumulator may
+/// have a different type from the list elements.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation>
+pub fn accumulate(data: &list<T>, init: U, operation: Operation) -> U {
+    return accumulate_by(data, init, operation);
+}
+
+/// @brief Reduce a list with addition and a caller-supplied initial value.
+/// C++ `std::reduce` equivalent. This eager Mlang implementation evaluates
+/// elements sequentially; unlike `accumulate`, callers should use an
+/// associative, commutative operation when relying on C++ reduce semantics.
 /// @ingroup algorithm_numeric
 generic<T, U>
-pub fn inner_product(left: &list<T>, right: &list<T>, init: U) -> U {
+pub fn reduce(data: &list<T>, init: U) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n { acc = acc + data[i]; }
+    return acc;
+}
+
+/// @brief Reduce a list with a caller-supplied binary operation.
+/// The implementation is sequential, but the operation should be associative
+/// and commutative to retain the general `std::reduce` contract.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation>
+pub fn reduce(data: &list<T>, init: U, operation: Operation) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n { acc = operation(acc, data[i]); }
+    return acc;
+}
+
+/// @brief Fold a list from left to right with a caller-supplied operation.
+/// `operation(accumulator, element)` returns the next accumulator.
+/// C++23 `std::ranges::fold_left` equivalent.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation>
+pub fn fold_left(data: &list<T>, init: U, operation: Operation) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, data[i]);
+    }
+    return acc;
+}
+
+/// @brief Fold a list from right to left with a caller-supplied operation.
+/// `operation(element, accumulator)` returns the next accumulator.
+/// C++23 `std::ranges::fold_right` equivalent.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation>
+pub fn fold_right(data: &list<T>, init: U, operation: Operation) -> U {
+    var acc: U = init;
+    var i: i64 = data.len();
+    while i > 0 {
+        i = i - 1;
+        acc = operation(data[i], acc);
+    }
+    return acc;
+}
+
+/// @brief Fold a non-empty list from left to right without an initial value.
+/// Empty input returns None; non-empty input returns Some of the result.
+/// C++23 `std::ranges::fold_left_first` equivalent.
+/// @ingroup algorithm_numeric
+generic<T, Operation>
+pub fn fold_left_first(data: &list<T>, operation: Operation) -> option<T> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return None<T>();
+    }
+    var acc: T = data[0];
+    for i in 1..n {
+        acc = operation(acc, data[i]);
+    }
+    return Some<T>(acc);
+}
+
+/// @brief Fold a non-empty list from right to left without an initial value.
+/// The operation receives `(element, accumulator)`; empty input returns None.
+/// C++23 `std::ranges::fold_right_last` equivalent.
+/// @ingroup algorithm_numeric
+generic<T, Operation>
+pub fn fold_right_last(data: &list<T>, operation: Operation) -> option<T> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return None<T>();
+    }
+    var i: i64 = n - 1;
+    var acc: T = data[i];
+    while i > 0 {
+        i = i - 1;
+        acc = operation(data[i], acc);
+    }
+    return Some<T>(acc);
+}
+
+/// @brief Project each element, then reduce it into the accumulator in one pass.
+/// C++ `std::transform_reduce` unary-range form.
+/// @ingroup algorithm_numeric
+generic<T, U, Reduce, Project>
+pub fn transform_reduce(data: &list<T>, init: U, reduce: Reduce,
+                        project: Project) -> U {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = reduce(acc, project(data[i]));
+    }
+    return acc;
+}
+
+/// @brief Project corresponding elements from two lists, then reduce in one pass.
+/// Stops at the end of the shorter range.
+/// C++ `std::transform_reduce` binary-range form.
+/// @ingroup algorithm_numeric
+generic<T, V, U, Reduce, Project>
+pub fn transform_reduce(left: &list<T>, right: &list<V>, init: U,
+                        reduce: Reduce, project: Project) -> U {
+    var acc: U = init;
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        acc = reduce(acc, project(left[i], right[i]));
+    }
+    return acc;
+}
+
+/// @brief Generic inner product over the shared prefix of two lists.
+/// @ingroup algorithm_numeric
+generic<T, V, U>
+pub fn inner_product(left: &list<T>, right: &list<V>, init: U) -> U {
     let left_len: i64 = left.len();
     let right_len: i64 = right.len();
     let n: i64 = left_len < right_len ? left_len : right_len;
@@ -43,6 +291,144 @@ pub fn inner_product(left: &list<T>, right: &list<T>, init: U) -> U {
         acc = acc + (left[i] * right[i]);
     }
     return acc;
+}
+
+/// @brief Compute an inner product with caller-defined reduction operations.
+/// `product(left, right)` forms each pair's term and `reduce(acc, term)` folds
+/// it into the accumulator. Heterogeneous input lists are supported.
+/// C++ `std::inner_product` custom-operation overload equivalent.
+/// @ingroup algorithm_numeric
+generic<T, V, U, Reduce, Product>
+pub fn inner_product_by(left: &list<T>, right: &list<V>, init: U,
+                        reduce: Reduce, product: Product) -> U {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    var acc: U = init;
+    for i in 0..n {
+        acc = reduce(acc, product(left[i], right[i]));
+    }
+    return acc;
+}
+
+/// @brief C++-style custom-operation overload of `inner_product`.
+/// `product(left, right)` forms each term; `reduce(accumulator, term)` folds
+/// it into the result. Inputs may have different element types.
+/// @ingroup algorithm_numeric
+generic<T, V, U, Reduce, Product>
+pub fn inner_product(left: &list<T>, right: &list<V>, init: U,
+                     reduce: Reduce, product: Product) -> U {
+    return inner_product_by(left, right, init, reduce, product);
+}
+
+/// @brief Return all inclusive prefix accumulations using `operation`.
+/// The first output is the first input element; empty input produces an empty list.
+/// C++ `std::inclusive_scan` equivalent.
+/// @ingroup algorithm_numeric
+generic<T, Operation>
+pub fn inclusive_scan(data: &list<T>, operation: Operation) -> list<T> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return [];
+    }
+    var out: list<T> = [];
+    var acc: T = data[0];
+    out.push(acc);
+    for i in 1..n {
+        acc = operation(acc, data[i]);
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Return seeded inclusive prefix accumulations using `init` and
+/// `operation`. The accumulator/output type may differ from the input type,
+/// matching the seeded C++20 `std::inclusive_scan` overload.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation>
+pub fn inclusive_scan(data: &list<T>, init: U, operation: Operation)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, data[i]);
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Return exclusive prefix accumulations using `init` and `operation`.
+/// Each output is the accumulator before incorporating that position's element.
+/// C++ `std::exclusive_scan` equivalent.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation>
+pub fn exclusive_scan(data: &list<T>, init: U, operation: Operation)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        out.push(acc);
+        acc = operation(acc, data[i]);
+    }
+    return out;
+}
+
+/// @brief Project each input and return its inclusive accumulated prefixes.
+/// The first projected value initializes the accumulator; empty input returns
+/// an empty list. C++ `std::transform_inclusive_scan` without an initial value.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation, Projection>
+pub fn transform_inclusive_scan(data: &list<T>, operation: Operation,
+                                project: Projection) -> list<U> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return [];
+    }
+    var out: list<U> = [];
+    var acc: U = project(data[0]);
+    out.push(acc);
+    for i in 1..n {
+        acc = operation(acc, project(data[i]));
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Project inputs and return inclusive accumulated prefixes beginning
+/// with `init`. Empty input returns an empty list.
+/// C++ `std::transform_inclusive_scan` with an initial value.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation, Projection>
+pub fn transform_inclusive_scan(data: &list<T>, init: U,
+                                operation: Operation, project: Projection)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, project(data[i]));
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Project each input after emitting the current accumulator.
+/// C++ `std::transform_exclusive_scan` eager-list counterpart.
+/// @ingroup algorithm_numeric
+generic<T, U, Operation, Projection>
+pub fn transform_exclusive_scan(data: &list<T>, init: U,
+                                operation: Operation, project: Projection)
+    -> list<U> {
+    var out: list<U> = [];
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        out.push(acc);
+        acc = operation(acc, project(data[i]));
+    }
+    return out;
 }
 
 /// @brief Generic prefix sums with an initial value.
@@ -73,6 +459,42 @@ pub fn adjacent_difference(data: &list<T>, init: T) -> list<T> {
     out.push(data[0] - init);
     for i in 1..n {
         out.push(data[i] - data[i - 1]);
+    }
+    return out;
+}
+
+/// @brief Compute inclusive prefixes with a custom binary operation.
+/// The first output is the first input value; subsequent outputs are
+/// `operation(previous_prefix, current_value)`, matching `std::partial_sum`.
+/// @ingroup algorithm_numeric
+generic<T, Operation>
+pub fn partial_sum_by(data: &list<T>, operation: Operation) -> list<T> {
+    let n: i64 = data.len();
+    if n == 0 { return []; }
+    var out: list<T> = [];
+    var acc: T = data[0];
+    out.push(acc);
+    for i in 1..n {
+        acc = operation(acc, data[i]);
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Compute adjacent differences with a custom binary operation.
+/// The first output is the first input value; later outputs are
+/// `operation(current_value, previous_value)`, preserving standard
+/// `std::adjacent_difference` operand order.
+/// @ingroup algorithm_numeric
+generic<T, Operation>
+pub fn adjacent_difference_by(data: &list<T>, operation: Operation)
+    -> list<T> {
+    let n: i64 = data.len();
+    if n == 0 { return []; }
+    var out: list<T> = [];
+    out.push(data[0]);
+    for i in 1..n {
+        out.push(operation(data[i], data[i - 1]));
     }
     return out;
 }

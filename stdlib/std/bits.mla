@@ -5,6 +5,37 @@
 /// Standalone `bit` values still use normal ABI byte-sized storage rules for
 /// `size_of(bit)`, but packed bit storage is provided by `std::bitset::BitSet`.
 
+/// @brief Native byte order classification (C++20 `std::endian` equivalent).
+pub enum Endian : i32 {
+    Little = 0,
+    Big = 1,
+    Mixed = 2
+};
+
+extern pub fn __mlang_std_bits_native_endian() -> i32;
+
+/// @brief Return the host's native byte order.
+pub fn native_endian() -> Endian {
+    let endian: i32 = __mlang_std_bits_native_endian();
+    if endian == 0 {
+        return Endian::Little;
+    }
+    if endian == 1 {
+        return Endian::Big;
+    }
+    return Endian::Mixed;
+}
+
+/// @brief Return whether native byte order is uniformly little-endian.
+pub fn is_little_endian() -> bool {
+    return native_endian() == Endian::Little;
+}
+
+/// @brief Return whether native byte order is uniformly big-endian.
+pub fn is_big_endian() -> bool {
+    return native_endian() == Endian::Big;
+}
+
 extern pub fn __mlang_std_bits_popcount_u64(value: u64) -> i64;
 extern pub fn __mlang_std_bits_has_single_bit_u64(value: u64) -> i32;
 extern pub fn __mlang_std_bits_bit_width_u64(value: u64) -> i64;
@@ -53,10 +84,26 @@ extern pub fn __mlang_std_bits_byteswap_u64(value: u64) -> u64;
 extern pub fn __mlang_std_bits_byteswap_u32(value: u32) -> u32;
 extern pub fn __mlang_std_bits_byteswap_u16(value: u16) -> u16;
 extern pub fn __mlang_std_bits_byteswap_u8(value: u8) -> u8;
+extern pub fn __mlang_std_bits_byteswap_i64(value: i64) -> i64;
+extern pub fn __mlang_std_bits_byteswap_i32(value: i32) -> i32;
+extern pub fn __mlang_std_bits_byteswap_i16(value: i16) -> i16;
+extern pub fn __mlang_std_bits_byteswap_i8(value: i8) -> i8;
 extern pub fn __mlang_std_bits_f32_to_u32(value: f32) -> u32;
 extern pub fn __mlang_std_bits_u32_to_f32(value: u32) -> f32;
 extern pub fn __mlang_std_bits_f64_to_u64(value: f64) -> u64;
 extern pub fn __mlang_std_bits_u64_to_f64(value: u64) -> f64;
+extern pub fn __mlang_std_bits_f32_to_i32(value: f32) -> i32;
+extern pub fn __mlang_std_bits_i32_to_f32(bits: i32) -> f32;
+extern pub fn __mlang_std_bits_f64_to_i64(value: f64) -> i64;
+extern pub fn __mlang_std_bits_i64_to_f64(bits: i64) -> f64;
+extern pub fn __mlang_std_bits_i32_to_u32(value: i32) -> u32;
+extern pub fn __mlang_std_bits_u32_to_i32(bits: u32) -> i32;
+extern pub fn __mlang_std_bits_i64_to_u64(value: i64) -> u64;
+extern pub fn __mlang_std_bits_u64_to_i64(bits: u64) -> i64;
+extern pub fn __mlang_std_bits_i8_to_u8(value: i8) -> u8;
+extern pub fn __mlang_std_bits_u8_to_i8(bits: u8) -> i8;
+extern pub fn __mlang_std_bits_i16_to_u16(value: i16) -> u16;
+extern pub fn __mlang_std_bits_u16_to_i16(bits: u16) -> i16;
 
 /// @brief Logical on value (`1`).
 pub fn on() -> bit {
@@ -198,6 +245,27 @@ pub fn byteswap_u8(value: u8) -> u8 {
     return __mlang_std_bits_byteswap_u8(value);
 }
 
+/// @brief Reverse the byte order of a signed 64-bit integer.
+/// C++23 equivalent of `std::byteswap` for signed integral types.
+pub fn byteswap_i64(value: i64) -> i64 {
+    return __mlang_std_bits_byteswap_i64(value);
+}
+
+/// @brief Reverse the byte order of a signed 32-bit integer.
+pub fn byteswap_i32(value: i32) -> i32 {
+    return __mlang_std_bits_byteswap_i32(value);
+}
+
+/// @brief Reverse the byte order of a signed 16-bit integer.
+pub fn byteswap_i16(value: i16) -> i16 {
+    return __mlang_std_bits_byteswap_i16(value);
+}
+
+/// @brief Reverse the byte order of a signed 8-bit integer (a no-op).
+pub fn byteswap_i8(value: i8) -> i8 {
+    return __mlang_std_bits_byteswap_i8(value);
+}
+
 /// @brief Reinterpret an IEEE-754 `f32` representation as `u32` bits.
 /// C++20 `std::bit_cast` equivalent for this type pair.
 pub fn bit_cast_u32_from_f32(value: f32) -> u32 {
@@ -217,4 +285,65 @@ pub fn bit_cast_u64_from_f64(value: f64) -> u64 {
 /// @brief Reinterpret `u64` bits as an IEEE-754 `f64` value.
 pub fn bit_cast_f64_from_u64(bits: u64) -> f64 {
     return __mlang_std_bits_u64_to_f64(bits);
+}
+
+/// @brief Reinterpret an IEEE-754 `f32` representation as signed `i32` bits.
+pub fn bit_cast_i32_from_f32(value: f32) -> i32 {
+    return __mlang_std_bits_f32_to_i32(value);
+}
+
+/// @brief Reinterpret signed `i32` bits as an IEEE-754 `f32` value.
+pub fn bit_cast_f32_from_i32(bits: i32) -> f32 {
+    return __mlang_std_bits_i32_to_f32(bits);
+}
+
+/// @brief Reinterpret an IEEE-754 `f64` representation as signed `i64` bits.
+pub fn bit_cast_i64_from_f64(value: f64) -> i64 {
+    return __mlang_std_bits_f64_to_i64(value);
+}
+
+/// @brief Reinterpret signed `i64` bits as an IEEE-754 `f64` value.
+pub fn bit_cast_f64_from_i64(bits: i64) -> f64 {
+    return __mlang_std_bits_i64_to_f64(bits);
+}
+
+/// @brief Reinterpret the two's-complement bits of an `i32` as `u32`.
+/// C++20 `std::bit_cast` equivalent for this same-size type pair.
+pub fn bit_cast_u32_from_i32(value: i32) -> u32 {
+    return __mlang_std_bits_i32_to_u32(value);
+}
+
+/// @brief Reinterpret `u32` bits as an `i32` without numeric conversion.
+pub fn bit_cast_i32_from_u32(bits: u32) -> i32 {
+    return __mlang_std_bits_u32_to_i32(bits);
+}
+
+/// @brief Reinterpret the two's-complement bits of an `i64` as `u64`.
+pub fn bit_cast_u64_from_i64(value: i64) -> u64 {
+    return __mlang_std_bits_i64_to_u64(value);
+}
+
+/// @brief Reinterpret `u64` bits as an `i64` without numeric conversion.
+pub fn bit_cast_i64_from_u64(bits: u64) -> i64 {
+    return __mlang_std_bits_u64_to_i64(bits);
+}
+
+/// @brief Reinterpret the same-width bit pattern from `i8` to `u8`.
+pub fn bit_cast_u8_from_i8(value: i8) -> u8 {
+    return __mlang_std_bits_i8_to_u8(value);
+}
+
+/// @brief Reinterpret the same-width bit pattern from `u8` to `i8`.
+pub fn bit_cast_i8_from_u8(bits: u8) -> i8 {
+    return __mlang_std_bits_u8_to_i8(bits);
+}
+
+/// @brief Reinterpret the same-width bit pattern from `i16` to `u16`.
+pub fn bit_cast_u16_from_i16(value: i16) -> u16 {
+    return __mlang_std_bits_i16_to_u16(value);
+}
+
+/// @brief Reinterpret the same-width bit pattern from `u16` to `i16`.
+pub fn bit_cast_i16_from_u16(bits: u16) -> i16 {
+    return __mlang_std_bits_u16_to_i16(bits);
 }

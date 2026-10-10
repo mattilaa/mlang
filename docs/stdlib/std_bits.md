@@ -6,6 +6,14 @@ The module provides constructors for Mlang's logical `bit` type and C++20–23
 inspired operations on unsigned integers and IEEE-754 floating-point
 representations. Packed collections remain available in `std::bitset`.
 
+### Native byte order
+
+- `Endian` classifies the host as `Little`, `Big`, or `Mixed`.
+- `native_endian()` returns that classification; `is_little_endian()` and
+  `is_big_endian()` are convenient boolean checks.
+- These helpers correspond to C++20 `std::endian` and preserve the possibility
+  of a mixed-endian target.
+
 ### Logical bit values
 
 - `on()` / `ON()` return `bit(1)`.
@@ -22,7 +30,9 @@ representations. Packed collections remain available in `std::bitset`.
   rotations normalize counts by the value width and negative counts reverse
   direction.
 - `byteswap_u8`, `byteswap_u16`, `byteswap_u32`, and `byteswap_u64` reverse
-  byte order (the 8-bit operation is a no-op).
+  unsigned integer byte order; `byteswap_i8`, `byteswap_i16`, `byteswap_i32`,
+  and `byteswap_i64` do the same for signed integer representations. The 8-bit
+  operations are no-ops.
 
 The original 64-bit API names remain available for source compatibility.
 
@@ -30,7 +40,13 @@ The original 64-bit API names remain available for source compatibility.
 
 - `bit_cast_u32_from_f32` and `bit_cast_f32_from_u32`
 - `bit_cast_u64_from_f64` and `bit_cast_f64_from_u64`
+- `bit_cast_i32_from_f32` and `bit_cast_f32_from_i32`
+- `bit_cast_i64_from_f64` and `bit_cast_f64_from_i64`
+- `bit_cast_u32_from_i32` and `bit_cast_i32_from_u32`
+- `bit_cast_u64_from_i64` and `bit_cast_i64_from_u64`
+- `bit_cast_u8_from_i8` and `bit_cast_i8_from_u8`
+- `bit_cast_u16_from_i16` and `bit_cast_i16_from_u16`
 
-These reinterpret IEEE-754 bits without performing a numeric conversion. The
-native implementation verifies that the target platform uses binary32 and
-binary64 layouts.
+These reinterpret bits without performing a numeric conversion. Float pairs
+reinterpret IEEE-754 binary32/binary64 layouts; signed/unsigned integer pairs
+preserve the same-width two's-complement bit pattern.

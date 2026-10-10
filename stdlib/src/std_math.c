@@ -221,6 +221,60 @@ double __mlang_std_math_sqrt_f64(double x)
     return sqrt(x);
 }
 
+float __mlang_std_math_hypot_f32(float x, float y)
+{
+    return hypotf(x, y);
+}
+
+double __mlang_std_math_hypot_f64(double x, double y)
+{
+    return hypot(x, y);
+}
+
+float __mlang_std_math_fma_f32(float x, float y, float z)
+{
+    return fmaf(x, y, z);
+}
+
+double __mlang_std_math_fma_f64(double x, double y, double z)
+{
+    return fma(x, y, z);
+}
+
+float __mlang_std_math_nextafter_f32(float x, float y)
+{
+    return nextafterf(x, y);
+}
+
+double __mlang_std_math_nextafter_f64(double x, double y)
+{
+    return nextafter(x, y);
+}
+
+int32_t __mlang_std_math_isfinite_f32(float x) { return isfinite(x); }
+int32_t __mlang_std_math_isfinite_f64(double x) { return isfinite(x); }
+int32_t __mlang_std_math_isinf_f32(float x) { return isinf(x); }
+int32_t __mlang_std_math_isinf_f64(double x) { return isinf(x); }
+int32_t __mlang_std_math_isnan_f32(float x) { return isnan(x); }
+int32_t __mlang_std_math_isnan_f64(double x) { return isnan(x); }
+int32_t __mlang_std_math_signbit_f32(float x) { return signbit(x); }
+int32_t __mlang_std_math_signbit_f64(double x) { return signbit(x); }
+
+float __mlang_std_math_atan2_f32(float y, float x)
+{
+    return atan2f(y, x);
+}
+
+double __mlang_std_math_atan2_f64(double y, double x)
+{
+    return atan2(y, x);
+}
+
+float __mlang_std_math_sinh_f32(float x) { return sinhf(x); }
+double __mlang_std_math_sinh_f64(double x) { return sinh(x); }
+float __mlang_std_math_cosh_f32(float x) { return coshf(x); }
+double __mlang_std_math_cosh_f64(double x) { return cosh(x); }
+
 int32_t __mlang_std_math_sin_i32(int32_t x)
 {
     return (int32_t)sin((double)x);

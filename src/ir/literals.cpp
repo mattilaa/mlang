@@ -94,6 +94,16 @@ llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
 
     llvm::Value* value = namedValues[node->name];
 
+    if(closureCaptureReferenceAliases.count(node->name))
+    {
+        TypeNode* capturedType = getLValueType(node, node->line);
+        llvm::Type* capturedLLVMType = getLLVMTypeFromNode(capturedType);
+        if(!capturedLLVMType)
+            return nullptr;
+        return builder.CreateLoad(capturedLLVMType, value,
+                                  node->name + ".capture.value");
+    }
+
     if(llvm::AllocaInst* alloca = llvm::dyn_cast<llvm::AllocaInst>(value))
     {
         return builder.CreateLoad(alloca->getAllocatedType(), alloca,

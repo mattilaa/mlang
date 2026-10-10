@@ -14,12 +14,32 @@ mod std::algorithm::ranges;
 use std::algorithm::ranges::find;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::unique_stable;
+use std::algorithm::ranges::filter;
+use std::algorithm::ranges::transform;
+use std::algorithm::ranges::zip_transform;
+use std::algorithm::ranges::chunk_by;
+use std::algorithm::ranges::pairwise;
+use std::algorithm::ranges::adjacent_transform;
+use std::algorithm::ranges::next_permutation;
+use std::algorithm::ranges::generate_n;
+use std::algorithm::ranges::generate;
 
 fn example() {
     let data: list<i32> = [4, 2, 4, 7];
     let first_four: i64 = find(data, 4);           // 0
     let prefix: list<i32> = take(data, 2);        // [4, 2]
     let distinct: list<i32> = unique_stable(data); // [4, 2, 7]
+    let positive = |value: i32| { return value > 0; };
+    let positives: list<i32> = filter(data, positive); // [4, 2, 4, 7]
+    let to_double = |value: i32| { return f64(value); };
+    let converted: list<f64> = transform(data, to_double);
+    let add = |left: i32, right: i32| { return left + right; };
+    let sums: list<i32> = zip_transform(data, data, add);
+    let consecutive = |left: i32, right: i32| { return right == left + 1; };
+    let groups: list<list<i32>> = chunk_by(data, consecutive);
+    let adjacent: list<tuple<i32, i32>> = pairwise(data);
+    let adjacent_add = |left: i32, right: i32| { return left + right; };
+    let sums: list<i32> = adjacent_transform(data, adjacent_add);
 }
 ```
 
@@ -27,51 +47,500 @@ fn example() {
 
 - `find`, `find_last`, `adjacent_find`, `count`, and `contains` search for a
   value; `adjacent_find` returns the first index of equal neighbors or `-1`.
+- `find_last_if` and `find_last_if_not` return the last index accepted or
+  rejected by a predicate, respectively, or `-1` when no element matches.
+- `find_last_by(data, key, equivalent)` searches backward and returns the last
+  index whose element matches a separate key under the supplied binary
+  predicate, or `-1` when none matches.
+- `find_by`, `count_by`, and `contains_by` apply the same element/key
+  equivalence predicate for first-match lookup, counting, and membership.
+- `find_last_by_projected(data, key, equivalent, projection)` searches
+  backward, applying the projection to each element before matching it against
+  a possibly heterogeneous lookup key with the supplied predicate.
+- `find_by_projected`, `count_by_projected`, and `contains_by_projected` apply
+  the equivalence predicate to a projected element key and the lookup key.
+- `adjacent_find_by(data, equivalent)` returns the first adjacent index whose
+  pair satisfies a caller-provided binary equivalence predicate, or `-1`.
+- `adjacent_find_by_projected` applies that equivalence predicate to adjacent
+  projected keys.
 - `find_first_of(data, candidates)` returns the first index in `data` matching
-  any candidate, or `-1` when there is no match.
+  any candidate, or `-1` when there is no match; `find_first_of_by` accepts a
+  binary equivalence predicate and supports different element types.
+- `find_first_of_by_projected` adds independent projections for the data and
+  candidate ranges before applying the binary equivalence predicate.
+- `find_projected`, `count_projected`, and `contains_projected` apply a unary
+  projection before comparing with the search value, covering the common
+  C++20 ranges projection use case without requiring a custom predicate.
+- `find_last_projected` finds the final matching key, `adjacent_find_projected`
+  finds equal neighboring keys, and `find_first_of_projected` searches for a
+  projected key from a second range.
 - `includes(range, subset)` checks whether sorted `range` contains sorted
   `subset`; duplicate multiplicities matter and both inputs must be sorted.
 - `search` returns the first index of a contiguous pattern (`0` for an empty
   pattern, `-1` if absent); `contains_subrange` returns the corresponding
   membership result.
-- `equal` compares lists in order; `is_permutation` compares element
-  multiplicities without considering order.
-- `starts_with` and `ends_with` compare prefixes and suffixes.
+- `search_n(data, count, value)` locates the first run of consecutive equal
+  values; `search_n_by` uses an equivalence predicate. A non-positive count
+  matches at index zero.
+- `search_n_projected` finds a consecutive run by comparing each element's
+  projected key with the search value; non-positive counts also return zero.
+- `search_n_by_projected` applies an equivalence predicate to projected keys
+  and the search value, retaining the same count and no-match semantics.
+- `find_end` returns the last matching subrange start (`data.len()` for an
+  empty pattern, `-1` if absent).
+- `search_by` and `find_end_by` find the first or last contiguous subrange
+  matching under a caller-provided equivalence predicate, including when the
+  two ranges have different element types.
+- `search_projected` and `find_end_projected` compare independent projections
+  of the data and pattern; `contains_subrange_projected` provides the matching
+  membership query. Empty-pattern behavior matches the non-projected forms.
+- `contains_subrange_by(data, pattern, equivalent)` returns whether a
+  contiguous pattern exists under a binary equivalence predicate, including
+  for different element types. An empty pattern matches every range.
+- `search_by_projected`, `find_end_by_projected`, and
+  `contains_subrange_by_projected` apply independent projections before their
+  binary equivalence predicate, with the same empty-pattern and absent-pattern
+  behavior as the corresponding non-projected functions.
+- `equal` compares lists in order, including across distinct equality-comparable
+  element types; `is_permutation` compares element multiplicities without
+  considering order.
+- `equal_projected` and `mismatch_projected` apply independent projections
+  before comparing elements; `is_permutation_projected` compares projected
+  multisets while preserving duplicate counts.
+- `equal_by_projected` and `mismatch_by_projected` combine independent
+  projections with an equivalence predicate, including heterogeneous input
+  element types; mismatch returns the first unequal pair of indices.
+- `is_permutation_by_projected` compares projected equivalence classes under a
+  strict comparator, with independent projections for the two input types and
+  duplicate multiplicities preserved.
+- `mismatch(left, right)` returns a tuple of the first unequal indices,
+  stopping at the shorter range; an equal prefix returns its shared length for
+  both indices. `mismatch_by` accepts a binary equivalence predicate.
+- `equal_by` compares each pair with a supplied equivalence predicate and
+  supports distinct left/right element types; `is_permutation_by` compares
+  multiplicities under an equivalence relation for same-typed ranges.
+- `lexicographical_compare` supports ranges with distinct mutually
+  order-comparable element types.
+- `lexicographical_compare_by` performs the same range comparison with a
+  caller-supplied strict ordering; equivalent elements continue to the next
+  position and a matching prefix sorts before its extension.
+- `lexicographical_compare_projected` applies an independent projection to
+  each range before lexicographically comparing the resulting keys.
+- `lexicographical_compare_by_projected` adds a strict comparator over those
+  projected keys while retaining the matching-prefix rule.
+- `includes_by(range, subset, less)` checks sorted-range containment with a
+  comparator, including duplicate multiplicities.
+- `includes_projected` performs the same duplicate-aware containment check
+  after applying a separate projection to each sorted input.
+- `starts_with` and `ends_with` compare prefixes and suffixes, including across
+  distinct equality-comparable element types; `starts_with_by` and
+  `ends_with_by` accept a binary equivalence predicate for custom matching.
+- `starts_with_projected` and `ends_with_projected` apply separate projections
+  to the data and prefix/suffix before comparing their keys.
+- `starts_with_by_projected` and `ends_with_by_projected` apply a binary
+  equivalence predicate after the independent projections, including for
+  different input element types.
+- `unique_projected` and `unique_copy_projected` remove adjacent values with
+  equal projected keys while preserving the first original value in each run.
 - `lexicographical_compare`, `is_sorted`, `min_element_index`, and
   `max_element_index` provide ordering queries. The min/max index functions
   return `-1` on an empty list and keep the first index on ties.
+- `next_permutation` and `prev_permutation` return `(advanced, copied_list)`;
+  when no next/previous permutation exists, they wrap the copy to the first or
+  last permutation and return `false`. The `_by` variants use a strict
+  comparator. Inputs are never mutated.
+- `next_permutation_projected` and `prev_permutation_projected` compare
+  projected keys while rearranging the original values, with the same wrapping
+  and unchanged-input behavior.
+- `next_permutation_by_projected` and `prev_permutation_by_projected` combine
+  comparator and projection ordering while preserving the same wrap and
+  non-mutating behavior.
+- `min_element_value` and `max_element_value` return the selected value for a
+  nonempty input. Use the index forms to handle empty ranges; value forms keep
+  the first value on ties.
+- `min_element`, `max_element`, and `minmax_element` return the selected value
+  or values in `Some`, and return `None` for empty ranges. The minmax form
+  keeps the first minimum and last maximum, matching the index/value forms.
+- `minmax_element_index(data)` returns `(first_minimum, last_maximum)` in one
+  pass, or `(-1, -1)` for empty input. The comparator form
+  `minmax_element_index_by(data, less)` applies the same tie rules under a
+  strict ordering.
+- `minmax_element_value(data)` and `minmax_element_value_by(data, less)` return
+  both selected values in one traversal; like the individual value forms, they
+  require nonempty input.
+- The `_projected` extrema forms select indices or original values by a unary
+  key projection. Individual min/max selection keeps the first tie; minmax
+  keeps the first minimum and last maximum, and index forms return `-1` for
+  empty input.
+- The `_by_projected` extrema forms combine a strict comparator with a unary
+  projection for minimum/maximum indices and values, including minmax variants.
+  They preserve the same first-minimum, first individual maximum, and last
+  minmax-maximum tie rules as the other extrema overloads.
+- Safe `min_element_by`/`max_element_by`, `_projected`, and
+  `_by_projected` forms return `Some(original_value)` or `None` for empty
+  ranges. Their `minmax_element` counterparts return an optional pair and
+  preserve the same tie rules.
+- The corresponding `min_element_index_by`, `max_element_index_by`,
+  `min_element_value_by`, and `max_element_value_by` forms accept a strict
+  ordering comparator and also keep the first equivalent element.
 - `is_sorted_until(data)` returns the first index that breaks nondecreasing
   order, or `data.len()` when the entire range is sorted.
+- `is_sorted_projected`, `is_sorted_until_projected`, `lower_bound_projected`,
+  `upper_bound_projected`, `equal_range_projected`, and
+  `binary_search_projected` perform the corresponding ordering query on a
+  unary projection of each element. Binary-search forms require projected
+  values sorted in nondecreasing order.
+- `is_heap(data)` checks max-heap order; `is_heap_until(data)` returns the
+  first violating child index, or `data.len()` when the range is a heap.
+- `is_heap_by(data, less)` and `is_heap_until_by(data, less)` check heap order
+  using a strict comparator; the returned index is the first child for which
+  `less(parent, child)` is true.
+- `make_heap` and `make_heap_by` build copied max-heaps (or comparator-defined
+  heaps). `push_heap`/`push_heap_by` restore order after the final element is
+  appended; `pop_heap`/`pop_heap_by` move the top element to the last position
+  and restore the prefix heap. `sort_heap`/`sort_heap_by` return the sorted
+  result. All operations preserve the input; push/pop follow the usual heap
+  preconditions, and the comparator variants use the same strict ordering as
+  the query helpers.
+- The `_projected` heap forms (`is_heap_until_projected`,
+  `is_heap_projected`, `make_heap_projected`, `push_heap_projected`,
+  `pop_heap_projected`, and `sort_heap_projected`) apply a unary key projection
+  while preserving the same copied-list behavior and heap preconditions.
+- The `_by_projected` heap forms combine a strict comparator with a unary key
+  projection for heap queries and make/push/pop/sort operations.
+- `partial_sort(data, count)` uses a bounded heap to return the `count`
+  smallest values in ascending order. `partial_sort_by(data, count, less)`
+  applies a caller-provided order (for example, to select the largest values).
+  `partial_sort_projected(data, count, projection)` orders by projected keys.
+  `partial_sort_by_projected(data, count, less, projection)` combines both
+  ordering controls. Counts clamp to the available range and the source is
+  unchanged.
+- `partial_sort_copy(data, output_capacity)` and its `_by` comparator form
+  use the destination capacity to select and sort a prefix into a new list;
+  this eager counterpart leaves the source unchanged.
+- `partial_sort_copy_projected` selects and sorts the output-capacity prefix
+  according to projected keys while retaining original values.
+- `partial_sort_copy_by_projected` applies both a comparator and a projection
+  while returning the selected original values in comparator order.
+- `nth_element(data, nth)` returns a copied partitioned list with its selected
+  value at `nth`; under ascending order, preceding values are no greater and
+  following values are no smaller. The two partitions are not otherwise
+  sorted. `nth_element_by` applies the same partition guarantee under `less`;
+  `nth_element_projected` partitions by a unary projected key, and
+  `nth_element_by_projected` combines both controls. An invalid index returns
+  an empty list.
 - `lower_bound`, `upper_bound`, and `binary_search` perform logarithmic-time
   queries on a list sorted in nondecreasing order. The bounds return insertion
-  indices; binary search returns `bool`.
+  indices; binary search returns [`bool`](Quick-Guide#types).
+- `equal_range(data, value)` returns `(first, last)`, the half-open index range
+  of equal values, or an empty insertion range when no value matches.
+- `is_sorted_by`, `is_sorted_until_by`, `lower_bound_by`, `upper_bound_by`, and
+  `binary_search_by` accept a strict ordering comparator, enabling descending or
+  custom orderings while keeping binary searches logarithmic.
+- The `_by_projected` ordering forms combine a strict comparator with a key
+  projection for sorted checks and binary-search queries, allowing projected
+  keys to use custom orders such as descending order.
+- `equal_range_by(data, value, less)` provides the same half-open matching
+  index range with a comparator-defined ordering.
 - `size` and `empty` provide generic list size queries.
-- `all_of`, `any_of`, and `none_of` quantify `list<bool>` values directly. These
-  identity-predicate forms preserve the usual empty-range identities; callback
-  predicates are not supported by this API.
+- `find_if` and `count_if` search/count elements accepted by a bound predicate;
+  `filter` eagerly copies accepted values to a new list. Predicates may capture
+  local values, and captured mutations are visible to the caller.
+- `find_if_projected`, `find_if_not_projected`, `count_if_projected`,
+  `all_of_projected`, `any_of_projected`, and `none_of_projected` apply their
+  predicate to each element's projected key, preserving the corresponding
+  empty-range and not-found results.
+- `find_last_if_projected` and `find_last_if_not_projected` search from the
+  end for the final element accepted or rejected by a predicate on its key.
+- `for_each(data, operation)` invokes a closure once per element in iteration
+  order; captured mutable state can collect side effects or a result.
+- `for_each_n(data, count, operation)` invokes a closure on a bounded prefix
+  in iteration order. Negative counts perform no calls and oversized counts
+  clamp to the input length.
+- `for_each_n_count` and `for_each_n_projected_count` return the number of
+  elements consumed after processing the bounded prefix, adapting the standard
+  ending-iterator result to eager-list indices. The callable remains an input
+  because generic closure values cannot currently be returned in tuples.
+- `for_each_projected` and `for_each_n_projected` invoke the operation on each
+  element's projected value, preserving traversal order and bounded-count
+  behavior.
+- `generate_n(count, generator)` materializes values by invoking a zero-argument
+  generator closure `count` times; non-positive counts return an empty list.
+  Captured generator state is preserved between invocations.
+- `generate(shape, generator)` uses the shape list's length to invoke a
+  zero-argument generator into a new list; shape values are ignored and the
+  source remains unchanged. Empty shape performs no calls.
+- `fold_left(data, init, operation)` and `fold_right(data, init, operation)`
+  reduce a range in forward or reverse order. The operation receives
+  `(accumulator, element)` for left folds and `(element, accumulator)` for
+  right folds; the accumulator type may differ from the element type. Empty
+  input returns `init` unchanged.
+- `fold_left_with_iter(data, init, operation)` returns `(consumed, accumulator)`;
+  `consumed` is the eager list length (zero for empty input), standing in for
+  the final iterator in C++23 [`std::ranges::fold_left_with_iter`](Stdlib-Module-API).
+- `fold_right_with_iter(data, init, operation)` provides the corresponding
+  reverse-order eager-list fold and returns `(consumed, accumulator)`. Since
+  lists do not expose iterators, `consumed` is the number of elements visited.
+- `fold_left_first(data, operation)` and `fold_right_last(data, operation)`
+  seed the reduction from the first or last element. They return
+  [`option<T>`](Quick-Guide#types)—`None` for empty input and `Some(result)` otherwise. These are
+  eager counterparts to the C++23 [`std::ranges`](Stdlib-Module-API) fold algorithms.
+- `fold_left_first_with_iter(data, operation)` returns
+  `Some((consumed, accumulator))` for nonempty input and `None` for empty
+  input. The output accumulator can differ from the input element type, which
+  is useful for widening reductions.
+- `fill(data, value)` returns a new list of the same length with every item set
+  to `value`; the source list is unchanged, matching the result of applying
+  C++20 [`std::ranges::fill`](Stdlib-Module-API) to an equal-sized destination range.
+- `fill_n(count, value)` materializes exactly `count` copies in a new list;
+  non-positive counts return an empty list. This eager-list helper adapts C++20
+  [`std::ranges::fill_n`](Stdlib-Module-API), whose output length is normally defined by an output
+  iterator rather than a new allocation.
+- `copy_n(data, count)` copies a bounded prefix; negative counts produce an
+  empty list and oversized counts clamp to the input length. This eager,
+  non-mutating operation is the Mlang counterpart to the C++20 algorithm.
+- `copy_n_with_count(data, count)` returns `(consumed, copied)` so callers can
+  observe the actual bounded progress alongside the copied prefix.
+- `copy(data)` materializes a full list copy, the eager-list counterpart to
+  [`std::ranges::copy`](Stdlib-Module-API); the source remains unchanged.
+- `swap_ranges(left, right)` returns two copied lists with corresponding
+  elements in the common prefix exchanged; an unmatched tail is preserved.
+  Both inputs remain unchanged.
+- `transform(data, operation)` eagerly maps every element into a new list;
+  the output element type is inferred from the closure return type and may
+  differ from the input element type.
+- `transform_with_count` returns `(consumed, output)` with the transformed
+  list, exposing the full input progress of the eager unary transform.
+- The binary `transform(left, right, operation)` overload transforms paired
+  elements into a new list and stops at the shorter input, matching the bounded
+  two-range form of C++20 [`std::ranges::transform`](Stdlib-Module-API).
+- `transform_projected` applies a projection before its unary operation;
+  `zip_transform_projected` applies independent projections to paired inputs
+  before the binary operation, stopping at the shorter range.
+- `transform_projected_with_count` combines unary projection and transform
+  while also returning the input element count.
+- `zip_transform3_projected` through `zip_transform6_projected` apply
+  independent projections to each corresponding input before invoking the
+  operation; each stops at the shortest input and infers the result type.
+- `zip_transform` applies operations to corresponding values from two through
+  six inputs, stopping at the shortest input and inferring the output type.
+  This eager-list API mirrors the C++23 [`std::ranges::zip_transform`](Stdlib-Module-API) shape.
+- `zip` materializes heterogeneous tuples from two through six input ranges,
+  stopping at the shortest input.
+- `find_if_not` returns the first rejected element's index; `remove_if` returns
+  a copy without accepted elements, and `replace_if` substitutes a value for
+  every accepted element. These transforms leave their input unchanged.
+- `copy_if`, `remove_copy`, `remove_copy_if`, `replace_copy`, and
+  `replace_copy_if` provide the corresponding C++20 copying algorithms. Each
+  returns a new list in source order and leaves the input unchanged.
+- Projected predicate transforms (`copy_if_projected`,
+  `remove_if_projected`, `remove_copy_if_projected`, `replace_if_projected`,
+  and `replace_copy_if_projected`) apply their predicate to an element's key
+  while copying original values (or the requested replacement).
+- `sample(data, count, choose_index)` selects up to `count` distinct elements
+  without replacement and preserves their input order. The supplied selector
+  receives the current exclusive bound, allowing a caller-owned random engine
+  (for example, `range_i64(0, bound - 1)`); the selection pass is O(N).
+  Negative counts return empty and oversized counts clamp to the input length.
+- `shuffle(data, choose_index)` returns a randomized copy. The selector receives
+  each current exclusive bound; use a uniformly distributed selector for an
+  unbiased permutation. Because lists are eagerly rebuilt without indexed
+  mutation, this implementation is O(N²) and leaves the input unchanged.
+- `unique_by(data, equivalent)` removes adjacent equivalent elements while
+  keeping the first value in each run.
+- `unique_by_projected(data, equivalent, projection)` compares projected keys
+  with a caller-supplied equivalence predicate while retaining original values.
+- `unique_copy(data)` and `unique_copy_by(data, equivalent)` provide C++20
+  [`std::ranges::unique_copy`](Stdlib-Module-API) counterparts; they retain the first item of each
+  adjacent run in a new list and leave the source unchanged.
+- `unique_copy_by_projected(data, equivalent, projection)` provides the same
+  copied behavior using equivalence over projected keys.
+- `all_of`, `any_of`, and `none_of` accept predicates as well as retaining the
+  one-argument [`list<bool>`](Quick-Guide#types) identity forms. Empty-range results match the
+  standard algorithms: true, false, and true respectively.
+- `is_partitioned` checks whether all matching elements precede nonmatches;
+  `partition_point` binary-searches for the first nonmatch index in an
+  already-partitioned range using O(log N) predicate calls. `stable_partition`
+  returns a copied range with matching elements
+  first, preserving order within both groups and evaluating its predicate once
+  per element.
+- `partition_copy(data, predicate)` returns a tuple of stable matching and
+  nonmatching lists, evaluating the predicate once per element and preserving
+  the input.
+- `partition(data, predicate)` returns `(partitioned_copy, boundary_index)`.
+  Matching elements precede the rest; this eager-list counterpart preserves
+  order within both groups and evaluates the predicate once per element.
+- `copy_if_projected`, `is_partitioned_projected`,
+  `partition_point_projected`, `stable_partition_projected`,
+  `partition_projected`, and `partition_copy_projected` apply the predicate to
+  each element's projected key. Partition-copy forms retain original elements;
+  the partition-point form requires a true prefix followed by false values.
 
 ### Transforms and sequence creation
 
 - `remove`, `take`, `drop`, `unique`, `unique_stable`, and `clamp` return a
   transformed copy. `unique` removes only adjacent duplicates;
   `unique_stable` keeps the first occurrence of each value.
+- `take_while(data, predicate)` copies the initial matching prefix;
+  `drop_while(data, predicate)` copies the rest after that prefix, matching the
+  eager behavior of C++20 `views::take_while` and `views::drop_while`.
+- `take_while_projected` and `drop_while_projected` apply a predicate to
+  projected keys while returning the original elements, preserving data shape
+  for record-like lists.
+- `take_last(data, count)` copies a suffix and `drop_last(data, count)` copies
+  the prefix before it (C++23 `views::take_last`/`drop_last` counterparts).
+  Counts are clamped to the range; non-positive counts yield empty/all values,
+  respectively.
+- `subrange(data, first, last)` copies the half-open interval `[first, last)`;
+  bounds are clamped to `[0, len]`, while empty/reversed intervals are empty.
+- `iota(start, end)` materializes `[start, end)`; `iota_by(start, end, step)`
+  supports positive and negative strides. A zero step or a step pointing away
+  from the bound returns an empty list. `iota_range(start, end)` and
+  `iota_range_by(start, end, step)` provide generic typed progressions; the
+  stepped form also terminates if arithmetic stops making progress.
+- `repeat(value, count)` eagerly materializes `count` copies of a value, the
+  list counterpart to the C++23 [`std::views::repeat`](Stdlib-Module-API); non-positive counts are
+  empty.
+- `single(value)` materializes a one-element list, corresponding to C++20
+  [`std::views::single`](Stdlib-Module-API).
+- `clamp_by(data, low, high, less)` clamps each element using a custom ordering;
+  bounds must be ordered according to the comparator.
+- `clamp_projected(data, low, high, projection)` compares projected keys for
+  both elements and bounds, but emits the original value or the corresponding
+  bound value into its copied list.
+- `clamp_by_projected(data, low, high, less, projection)` combines projected
+  keys with a custom strict ordering; bounds must be ordered by that combined
+  ordering.
 - `sorted` returns a stable ascending copy and leaves the input unchanged.
+- `sorted_by(data, less)` returns a stable copied ordering by a strict
+  comparator. Equivalent elements retain their original relative order.
+- `sorted_projected(data, projection)` returns a stable copy ordered by the
+  projected key, preserving input order among equivalent keys.
+- `sorted_by_projected(data, less, projection)` combines projected keys with a
+  custom strict ordering and preserves input order among equivalent keys.
 - `reversed` returns the elements in reverse order; `rotate_left` returns a
-  copy rotated by a normalized signed offset.
+  copy rotated by a normalized signed offset. `rotate(data, middle)` places
+  the suffix beginning at the split before the prefix (C++20 `ranges::rotate`
+  style), clamping the split index and leaving the input unchanged.
+- `reverse_copy(data)` and `rotate_copy(data, middle)` provide the C++20
+  ranges algorithm names for those eager copying operations; both preserve the
+  input, and `rotate_copy` clamps the split index.
+- `shift_left(data, count)` returns the retained suffix after a left shift;
+  `shift_right(data, count)` returns the retained prefix moved right. These
+  eager C++20 `ranges::shift_left`/`shift_right` counterparts leave the input
+  unchanged; non-positive counts are no-ops and counts at least the length
+  yield an empty list.
 - `chunked(data, size)` materializes consecutive sublists (C++23
   `views::chunk` style); the final chunk can be shorter, and non-positive sizes
-  produce an empty list.
+  produce an empty list. `chunk(data, size)` is the standard view spelling.
+- `chunk_by(data, equivalent)` groups adjacent elements while the binary
+  predicate accepts each neighboring pair (C++23 `views::chunk_by` style).
+- `chunk_by_projected(data, equivalent, projection)` groups adjacent values
+  when their projected keys are equivalent, preserving the original elements
+  in each eager output chunk.
 - `windows(data, size)` materializes every overlapping fixed-size sublist
-  (C++23 `views::slide` style); invalid sizes produce an empty list.
+  (C++23 `views::slide` style); invalid sizes produce an empty list. `slide`
+  is the standard view spelling.
 - `strided(data, step)` copies every `step`-th element from index zero
   (C++23 `views::stride` style); non-positive steps produce an empty list.
+  `stride` is the standard view spelling.
 - `joined(data)` flattens one list-of-lists level into a copied list (C++20
-  `views::join` style); empty inner lists contribute no elements.
+  `views::join` style); empty inner lists contribute no elements. `join` is
+  the standard view spelling.
+- `joined_with(data, separator)` flattens one level and inserts a copied
+  separator between each pair of inner lists (C++23 `views::join_with` style).
+  Separators are inserted between empty inner lists too; an empty outer list
+  produces an empty result. `join_with` is the standard view spelling.
+- `split(data, delimiter)` eagerly splits at non-overlapping delimiter matches
+  and preserves empty fields around leading, repeated, and trailing matches.
+  Empty input yields no fields; an empty delimiter yields the whole nonempty
+  input as one field.
 - `concat(left, right)` copies two same-typed ranges into one list (C++23
   `views::concat` style).
+- `zip` overloads for two through six ranges materialize heterogeneous
+  tuples, stopping at the shortest input (C++23 `views::zip` style).
+- `pairwise(data)` materializes tuples of each adjacent pair (C++23
+  `views::pairwise` style); inputs shorter than two elements produce an empty
+  list.
+- `adjacent3(data)`, `adjacent4(data)`, and `adjacent5(data)` materialize typed
+  tuples for each overlapping fixed-width window, analogous to C++23
+  `views::adjacent<N>`; short inputs produce empty lists.
+- `adjacent_transform(data, operation)` applies a binary operation to each
+  neighboring pair, returning up to one fewer result than input elements and
+  inferring the output element type from the operation (C++23
+  `views::adjacent_transform<2>` style).
+- `adjacent_transform3` and `adjacent_transform4` apply ternary or four-argument
+  operations to each neighboring triple or group of four, inferring the output
+  type and returning an empty list when the input is too short.
+- `adjacent_transform5` applies a five-argument operation to each neighboring
+  group of five. The `_projected` forms apply these operations to projected
+  keys while preserving the original source values.
+- The `_projected` adjacent-transform forms apply those operations to projected
+  keys while preserving the original source values.
+- `enumerate(data)` materializes `(index, value)` tuples with zero-based indices
+  (C++23 `views::enumerate` style).
+- `enumerate_from(data, first_index)` provides the same eager pairing with a
+  caller-selected starting index, including negative offsets.
+- `keys(data)` and `values(data)` project the first or second member of each
+  `tuple<K, V>` (eager counterparts to C++20 `views::keys` and `views::values`).
+- `cartesian_product` overloads for two through six ranges materialize
+  every value combination in nested-loop order; the rightmost input varies
+  fastest (C++23 `views::cartesian_product` style). Any empty input produces
+  an empty result.
+- `merged(left, right)` stably merges two sorted same-typed ranges into a new
+  sorted list; equal elements from the left range come first.
+- `inplace_merge(data, middle)` stably merges the two sorted halves around
+  `middle` into a new list; `inplace_merge_by` accepts a strict comparator.
+  Despite the C++ name, these eager-list forms preserve the source and clamp
+  the split index to the range bounds.
+- `inplace_merge_projected` merges halves sorted by the same projected key,
+  retaining the original values and taking equivalent keys from the left half
+  first.
+- `merged_by_projected` and `inplace_merge_by_projected` combine a strict
+  comparator with a projection for stable ordering. Equal projected keys keep
+  left-range precedence, and the split index is clamped for the half-merge.
+- `union_sorted(left, right)` returns the sorted multiset union, keeping the
+  maximum duplicate count for every value.
+- `intersection_sorted(left, right)` returns the sorted multiset intersection,
+  keeping the minimum duplicate count for every value.
+- `difference_sorted(left, right)` removes matching right-side occurrences
+  from the left sorted range, preserving unmatched duplicate counts.
+- `symmetric_difference_sorted(left, right)` returns values present in exactly
+  one sorted input, with each value's output count equal to the difference in
+  input multiplicities.
+- `merged_projected` and the four `*_sorted_projected` set operations compare
+  unary projected keys. Inputs must be sorted by the same projection; they
+  retain the merge stability and multiset multiplicity rules described above.
+- `merged_by`, `union_sorted_by`, `intersection_sorted_by`,
+  `difference_sorted_by`, and `symmetric_difference_sorted_by` take a strict
+  ordering comparator. Both inputs must be sorted with that comparator; set
+  operations define equivalent values as neither being less than the other.
+  They preserve the same stability and duplicate-count rules as their default
+  ordering counterparts.
+- The `_by_projected` set-operation forms combine a strict comparator with a
+  unary projection: `includes_by_projected`, `union_sorted_by_projected`,
+  `intersection_sorted_by_projected`, `difference_sorted_by_projected`, and
+  `symmetric_difference_sorted_by_projected`. Both inputs must be sorted by
+  that combined ordering, and output values retain their original elements.
 - `replace(data, old, new)` copies a range while replacing every value equal
   to `old`; the original range is unchanged.
+- `replace_if(data, predicate, new)` copies a range, replacing values accepted
+  by the predicate. `replace_if_projected` applies the predicate to a projected
+  key. Both preserve source order and leave the original range unchanged.
+- `remove_projected` and `remove_copy_projected` filter out elements whose
+  projected key matches a value. `replace_projected` and
+  `replace_copy_projected` replace elements by projected-key equality; all
+  four return a new list and leave the input unchanged.
+- `remove_by` and `remove_copy_by` exclude every element matching a lookup key
+  under a caller-supplied equivalence predicate; both preserve source order.
+- `remove_by_projected` and `remove_copy_by_projected` apply that equivalence
+  predicate to each projected key while retaining the original elements.
+- `replace_by` and `replace_copy_by` substitute values matching a lookup key
+  under a caller-supplied equivalence predicate. Their `_by_projected` forms
+  apply that predicate to each projected element key and the supplied old key.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
+- `iota_range(start, end)` materializes a typed half-open range, preserving
+  the input element type instead of widening it to [`i64`](Quick-Guide#types).
 
 The module retains the original `_i64` functions for source compatibility.

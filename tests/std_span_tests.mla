@@ -5,6 +5,15 @@ mod std::testing;
 use std::testing::verify;
 use std::testing::verify_eq_i32;
 use std::testing::verify_eq_i64;
+use std::span::size;
+use std::span::size_bytes;
+use std::span::empty;
+use std::span::get;
+use std::span::front;
+use std::span::back;
+use std::span::first;
+use std::span::last;
+use std::span::subspan;
 
 fn sum_span(values: Span<i32>) -> i32 {
     var total: i32 = 0;
@@ -59,4 +68,78 @@ fn test_span_from_array_like_fill_and_bool_view() {
     let flags: span<bool> = [true, true, true, true];
     verify(all_true(flags));
     verify_eq_i32(1, i32(flags[2]));
+}
+
+#[test]
+fn test_span_size_and_copied_slices() {
+    let values: Span<i32> = [10, 20, 30, 40];
+    verify_eq_i64(4, size(values));
+    verify(!empty(values));
+
+    let prefix: Span<i32> = first(values, 2);
+    verify_eq_i32(2, i32(prefix.len()));
+    verify(prefix[0] == 10 && prefix[1] == 20);
+    let oversized_prefix: Span<i32> = first(values, 99);
+    verify_eq_i32(4, i32(oversized_prefix.len()));
+    let negative_prefix: Span<i32> = first(values, -1);
+    verify(empty(negative_prefix));
+
+    let suffix: Span<i32> = last(values, 2);
+    verify(suffix[0] == 30 && suffix[1] == 40);
+    let oversized_suffix: Span<i32> = last(values, 99);
+    verify_eq_i32(4, i32(oversized_suffix.len()));
+    let negative_suffix: Span<i32> = last(values, -1);
+    verify(empty(negative_suffix));
+
+    let middle: Span<i32> = subspan(values, 1, 2);
+    verify(middle.len() == 2 && middle[0] == 20 && middle[1] == 30);
+    let rest: Span<i32> = subspan(values, 2, -1);
+    verify(rest.len() == 2 && rest[0] == 30 && rest[1] == 40);
+    let rest_default_count: Span<i32> = subspan(values, 2);
+    verify(rest_default_count.len() == 2 && rest_default_count[0] == 30 &&
+           rest_default_count[1] == 40);
+    let empty_tail: Span<i32> = subspan(values, 4);
+    verify(empty(empty_tail));
+    let invalid_tail: Span<i32> = subspan(values, 5);
+    verify(empty(invalid_tail));
+    let clamped: Span<i32> = subspan(values, 3, 99);
+    verify(clamped.len() == 1 && clamped[0] == 40);
+    let invalid: Span<i32> = subspan(values, 5, -1);
+    verify(empty(invalid));
+
+    let empty_values: Span<i32> = [];
+    verify(empty(empty_values));
+    let empty_prefix: Span<i32> = first(empty_values, 1);
+    let empty_suffix: Span<i32> = last(empty_values, 1);
+    let empty_rest: Span<i32> = subspan(empty_values, 0, -1);
+    let empty_default_rest: Span<i32> = subspan(empty_values, 0);
+    verify(empty_prefix.len() == 0);
+    verify(empty_suffix.len() == 0);
+    verify(empty_rest.len() == 0);
+    verify(empty_default_rest.len() == 0);
+    verify(values[0] == 10 && values[3] == 40);
+}
+
+#[test]
+fn test_span_size_bytes_and_safe_get() {
+    let integers: Span<i32> = [8, 13, 21];
+    verify_eq_i64(12, size_bytes(integers));
+    let byte_values: span<u8> = [1, 2, 3, 4];
+    verify_eq_i64(4, size_bytes(byte_values));
+
+    let found: option<i32> = get(integers, 1);
+    verify(found.is_some() && found.unwrap() == 13);
+    let negative: option<i32> = get(integers, -1);
+    let past_end: option<i32> = get(integers, 3);
+    verify(negative.is_none() && past_end.is_none());
+    let empty_values: Span<i32> = [];
+    let absent: option<i32> = get(empty_values, 0);
+    verify(absent.is_none());
+    let first_value: option<i32> = front(integers);
+    let last_value: option<i32> = back(integers);
+    verify(first_value.is_some() && first_value.unwrap() == 8);
+    verify(last_value.is_some() && last_value.unwrap() == 21);
+    let no_front: option<i32> = front(empty_values);
+    let no_back: option<i32> = back(empty_values);
+    verify(no_front.is_none() && no_back.is_none());
 }

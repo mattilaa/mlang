@@ -1,0 +1,35 @@
+# `std::flat_multiset`
+
+`std::flat_multiset` is a C++23-inspired sorted associative multiset backed by
+contiguous Mlang list storage. Unlike `std::flat_set`, it retains equivalent
+keys. Reads use binary search, and updates rebuild the backing list.
+
+```mlang
+mod std::flat_multiset;
+use std::flat_multiset::FlatMultiSet;
+
+var scores: FlatMultiSet<i32> = FlatMultiSet<i32>::new();
+scores.insert(8);
+scores.insert(3);
+scores.insert(8);
+let repeated: i64 = scores.count(8); // 2
+```
+
+`FlatMultiSet<T>` and its lowercase alias `flat_multiset<T>` provide `new`,
+`len`, `is_empty`, `lower_bound`, `upper_bound`, `equal_range`, `count`,
+`contains`, `insert`, `insert_range`, `replace`, `remove`, `clear`, and
+`key_at`. Free `erase_if` and `merge` functions provide bulk operations.
+`lower_bound_by`, `upper_bound_by`, `equal_range_by`, `count_by`, `contains_by`,
+and `remove_by` accept heterogeneous query types and bidirectional strict
+ordering comparators.
+
+Ordering equivalence means neither key is less than the other. `insert` places
+a new equivalent key after existing equivalent keys. `remove(key)` erases every
+equivalent key and returns the number removed. `replace` accepts nondecreasing
+input and leaves the container unchanged on invalid order. `merge(destination,
+source)` transfers every source key, including duplicates, into the destination
+and leaves the source empty.
+
+`key_at` requires an index in `[0, len())`. Lookup is O(log n); updates are
+O(n) or worse due to list reconstruction, so this container best suits compact,
+read-heavy multisets.

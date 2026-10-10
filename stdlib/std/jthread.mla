@@ -1,0 +1,57 @@
+/// \file jthread.mla
+/// \brief Stop-aware thread ownership helpers.
+///
+/// `jthread` combines a native thread with a stop source. Start the worker by
+/// passing a retained `StopToken` to the compiler-lowered `thread::spawn`;
+/// the worker polls and closes that token before returning. `close` requests
+/// stop, joins, and releases the source, mirroring `std::jthread`'s shutdown
+/// order. Mlang has no implicit destructors, so close is explicit.
+
+mod std::thread;
+mod std::stop_token;
+use std::thread::thread;
+use std::thread::join;
+use std::stop_token::StopSource;
+use std::stop_token::StopToken;
+
+/// @brief A joinable thread with a cooperative stop source.
+pub struct jthread {
+    var worker: thread;
+    var source: StopSource;
+};
+
+impl jthread {
+    /// @brief Create an owner from a spawned worker and its stop source.
+    /// The source's token must have been passed to the worker.
+    pub fn from_parts(worker: thread, source: StopSource) -> jthread {
+        return jthread { worker: worker, source: source };
+    }
+
+    /// @brief Get a retained token for the worker or another observer.
+    pub fn token(self: jthread) -> result<StopToken, str8> {
+        return self.source.token();
+    }
+
+    /// @brief Request cooperative shutdown; true only on the first request.
+    pub fn request_stop(self: jthread) -> result<bool, str8> {
+        return self.source.request_stop();
+    }
+
+    /// @brief Join without requesting stop.
+    pub fn join(self: jthread) -> i32 {
+        let status: i32 = join(self.worker);
+        let released: i32 = self.source.close();
+        if released != 0 { return released; }
+        return status;
+    }
+
+    /// @brief Request stop, join the worker, then release the source.
+    pub fn close(self: jthread) -> i32 {
+        let requested: result<bool, str8> = self.source.request_stop();
+        let status: i32 = join(self.worker);
+        let released: i32 = self.source.close();
+        if requested.is_err() { return -1; }
+        if released != 0 { return released; }
+        return status;
+    }
+}

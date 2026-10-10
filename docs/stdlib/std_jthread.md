@@ -1,0 +1,46 @@
+# std::jthread
+
+Module file: `stdlib/std/jthread.mla`
+
+`jthread` combines a native worker handle with a cooperative `StopSource`. As
+Mlang does not currently run implicit destructors, explicitly call `close()`
+to request stop, join the worker, and release the source. `join()` waits without
+requesting stop and releases the source after the worker exits.
+
+```mlang
+mod std::thread;
+mod std::stop_token;
+mod std::jthread;
+use std::thread::*;
+use std::stop_token::{StopSource, StopToken};
+use std::jthread::jthread;
+
+fn worker(token: StopToken) -> i32 {
+    while true {
+        let requested: result<bool, str8> = token.stop_requested();
+        if requested.is_err() { break; }
+        if requested.unwrap() { break; }
+    }
+    token.close();
+    return 0;
+}
+
+fn main() -> i32 {
+    let made: result<StopSource, str8> = StopSource::new();
+    if made.is_err() { return 1; }
+    let source: StopSource = made.unwrap();
+    let token_result: result<StopToken, str8> = source.token();
+    if token_result.is_err() { source.close(); return 1; }
+    let token: StopToken = token_result.unwrap();
+    let worker_thread: std::thread::thread = thread::spawn(worker, token);
+    let owner: jthread = jthread::from_parts(worker_thread, source);
+    return owner.close();
+}
+```
+
+`thread::spawn` is compiler-lowered for named workers and accepts `StopToken`
+as a handle argument. Treat that token as transferred to the worker and close
+it there; the `jthread` keeps the source alive until `join()` or `close()`.
+`request_stop()` is cooperative and does not interrupt a
+blocked operation, so use an appropriate wakeup for workers waiting on I/O or
+synchronization.

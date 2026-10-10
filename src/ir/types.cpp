@@ -133,6 +133,13 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
         {
             return getLLVMTypeFromNode(bindIt->second);
         }
+        auto functionBindIt =
+            activeFunctionTypeBindings.find(structRef->structName);
+        if(functionBindIt != activeFunctionTypeBindings.end() &&
+           functionBindIt->second)
+        {
+            return getLLVMTypeFromNode(functionBindIt->second);
+        }
 
         // Generic container type args in generic structs can surface as
         // textual struct refs (e.g. "list<i64>"). Reparse and resolve.

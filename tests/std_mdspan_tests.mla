@@ -1,0 +1,199 @@
+mod std::mdspan;
+mod std::testing;
+
+use std::mdspan::Mdspan;
+use std::mdspan::from_extents;
+use std::mdspan::from_extents_left;
+use std::mdspan::from_extents_strided;
+use std::testing::verify;
+use std::testing::verify_eq_i32;
+use std::testing::verify_eq_i64;
+
+#[test]
+fn test_mdspan_rank_extents_and_row_major_access() {
+    let data: list<i32> = [10, 20, 30, 40, 50, 60];
+    let shape: list<i64> = [2, 3];
+    let maybe_view: option<Mdspan<i32>> = from_extents(data, shape);
+    verify(maybe_view.is_some());
+    var view: Mdspan<i32> = maybe_view.unwrap();
+    verify_eq_i64(2, view.rank());
+    verify_eq_i64(6, view.size());
+    verify_eq_i64(6, view.required_span_size());
+    verify(!view.is_empty());
+    verify(view.is_unique() && view.is_exhaustive() && view.is_strided());
+
+    let row_stride: option<i64> = view.stride(0);
+    let column_stride: option<i64> = view.stride(1);
+    let invalid_stride: option<i64> = view.stride(2);
+    verify(row_stride.is_some() && row_stride.unwrap() == 3);
+    verify(column_stride.is_some() && column_stride.unwrap() == 1);
+    verify(invalid_stride.is_none());
+
+    let rows: option<i64> = view.extent(0);
+    let columns: option<i64> = view.extent(1);
+    let negative_dimension: option<i64> = view.extent(-1);
+    let past_dimension: option<i64> = view.extent(2);
+    verify(rows.is_some() && rows.unwrap() == 2);
+    verify(columns.is_some() && columns.unwrap() == 3);
+    verify(negative_dimension.is_none() && past_dimension.is_none());
+
+    let first: list<i64> = [0, 0];
+    let last: list<i64> = [1, 2];
+    let wrong_rank: list<i64> = [1];
+    let before_start: list<i64> = [-1, 0];
+    let past_extent: list<i64> = [2, 0];
+    let first_value: option<i32> = view.get(first);
+    let last_value: option<i32> = view.get(last);
+    let first_offset: option<i64> = view.linear_index(first);
+    let last_offset: option<i64> = view.linear_index(last);
+    let wrong_rank_value: option<i32> = view.get(wrong_rank);
+    let before_start_value: option<i32> = view.get(before_start);
+    let past_extent_value: option<i32> = view.get(past_extent);
+    let wrong_rank_offset: option<i64> = view.linear_index(wrong_rank);
+    let before_start_offset: option<i64> = view.linear_index(before_start);
+    let past_extent_offset: option<i64> = view.linear_index(past_extent);
+    verify(first_value.is_some() && first_value.unwrap() == 10);
+    verify(last_value.is_some() && last_value.unwrap() == 60);
+    verify(first_offset.is_some() && first_offset.unwrap() == 0);
+    verify(last_offset.is_some() && last_offset.unwrap() == 5);
+    verify(wrong_rank_offset.is_none());
+    verify(before_start_offset.is_none());
+    verify(past_extent_offset.is_none());
+    verify(wrong_rank_value.is_none());
+    verify(before_start_value.is_none());
+    verify(past_extent_value.is_none());
+    let update_indices: list<i64> = [1, 1];
+    verify(view.set(update_indices, 55));
+    let updated_value: option<i32> = view.get(update_indices);
+    verify(updated_value.is_some() && updated_value.unwrap() == 55);
+    verify(data[4] == 50);
+    verify(!view.set(wrong_rank, 99));
+    verify(!view.set(before_start, 99));
+    verify(!view.set(past_extent, 99));
+}
+
+#[test]
+fn test_mdspan_rejects_mismatched_and_negative_extents() {
+    let data: list<i32> = [1, 2, 3, 4];
+    let short_shape: list<i64> = [2, 3];
+    let negative_shape: list<i64> = [2, -2];
+    let short_view: option<Mdspan<i32>> = from_extents(data, short_shape);
+    let negative_view: option<Mdspan<i32>> =
+        from_extents(data, negative_shape);
+    verify(short_view.is_none());
+    verify(negative_view.is_none());
+
+    let empty_data: list<i32> = [];
+    let zero_shape: list<i64> = [2, 0, 3];
+    let maybe_empty: option<Mdspan<i32>> = from_extents(empty_data, zero_shape);
+    verify(maybe_empty.is_some());
+    let empty_view: Mdspan<i32> = maybe_empty.unwrap();
+    verify(empty_view.is_empty() && empty_view.size() == 0);
+}
+
+#[test]
+fn test_mdspan_rank_zero_scalar() {
+    let scalar_data: list<i32> = [42];
+    let scalar_shape: list<i64> = [];
+    let maybe_scalar: option<Mdspan<i32>> =
+        from_extents(scalar_data, scalar_shape);
+    verify(maybe_scalar.is_some());
+    let scalar: Mdspan<i32> = maybe_scalar.unwrap();
+    let no_indices: list<i64> = [];
+    let value: option<i32> = scalar.get(no_indices);
+    verify(scalar.rank() == 0 && scalar.size() == 1);
+    verify(value.is_some());
+    verify_eq_i32(42, value.unwrap());
+}
+
+#[test]
+fn test_mdspan_layout_left_column_major_access() {
+    let data: list<i32> = [10, 20, 30, 40, 50, 60];
+    let shape: list<i64> = [2, 3];
+    let maybe_left: option<Mdspan<i32>> = from_extents_left(data, shape);
+    verify(maybe_left.is_some());
+    var left: Mdspan<i32> = maybe_left.unwrap();
+    let row_stride: option<i64> = left.stride(0);
+    let column_stride: option<i64> = left.stride(1);
+    verify(row_stride.is_some() && row_stride.unwrap() == 1);
+    verify(column_stride.is_some() && column_stride.unwrap() == 2);
+    verify(left.required_span_size() == 6 && left.is_unique() &&
+           left.is_exhaustive() && left.is_strided());
+    let first_column_second_row: list<i64> = [1, 0];
+    let second_column_first_row: list<i64> = [0, 1];
+    let last: list<i64> = [1, 2];
+    let a: option<i32> = left.get(first_column_second_row);
+    let b: option<i32> = left.get(second_column_first_row);
+    let c: option<i32> = left.get(last);
+    let mapped_offset: option<i64> = left.linear_index(first_column_second_row);
+    verify(a.is_some() && a.unwrap() == 20);
+    verify(b.is_some() && b.unwrap() == 30);
+    verify(c.is_some() && c.unwrap() == 60);
+    verify(mapped_offset.is_some() && mapped_offset.unwrap() == 1);
+    let update_indices: list<i64> = [0, 1];
+    verify(left.set(update_indices, 33));
+    let updated: option<i32> = left.get(update_indices);
+    verify(updated.is_some() && updated.unwrap() == 33 && data[2] == 30);
+    verify(data[0] == 10 && data[1] == 20 && data[2] == 30);
+
+    let bad_shape: list<i64> = [2, 4];
+    let invalid: option<Mdspan<i32>> = from_extents_left(data, bad_shape);
+    verify(invalid.is_none());
+}
+
+#[test]
+fn test_mdspan_layout_stride_custom_mapping() {
+    let data: list<i32> = [10, 20, 30, 40, 50, 60, 70, 80];
+    let shape: list<i64> = [2, 3];
+    let strides: list<i64> = [3, 2];
+    let maybe_view: option<Mdspan<i32>> =
+        from_extents_strided(data, shape, strides);
+    verify(maybe_view.is_some());
+    var view: Mdspan<i32> = maybe_view.unwrap();
+    verify(view.rank() == 2 && view.size() == 6);
+    verify(view.required_span_size() == 8);
+    verify(view.is_unique() && !view.is_exhaustive() && view.is_strided());
+    let row_stride: option<i64> = view.stride(0);
+    let column_stride: option<i64> = view.stride(1);
+    verify(row_stride.is_some() && row_stride.unwrap() == 3);
+    verify(column_stride.is_some() && column_stride.unwrap() == 2);
+    let a_indices: list<i64> = [1, 0];
+    let b_indices: list<i64> = [0, 1];
+    let c_indices: list<i64> = [1, 2];
+    let a: option<i32> = view.get(a_indices);
+    let b: option<i32> = view.get(b_indices);
+    let c: option<i32> = view.get(c_indices);
+    let c_offset: option<i64> = view.linear_index(c_indices);
+    verify(a.is_some() && a.unwrap() == 40);
+    verify(b.is_some() && b.unwrap() == 30);
+    verify(c.is_some() && c.unwrap() == 80);
+    verify(c_offset.is_some() && c_offset.unwrap() == 7);
+    let update_indices: list<i64> = [1, 1];
+    verify(view.set(update_indices, 88));
+    let updated: option<i32> = view.get(update_indices);
+    verify(updated.is_some() && updated.unwrap() == 88);
+}
+
+#[test]
+fn test_mdspan_layout_stride_rejects_invalid_mappings() {
+    let data: list<i32> = [1, 2, 3, 4];
+    let shape: list<i64> = [2, 2];
+    let overlap: list<i64> = [1, 1];
+    let zero_stride: list<i64> = [0, 1];
+    let wrong_rank: list<i64> = [1];
+    let short_buffer: list<i32> = [1, 2, 3];
+    let valid_shape: list<i64> = [2, 2];
+    let valid_strides: list<i64> = [2, 1];
+    let overlapping: option<Mdspan<i32>> =
+        from_extents_strided(data, shape, overlap);
+    let zero: option<Mdspan<i32>> =
+        from_extents_strided(data, shape, zero_stride);
+    let wrong: option<Mdspan<i32>> =
+        from_extents_strided(data, shape, wrong_rank);
+    let too_short: option<Mdspan<i32>> =
+        from_extents_strided(short_buffer, valid_shape, valid_strides);
+    verify(overlapping.is_none());
+    verify(zero.is_none());
+    verify(wrong.is_none());
+    verify(too_short.is_none());
+}

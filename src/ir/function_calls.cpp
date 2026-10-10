@@ -1,4 +1,5 @@
 #include "ir.h"
+#include "ir/ast_analysis.h"
 #include "ir/common.h"
 #include "llvm_compat.h"
 #include "module.h"
@@ -10,6 +11,7 @@
 #include <pthread.h>
 
 using mlang::ir_detail::common::Helpers;
+using mlang::ir_detail::ast_analysis::collect_used_idents;
 
 llvm::Value* CodeGenerator::generateVariadicGenericCall(
     FunctionCallNode* node, FunctionDefNode* functionTemplate)
@@ -101,16 +103,32 @@ llvm::Value* CodeGenerator::generateVariadicGenericCall(
         if(auto* patternGeneric =
                dynamic_cast<GenericStructTypeRefNode*>(pattern))
         {
-            auto* concreteGeneric =
-                dynamic_cast<GenericStructTypeRefNode*>(concrete);
-            if(!concreteGeneric ||
-               patternGeneric->structName != concreteGeneric->structName ||
-               patternGeneric->typeArgs.size() != concreteGeneric->typeArgs.size())
+            const std::vector<TypeNode*>* concreteArgs = nullptr;
+            if(auto* concreteGeneric =
+                   dynamic_cast<GenericStructTypeRefNode*>(concrete))
+            {
+                if(patternGeneric->structName == concreteGeneric->structName)
+                    concreteArgs = &concreteGeneric->typeArgs;
+            }
+            else if(auto* concreteName =
+                        dynamic_cast<StructTypeRefNode*>(concrete))
+            {
+                auto genericName =
+                    mangledToGenericName.find(concreteName->structName);
+                auto typeArgs =
+                    monomorphizedTypeArgs.find(concreteName->structName);
+                if(genericName != mangledToGenericName.end() &&
+                   genericName->second == patternGeneric->structName &&
+                   typeArgs != monomorphizedTypeArgs.end())
+                    concreteArgs = &typeArgs->second;
+            }
+            if(!concreteArgs || patternGeneric->typeArgs.size() !=
+                                    concreteArgs->size())
                 return false;
             for(size_t i = 0; i < patternGeneric->typeArgs.size(); ++i)
                 if(!bindType(patternGeneric->typeArgs[i],
-                             concreteGeneric->typeArgs[i]))
-                    return false;
+                             (*concreteArgs)[i]))
+                return false;
             return true;
         }
         return typeMangle(pattern) == typeMangle(concrete);
@@ -315,30 +333,243 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         if(auto* patternGeneric =
                dynamic_cast<GenericStructTypeRefNode*>(pattern))
         {
-            auto* concreteGeneric =
-                dynamic_cast<GenericStructTypeRefNode*>(concrete);
-            if(!concreteGeneric ||
-               patternGeneric->structName != concreteGeneric->structName ||
-               patternGeneric->typeArgs.size() !=
-                   concreteGeneric->typeArgs.size())
+            const std::vector<TypeNode*>* concreteArgs = nullptr;
+            if(auto* concreteGeneric =
+                   dynamic_cast<GenericStructTypeRefNode*>(concrete))
+            {
+                if(patternGeneric->structName == concreteGeneric->structName)
+                    concreteArgs = &concreteGeneric->typeArgs;
+            }
+            else if(auto* concreteName =
+                        dynamic_cast<StructTypeRefNode*>(concrete))
+            {
+                auto genericName =
+                    mangledToGenericName.find(concreteName->structName);
+                auto typeArgs =
+                    monomorphizedTypeArgs.find(concreteName->structName);
+                if(genericName != mangledToGenericName.end() &&
+                   genericName->second == patternGeneric->structName &&
+                   typeArgs != monomorphizedTypeArgs.end())
+                    concreteArgs = &typeArgs->second;
+            }
+            if(!concreteArgs || patternGeneric->typeArgs.size() !=
+                                    concreteArgs->size())
                 return false;
             for(size_t i = 0; i < patternGeneric->typeArgs.size(); ++i)
                 if(!bindType(patternGeneric->typeArgs[i],
-                             concreteGeneric->typeArgs[i]))
-                    return false;
+                             (*concreteArgs)[i]))
+                return false;
             return true;
         }
         return typeMangle(pattern) == typeMangle(concrete);
     };
 
+    // Closure parameters are intentionally represented as opaque pointers in
+    // the generic argument list. When the function's return type contains an
+    // otherwise-unbound type parameter (for example list<Output> in
+    // ranges::transform), infer that parameter from the closure's return
+    // expression. Keep this local to overload probing: callback parameters
+    // must not leak into the enclosing function's variable scopes.
+    auto inferClosureResult = [&](ClosureNode* closure) -> TypeNode* {
+        if(!closure || !closure->body)
+            return nullptr;
+        std::map<std::string, TypeNode*> parametersByName;
+        if(closure->parameters)
+            for(auto* parameter : closure->parameters->parameters)
+                if(parameter && parameter->type)
+                    parametersByName[parameter->name] = parameter->type;
+
+        std::function<TypeNode*(ExpressionNode*)> inferClosureExpr =
+            [&](ExpressionNode* expr) -> TypeNode* {
+            if(!expr)
+                return nullptr;
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(expr))
+            {
+                auto found = parametersByName.find(identifier->name);
+                if(found != parametersByName.end())
+                    return cloneTypeNode(found->second);
+                return inferExpressionTypeNode(expr, functionTemplate->line);
+            }
+            if(auto* binary = dynamic_cast<BinaryOpNode*>(expr))
+            {
+                switch(binary->op)
+                {
+                    case BinaryOpNode::OP_LT:
+                    case BinaryOpNode::OP_GT:
+                    case BinaryOpNode::OP_LE:
+                    case BinaryOpNode::OP_GE:
+                    case BinaryOpNode::OP_EQ:
+                    case BinaryOpNode::OP_NE:
+                    case BinaryOpNode::OP_AND:
+                    case BinaryOpNode::OP_OR:
+                        return new TypeNode(TypeNode::TYPE_BOOL);
+                    default:
+                        break;
+                }
+                TypeNode* left = inferClosureExpr(binary->left);
+                TypeNode* right = inferClosureExpr(binary->right);
+                if(left && (left->kind == TypeNode::TYPE_STR8 ||
+                            left->kind == TypeNode::TYPE_STR16 ||
+                            left->kind == TypeNode::TYPE_STRING))
+                    return left;
+                if(right && (right->kind == TypeNode::TYPE_DOUBLE ||
+                             right->kind == TypeNode::TYPE_FLOAT))
+                    return right;
+                return left ? left : right;
+            }
+            if(auto* cast = dynamic_cast<CastExpressionNode*>(expr))
+                return new TypeNode(cast->targetType);
+            if(dynamic_cast<BoolLiteralNode*>(expr))
+                return new TypeNode(TypeNode::TYPE_BOOL);
+            if(dynamic_cast<IntLiteralNode*>(expr))
+                return new TypeNode(TypeNode::TYPE_I64);
+            if(dynamic_cast<FloatLiteralNode*>(expr))
+                return new TypeNode(TypeNode::TYPE_FLOAT);
+            if(dynamic_cast<DoubleLiteralNode*>(expr))
+                return new TypeNode(TypeNode::TYPE_DOUBLE);
+            if(dynamic_cast<StringLiteralNode*>(expr) ||
+               dynamic_cast<FormatNode*>(expr))
+                return new TypeNode(TypeNode::TYPE_STR8);
+            return inferExpressionTypeNode(expr, functionTemplate->line);
+        };
+
+        TypeNode* result = nullptr;
+        for(auto* statement : closure->body->statements)
+        {
+            auto* ret = dynamic_cast<ReturnNode*>(statement);
+            if(!ret || !ret->expression)
+                continue;
+            TypeNode* returned = inferClosureExpr(ret->expression);
+            if(!returned)
+                return nullptr;
+            if(result && typeMangle(result) != typeMangle(returned))
+                return nullptr;
+            result = returned;
+        }
+        return result;
+    };
+
     for(size_t i = 0; i < arguments.size(); ++i)
     {
-        TypeNode* concrete =
-            inferExpressionTypeNode(arguments[i], functionTemplate->line);
+        TypeNode* concrete = nullptr;
+        TypeNode* parameterType =
+            functionTemplate->parameters->parameters[i]->type;
+        if(auto* reference = dynamic_cast<ReferenceTypeNode*>(parameterType))
+        {
+            // Address-of expressions infer as pointer types, but generic
+            // reference parameters bind against the referenced value type.
+            // Validate the explicit borrow here just as we do for variadic
+            // generic functions, then infer from its operand. Immutable
+            // references also accept ordinary values, preserving the usual
+            // implicit shared-borrow behavior.
+            auto* borrow = dynamic_cast<UnaryOpNode*>(arguments[i]);
+            const bool correctBorrow = borrow &&
+                (reference->isMutable
+                     ? borrow->op == UnaryOpNode::OP_ADDR_MUT
+                     : borrow->op == UnaryOpNode::OP_ADDR);
+            if(correctBorrow)
+            {
+                concrete = inferExpressionTypeNode(borrow->operand,
+                                                   functionTemplate->line);
+            }
+            else if(reference->isMutable)
+            {
+                return false;
+            }
+            else
+            {
+                concrete = inferExpressionTypeNode(arguments[i],
+                                                   functionTemplate->line);
+            }
+        }
+        // A named inline closure is not a normal local value: it lives in
+        // closureVariables and is expanded into the generic specialization.
+        // Resolve it here before ordinary identifier inference, otherwise
+        // overload probing can diagnose the closure name as an unknown local.
+        else
+        {
+            bool isBoundClosure =
+                dynamic_cast<ClosureNode*>(arguments[i]) != nullptr;
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(arguments[i]))
+                isBoundClosure = closureVariables.count(identifier->name) != 0;
+            if(isBoundClosure)
+                concrete = new PointerTypeNode(new TypeNode(TypeNode::TYPE_VOID));
+            else
+                concrete = inferExpressionTypeNode(arguments[i],
+                                                   functionTemplate->line);
+        }
         if(!concrete ||
-           !bindType(functionTemplate->parameters->parameters[i]->type,
-                     concrete))
+           !bindType(parameterType, concrete))
             return false;
+    }
+
+    auto bindUnboundReturnType = [&](TypeNode* pattern,
+                                     TypeNode* concrete) -> bool {
+        // Prefer structural matching when the callback result has the same
+        // shape as the generic function's return type (for example
+        // result<Output, E> in expected::and_then). Only fall back to binding
+        // the first unbound parameter for APIs such as ranges::transform,
+        // where the callback returns an element but the function returns a
+        // container of that element.
+        auto savedBindings = bindings;
+        if(bindType(pattern, concrete))
+            return true;
+        bindings = std::move(savedBindings);
+
+        std::function<bool(TypeNode*)> bindFirst = [&](TypeNode* current) {
+            if(!current)
+                return false;
+            if(auto* name = dynamic_cast<StructTypeRefNode*>(current))
+            {
+                if(typeParamNames.count(name->structName) &&
+                   bindings.count(name->structName) == 0)
+                {
+                    bindings[name->structName] = cloneTypeNode(concrete);
+                    return true;
+                }
+                return false;
+            }
+            if(auto* list = dynamic_cast<GenericListTypeNode*>(current))
+                return bindFirst(list->elementType);
+            if(auto* array = dynamic_cast<ArrayTypeNode*>(current))
+                return bindFirst(array->elementType);
+            if(auto* multi = dynamic_cast<MultiArrayTypeNode*>(current))
+                return bindFirst(multi->elementType);
+            if(auto* pointer = dynamic_cast<PointerTypeNode*>(current))
+                return bindFirst(pointer->elementType);
+            if(auto* reference = dynamic_cast<ReferenceTypeNode*>(current))
+                return bindFirst(reference->elementType);
+            if(auto* tuple = dynamic_cast<TupleTypeNode*>(current))
+                if(tuple->elementTypes)
+                    for(auto* element : tuple->elementTypes->types)
+                        if(bindFirst(element))
+                            return true;
+            if(auto* map = dynamic_cast<MapTypeNode*>(current))
+                return bindFirst(map->valueType);
+            if(auto* generic =
+                   dynamic_cast<GenericStructTypeRefNode*>(current))
+                for(auto* argument : generic->typeArgs)
+                    if(bindFirst(argument))
+                        return true;
+            return false;
+        };
+        return bindFirst(pattern);
+    };
+    for(size_t i = 0; i < arguments.size(); ++i)
+    {
+        ClosureNode* closure = dynamic_cast<ClosureNode*>(arguments[i]);
+        if(auto* identifier = dynamic_cast<IdentifierNode*>(arguments[i]))
+        {
+            auto found = closureVariables.find(identifier->name);
+            if(found != closureVariables.end())
+                closure = found->second;
+        }
+        if(!closure)
+            continue;
+        TypeNode* closureResult = inferClosureResult(closure);
+        if(closureResult)
+            bindUnboundReturnType(functionTemplate->returnType,
+                                  closureResult);
     }
     return true;
 }
@@ -413,6 +644,82 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
         specialized->isInline = functionTemplate->isInline;
         specialized->isInlineAlways = functionTemplate->isInlineAlways;
         specialized->isInlineNever = functionTemplate->isInlineNever;
+        specialized->boundClosureParameters =
+            functionTemplate->boundClosureParameters;
+        specialized->boundClosureCaptureAliases =
+            functionTemplate->boundClosureCaptureAliases;
+        specialized->boundClosureCaptureTypes =
+            functionTemplate->boundClosureCaptureTypes;
+        specialized->boundClosureConstCaptures =
+            functionTemplate->boundClosureConstCaptures;
+        specialized->closureSpecializationKey =
+            functionTemplate->closureSpecializationKey;
+        static std::map<ClosureNode*, size_t> closureSpecializationIds;
+        static size_t nextClosureSpecializationId = 0;
+        for(size_t i = 0; i < call->arguments.size(); ++i)
+        {
+            ClosureNode* closure =
+                dynamic_cast<ClosureNode*>(call->arguments[i]);
+            if(auto* identifier =
+                   dynamic_cast<IdentifierNode*>(call->arguments[i]))
+            {
+                auto closureIt = closureVariables.find(identifier->name);
+                if(closureIt != closureVariables.end())
+                    closure = closureIt->second;
+            }
+            if(closure)
+            {
+                const std::string& parameterName =
+                    functionTemplate->parameters->parameters[i]->name;
+                specialized->boundClosureParameters[parameterName] = closure;
+                std::set<std::string> usedNames;
+                if(closure->body)
+                    for(auto* statement : closure->body->statements)
+                        collect_used_idents(statement, usedNames);
+                if(closure->parameters)
+                    for(auto* closureParameter :
+                        closure->parameters->parameters)
+                        usedNames.erase(closureParameter->name);
+                size_t captureIndex = 0;
+                for(const auto& usedName : usedNames)
+                {
+                    if(globalNamedValues.count(usedName) ||
+                       namedValues.count(usedName) == 0 ||
+                       variableTypes.count(usedName) == 0)
+                        continue;
+                    TypeNode* capturedType = getLValueType(
+                        new IdentifierNode(usedName), call->line);
+                    if(!capturedType)
+                        continue;
+                    const std::string hiddenName =
+                        "__closure_capture_" + std::to_string(i) + "_" +
+                        std::to_string(captureIndex++);
+                    specialized->boundClosureCaptureAliases[parameterName]
+                        [usedName] = hiddenName;
+                    specialized->boundClosureCaptureTypes[parameterName]
+                        [usedName] = cloneTypeNode(capturedType);
+                    if(constantVariables.count(usedName))
+                        specialized->boundClosureConstCaptures[parameterName]
+                            .insert(usedName);
+                    specializedParameters->parameters.push_back(
+                        new ParameterNode(
+                            new PointerTypeNode(cloneTypeNode(capturedType)),
+                                          hiddenName));
+                }
+                if(!specialized->closureSpecializationKey.empty())
+                    specialized->closureSpecializationKey += "_";
+                auto closureId = closureSpecializationIds.find(closure);
+                if(closureId == closureSpecializationIds.end())
+                {
+                    closureId = closureSpecializationIds
+                                    .emplace(closure,
+                                             ++nextClosureSpecializationId)
+                                    .first;
+                }
+                specialized->closureSpecializationKey +=
+                    std::to_string(closureId->second);
+            }
+        }
         for(const auto& binding : bindings)
             specialized->concreteTypeBindings[binding.first] =
                 cloneTypeNode(binding.second);
@@ -1159,7 +1466,12 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             auto savedEnumVariableTypes = enumVariableTypes;
             auto savedListElementTypes = listElementTypes;
             auto savedMapKeyValueTypes = mapKeyValueTypes;
+            auto savedTupleElementTypes = tupleElementTypes;
             auto savedPointerElementTypes = pointerElementTypes;
+            auto savedArrayCapacities = arrayCapacities;
+            auto savedMultiarrayMutability = multiarrayMutability;
+            auto savedClosureCaptureReferenceAliases =
+                closureCaptureReferenceAliases;
 
             auto restoreInlineState = [&]()
             {
@@ -1171,8 +1483,81 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 enumVariableTypes = savedEnumVariableTypes;
                 listElementTypes = savedListElementTypes;
                 mapKeyValueTypes = savedMapKeyValueTypes;
+                tupleElementTypes = savedTupleElementTypes;
                 pointerElementTypes = savedPointerElementTypes;
+                arrayCapacities = savedArrayCapacities;
+                multiarrayMutability = savedMultiarrayMutability;
+                closureCaptureReferenceAliases =
+                    savedClosureCaptureReferenceAliases;
             };
+
+            auto captureAliases = closureCaptureAliases.find(node->name);
+            if(captureAliases != closureCaptureAliases.end())
+            {
+                for(const auto& capture : captureAliases->second)
+                {
+                    const std::string& capturedName = capture.first;
+                    const std::string& hiddenName = capture.second;
+                    auto hiddenValue = namedValues.find(hiddenName);
+                    if(hiddenValue == namedValues.end())
+                        continue;
+                    llvm::Type* capturePointerType =
+                        llvm::cast<llvm::AllocaInst>(hiddenValue->second)
+                            ->getAllocatedType();
+                    llvm::Value* captureAddress = builder.CreateLoad(
+                        capturePointerType, hiddenValue->second,
+                        capturedName + ".capture");
+                    TypeNode* capturedType =
+                        closureCaptureTypes[node->name][capturedName];
+                    if(!capturedType)
+                        continue;
+                    namedValues[capturedName] = captureAddress;
+                    closureCaptureReferenceAliases.insert(capturedName);
+                    auto captureDepth = variableScopeDepth.find(hiddenName);
+                    if(captureDepth != variableScopeDepth.end())
+                        variableScopeDepth[capturedName] = captureDepth->second;
+                    if(capturedType)
+                    {
+                        variableTypes[capturedName] = capturedType->kind;
+                        if(auto* structType =
+                               dynamic_cast<StructTypeRefNode*>(capturedType))
+                            structVariableTypes[capturedName] =
+                                structType->structName;
+                        if(auto* listType =
+                               dynamic_cast<GenericListTypeNode*>(capturedType))
+                        {
+                            variableTypes[capturedName] = TypeNode::TYPE_LIST;
+                            listElementTypes[capturedName] =
+                                listType->elementType;
+                        }
+                        if(auto* mapType =
+                               dynamic_cast<MapTypeNode*>(capturedType))
+                        {
+                            variableTypes[capturedName] = TypeNode::TYPE_MAP;
+                            mapKeyValueTypes[capturedName] =
+                                {mapType->keyType, mapType->valueType};
+                        }
+                        if(auto* tupleType =
+                               dynamic_cast<TupleTypeNode*>(capturedType))
+                        {
+                            variableTypes[capturedName] = TypeNode::TYPE_TUPLE;
+                            tupleElementTypes[capturedName] =
+                                tupleType->elementTypes->types;
+                        }
+                        if(auto* pointerType =
+                               dynamic_cast<PointerTypeNode*>(capturedType))
+                        {
+                            variableTypes[capturedName] = TypeNode::TYPE_PTR;
+                            pointerElementTypes[capturedName] =
+                                pointerType->elementType;
+                        }
+                    }
+                    if(closureConstCaptures[node->name].count(capturedName))
+                        constantVariables.insert(capturedName);
+                    else
+                        constantVariables.erase(capturedName);
+                }
+            }
 
             // Bind lambda arguments to local parameter variables.
             for(size_t i = 0; i < expectedArgs; ++i)
@@ -1298,6 +1683,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             loopBreakBlocks.clear();
             loopContinueBlocks.clear();
 
+            InlineClosureReturnState closureReturn;
+            closureReturn.exitBlock = llvm::BasicBlock::Create(
+                context, "lambda.exit", builder.GetInsertBlock()->getParent());
+            inlineClosureReturnStates.push_back(&closureReturn);
             enterCleanupScope();
             if(closure->body)
             {
@@ -1311,11 +1700,21 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
             exitCleanupScope();
 
+            if(builder.GetInsertBlock() &&
+               !mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
+                builder.CreateBr(closureReturn.exitBlock);
+            inlineClosureReturnStates.pop_back();
+            builder.SetInsertPoint(closureReturn.exitBlock);
+
             loopBreakBlocks = std::move(savedBreak);
             loopContinueBlocks = std::move(savedContinue);
             restoreInlineState();
             activeInlineClosures.erase(node->name);
-            return nullptr; // inline closures return void
+            if(closureReturn.resultStorage)
+                return builder.CreateLoad(
+                    closureReturn.resultStorage->getAllocatedType(),
+                    closureReturn.resultStorage, "lambda.result");
+            return nullptr; // inline closures without a value return are void
         }
     }
 
@@ -1761,18 +2160,60 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         llvm::Function* callee = info.function;
         if(!callee)
             continue;
+        bool boundClosuresMatch = true;
+        if(info.node)
+        {
+            for(const auto& boundClosure : info.node->boundClosureParameters)
+            {
+                size_t parameterIndex = 0;
+                while(parameterIndex <
+                          info.node->parameters->parameters.size() &&
+                      info.node->parameters->parameters[parameterIndex]->name !=
+                          boundClosure.first)
+                    ++parameterIndex;
+                if(parameterIndex >= node->arguments.size())
+                {
+                    boundClosuresMatch = false;
+                    break;
+                }
+                ClosureNode* actualClosure = dynamic_cast<ClosureNode*>(
+                    node->arguments[parameterIndex]);
+                if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                       node->arguments[parameterIndex]))
+                {
+                    auto closureIt = closureVariables.find(identifier->name);
+                    if(closureIt != closureVariables.end())
+                        actualClosure = closureIt->second;
+                }
+                if(actualClosure != boundClosure.second)
+                {
+                    boundClosuresMatch = false;
+                    break;
+                }
+            }
+        }
+        if(!boundClosuresMatch)
+            continue;
         size_t expectedArgs = callee->arg_size();
         size_t actualArgs = argVals.size();
+        size_t hiddenCaptureCount = 0;
+        if(info.node)
+            for(const auto& closureCaptures :
+                info.node->boundClosureCaptureAliases)
+                hiddenCaptureCount += closureCaptures.second.size();
+        if(hiddenCaptureCount > expectedArgs)
+            continue;
+        const size_t sourceParameterCount = expectedArgs - hiddenCaptureCount;
         bool isVarArg = callee->isVarArg();
 
-        if(!isVarArg && expectedArgs != actualArgs)
+        if(!isVarArg && sourceParameterCount != actualArgs)
             continue;
-        if(isVarArg && actualArgs < expectedArgs)
+        if(isVarArg && actualArgs < sourceParameterCount)
             continue;
 
         int totalCost = 0;
         bool ok = true;
-        for(size_t i = 0; i < expectedArgs; ++i)
+        for(size_t i = 0; i < sourceParameterCount; ++i)
         {
             if(info.node && info.node->parameters &&
                i < info.node->parameters->parameters.size())
@@ -1887,19 +2328,51 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     llvm::Function* callee = best->function;
     size_t expectedArgs = callee->arg_size();
     bool isVarArg = callee->isVarArg();
+    size_t hiddenCaptureCount = 0;
+    if(best->node)
+        for(const auto& closureCaptures :
+            best->node->boundClosureCaptureAliases)
+            hiddenCaptureCount += closureCaptures.second.size();
+    const size_t sourceParameterCount = expectedArgs - hiddenCaptureCount;
 
-    if(isVarArg && argVals.size() < expectedArgs)
+    if(isVarArg && argVals.size() < sourceParameterCount)
     {
         reportError(node->line,
                     "function '" + node->name + "' requires at least " +
-                        std::to_string(expectedArgs) + " argument(s), but " +
+                        std::to_string(sourceParameterCount) +
+                        " argument(s), but " +
                         std::to_string(argVals.size()) + " provided");
         return nullptr;
     }
 
+    std::vector<llvm::Value*> callArgVals = argVals;
+    if(best->node)
+    {
+        for(const auto& closureCaptures :
+            best->node->boundClosureCaptureAliases)
+        {
+            for(const auto& capture : closureCaptures.second)
+            {
+                auto captured = namedValues.find(capture.first);
+                if(captured == namedValues.end())
+                {
+                    reportError(
+                        node->line,
+                        "cannot pass captured variable '" + capture.first +
+                            "' to generic closure specialization");
+                    return nullptr;
+                }
+                llvm::Value* captureValue = captured->second;
+                if(!captureValue)
+                    return nullptr;
+                callArgVals.push_back(captureValue);
+            }
+        }
+    }
+
     std::vector<llvm::Value*> args;
     unsigned paramIdx = 0;
-    for(auto* argValIn : argVals)
+    for(auto* argValIn : callArgVals)
     {
         llvm::Value* argVal = argValIn;
         if(paramIdx < expectedArgs)
@@ -2115,6 +2588,11 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     auto savedLoopContinue = loopContinueBlocks;
     auto savedModule = currentModule;
     auto savedClosureVars = closureVariables;
+    auto savedClosureCaptureAliases = closureCaptureAliases;
+    auto savedClosureCaptureTypes = closureCaptureTypes;
+    auto savedClosureConstCaptures = closureConstCaptures;
+    auto savedClosureCaptureReferenceAliases =
+        closureCaptureReferenceAliases;
     auto savedActiveInline = activeInlineClosures;
 
     // Initialise a fresh scope for the closure body
@@ -2122,6 +2600,10 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     constantVariables.clear();
     movedVariables.clear();
     closureVariables.clear();
+    closureCaptureAliases.clear();
+    closureCaptureTypes.clear();
+    closureConstCaptures.clear();
+    closureCaptureReferenceAliases.clear();
     activeInlineClosures.clear();
     pointerBorrowTarget.clear();
     pointerKnownNull.clear();
@@ -2181,6 +2663,11 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     loopContinueBlocks = std::move(savedLoopContinue);
     currentModule = std::move(savedModule);
     closureVariables = std::move(savedClosureVars);
+    closureCaptureAliases = std::move(savedClosureCaptureAliases);
+    closureCaptureTypes = std::move(savedClosureCaptureTypes);
+    closureConstCaptures = std::move(savedClosureConstCaptures);
+    closureCaptureReferenceAliases =
+        std::move(savedClosureCaptureReferenceAliases);
     activeInlineClosures = std::move(savedActiveInline);
     builder.restoreIP(savedIP);
 

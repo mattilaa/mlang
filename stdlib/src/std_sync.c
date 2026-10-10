@@ -50,6 +50,49 @@ typedef struct
     unsigned char* items;
 } mlang_sync_spsc_t;
 
+typedef struct
+{
+    _Atomic int64_t value;
+    pthread_mutex_t wait_mu;
+    pthread_cond_t wait_cv;
+} mlang_sync_atomic_i64_t;
+
+typedef struct
+{
+    atomic_flag flag;
+} mlang_sync_atomic_flag_t;
+
+typedef struct
+{
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    int64_t count;
+} mlang_sync_latch_t;
+
+typedef struct
+{
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    int64_t expected;
+    int64_t remaining;
+    int64_t phase;
+} mlang_sync_barrier_t;
+
+typedef struct
+{
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    int64_t count;
+    int64_t maximum;
+} mlang_sync_semaphore_t;
+
+typedef struct
+{
+    _Atomic uint32_t references;
+    _Atomic uint32_t sources;
+    _Atomic int requested;
+} mlang_stop_state_t;
+
 static void set_error(const char* msg)
 {
     if(!msg)
@@ -67,6 +110,160 @@ static void set_errno_error(const char* prefix)
 static void clear_error(void)
 {
     g_last_error[0] = '\0';
+}
+
+int64_t __mlang_std_sync_stop_new(void)
+{
+    mlang_stop_state_t* state = calloc(1, sizeof(*state));
+    if(!state)
+    {
+        set_error("std::stop_token: out of memory");
+        return 0;
+    }
+    atomic_init(&state->references, 1);
+    atomic_init(&state->sources, 1);
+    atomic_init(&state->requested, 0);
+    clear_error();
+    return (int64_t)(intptr_t)state;
+}
+
+int __mlang_std_sync_stop_release(int64_t handle);
+
+int __mlang_std_sync_stop_retain(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    uint32_t current = atomic_load_explicit(&state->references, memory_order_relaxed);
+    for(;;)
+    {
+        if(current == 0 || current == UINT32_MAX)
+        {
+            set_error("std::stop_token: reference count unavailable");
+            return -1;
+        }
+        if(atomic_compare_exchange_weak_explicit(&state->references, &current, current + 1,
+                                                 memory_order_relaxed, memory_order_relaxed))
+            break;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_stop_source_retain(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    if(__mlang_std_sync_stop_retain(handle) != 0) return -1;
+    uint32_t current = atomic_load_explicit(&state->sources, memory_order_relaxed);
+    for(;;)
+    {
+        if(current == 0 || current == UINT32_MAX)
+        {
+            (void)__mlang_std_sync_stop_release(handle);
+            set_error("std::stop_token: source count unavailable");
+            return -1;
+        }
+        if(atomic_compare_exchange_weak_explicit(&state->sources, &current, current + 1,
+                                                 memory_order_acq_rel, memory_order_relaxed))
+            break;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_stop_release(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    uint32_t current = atomic_load_explicit(&state->references, memory_order_relaxed);
+    for(;;)
+    {
+        if(current == 0)
+        {
+            set_error("std::stop_token: reference count already zero");
+            return -1;
+        }
+        if(atomic_compare_exchange_weak_explicit(&state->references, &current, current - 1,
+                                                 memory_order_acq_rel, memory_order_relaxed))
+            break;
+    }
+    if(current == 1) free(state);
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_stop_source_release(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    uint32_t current = atomic_load_explicit(&state->sources, memory_order_relaxed);
+    for(;;)
+    {
+        if(current == 0)
+        {
+            set_error("std::stop_token: source count already zero");
+            return -1;
+        }
+        if(atomic_compare_exchange_weak_explicit(&state->sources, &current, current - 1,
+                                                 memory_order_acq_rel, memory_order_relaxed))
+            break;
+    }
+    return __mlang_std_sync_stop_release(handle);
+}
+
+int __mlang_std_sync_stop_request(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    int previous = atomic_exchange_explicit(&state->requested, 1, memory_order_acq_rel);
+    clear_error();
+    return previous == 0 ? 1 : 0;
+}
+
+int __mlang_std_sync_stop_requested(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    int requested = atomic_load_explicit(&state->requested, memory_order_acquire);
+    clear_error();
+    return requested ? 1 : 0;
+}
+
+int __mlang_std_sync_stop_possible(int64_t handle)
+{
+    mlang_stop_state_t* state = (mlang_stop_state_t*)(intptr_t)handle;
+    if(!state)
+    {
+        set_error("std::stop_token: invalid handle");
+        return -1;
+    }
+    uint32_t sources = atomic_load_explicit(&state->sources, memory_order_acquire);
+    clear_error();
+    return sources != 0 ? 1 : 0;
 }
 
 int64_t __mlang_std_sync_spsc_new(int64_t capacity, int64_t item_size)
@@ -137,6 +334,857 @@ void __mlang_std_sync_spsc_free(int64_t handle)
     if(!q) return;
     free(q->items);
     free(q);
+}
+
+static int atomic_order_from_int(int order, memory_order* out)
+{
+    if(!out) return 0;
+    switch(order)
+    {
+        case 0: *out = memory_order_relaxed; return 1;
+        case 1: *out = memory_order_consume; return 1;
+        case 2: *out = memory_order_acquire; return 1;
+        case 3: *out = memory_order_release; return 1;
+        case 4: *out = memory_order_acq_rel; return 1;
+        case 5: *out = memory_order_seq_cst; return 1;
+        default: return 0;
+    }
+}
+
+static mlang_sync_atomic_i64_t* atomic_i64_from_handle(int64_t handle)
+{
+    return (mlang_sync_atomic_i64_t*)(intptr_t)handle;
+}
+
+static int atomic_i64_validate(int64_t handle, int order, memory_order* memory_order_out)
+{
+    if(!atomic_i64_from_handle(handle))
+    {
+        set_error("std::sync AtomicI64: invalid handle");
+        return 0;
+    }
+    if(!atomic_order_from_int(order, memory_order_out))
+    {
+        set_error("std::sync AtomicI64: invalid memory order");
+        return 0;
+    }
+    return 1;
+}
+
+int64_t __mlang_std_sync_atomic_i64_new(int64_t initial)
+{
+    mlang_sync_atomic_i64_t* value = malloc(sizeof(*value));
+    if(!value)
+    {
+        set_error("std::sync AtomicI64: out of memory");
+        return 0;
+    }
+    atomic_init(&value->value, initial);
+    int rc = pthread_mutex_init(&value->wait_mu, NULL);
+    if(rc != 0)
+    {
+        free(value);
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: mutex init: %s", strerror(rc));
+        return 0;
+    }
+    rc = pthread_cond_init(&value->wait_cv, NULL);
+    if(rc != 0)
+    {
+        (void)pthread_mutex_destroy(&value->wait_mu);
+        free(value);
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: condition init: %s", strerror(rc));
+        return 0;
+    }
+    clear_error();
+    return (int64_t)(intptr_t)value;
+}
+
+int __mlang_std_sync_atomic_i64_load(int64_t handle, int order, int64_t* output)
+{
+    memory_order mo;
+    if(!output)
+    {
+        set_error("std::sync AtomicI64: null output");
+        return -1;
+    }
+    if(!atomic_i64_validate(handle, order, &mo)) return -1;
+    if(mo == memory_order_release || mo == memory_order_acq_rel)
+    {
+        set_error("std::sync AtomicI64: invalid load memory order");
+        return -1;
+    }
+    *output = atomic_load_explicit(&atomic_i64_from_handle(handle)->value, mo);
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_atomic_i64_store(int64_t handle, int64_t value, int order)
+{
+    memory_order mo;
+    if(!atomic_i64_validate(handle, order, &mo)) return -1;
+    if(mo == memory_order_consume || mo == memory_order_acquire || mo == memory_order_acq_rel)
+    {
+        set_error("std::sync AtomicI64: invalid store memory order");
+        return -1;
+    }
+    atomic_store_explicit(&atomic_i64_from_handle(handle)->value, value, mo);
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_atomic_i64_wait(int64_t handle, int64_t old_value,
+                                      int order)
+{
+    memory_order mo;
+    if(!atomic_i64_validate(handle, order, &mo)) return -1;
+    if(mo == memory_order_release || mo == memory_order_acq_rel)
+    {
+        set_error("std::sync AtomicI64: invalid wait memory order");
+        return -1;
+    }
+
+    mlang_sync_atomic_i64_t* value = atomic_i64_from_handle(handle);
+    int rc = pthread_mutex_lock(&value->wait_mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: wait mutex lock: %s", strerror(rc));
+        return -1;
+    }
+    while(atomic_load_explicit(&value->value, mo) == old_value)
+    {
+        rc = pthread_cond_wait(&value->wait_cv, &value->wait_mu);
+        if(rc != 0)
+        {
+            (void)pthread_mutex_unlock(&value->wait_mu);
+            (void)snprintf(g_last_error, sizeof(g_last_error),
+                           "std::sync AtomicI64: wait: %s", strerror(rc));
+            return -1;
+        }
+    }
+    rc = pthread_mutex_unlock(&value->wait_mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: wait mutex unlock: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+static int atomic_i64_notify(int64_t handle, int all)
+{
+    memory_order ignored;
+    if(!atomic_i64_validate(handle, 5, &ignored)) return -1;
+    mlang_sync_atomic_i64_t* value = atomic_i64_from_handle(handle);
+    int rc = pthread_mutex_lock(&value->wait_mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: notify mutex lock: %s", strerror(rc));
+        return -1;
+    }
+    rc = all ? pthread_cond_broadcast(&value->wait_cv) :
+               pthread_cond_signal(&value->wait_cv);
+    int unlock_rc = pthread_mutex_unlock(&value->wait_mu);
+    if(rc != 0 || unlock_rc != 0)
+    {
+        int error = rc != 0 ? rc : unlock_rc;
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: notify: %s", strerror(error));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_atomic_i64_notify_one(int64_t handle)
+{
+    return atomic_i64_notify(handle, 0);
+}
+
+int __mlang_std_sync_atomic_i64_notify_all(int64_t handle)
+{
+    return atomic_i64_notify(handle, 1);
+}
+
+#define DEFINE_ATOMIC_I64_RMW(name, expression) \
+int __mlang_std_sync_atomic_i64_##name(int64_t handle, int64_t value, int order, int64_t* output) \
+{ \
+    memory_order mo; \
+    if(!output || !atomic_i64_validate(handle, order, &mo)) { \
+        if(!output) set_error("std::sync AtomicI64: null output"); \
+        return -1; \
+    } \
+    *output = (expression); \
+    clear_error(); \
+    return 0; \
+}
+
+DEFINE_ATOMIC_I64_RMW(exchange, atomic_exchange_explicit(&atomic_i64_from_handle(handle)->value, value, mo))
+DEFINE_ATOMIC_I64_RMW(fetch_add, atomic_fetch_add_explicit(&atomic_i64_from_handle(handle)->value, value, mo))
+DEFINE_ATOMIC_I64_RMW(fetch_sub, atomic_fetch_sub_explicit(&atomic_i64_from_handle(handle)->value, value, mo))
+DEFINE_ATOMIC_I64_RMW(fetch_and, atomic_fetch_and_explicit(&atomic_i64_from_handle(handle)->value, value, mo))
+DEFINE_ATOMIC_I64_RMW(fetch_or, atomic_fetch_or_explicit(&atomic_i64_from_handle(handle)->value, value, mo))
+DEFINE_ATOMIC_I64_RMW(fetch_xor, atomic_fetch_xor_explicit(&atomic_i64_from_handle(handle)->value, value, mo))
+
+#undef DEFINE_ATOMIC_I64_RMW
+
+int __mlang_std_sync_atomic_i64_compare_exchange(int64_t handle, int64_t* expected,
+                                                 int64_t desired, int order)
+{
+    memory_order success;
+    if(!expected || !atomic_i64_validate(handle, order, &success))
+    {
+        if(!expected) set_error("std::sync AtomicI64: null expected pointer");
+        return -1;
+    }
+    memory_order failure = success;
+    if(success == memory_order_release) failure = memory_order_relaxed;
+    else if(success == memory_order_acq_rel) failure = memory_order_acquire;
+    int exchanged = atomic_compare_exchange_strong_explicit(
+        &atomic_i64_from_handle(handle)->value, expected, desired, success, failure);
+    clear_error();
+    return exchanged ? 1 : 0;
+}
+
+int __mlang_std_sync_atomic_i64_free(int64_t handle)
+{
+    mlang_sync_atomic_i64_t* value = atomic_i64_from_handle(handle);
+    if(!value)
+    {
+        set_error("std::sync AtomicI64: invalid handle");
+        return -1;
+    }
+    int cond_rc = pthread_cond_destroy(&value->wait_cv);
+    int mutex_rc = pthread_mutex_destroy(&value->wait_mu);
+    if(cond_rc != 0 || mutex_rc != 0)
+    {
+        int error = cond_rc != 0 ? cond_rc : mutex_rc;
+        (void)snprintf(g_last_error, sizeof(g_last_error),
+                       "std::sync AtomicI64: destroy: %s", strerror(error));
+        return -1;
+    }
+    free(value);
+    clear_error();
+    return 0;
+}
+
+static mlang_sync_atomic_flag_t* atomic_flag_from_handle(int64_t handle)
+{
+    return (mlang_sync_atomic_flag_t*)(intptr_t)handle;
+}
+
+int64_t __mlang_std_sync_atomic_flag_new(void)
+{
+    mlang_sync_atomic_flag_t* flag = malloc(sizeof(*flag));
+    if(!flag)
+    {
+        set_error("std::sync AtomicFlag: out of memory");
+        return 0;
+    }
+    atomic_flag_clear(&flag->flag);
+    clear_error();
+    return (int64_t)(intptr_t)flag;
+}
+
+int __mlang_std_sync_atomic_flag_test_and_set(int64_t handle, int order)
+{
+    memory_order mo;
+    if(!atomic_flag_from_handle(handle))
+    {
+        set_error("std::sync AtomicFlag: invalid handle");
+        return -1;
+    }
+    if(!atomic_order_from_int(order, &mo))
+    {
+        set_error("std::sync AtomicFlag: invalid memory order");
+        return -1;
+    }
+    int was_set = atomic_flag_test_and_set_explicit(
+        &atomic_flag_from_handle(handle)->flag, mo);
+    clear_error();
+    return was_set ? 1 : 0;
+}
+
+int __mlang_std_sync_atomic_flag_clear(int64_t handle, int order)
+{
+    memory_order mo;
+    if(!atomic_flag_from_handle(handle))
+    {
+        set_error("std::sync AtomicFlag: invalid handle");
+        return -1;
+    }
+    if(!atomic_order_from_int(order, &mo))
+    {
+        set_error("std::sync AtomicFlag: invalid memory order");
+        return -1;
+    }
+    if(mo == memory_order_consume || mo == memory_order_acquire ||
+       mo == memory_order_acq_rel)
+    {
+        set_error("std::sync AtomicFlag: invalid clear memory order");
+        return -1;
+    }
+    atomic_flag_clear_explicit(&atomic_flag_from_handle(handle)->flag, mo);
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_atomic_flag_free(int64_t handle)
+{
+    mlang_sync_atomic_flag_t* flag = atomic_flag_from_handle(handle);
+    if(!flag)
+    {
+        set_error("std::sync AtomicFlag: invalid handle");
+        return -1;
+    }
+    free(flag);
+    clear_error();
+    return 0;
+}
+
+int64_t __mlang_std_sync_latch_new(int64_t expected)
+{
+    if(expected < 0)
+    {
+        set_error("std::sync Latch: expected count must be non-negative");
+        return 0;
+    }
+    mlang_sync_latch_t* latch = calloc(1, sizeof(*latch));
+    if(!latch)
+    {
+        set_error("std::sync Latch: out of memory");
+        return 0;
+    }
+    int rc = pthread_mutex_init(&latch->mu, NULL);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: mutex init failed: %s", strerror(rc));
+        free(latch);
+        return 0;
+    }
+    rc = pthread_cond_init(&latch->cv, NULL);
+    if(rc != 0)
+    {
+        (void)pthread_mutex_destroy(&latch->mu);
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: condition init failed: %s", strerror(rc));
+        free(latch);
+        return 0;
+    }
+    latch->count = expected;
+    clear_error();
+    return (int64_t)(intptr_t)latch;
+}
+
+int __mlang_std_sync_latch_count_down(int64_t handle, int64_t update)
+{
+    mlang_sync_latch_t* latch = (mlang_sync_latch_t*)(intptr_t)handle;
+    if(!latch)
+    {
+        set_error("std::sync Latch: invalid handle");
+        return -1;
+    }
+    if(update <= 0)
+    {
+        set_error("std::sync Latch: update must be positive");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    if(update > latch->count)
+    {
+        (void)pthread_mutex_unlock(&latch->mu);
+        set_error("std::sync Latch: update exceeds remaining count");
+        return -1;
+    }
+    latch->count -= update;
+    if(latch->count == 0)
+    {
+        rc = pthread_cond_broadcast(&latch->cv);
+        if(rc != 0)
+        {
+            (void)pthread_mutex_unlock(&latch->mu);
+            (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: broadcast failed: %s", strerror(rc));
+            return -1;
+        }
+    }
+    rc = pthread_mutex_unlock(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_latch_try_wait(int64_t handle)
+{
+    mlang_sync_latch_t* latch = (mlang_sync_latch_t*)(intptr_t)handle;
+    if(!latch)
+    {
+        set_error("std::sync Latch: invalid handle");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    int ready = latch->count == 0;
+    rc = pthread_mutex_unlock(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return ready ? 1 : 0;
+}
+
+int __mlang_std_sync_latch_wait(int64_t handle)
+{
+    mlang_sync_latch_t* latch = (mlang_sync_latch_t*)(intptr_t)handle;
+    if(!latch)
+    {
+        set_error("std::sync Latch: invalid handle");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    while(latch->count > 0)
+    {
+        rc = pthread_cond_wait(&latch->cv, &latch->mu);
+        if(rc != 0)
+        {
+            (void)pthread_mutex_unlock(&latch->mu);
+            (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: wait failed: %s", strerror(rc));
+            return -1;
+        }
+    }
+    rc = pthread_mutex_unlock(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_latch_free(int64_t handle)
+{
+    mlang_sync_latch_t* latch = (mlang_sync_latch_t*)(intptr_t)handle;
+    if(!latch)
+    {
+        set_error("std::sync Latch: invalid handle");
+        return -1;
+    }
+    int rc = pthread_cond_destroy(&latch->cv);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: condition destroy failed: %s", strerror(rc));
+        return -1;
+    }
+    rc = pthread_mutex_destroy(&latch->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Latch: mutex destroy failed: %s", strerror(rc));
+        return -1;
+    }
+    free(latch);
+    clear_error();
+    return 0;
+}
+
+int64_t __mlang_std_sync_barrier_new(int64_t expected)
+{
+    if(expected <= 0)
+    {
+        set_error("std::sync Barrier: expected count must be positive");
+        return 0;
+    }
+    mlang_sync_barrier_t* barrier = calloc(1, sizeof(*barrier));
+    if(!barrier)
+    {
+        set_error("std::sync Barrier: out of memory");
+        return 0;
+    }
+    int rc = pthread_mutex_init(&barrier->mu, NULL);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: mutex init failed: %s", strerror(rc));
+        free(barrier);
+        return 0;
+    }
+    rc = pthread_cond_init(&barrier->cv, NULL);
+    if(rc != 0)
+    {
+        (void)pthread_mutex_destroy(&barrier->mu);
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: condition init failed: %s", strerror(rc));
+        free(barrier);
+        return 0;
+    }
+    barrier->expected = expected;
+    barrier->remaining = expected;
+    clear_error();
+    return (int64_t)(intptr_t)barrier;
+}
+
+static int barrier_advance_phase(mlang_sync_barrier_t* barrier)
+{
+    if(barrier->phase == INT64_MAX)
+    {
+        set_error("std::sync Barrier: phase counter exhausted");
+        return 0;
+    }
+    barrier->phase++;
+    barrier->remaining = barrier->expected;
+    int rc = pthread_cond_broadcast(&barrier->cv);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: broadcast failed: %s", strerror(rc));
+        return 0;
+    }
+    return 1;
+}
+
+int64_t __mlang_std_sync_barrier_arrive(int64_t handle, int64_t update)
+{
+    mlang_sync_barrier_t* barrier = (mlang_sync_barrier_t*)(intptr_t)handle;
+    if(!barrier)
+    {
+        set_error("std::sync Barrier: invalid handle");
+        return -1;
+    }
+    if(update <= 0)
+    {
+        set_error("std::sync Barrier: update must be positive");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    if(update > barrier->remaining)
+    {
+        (void)pthread_mutex_unlock(&barrier->mu);
+        set_error("std::sync Barrier: update exceeds remaining arrivals");
+        return -1;
+    }
+    int64_t phase = barrier->phase;
+    if(update == barrier->remaining)
+    {
+        if(!barrier_advance_phase(barrier))
+        {
+            (void)pthread_mutex_unlock(&barrier->mu);
+            return -1;
+        }
+    }
+    else
+    {
+        barrier->remaining -= update;
+    }
+    rc = pthread_mutex_unlock(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return phase;
+}
+
+int64_t __mlang_std_sync_barrier_arrive_and_drop(int64_t handle)
+{
+    mlang_sync_barrier_t* barrier = (mlang_sync_barrier_t*)(intptr_t)handle;
+    if(!barrier)
+    {
+        set_error("std::sync Barrier: invalid handle");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    if(barrier->expected <= 0 || barrier->remaining <= 0)
+    {
+        (void)pthread_mutex_unlock(&barrier->mu);
+        set_error("std::sync Barrier: no participant can arrive and drop");
+        return -1;
+    }
+    if(barrier->remaining == 1 && barrier->phase == INT64_MAX)
+    {
+        (void)pthread_mutex_unlock(&barrier->mu);
+        set_error("std::sync Barrier: phase counter exhausted");
+        return -1;
+    }
+    int64_t phase = barrier->phase;
+    barrier->expected--;
+    barrier->remaining--;
+    if(barrier->remaining == 0 && !barrier_advance_phase(barrier))
+    {
+        (void)pthread_mutex_unlock(&barrier->mu);
+        return -1;
+    }
+    rc = pthread_mutex_unlock(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return phase;
+}
+
+int __mlang_std_sync_barrier_wait(int64_t handle, int64_t phase)
+{
+    mlang_sync_barrier_t* barrier = (mlang_sync_barrier_t*)(intptr_t)handle;
+    if(!barrier)
+    {
+        set_error("std::sync Barrier: invalid handle");
+        return -1;
+    }
+    if(phase < 0)
+    {
+        set_error("std::sync Barrier: invalid phase token");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    if(phase > barrier->phase)
+    {
+        (void)pthread_mutex_unlock(&barrier->mu);
+        set_error("std::sync Barrier: phase token is from the future");
+        return -1;
+    }
+    while(barrier->phase == phase)
+    {
+        rc = pthread_cond_wait(&barrier->cv, &barrier->mu);
+        if(rc != 0)
+        {
+            (void)pthread_mutex_unlock(&barrier->mu);
+            (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: wait failed: %s", strerror(rc));
+            return -1;
+        }
+    }
+    rc = pthread_mutex_unlock(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_barrier_free(int64_t handle)
+{
+    mlang_sync_barrier_t* barrier = (mlang_sync_barrier_t*)(intptr_t)handle;
+    if(!barrier)
+    {
+        set_error("std::sync Barrier: invalid handle");
+        return -1;
+    }
+    int rc = pthread_cond_destroy(&barrier->cv);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: condition destroy failed: %s", strerror(rc));
+        return -1;
+    }
+    rc = pthread_mutex_destroy(&barrier->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync Barrier: mutex destroy failed: %s", strerror(rc));
+        return -1;
+    }
+    free(barrier);
+    clear_error();
+    return 0;
+}
+
+int64_t __mlang_std_sync_semaphore_new(int64_t initial, int64_t maximum)
+{
+    if(maximum <= 0 || initial < 0 || initial > maximum)
+    {
+        set_error("std::sync CountingSemaphore: require 0 <= initial <= positive maximum");
+        return 0;
+    }
+    mlang_sync_semaphore_t* semaphore = calloc(1, sizeof(*semaphore));
+    if(!semaphore)
+    {
+        set_error("std::sync CountingSemaphore: out of memory");
+        return 0;
+    }
+    int rc = pthread_mutex_init(&semaphore->mu, NULL);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: mutex init failed: %s", strerror(rc));
+        free(semaphore);
+        return 0;
+    }
+    rc = pthread_cond_init(&semaphore->cv, NULL);
+    if(rc != 0)
+    {
+        (void)pthread_mutex_destroy(&semaphore->mu);
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: condition init failed: %s", strerror(rc));
+        free(semaphore);
+        return 0;
+    }
+    semaphore->count = initial;
+    semaphore->maximum = maximum;
+    clear_error();
+    return (int64_t)(intptr_t)semaphore;
+}
+
+int __mlang_std_sync_semaphore_acquire(int64_t handle)
+{
+    mlang_sync_semaphore_t* semaphore = (mlang_sync_semaphore_t*)(intptr_t)handle;
+    if(!semaphore)
+    {
+        set_error("std::sync CountingSemaphore: invalid handle");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    while(semaphore->count == 0)
+    {
+        rc = pthread_cond_wait(&semaphore->cv, &semaphore->mu);
+        if(rc != 0)
+        {
+            (void)pthread_mutex_unlock(&semaphore->mu);
+            (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: wait failed: %s", strerror(rc));
+            return -1;
+        }
+    }
+    semaphore->count--;
+    rc = pthread_mutex_unlock(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_semaphore_try_acquire(int64_t handle)
+{
+    mlang_sync_semaphore_t* semaphore = (mlang_sync_semaphore_t*)(intptr_t)handle;
+    if(!semaphore)
+    {
+        set_error("std::sync CountingSemaphore: invalid handle");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    int acquired = semaphore->count > 0;
+    if(acquired) semaphore->count--;
+    rc = pthread_mutex_unlock(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return acquired ? 1 : 0;
+}
+
+int __mlang_std_sync_semaphore_release(int64_t handle, int64_t update)
+{
+    mlang_sync_semaphore_t* semaphore = (mlang_sync_semaphore_t*)(intptr_t)handle;
+    if(!semaphore)
+    {
+        set_error("std::sync CountingSemaphore: invalid handle");
+        return -1;
+    }
+    if(update <= 0)
+    {
+        set_error("std::sync CountingSemaphore: update must be positive");
+        return -1;
+    }
+    int rc = pthread_mutex_lock(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: lock failed: %s", strerror(rc));
+        return -1;
+    }
+    if(update > semaphore->maximum - semaphore->count)
+    {
+        (void)pthread_mutex_unlock(&semaphore->mu);
+        set_error("std::sync CountingSemaphore: release exceeds maximum count");
+        return -1;
+    }
+    semaphore->count += update;
+    rc = pthread_cond_broadcast(&semaphore->cv);
+    if(rc != 0)
+    {
+        (void)pthread_mutex_unlock(&semaphore->mu);
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: broadcast failed: %s", strerror(rc));
+        return -1;
+    }
+    rc = pthread_mutex_unlock(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: unlock failed: %s", strerror(rc));
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_semaphore_free(int64_t handle)
+{
+    mlang_sync_semaphore_t* semaphore = (mlang_sync_semaphore_t*)(intptr_t)handle;
+    if(!semaphore)
+    {
+        set_error("std::sync CountingSemaphore: invalid handle");
+        return -1;
+    }
+    int rc = pthread_cond_destroy(&semaphore->cv);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: condition destroy failed: %s", strerror(rc));
+        return -1;
+    }
+    rc = pthread_mutex_destroy(&semaphore->mu);
+    if(rc != 0)
+    {
+        (void)snprintf(g_last_error, sizeof(g_last_error), "std::sync CountingSemaphore: mutex destroy failed: %s", strerror(rc));
+        return -1;
+    }
+    free(semaphore);
+    clear_error();
+    return 0;
 }
 
 static char* dup_cstr(const char* s)

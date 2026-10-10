@@ -25,6 +25,8 @@ std::string CodeGenerator::functionSignatureKey(FunctionDefNode* node) const
         }
     }
     key += ")";
+    if(!node->closureSpecializationKey.empty())
+        key += "#closure=" + node->closureSpecializationKey;
     return key;
 }
 
@@ -55,6 +57,8 @@ std::string CodeGenerator::functionSymbolName(FunctionDefNode* node) const
             suffix += "_";
         suffix += "vararg";
     }
+    if(!node->closureSpecializationKey.empty())
+        suffix += "_closure_" + node->closureSpecializationKey;
     return node->name + "__" + suffix;
 }
 

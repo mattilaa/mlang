@@ -1,0 +1,58 @@
+# `std::flat_map`
+
+`std::flat_map` provides a sorted associative map backed by contiguous list
+storage. Keys are unique and iteration-by-index is in ascending key order.
+This is an eager Mlang container: insertion and removal rebuild the backing
+list, while lookup uses binary search.
+
+```mlang
+mod std::flat_map;
+use std::flat_map::FlatMap;
+
+var scores: FlatMap<i32, str8> = FlatMap<i32, str8>::new();
+scores.insert(20, "twenty");
+scores.insert(10, "ten");
+let first_key: i32 = scores.key_at(0);       // 10
+let first_value: str8 = scores.value_at(0);  // "ten"
+let score: option<str8> = scores.get(20);
+```
+
+The API includes `len`, `is_empty`, `lower_bound`, `upper_bound`, `equal_range`,
+`contains`, `get`, `insert`, `try_emplace`, `insert_or_assign`, `insert_range`,
+`remove`, `erase_if`, `clear`, `replace`, `merge`, `key_at`, `value_at`,
+`keys(container)`, and `values(container)`.
+`equal_range(key)` returns the half-open index pair `(lower_bound, upper_bound)`;
+it is empty for an absent key and contains one entry for a present key because
+keys are unique. `insert` returns true
+for a new key and false when replacing an existing key's value. `remove`
+returns whether the key existed. Index access requires `0 <= index < len()`.
+`insert_range(entries)` processes entries in order, returns the count of newly
+created distinct keys, and lets the last occurrence of a repeated key determine
+its value.
+`try_emplace(key, value)` inserts only when absent and returns
+`(sorted_index, inserted)`; an existing mapped value remains unchanged.
+`insert_or_assign(key, value)` returns the same shape but replaces the value
+when present. Since Mlang receives values directly, `try_emplace` cannot defer
+construction of its value argument.
+`erase_if(map, predicate)` evaluates the predicate with each key and value,
+retains nonmatching entries in sorted order, and returns the number removed.
+`replace(keys, values)` atomically replaces both ordered sequences after
+checking equal lengths and strictly increasing keys; invalid input returns
+false and leaves the existing contents unchanged.
+`merge(destination, source)` transfers non-colliding entries and returns the
+number transferred. Destination values win on duplicate keys, and the colliding
+entries remain in `source`; both maps stay sorted.
+`keys(container)` and `values(container)` return independent lists in matching
+sorted order, so modifying a returned snapshot does not mutate the map.
+`lower_bound_by`, `upper_bound_by`, `equal_range_by`, `contains_by`, `get_by`,
+and `remove_by` support a query type distinct from the stored key type. The
+bound functions take the relevant comparator direction; the combined lookup
+functions take strict-ordering closures for both `(stored_key, query)` and
+`(query, stored_key)`. Neither comparator ordering the pair defines a match.
+
+Keys must support ordering (`<`) and equality (`==`). Lookup is O(log n);
+insertion and removal are O(n) due to list reconstruction. Merging two maps is
+O(n + m) for `n` destination and `m` source entries. `insert_range` is
+sequential, so inserting `m` entries into an `n`-entry map is O(m(n + m)) in
+the worst case. Prefer this type for small maps or workloads with frequent
+lookup and relatively few updates.

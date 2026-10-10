@@ -1,0 +1,321 @@
+/// ile mdspan.mla
+/// \brief Checked list-backed multidimensional views (C++23 mdspan style).
+///
+/// Mlang's `Mdspan<T>` stores a copied list and runtime extents. It provides
+/// checked row-major or column-major access, but does not claim the non-owning
+/// lifetime or accessor-policy guarantees of C++ `std::mdspan`.
+
+/// @brief Runtime-rank row-major or column-major descriptor over a list.
+pub struct Mdspan<T> {
+    var data: list<T>;
+    var extents: list<i64>;
+    var strides: list<i64>;
+    var logical_size: i64;
+    var required_size: i64;
+};
+
+/// @brief Lowercase C++-style alias for `Mdspan<T>`.
+use type mdspan<T> = Mdspan<T>;
+
+fn mdspan_right_strides(extents: &list<i64>) -> list<i64> {
+    var strides: list<i64> = [];
+    var stride_value: i64 = 1;
+    var dimension: i64 = extents.len();
+    while dimension > 0 {
+        dimension = dimension - 1;
+        strides.push(stride_value);
+        stride_value = stride_value * extents[dimension];
+    }
+    strides.reverse();
+    return strides;
+}
+
+fn mdspan_left_strides(extents: &list<i64>) -> list<i64> {
+    var strides: list<i64> = [];
+    var stride_value: i64 = 1;
+    for dimension in 0..extents.len() {
+        strides.push(stride_value);
+        stride_value = stride_value * extents[dimension];
+    }
+    return strides;
+}
+
+/// @brief Build a row-major shape descriptor when extents match data size.
+/// Negative extents and shape/data size mismatches return `None`. The list
+/// elements and extents are copied, so the object is self-contained.
+generic<T>
+pub fn from_extents(data: &list<T>, extents: &list<i64>) -> option<Mdspan<T>> {
+    let rank: i64 = extents.len();
+    let data_size: i64 = data.len();
+    var has_zero_extent: bool = false;
+    for dimension in 0..rank {
+        let extent_value: i64 = extents[dimension];
+        if extent_value < 0 {
+            return None<Mdspan<T>>();
+        }
+        if extent_value == 0 {
+            has_zero_extent = true;
+        }
+    }
+
+    var expected_size: i64 = 1;
+    if has_zero_extent {
+        expected_size = 0;
+    } else {
+        for dimension in 0..rank {
+            let extent_value: i64 = extents[dimension];
+            // Bound multiplication by the available data length so malformed
+            // shapes cannot overflow the product.
+            if expected_size > data_size / extent_value {
+                return None<Mdspan<T>>();
+            }
+            expected_size = expected_size * extent_value;
+        }
+    }
+
+    if expected_size != data_size {
+        return None<Mdspan<T>>();
+    }
+    var copied_data: list<T> = [];
+    for i in 0..data_size { copied_data.push(data[i]); }
+    var copied_extents: list<i64> = [];
+    for i in 0..rank { copied_extents.push(extents[i]); }
+    let strides: list<i64> = mdspan_right_strides(copied_extents);
+    return Some<Mdspan<T>>(Mdspan<T> {
+        data: copied_data,
+        extents: copied_extents,
+        strides: strides,
+        logical_size: expected_size,
+        required_size: expected_size
+    });
+}
+
+/// @brief Build a column-major descriptor using C++23 `layout_left` indexing.
+/// The data and extents use the same validation and copy behavior as
+/// `from_extents`; only multidimensional index mapping changes.
+generic<T>
+pub fn from_extents_left(data: &list<T>, extents: &list<i64>)
+    -> option<Mdspan<T>> {
+    let validated: option<Mdspan<T>> = from_extents(data, extents);
+    if validated.is_none() {
+        return None<Mdspan<T>>();
+    }
+    var view: Mdspan<T> = validated.unwrap();
+    view.strides = mdspan_left_strides(extents);
+    return Some<Mdspan<T>>(view);
+}
+
+/// @brief Build a descriptor with explicit positive element strides.
+/// This is the C++23 `layout_stride` counterpart. Extents and strides must
+/// have equal rank; the required backing span must fit in `data`, and the
+/// strides must map every logical index tuple to a distinct element.
+/// Additional unused values after the required span are retained in the copy.
+generic<T>
+pub fn from_extents_strided(data: &list<T>, extents: &list<i64>,
+                            strides: &list<i64>) -> option<Mdspan<T>> {
+    let rank: i64 = extents.len();
+    let data_size: i64 = data.len();
+    if strides.len() != rank {
+        return None<Mdspan<T>>();
+    }
+
+    var has_zero_extent: bool = false;
+    for dimension in 0..rank {
+        if extents[dimension] < 0 || strides[dimension] <= 0 {
+            return None<Mdspan<T>>();
+        }
+        if extents[dimension] == 0 {
+            has_zero_extent = true;
+        }
+    }
+
+    var logical_size: i64 = 1;
+    if has_zero_extent {
+        logical_size = 0;
+    } else {
+        for dimension in 0..rank {
+            let extent_value: i64 = extents[dimension];
+            if data_size == 0 || logical_size > data_size / extent_value {
+                return None<Mdspan<T>>();
+            }
+            logical_size = logical_size * extent_value;
+        }
+    }
+
+    var required_size: i64 = 0;
+    if logical_size > 0 {
+        var last_offset: i64 = 0;
+        for dimension in 0..rank {
+            let distance: i64 = extents[dimension] - 1;
+            if distance > 0 {
+                let available: i64 = data_size - 1 - last_offset;
+                if strides[dimension] > available / distance {
+                    return None<Mdspan<T>>();
+                }
+                last_offset = last_offset + distance * strides[dimension];
+            }
+        }
+        required_size = last_offset + 1;
+    }
+
+    // layout_stride requires a unique mapping. Enumerate logical indices in
+    // row-major order, sort their physical offsets, and reject any collision.
+    var offsets: list<i64> = [];
+    for linear_index in 0..logical_size {
+        var remainder: i64 = linear_index;
+        var offset: i64 = 0;
+        var dimension: i64 = rank;
+        while dimension > 0 {
+            dimension = dimension - 1;
+            let extent_value: i64 = extents[dimension];
+            let coordinate: i64 = remainder % extent_value;
+            remainder = remainder / extent_value;
+            offset = offset + coordinate * strides[dimension];
+        }
+        offsets.push(offset);
+    }
+    offsets.sort();
+    for i in 1..offsets.len() {
+        if offsets[i] == offsets[i - 1] {
+            return None<Mdspan<T>>();
+        }
+    }
+
+    var copied_data: list<T> = [];
+    for i in 0..data_size { copied_data.push(data[i]); }
+    var copied_extents: list<i64> = [];
+    for i in 0..rank { copied_extents.push(extents[i]); }
+    var copied_strides: list<i64> = [];
+    for i in 0..rank { copied_strides.push(strides[i]); }
+    return Some<Mdspan<T>>(Mdspan<T> {
+        data: copied_data,
+        extents: copied_extents,
+        strides: copied_strides,
+        logical_size: logical_size,
+        required_size: required_size
+    });
+}
+
+impl<T> Mdspan {
+    /// @brief Return the number of dimensions.
+    pub fn rank(self: Mdspan<T>) -> i64 {
+        return self.extents.len();
+    }
+
+    /// @brief Return the total number of elements.
+    pub fn size(self: Mdspan<T>) -> i64 {
+        return self.logical_size;
+    }
+
+    /// @brief Return whether the descriptor contains zero elements.
+    pub fn is_empty(self: Mdspan<T>) -> bool {
+        return self.logical_size == 0;
+    }
+
+    /// @brief Return the required backing span size for this dense mapping.
+    /// `layout_right` and `layout_left` both cover the complete stored list.
+    pub fn required_span_size(self: Mdspan<T>) -> i64 {
+        return self.required_size;
+    }
+
+    /// @brief Return the element stride of one dimension, or `None` if invalid.
+    pub fn stride(self: Mdspan<T>, dimension: i64) -> option<i64> {
+        let rank: i64 = self.extents.len();
+        if dimension < 0 || dimension >= rank {
+            return None<i64>();
+        }
+        return Some<i64>(self.strides[dimension]);
+    }
+
+    /// @brief Return whether the mapping is one-to-one.
+    pub fn is_unique(self: Mdspan<T>) -> bool {
+        return true;
+    }
+
+    /// @brief Return whether the mapping covers its required span densely.
+    pub fn is_exhaustive(self: Mdspan<T>) -> bool {
+        return self.required_size == self.logical_size;
+    }
+
+    /// @brief All supported mappings expose a stride per dimension.
+    pub fn is_strided(self: Mdspan<T>) -> bool {
+        return true;
+    }
+
+    /// @brief Read an extent, returning `None` for an invalid dimension.
+    pub fn extent(self: Mdspan<T>, dimension: i64) -> option<i64> {
+        if dimension < 0 || dimension >= self.extents.len() {
+            return None<i64>();
+        }
+        return Some<i64>(self.extents[dimension]);
+    }
+
+    /// @brief Map a full-rank coordinate to its backing-list offset.
+    /// Malformed-rank and out-of-bounds coordinates return `None`.
+    pub fn linear_index(self: Mdspan<T>, indices: &list<i64>) -> option<i64> {
+        let rank: i64 = self.extents.len();
+        if indices.len() != rank { return None<i64>(); }
+        var offset: i64 = 0;
+        for dimension in 0..rank {
+            let coordinate: i64 = indices[dimension];
+            let extent_value: i64 = self.extents[dimension];
+            if coordinate < 0 || coordinate >= extent_value {
+                return None<i64>();
+            }
+            offset = offset + coordinate * self.strides[dimension];
+        }
+        if offset < 0 || offset >= self.required_size ||
+           offset >= self.data.len() {
+            return None<i64>();
+        }
+        return Some<i64>(offset);
+    }
+
+    /// @brief Read an element at a full-rank index using the selected layout.
+    /// Wrong-rank or out-of-bounds indices return `None`.
+    pub fn get(self: Mdspan<T>, indices: &list<i64>) -> option<T> {
+        let rank: i64 = self.extents.len();
+        if indices.len() != rank {
+            return None<T>();
+        }
+        var flat_index: i64 = 0;
+        for dimension in 0..rank {
+            let index: i64 = indices[dimension];
+            let extent_value: i64 = self.extents[dimension];
+            if index < 0 || index >= extent_value {
+                return None<T>();
+            }
+            flat_index = flat_index + index * self.strides[dimension];
+        }
+        if flat_index < 0 || flat_index >= self.data.len() {
+            return None<T>();
+        }
+        return Some<T>(self.data[flat_index]);
+    }
+
+    /// @brief Write an element through the mapping when indices are valid.
+    /// The descriptor owns a copy of its source list, so writes do not modify
+    /// the list passed to its constructor.
+    pub fn set(self: &mut Mdspan<T>, indices: &list<i64>, value: T) -> bool {
+        let rank: i64 = self.extents.len();
+        if indices.len() != rank { return false; }
+        var flat_index: i64 = 0;
+        for dimension in 0..rank {
+            let index: i64 = indices[dimension];
+            let extent_value: i64 = self.extents[dimension];
+            if index < 0 || index >= extent_value { return false; }
+            flat_index = flat_index + index * self.strides[dimension];
+        }
+        if flat_index < 0 || flat_index >= self.required_size ||
+           flat_index >= self.data.len() {
+            return false;
+        }
+        var updated: list<T> = [];
+        for i in 0..self.data.len() {
+            if i == flat_index { updated.push(value); }
+            else { updated.push(self.data[i]); }
+        }
+        self.data = updated;
+        return true;
+    }
+}

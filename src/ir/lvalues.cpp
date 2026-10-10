@@ -207,6 +207,9 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         targetType = targetAlloca->getAllocatedType();
     else if(targetGlobal)
         targetType = targetGlobal->getValueType();
+    else if(closureCaptureReferenceAliases.count(node->name))
+        targetType = getLLVMTypeFromNode(
+            getLValueType(new IdentifierNode(node->name), node->line));
     else
     {
         reportError(node->line, "assignment target is not addressable: '" +

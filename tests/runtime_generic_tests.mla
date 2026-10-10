@@ -1,5 +1,14 @@
 mod std::testing;
+mod std::expected;
 use std::testing::verify;
+use std::expected::transform;
+use std::expected::transform_error;
+use std::expected::and_then;
+use std::expected::or_else;
+use std::expected::value_or;
+use std::expected::value_or_else;
+
+var generic_closure_call_count: i32 = 0;
 
 generic<T>
 fn identity(value: T) -> T {
@@ -19,6 +28,46 @@ fn copy_list(values: &list<T>) -> list<T> {
         copied.push(values[i]);
     }
     return copied;
+}
+
+generic<Callback>
+fn invoke_generic_callback(callback: Callback) -> void {
+    callback();
+}
+
+generic<Value, Predicate>
+fn invoke_generic_predicate(value: Value, predicate: Predicate) -> bool {
+    return predicate(value);
+}
+
+generic<Value, Predicate>
+fn count_matching(values: &list<Value>, predicate: Predicate) -> i32 {
+    var count: i32 = 0;
+    let length: i64 = values.len();
+    for i in 0..length {
+        if predicate(values[i]) {
+            count = count + 1;
+        }
+    }
+    return count;
+}
+
+generic<Value, Output, Operation>
+fn generic_transform(values: &list<Value>, operation: Operation) -> list<Output> {
+    var transformed: list<Output> = [];
+    let length: i64 = values.len();
+    for i in 0..length {
+        transformed.push(operation(values[i]));
+    }
+    return transformed;
+}
+
+generic<T>
+fn maybe_identity(include_value: bool, value: T) -> option<T> {
+    if include_value {
+        return Some<T>(value);
+    }
+    return None<T>();
 }
 
 #[test]
@@ -41,4 +90,189 @@ fn test_runtime_generic_functions_specialize_by_argument_type() {
     let copied_words: list<str8> = copy_list(words);
     verify(copied_words.len() == 2);
     verify(copied_words[0] == "modern" && copied_words[1] == "mlang");
+}
+
+#[test]
+fn test_bound_closure_can_be_passed_to_generic_function() {
+    generic_closure_call_count = 0;
+    var local_call_count: i32 = 0;
+    let mark_called = || {
+        generic_closure_call_count = generic_closure_call_count + 1;
+        local_call_count = local_call_count + 1;
+    };
+    invoke_generic_callback(mark_called);
+    verify(generic_closure_call_count == 1);
+    verify(local_call_count == 1);
+}
+
+#[test]
+fn test_bound_predicate_closure_can_be_passed_to_generic_function() {
+    let is_positive = |value: i32| {
+        return value > 0;
+    };
+    verify(invoke_generic_predicate(4, is_positive));
+    verify(!invoke_generic_predicate(-4, is_positive));
+
+    let values: list<i32> = [-3, -1, 0, 2, 5];
+    verify(count_matching(values, is_positive) == 2);
+
+    let threshold: i32 = 3;
+    let above_threshold = |value: i32| {
+        return value > threshold;
+    };
+    verify(count_matching(values, above_threshold) == 1);
+}
+
+#[test]
+fn test_generic_closure_result_infers_output_type() {
+    let values: list<i32> = [1, 3, 2];
+    let to_double = |value: i32| {
+        return f64(value);
+    };
+    let converted: list<f64> = generic_transform(values, to_double);
+    verify(converted.len() == 3);
+    verify(converted[0] == 1.0 && converted[1] == 3.0 && converted[2] == 2.0);
+}
+
+#[test]
+fn test_generic_function_can_construct_option_of_type_parameter() {
+    let value: i32 = 42;
+    let present: option<i32> = maybe_identity(true, value);
+    verify(present.is_some());
+    let present_value: i32 = match present {
+        Some(value) => value,
+        None => 0
+    };
+    verify(present_value == 42);
+
+    let absent: option<str8> = maybe_identity(false, "unused");
+    verify(absent.is_none());
+    let is_absent: bool = match absent {
+        Some(value) => value == "",
+        None => true
+    };
+    verify(is_absent);
+}
+
+#[test]
+fn test_expected_transform_and_error_propagation() {
+    let scale = |value: i32| { return f64(value) * 1.5; };
+    let success: result<i32, str8> = Ok<i32, str8>(8);
+    let converted: result<f64, str8> = transform(success, scale);
+    verify(converted.is_ok());
+    verify(converted.unwrap() == 12.0);
+
+    var calls: i32 = 0;
+    let counted_scale = |value: i32| {
+        calls = calls + 1;
+        return f64(value) * 2.0;
+    };
+    let failure: result<i32, str8> = Err<i32, str8>("no value");
+    let propagated: result<f64, str8> = transform(failure, counted_scale);
+    verify(propagated.is_err());
+    let propagated_error: str8 = propagated.unwrap_err();
+    verify(propagated_error == "no value");
+    verify(calls == 0);
+}
+
+#[test]
+fn test_expected_transform_error_and_value_propagation() {
+    var calls: i32 = 0;
+    let is_broken = |message: str8| {
+        calls = calls + 1;
+        return message == "broken";
+    };
+    let failure: result<i32, str8> = Err<i32, str8>("broken");
+    let converted_error: result<i32, bool> = transform_error(failure, is_broken);
+    verify(converted_error.is_err());
+    verify(converted_error.unwrap_err());
+    verify(calls == 1);
+
+    let success: result<i32, str8> = Ok<i32, str8>(17);
+    let preserved: result<i32, bool> = transform_error(success, is_broken);
+    verify(preserved.is_ok() && preserved.unwrap() == 17);
+    verify(calls == 1);
+}
+
+#[test]
+fn test_expected_value_or_fallbacks() {
+    let success: result<i32, str8> = Ok<i32, str8>(23);
+    let failure: result<i32, str8> = Err<i32, str8>("missing");
+    let zero: i32 = 0;
+    let fallback_value: i32 = 19;
+    verify(value_or(success, zero) == 23);
+    verify(value_or(failure, fallback_value) == 19);
+
+    var calls: i32 = 0;
+    let fallback = || {
+        calls = calls + 1;
+        return i32(31);
+    };
+    verify(value_or_else(success, fallback) == 23);
+    verify(calls == 0);
+    verify(value_or_else(failure, fallback) == 31);
+    verify(calls == 1);
+}
+
+#[test]
+fn test_expected_and_then_chains_success_and_propagates_error() {
+    var calls: i32 = 0;
+    let parse_label = |value: i32| {
+        calls = calls + 1;
+        if value > 0 {
+            let widened: i64 = value;
+            return Ok<i64, str8>(widened * 10);
+        }
+        return Err<i64, str8>("not positive");
+    };
+
+    let success: result<i32, str8> = Ok<i32, str8>(7);
+    let chained_success: result<i64, str8> = and_then(success, parse_label);
+    verify(chained_success.is_ok());
+    verify(chained_success.unwrap() == 70);
+    verify(calls == 1);
+
+    let failure: result<i32, str8> = Err<i32, str8>("upstream");
+    let chained_failure: result<i64, str8> = and_then(failure, parse_label);
+    verify(chained_failure.is_err());
+    let propagated_error: str8 = chained_failure.unwrap_err();
+    verify(propagated_error == "upstream");
+    verify(calls == 1);
+
+    let negative: result<i32, str8> = Ok<i32, str8>(0 - 1);
+    let operation_failure: result<i64, str8> = and_then(negative, parse_label);
+    verify(operation_failure.is_err());
+    let operation_error: str8 = operation_failure.unwrap_err();
+    verify(operation_error == "not positive");
+    verify(calls == 2);
+}
+
+#[test]
+fn test_expected_or_else_recovers_or_preserves_error() {
+    var calls: i32 = 0;
+    let recover_missing = |message: str8| {
+        calls = calls + 1;
+        if message == "missing" {
+            return Ok<i32, bool>(0);
+        }
+        return Err<i32, bool>(true);
+    };
+
+    let failure: result<i32, str8> = Err<i32, str8>("missing");
+    let recovered: result<i32, bool> = or_else(failure, recover_missing);
+    verify(recovered.is_ok());
+    verify(recovered.unwrap() == 0);
+    verify(calls == 1);
+
+    let other_failure: result<i32, str8> = Err<i32, str8>("invalid");
+    let mapped_error: result<i32, bool> = or_else(other_failure, recover_missing);
+    verify(mapped_error.is_err());
+    verify(mapped_error.unwrap_err());
+    verify(calls == 2);
+
+    let success: result<i32, str8> = Ok<i32, str8>(42);
+    let preserved: result<i32, bool> = or_else(success, recover_missing);
+    verify(preserved.is_ok());
+    verify(preserved.unwrap() == 42);
+    verify(calls == 2);
 }
