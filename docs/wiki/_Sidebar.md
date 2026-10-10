@@ -80,6 +80,7 @@
 - [[std::span|Stdlib-Span]]
 - [[std::mdspan|Stdlib-Mdspan]]
 - [[std::flat_map|Stdlib-Flat-Map]]
+- [[std::flat_set|Stdlib-Flat-Set]]
 - [[std::stop_token|Stdlib-Stop-Token]]
 - [[std::jthread|Stdlib-Jthread]]
 - [[std::strbuf|Stdlib-Strbuf]]

@@ -1,0 +1,83 @@
+mod std::testing;
+mod std::flat_set;
+use std::testing::verify;
+use std::flat_set::FlatSet;
+use std::flat_set::erase_if;
+use std::flat_set::merge;
+
+#[test]
+fn test_flat_set_insert_bounds_and_contains() {
+    var values: FlatSet<i32> = FlatSet<i32>::new();
+    verify(values.is_empty());
+    verify(values.insert(4));
+    verify(values.insert(1));
+    verify(values.insert(3));
+    verify(!values.insert(3));
+    verify(values.len() == 3);
+    verify(values.key_at(0) == 1 && values.key_at(1) == 3 &&
+           values.key_at(2) == 4);
+    verify(values.lower_bound(0) == 0 && values.lower_bound(2) == 1 &&
+           values.lower_bound(5) == 3);
+    verify(values.upper_bound(1) == 1 && values.upper_bound(3) == 2 &&
+           values.upper_bound(5) == 3);
+    let present: tuple<i64, i64> = values.equal_range(3);
+    let missing: tuple<i64, i64> = values.equal_range(2);
+    verify(present.0 == 1 && present.1 == 2);
+    verify(missing.0 == 1 && missing.1 == 1);
+    verify(values.contains(3) && !values.contains(2));
+}
+
+#[test]
+fn test_flat_set_insert_range_replace_and_remove() {
+    var values: FlatSet<i32> = FlatSet<i32>::new();
+    values.insert(2);
+    let incoming: list<i32> = [3, 1, 3, 2, 5];
+    verify(values.insert_range(incoming) == 3);
+    verify(values.len() == 4 && values.key_at(0) == 1 &&
+           values.key_at(3) == 5);
+
+    let replacement: list<i32> = [4, 7, 9];
+    verify(values.replace(replacement));
+    verify(values.len() == 3 && values.key_at(0) == 4 &&
+           values.key_at(2) == 9);
+    let unsorted: list<i32> = [4, 9, 7];
+    let duplicate: list<i32> = [4, 7, 7];
+    verify(!values.replace(unsorted) && !values.replace(duplicate));
+    verify(values.len() == 3 && values.key_at(1) == 7);
+
+    verify(values.remove(7) && !values.remove(7));
+    verify(values.len() == 2 && values.key_at(0) == 4 &&
+           values.key_at(1) == 9);
+    values.clear();
+    verify(values.is_empty());
+}
+
+#[test]
+fn test_flat_set_erase_if_preserves_order() {
+    var values: FlatSet<i32> = FlatSet<i32>::new();
+    let input: list<i32> = [5, 2, 4, 1, 3];
+    verify(values.insert_range(input) == 5);
+    let erase_even = |key: i32| { return key % 2 == 0; };
+    verify(erase_if(&mut values, erase_even) == 2);
+    verify(values.len() == 3 && values.key_at(0) == 1 &&
+           values.key_at(1) == 3 && values.key_at(2) == 5);
+    verify(erase_if(&mut values, erase_even) == 0);
+}
+
+#[test]
+fn test_flat_set_merge_transfers_non_colliding_keys() {
+    var destination: FlatSet<i32> = FlatSet<i32>::new();
+    let destination_keys: list<i32> = [1, 3, 6];
+    destination.insert_range(destination_keys);
+    var source: FlatSet<i32> = FlatSet<i32>::new();
+    let source_keys: list<i32> = [2, 3, 4, 6, 7];
+    source.insert_range(source_keys);
+
+    verify(merge(&mut destination, &mut source) == 3);
+    verify(destination.len() == 6 && source.len() == 2);
+    verify(destination.key_at(0) == 1 && destination.key_at(1) == 2 &&
+           destination.key_at(2) == 3 && destination.key_at(3) == 4 &&
+           destination.key_at(4) == 6 && destination.key_at(5) == 7);
+    verify(source.key_at(0) == 3 && source.key_at(1) == 6);
+    verify(merge(&mut destination, &mut source) == 0);
+}
