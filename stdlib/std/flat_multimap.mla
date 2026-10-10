@@ -183,6 +183,103 @@ pub fn values(container: &FlatMultiMap<K, V>) -> list<V> {
     return result;
 }
 
+/// @brief Find the first key not ordered before a heterogeneous query.
+generic<K, V, Query, LessKeyQuery>
+pub fn lower_bound_by(container: &FlatMultiMap<K, V>, query: Query,
+                      less_key_query: LessKeyQuery) -> i64 {
+    var first: i64 = 0;
+    var count: i64 = container.entries.len();
+    while count > 0 {
+        let step: i64 = count / 2;
+        let middle: i64 = first + step;
+        let entry: tuple<K, V> = container.entries[middle];
+        if less_key_query(entry.0, query) {
+            first = middle + 1;
+            count = count - step - 1;
+        } else {
+            count = step;
+        }
+    }
+    return first;
+}
+
+/// @brief Find the first key ordered after a heterogeneous query.
+generic<K, V, Query, LessQueryKey>
+pub fn upper_bound_by(container: &FlatMultiMap<K, V>, query: Query,
+                      less_query_key: LessQueryKey) -> i64 {
+    var first: i64 = 0;
+    var count: i64 = container.entries.len();
+    while count > 0 {
+        let step: i64 = count / 2;
+        let middle: i64 = first + step;
+        let entry: tuple<K, V> = container.entries[middle];
+        if !less_query_key(query, entry.0) {
+            first = middle + 1;
+            count = count - step - 1;
+        } else {
+            count = step;
+        }
+    }
+    return first;
+}
+
+/// @brief Return the half-open index range for a heterogeneous query.
+generic<K, V, Query, LessKeyQuery, LessQueryKey>
+pub fn equal_range_by(container: &FlatMultiMap<K, V>, query: Query,
+                      less_key_query: LessKeyQuery,
+                      less_query_key: LessQueryKey) -> tuple<i64, i64> {
+    return (lower_bound_by(container, query, less_key_query),
+            upper_bound_by(container, query, less_query_key));
+}
+
+/// @brief Count entries matching a heterogeneous query by ordering equivalence.
+generic<K, V, Query, LessKeyQuery, LessQueryKey>
+pub fn count_by(container: &FlatMultiMap<K, V>, query: Query,
+                less_key_query: LessKeyQuery,
+                less_query_key: LessQueryKey) -> i64 {
+    return upper_bound_by(container, query, less_query_key) -
+           lower_bound_by(container, query, less_key_query);
+}
+
+/// @brief Whether any entry has a key equivalent to a heterogeneous query.
+generic<K, V, Query, LessKeyQuery, LessQueryKey>
+pub fn contains_by(container: &FlatMultiMap<K, V>, query: Query,
+                   less_key_query: LessKeyQuery,
+                   less_query_key: LessQueryKey) -> bool {
+    return count_by(container, query, less_key_query, less_query_key) != 0;
+}
+
+/// @brief Return the first mapped value matching a heterogeneous query.
+generic<K, V, Query, LessKeyQuery, LessQueryKey>
+pub fn get_by(container: &FlatMultiMap<K, V>, query: Query,
+              less_key_query: LessKeyQuery,
+              less_query_key: LessQueryKey) -> option<V> {
+    let index: i64 = lower_bound_by(container, query, less_key_query);
+    if index >= container.entries.len() { return None<V>(); }
+    let entry: tuple<K, V> = container.entries[index];
+    if !less_key_query(entry.0, query) && !less_query_key(query, entry.0) {
+        return Some<V>(entry.1);
+    }
+    return None<V>();
+}
+
+/// @brief Erase every entry matching a heterogeneous query; return count.
+generic<K, V, Query, LessKeyQuery, LessQueryKey>
+pub fn remove_by(container: &mut FlatMultiMap<K, V>, query: Query,
+                 less_key_query: LessKeyQuery,
+                 less_query_key: LessQueryKey) -> i64 {
+    let first: i64 = lower_bound_by(container, query, less_key_query);
+    let last: i64 = upper_bound_by(container, query, less_query_key);
+    let removed: i64 = last - first;
+    if removed == 0 { return 0; }
+    var updated: list<tuple<K, V>> = [];
+    let count: i64 = container.entries.len();
+    for i in 0..first { updated.push(container.entries[i]); }
+    for i in last..count { updated.push(container.entries[i]); }
+    container.entries = updated;
+    return removed;
+}
+
 /// @brief Erase entries accepted by a key/value predicate.
 generic<K, V, Predicate>
 pub fn erase_if(container: &mut FlatMultiMap<K, V>, predicate: Predicate)

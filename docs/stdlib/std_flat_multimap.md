@@ -20,6 +20,8 @@ let count: i64 = headers.count(7); // 2
 `contains`, `get`, `insert`, `insert_range`, `replace`, `remove`, `clear`,
 `key_at`, `value_at`, `keys(container)`, and `values(container)`. Free
 `erase_if` and `merge` functions provide bulk operations.
+`lower_bound_by`, `upper_bound_by`, `equal_range_by`, `count_by`, `contains_by`,
+`get_by`, and `remove_by` support query types different from the stored key.
 
 Ordering equivalence means neither key is less than the other. `get(key)`
 returns the first value in the equivalent-key group, or `None`. `insert` places
@@ -31,6 +33,10 @@ and empties the source. `erase_if` passes each key and value to its predicate
 and preserves the remaining order. `keys(container)` and `values(container)`
 return independent lists in matching sorted order and retain duplicate-key
 positions.
+Heterogeneous lookup takes strict-ordering closures for both
+`(stored_key, query)` and `(query, stored_key)`; neither ordering the pair
+defines a match. `get_by` returns the first value in the matching key group,
+and `remove_by` erases the whole group.
 
 Index access requires `0 <= index < len()`. Lookup is O(log n); updates are
 O(n) or worse from list reconstruction, making this best for compact,
