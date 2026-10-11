@@ -690,6 +690,9 @@ fn example() {
   destination)` write the corresponding copy sequence into existing storage,
   stopping at the destination capacity and returning the number written.
   `rotate_copy_to` clamps its split index exactly like `rotate_copy`.
+- `reverse_copy_to_heterogeneous` and `rotate_copy_to_heterogeneous` preserve
+  those bounded sequence semantics while converting source values to an
+  independently typed destination.
 - `rotate_in_place(&mut data, middle)` moves the suffix beginning at `middle`
   before the prefix using at most O(N) swaps and no output allocation. It
   returns the index of the original first element after rotation (the Mlang

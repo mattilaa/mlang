@@ -8899,6 +8899,22 @@ pub fn reverse_copy_to(source: &list<T>, destination: &mut list<T>) -> i64 {
     return written;
 }
 
+/// @brief Copy reversed values into bounded output of another element type.
+/// Source values are converted as written; returns the number written.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn reverse_copy_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var written: i64 = 0;
+    while written < destination_len && written < source_len {
+        destination[written] = source[source_len - written - 1];
+        written = written + 1;
+    }
+    return written;
+}
+
 /// @brief Return a copy rotated left by `amount` positions.
 /// Negative amounts rotate right; amounts are normalized modulo list length.
 /// @ingroup algorithm_ranges
@@ -8959,6 +8975,33 @@ pub fn rotate_copy(data: &list<T>, middle: i64) -> list<T> {
 generic<T>
 pub fn rotate_copy_to(source: &list<T>, middle: i64,
                       destination: &mut list<T>) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var split: i64 = middle;
+    if split < 0 { split = 0; }
+    if split > source_len { split = source_len; }
+    var written: i64 = 0;
+    var source_index: i64 = split;
+    while written < destination_len && source_index < source_len {
+        destination[written] = source[source_index];
+        written = written + 1;
+        source_index = source_index + 1;
+    }
+    source_index = 0;
+    while written < destination_len && source_index < split {
+        destination[written] = source[source_index];
+        written = written + 1;
+        source_index = source_index + 1;
+    }
+    return written;
+}
+
+/// @brief Write a bounded rotated copy to a distinct destination element type.
+/// Clamps `middle`, converts source values, and returns the number written.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn rotate_copy_to_heterogeneous(source: &list<T>, middle: i64,
+    destination: &mut list<Output>) -> i64 {
     let source_len: i64 = source.len();
     let destination_len: i64 = destination.len();
     var split: i64 = middle;
