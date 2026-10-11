@@ -427,6 +427,9 @@ fn example() {
   of elements into existing output storage, stopping at the source or
   destination end and returning the count written. Negative counts write
   nothing; neither list changes length.
+- `copy_to_heterogeneous` and `copy_n_to_heterogeneous` preserve the same
+  bounded behavior while allowing the destination element type to differ from
+  the source type; source values are converted to the destination type.
 - `copy_to_projected` and `copy_n_to_projected` apply a projection before
   writing into an existing destination list. They retain the same bounded
   output and progress semantics as their non-projected counterparts.
@@ -438,10 +441,16 @@ fn example() {
   [`std::ranges::copy_backward`](Stdlib-Module-API).
 - `copy_backward_to_projected` applies a projection while aligning the source
   suffix to the destination end, and returns the copied subrange start indices.
+- `copy_backward_to_heterogeneous` aligns a source suffix to the destination
+  end while converting into a different destination element type.
 - `copy_if_to(source, destination, predicate)` writes matching source values
   into an existing destination and stops when it fills. It returns
   `(consumed, written)` so callers can resume from the exact source position;
   the projected variant evaluates a projection before its predicate.
+- `copy_if_to_heterogeneous` and
+  `copy_if_to_heterogeneous_projected` provide the same bounded progress
+  behavior while converting the original selected values to a distinct output
+  type; the projected form applies its projection only for predicate testing.
 - `remove_copy_to(source, destination, value)` writes nonmatching values into
   an existing destination and reports `(consumed, written)`. Its comparator
   and projected variants have the same bounded-progress behavior.

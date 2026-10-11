@@ -1487,6 +1487,39 @@ pub fn copy_n_to(source: &list<T>, destination: &mut list<T>,
     return copied;
 }
 
+/// @brief Copy into a bounded destination with a distinct element type.
+/// Source values are converted to the destination type; returns the number
+/// written without changing either list's length.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn copy_to_heterogeneous(source: &list<T>,
+                             destination: &mut list<Output>) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var copied: i64 = source_len;
+    if destination_len < copied { copied = destination_len; }
+    for i in 0..copied { destination[i] = source[i]; }
+    return copied;
+}
+
+/// @brief Copy a bounded prefix into a distinct destination element type.
+/// Returns the number written, limited by `count`, source length, and
+/// destination length. Negative counts write nothing.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn copy_n_to_heterogeneous(source: &list<T>,
+                               destination: &mut list<Output>,
+                               count: i64) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var copied: i64 = count;
+    if copied < 0 { copied = 0; }
+    if copied > source_len { copied = source_len; }
+    if copied > destination_len { copied = destination_len; }
+    for i in 0..copied { destination[i] = source[i]; }
+    return copied;
+}
+
 /// @brief Project and copy the common source/destination prefix.
 /// Returns the number of elements written; neither list changes length.
 /// @ingroup algorithm_ranges
@@ -1529,6 +1562,27 @@ pub fn copy_n_to_projected(source: &list<T>,
 generic<T>
 pub fn copy_backward_to(source: &list<T>, destination: &mut list<T>)
     -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    let source_first: i64 = source_len - count;
+    let destination_first: i64 = destination_len - count;
+    var offset: i64 = count;
+    while offset > 0 {
+        offset = offset - 1;
+        destination[destination_first + offset] = source[source_first + offset];
+    }
+    return (source_first, destination_first);
+}
+
+/// @brief Copy a source suffix backward into a distinct destination type.
+/// Values align at the destination end; returns the first source and
+/// destination indices copied. If the destination is shorter, the source
+/// suffix that fits is used.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn copy_backward_to_heterogeneous(
+    source: &list<T>, destination: &mut list<Output>) -> tuple<i64, i64> {
     let source_len: i64 = source.len();
     let destination_len: i64 = destination.len();
     let count: i64 = source_len < destination_len ? source_len : destination_len;
@@ -1831,6 +1885,30 @@ pub fn copy_if_to(source: &list<T>, destination: &mut list<T>,
     return (consumed, written);
 }
 
+/// @brief Copy predicate-matching values into a bounded distinct-type output.
+/// Stops when the source ends or the destination fills; returns
+/// `(consumed, written)`. Original source values are converted to the output
+/// element type.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate>
+pub fn copy_if_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>, predicate: Predicate)
+    -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if predicate(value) {
+            destination[written] = value;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Copy matching elements using a projected predicate into a bounded destination.
 /// Returns `(consumed, written)`; the predicate and projection are each run
 /// once for each consumed source item.
@@ -1838,6 +1916,30 @@ pub fn copy_if_to(source: &list<T>, destination: &mut list<T>,
 generic<T, Predicate, Projection>
 pub fn copy_if_to_projected(
     source: &list<T>, destination: &mut list<T>, predicate: Predicate,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if predicate(projection(value)) {
+            destination[written] = value;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Project for filtering while converting original values to output.
+/// Returns `(consumed, written)` and stops when the source ends or the bounded
+/// destination fills. The projection and predicate run once per consumed
+/// source element.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Projection>
+pub fn copy_if_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>, predicate: Predicate,
     projection: Projection) -> tuple<i64, i64> {
     let source_len: i64 = source.len();
     let destination_len: i64 = destination.len();

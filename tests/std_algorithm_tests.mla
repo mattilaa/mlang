@@ -480,10 +480,13 @@ use std::algorithm::ranges::copy_n_projected;
 use std::algorithm::ranges::copy_n_with_count;
 use std::algorithm::ranges::copy as ranges_copy;
 use std::algorithm::ranges::copy_to;
+use std::algorithm::ranges::copy_to_heterogeneous;
 use std::algorithm::ranges::copy_to_projected;
 use std::algorithm::ranges::copy_n_to;
+use std::algorithm::ranges::copy_n_to_heterogeneous;
 use std::algorithm::ranges::copy_n_to_projected;
 use std::algorithm::ranges::copy_backward_to;
+use std::algorithm::ranges::copy_backward_to_heterogeneous;
 use std::algorithm::ranges::copy_backward_to_projected;
 use std::algorithm::ranges::to_list;
 use std::algorithm::ranges::to_flat_set;
@@ -539,6 +542,8 @@ use std::algorithm::ranges::erase_if;
 use std::algorithm::ranges::erase_if_projected;
 use std::algorithm::ranges::copy_if;
 use std::algorithm::ranges::copy_if_to;
+use std::algorithm::ranges::copy_if_to_heterogeneous;
+use std::algorithm::ranges::copy_if_to_heterogeneous_projected;
 use std::algorithm::ranges::copy_if_to_projected;
 use std::algorithm::ranges::sample as ranges_sample;
 use std::algorithm::ranges::sample_to as ranges_sample_to;
@@ -6711,6 +6716,11 @@ fn test_algorithm_ranges_copy_to_output_range() {
     verify(copy_to(empty, destination) == 0 && destination[0] == 4);
     var empty_destination: list<i32> = [];
     verify(copy_to(source, empty_destination) == 0);
+
+    var wide_destination: list<i64> = [0, 0, 0, 99];
+    verify(copy_to_heterogeneous(source, wide_destination) == 3);
+    verify(wide_destination[0] == 4 && wide_destination[2] == 15 &&
+           wide_destination[3] == 99);
 }
 
 #[test]
@@ -6735,6 +6745,11 @@ fn test_algorithm_ranges_copy_n_to_is_bounded_by_all_ranges() {
     verify(copy_n_to(empty, unchanged, 4) == 0);
     var no_output: list<i32> = [];
     verify(copy_n_to(source, no_output, 4) == 0);
+
+    var wide_prefix: list<i64> = [-1, -1, -1, 99];
+    verify(copy_n_to_heterogeneous(source, wide_prefix, 2) == 2);
+    verify(wide_prefix[0] == 4 && wide_prefix[1] == 8 &&
+           wide_prefix[2] == -1 && wide_prefix[3] == 99);
 }
 
 #[test]
@@ -6791,6 +6806,42 @@ fn test_algorithm_ranges_copy_backward_to_aligns_destination_end() {
     let empty_source: list<i32> = [];
     let no_copy: tuple<i64, i64> = copy_backward_to(empty_source, larger);
     verify(no_copy.0 == 0 && no_copy.1 == 6);
+}
+
+#[test]
+fn test_algorithm_ranges_heterogeneous_bounded_copy_family() {
+    let source: list<i32> = [10, 20, 30, 40, 50, 60];
+    var output: list<f64> = [0.0, 0.0, 0.0, 91.0];
+    verify(copy_to_heterogeneous(source, output) == 4);
+    verify(output[0] == 10.0 && output[2] == 30.0 && output[3] == 40.0);
+
+    var prefix: list<i64> = [-1, -1, -1, 99];
+    verify(copy_n_to_heterogeneous(source, prefix, 2) == 2);
+    verify(prefix[0] == 10 && prefix[1] == 20 &&
+           prefix[2] == -1 && prefix[3] == 99);
+
+    var backward: list<f64> = [90.0, 0.0, 0.0];
+    let backward_positions: tuple<i64, i64> =
+        copy_backward_to_heterogeneous(source, backward);
+    verify(backward_positions.0 == 3 && backward_positions.1 == 0);
+    verify(backward[0] == 40.0 && backward[1] == 50.0 &&
+           backward[2] == 60.0);
+
+    let above_three = |key: i32| { return key > 3; };
+    let tens = |value: i32| { return value / 10; };
+    var filtered: list<f64> = [-1.0, -1.0];
+    let filtered_progress: tuple<i64, i64> =
+        copy_if_to_heterogeneous_projected(
+            source, filtered, above_three, tens);
+    verify(filtered_progress.0 == 5 && filtered_progress.1 == 2);
+    verify(filtered[0] == 40.0 && filtered[1] == 50.0);
+
+    var unprojected: list<i64> = [0, 0, 0];
+    let positive = |value: i32| { return value > 0; };
+    let unprojected_progress: tuple<i64, i64> =
+        copy_if_to_heterogeneous(source, unprojected, positive);
+    verify(unprojected_progress.0 == 3 && unprojected_progress.1 == 3);
+    verify(unprojected[0] == 10 && unprojected[2] == 30);
 }
 
 #[test]
