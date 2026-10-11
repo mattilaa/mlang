@@ -1,0 +1,36 @@
+mod std::compare;
+use std::compare::PartialOrdering;
+use std::compare::compare;
+use std::compare::compare_by;
+use std::compare::is_eq;
+use std::compare::is_neq;
+use std::compare::is_lt;
+use std::compare::is_lteq;
+use std::compare::is_gt;
+use std::compare::is_gteq;
+mod std::math;
+use std::math::sqrt;
+
+fn test_compare_ordering_and_relation_helpers() {
+    let less: PartialOrdering = compare(3, 8);
+    let equal: PartialOrdering = compare(8, 8);
+    let greater: PartialOrdering = compare(9, 8);
+    verify(is_lt(less) && is_lteq(less) && !is_eq(less));
+    verify(is_eq(equal) && is_lteq(equal) && is_gteq(equal));
+    verify(is_gt(greater) && is_gteq(greater) && !is_eq(greater));
+    verify(is_neq(less) && is_neq(greater) && !is_neq(equal));
+}
+
+fn test_compare_custom_order_and_unordered_float() {
+    let descending = |left: i32, right: i32| { return left > right; };
+    verify(compare_by(8, 3, descending) == PartialOrdering::Less);
+    verify(compare_by(3, 8, descending) == PartialOrdering::Greater);
+    verify(compare_by(5, 5, descending) == PartialOrdering::Equivalent);
+
+    let nan: f64 = sqrt(0.0 - 1.0);
+    let unordered: PartialOrdering = compare(nan, 1.0);
+    verify(unordered == PartialOrdering::Unordered);
+    verify(is_neq(unordered));
+    verify(!is_eq(unordered) && !is_lt(unordered) && !is_lteq(unordered));
+    verify(!is_gt(unordered) && !is_gteq(unordered));
+}

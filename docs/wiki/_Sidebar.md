@@ -50,6 +50,7 @@
 - [[std::bitset|Stdlib-Bitset]]
 - [[std::bytes|Stdlib-Bytes]]
 - [[std::chrono|Stdlib-Chrono]]
+- [[std::compare|Stdlib-Compare]]
 - [[std::compiler|Stdlib-Compiler]]
 - [[std::date|Stdlib-Date]]
 - [[std::env|Stdlib-Env]]

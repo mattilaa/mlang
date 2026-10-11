@@ -48,6 +48,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::bitset", "std_bitset.md"),
     ("std::bytes", "std_bytes.md"),
     ("std::chrono", "std_chrono.md"),
+    ("std::compare", "std_compare.md"),
     ("std::compiler", "std_compiler.md"),
     ("std::date", "std_date.md"),
     ("std::env", "std_env.md"),
