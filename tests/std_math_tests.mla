@@ -22,6 +22,25 @@ use std::numbers::inv_sqrt2 as numbers_inv_sqrt2;
 use std::numbers::sqrt3 as numbers_sqrt3;
 use std::numbers::inv_sqrt3 as numbers_inv_sqrt3;
 use std::numbers::phi as numbers_phi;
+use std::numbers::e_f32 as numbers_e_f32;
+use std::numbers::ln2_f32 as numbers_ln2_f32;
+use std::numbers::ln10_f32 as numbers_ln10_f32;
+use std::numbers::log2e_f32 as numbers_log2e_f32;
+use std::numbers::log10e_f32 as numbers_log10e_f32;
+use std::numbers::pi_f32 as numbers_pi_f32;
+use std::numbers::two_pi_f32 as numbers_two_pi_f32;
+use std::numbers::pi_over_2_f32 as numbers_pi_over_2_f32;
+use std::numbers::pi_over_4_f32 as numbers_pi_over_4_f32;
+use std::numbers::inv_pi_f32 as numbers_inv_pi_f32;
+use std::numbers::two_inv_pi_f32 as numbers_two_inv_pi_f32;
+use std::numbers::inv_sqrtpi_f32 as numbers_inv_sqrtpi_f32;
+use std::numbers::two_inv_sqrtpi_f32 as numbers_two_inv_sqrtpi_f32;
+use std::numbers::sqrt2_f32 as numbers_sqrt2_f32;
+use std::numbers::inv_sqrt2_f32 as numbers_inv_sqrt2_f32;
+use std::numbers::sqrt3_f32 as numbers_sqrt3_f32;
+use std::numbers::inv_sqrt3_f32 as numbers_inv_sqrt3_f32;
+use std::numbers::egamma_f32 as numbers_egamma_f32;
+use std::numbers::phi_f32 as numbers_phi_f32;
 use std::numbers::egamma as numbers_egamma;
 use std::numbers::phi as numbers_phi;
 use std::testing::verify;
@@ -76,6 +95,30 @@ fn test_cpp20_numbers_constants() {
     verify(approx_double(numbers_inv_sqrt3(), 0.5773502691896257, eps));
     verify(approx_double(numbers_egamma(), 0.5772156649015329, eps));
     verify(approx_double(numbers_phi(), 1.618033988749895, eps));
+}
+
+#[test]
+fn test_typed_f32_numbers_constants() {
+    let eps: f32 = 0.000001f;
+    verify(approx_float(numbers_e_f32(), f32(2.71828182845904523536), eps));
+    verify(approx_float(numbers_ln2_f32(), f32(0.69314718055994530942), eps));
+    verify(approx_float(numbers_ln10_f32(), f32(2.30258509299404568402), eps));
+    verify(approx_float(numbers_log2e_f32(), f32(1.44269504088896340736), eps));
+    verify(approx_float(numbers_log10e_f32(), f32(0.43429448190325182765), eps));
+    verify(approx_float(numbers_pi_f32(), f32(3.14159265358979323846), eps));
+    verify(approx_float(numbers_two_pi_f32(), f32(6.28318530717958647693), eps));
+    verify(approx_float(numbers_pi_over_2_f32(), f32(1.57079632679489661923), eps));
+    verify(approx_float(numbers_pi_over_4_f32(), f32(0.78539816339744830962), eps));
+    verify(approx_float(numbers_inv_pi_f32(), f32(0.31830988618379067154), eps));
+    verify(approx_float(numbers_two_inv_pi_f32(), f32(0.63661977236758134308), eps));
+    verify(approx_float(numbers_inv_sqrtpi_f32(), f32(0.56418958354775628695), eps));
+    verify(approx_float(numbers_two_inv_sqrtpi_f32(), f32(1.12837916709551257390), eps));
+    verify(approx_float(numbers_sqrt2_f32(), f32(1.41421356237309504880), eps));
+    verify(approx_float(numbers_inv_sqrt2_f32(), f32(0.70710678118654752440), eps));
+    verify(approx_float(numbers_sqrt3_f32(), f32(1.73205080756887729353), eps));
+    verify(approx_float(numbers_inv_sqrt3_f32(), f32(0.57735026918962576451), eps));
+    verify(approx_float(numbers_egamma_f32(), f32(0.57721566490153286061), eps));
+    verify(approx_float(numbers_phi_f32(), f32(1.61803398874989484820), eps));
 }
 
 #[test]

@@ -2,8 +2,9 @@
 
 Module file: `stdlib/std/numbers.mla`
 
-C++20 `<numbers>` constants, exposed as zero-argument `f64` functions. C++23
-additions `egamma()` and `phi()` are included as well. Names use descriptive
+C++20 `<numbers>` constants, exposed as zero-argument `f64` functions with
+parallel `*_f32()` functions for single-precision use. C++23 additions
+`egamma()` and `phi()` are included in both precisions. Names use descriptive
 snake case for fractional constants.
 
 ```mla
@@ -22,3 +23,7 @@ The module provides `e`, `ln2`, `ln10`, `log2e`, `log10e`, `pi`, `two_pi`,
 `two_inv_sqrtpi`, `sqrt2`, `inv_sqrt2`, `sqrt3`, and `inv_sqrt3`. The C++23
 constants `egamma` (Euler–Mascheroni) and `phi` (golden ratio) are also
 available.
+
+Append `_f32` to any constant function name (for example, `pi_f32()` or
+`egamma_f32()`) to obtain its `f32` value directly. The unadorned forms remain
+`f64`, matching the standard library's non-template constants.
