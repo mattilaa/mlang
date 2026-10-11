@@ -621,6 +621,10 @@ fn example() {
 - `reverse_copy(data)` and `rotate_copy(data, middle)` provide the C++20
   ranges algorithm names for those eager copying operations; both preserve the
   input, and `rotate_copy` clamps the split index.
+- `reverse_copy_to(source, destination)` and `rotate_copy_to(source, middle,
+  destination)` write the corresponding copy sequence into existing storage,
+  stopping at the destination capacity and returning the number written.
+  `rotate_copy_to` clamps its split index exactly like `rotate_copy`.
 - `rotate_in_place(&mut data, middle)` moves the suffix beginning at `middle`
   before the prefix using at most O(N) swaps and no output allocation. It
   returns the index of the original first element after rotation (the Mlang

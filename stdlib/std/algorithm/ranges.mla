@@ -8053,6 +8053,22 @@ pub fn reverse_copy(data: &list<T>) -> list<T> {
     return reversed(data);
 }
 
+/// @brief Copy reversed values into existing bounded output storage.
+/// Writes at most the destination length and returns the element count written.
+/// Both input and destination lengths remain unchanged.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn reverse_copy_to(source: &list<T>, destination: &mut list<T>) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var written: i64 = 0;
+    while written < destination_len && written < source_len {
+        destination[written] = source[source_len - written - 1];
+        written = written + 1;
+    }
+    return written;
+}
+
 /// @brief Return a copy rotated left by `amount` positions.
 /// Negative amounts rotate right; amounts are normalized modulo list length.
 /// @ingroup algorithm_ranges
@@ -8104,6 +8120,34 @@ pub fn rotate(data: &list<T>, middle: i64) -> list<T> {
 generic<T>
 pub fn rotate_copy(data: &list<T>, middle: i64) -> list<T> {
     return rotate(data, middle);
+}
+
+/// @brief Copy a rotated range into existing bounded output storage.
+/// The split is clamped to `[0, source.len()]`; writes the prefix of the full
+/// rotated sequence that fits and returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn rotate_copy_to(source: &list<T>, middle: i64,
+                      destination: &mut list<T>) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var split: i64 = middle;
+    if split < 0 { split = 0; }
+    if split > source_len { split = source_len; }
+    var written: i64 = 0;
+    var source_index: i64 = split;
+    while written < destination_len && source_index < source_len {
+        destination[written] = source[source_index];
+        written = written + 1;
+        source_index = source_index + 1;
+    }
+    source_index = 0;
+    while written < destination_len && source_index < split {
+        destination[written] = source[source_index];
+        written = written + 1;
+        source_index = source_index + 1;
+    }
+    return written;
 }
 
 /// @brief Return the retained range after a left shift by `count` positions.
