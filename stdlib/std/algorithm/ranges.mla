@@ -2692,6 +2692,94 @@ pub fn remove_copy_projected(data: &list<T>, value: U,
     return copied;
 }
 
+/// @brief Copy nonmatching elements into a bounded destination list.
+/// Stops when the source ends or the destination fills, returning
+/// `(consumed, written)` so bounded progress is explicit.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn remove_copy_to(source: &list<T>, destination: &mut list<T>,
+                      value: U) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if item != value {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Copy nonmatching elements using a custom equivalence predicate.
+/// Returns `(consumed, written)` and stops when the destination fills.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn remove_copy_to_by(source: &list<T>, destination: &mut list<T>,
+                         value: U, equivalent: Equivalent)
+    -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !equivalent(item, value) {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Copy nonmatching elements using equality on projected keys.
+/// Returns `(consumed, written)` and stops when the destination fills.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn remove_copy_to_projected(
+    source: &list<T>, destination: &mut list<T>, value: U,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if projection(item) != value {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Copy nonmatches by a predicate over projected keys.
+/// Returns `(consumed, written)` and stops when the destination fills.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, Projection>
+pub fn remove_copy_to_by_projected(
+    source: &list<T>, destination: &mut list<T>, value: U,
+    equivalent: Equivalent, projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !equivalent(projection(item), value) {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Copy elements rejected by `predicate` into a new list.
 /// C++20 `std::ranges::remove_copy_if` counterpart; the input is unchanged.
 /// @ingroup algorithm_ranges

@@ -435,6 +435,10 @@ use std::algorithm::ranges::remove_copy;
 use std::algorithm::ranges::remove_copy_by;
 use std::algorithm::ranges::remove_copy_by_projected;
 use std::algorithm::ranges::remove_copy_projected;
+use std::algorithm::ranges::remove_copy_to;
+use std::algorithm::ranges::remove_copy_to_by;
+use std::algorithm::ranges::remove_copy_to_projected;
+use std::algorithm::ranges::remove_copy_to_by_projected;
 use std::algorithm::ranges::remove_copy_if;
 use std::algorithm::ranges::remove_copy_if_projected;
 use std::algorithm::ranges::replace_copy;
@@ -3538,6 +3542,50 @@ fn test_algorithm_ranges_copy_remove_replace_copy() {
     verify(empty_without_predicate.len() == 0);
     verify(empty_replaced.len() == 0);
     verify(empty_replaced_if.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_remove_copy_to_bounded_output() {
+    let source: list<i32> = [1, 2, 3, 2, 4];
+    var destination: list<i32> = [0, 0, 77];
+    let progress: tuple<i64, i64> = remove_copy_to(source, destination, 2);
+    verify(progress.0 == 3 && progress.1 == 2);
+    verify(destination[0] == 1 && destination[1] == 3 &&
+           destination[2] == 77);
+
+    let values: list<i32> = [11, 22, 29, 31, 42];
+    let project_tens = |value: i32| { return value / 10; };
+    var projected: list<i32> = [0, 0, 0];
+    let projected_progress: tuple<i64, i64> = remove_copy_to_projected(
+        values, projected, 2, project_tens);
+    verify(projected_progress.0 == 5 && projected_progress.1 == 3);
+    verify(projected[0] == 11 && projected[1] == 31 &&
+           projected[2] == 42);
+
+    let same_decade = |item: i32, key: i32| {
+        return item / 10 == key / 10;
+    };
+    var by_destination: list<i32> = [0, 0];
+    let by_progress: tuple<i64, i64> = remove_copy_to_by(
+        values, by_destination, 20, same_decade);
+    verify(by_progress.0 == 4 && by_progress.1 == 2);
+    verify(by_destination[0] == 11 && by_destination[1] == 31 &&
+           by_destination.len() == 2);
+
+    let same_parity = |left: i32, right: i32| {
+        return left % 2 == right % 2;
+    };
+    var combined: list<i32> = [0, 0];
+    let combined_progress: tuple<i64, i64> = remove_copy_to_by_projected(
+        values, combined, 2, same_parity, project_tens);
+    verify(combined_progress.0 == 4 && combined_progress.1 == 2);
+    verify(combined[0] == 11 && combined[1] == 31);
+
+    var empty_destination: list<i32> = [];
+    let empty_progress: tuple<i64, i64> = remove_copy_to(
+        source, empty_destination, 2);
+    verify(empty_progress.0 == 0 && empty_progress.1 == 0);
+    verify(source[0] == 1 && source[4] == 4);
 }
 
 #[test]
