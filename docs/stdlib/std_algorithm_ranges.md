@@ -481,6 +481,9 @@ fn example() {
 - `swap_ranges(left, right)` returns two copied lists with corresponding
   elements in the common prefix exchanged; an unmatched tail is preserved.
   Both inputs remain unchanged.
+- `swap_ranges_in_place(&mut left, &mut right)` exchanges the common prefix
+  directly in both mutable lists, preserves either unmatched tail, and returns
+  the number of positions swapped.
 - `transform(data, operation)` eagerly maps every element into a new list;
   the output element type is inferred from the closure return type and may
   differ from the input element type.

@@ -477,6 +477,7 @@ use std::flat_multimap::FlatMultiMap;
 use std::flat_multiset::FlatMultiSet;
 use std::flat_set::FlatSet;
 use std::algorithm::ranges::swap_ranges;
+use std::algorithm::ranges::swap_ranges_in_place;
 use std::algorithm::ranges::filter;
 use std::algorithm::ranges::copy_if_projected;
 use std::algorithm::ranges::is_partitioned;
@@ -6612,6 +6613,26 @@ fn test_algorithm_ranges_swap_ranges_copy() {
     let unchanged_right: list<i32> = swapped_empty.1;
     verify(empty_left.len() == 0 && unchanged_right.len() == right.len());
     verify(unchanged_right[0] == 8 && unchanged_right[1] == 9);
+}
+
+#[test]
+fn test_algorithm_ranges_swap_ranges_in_place() {
+    var left: list<i32> = [1, 2, 3, 4];
+    var right: list<i32> = [8, 9];
+    verify(swap_ranges_in_place(left, right) == 2);
+    verify(left.len() == 4 && left[0] == 8 && left[1] == 9 &&
+           left[2] == 3 && left[3] == 4);
+    verify(right.len() == 2 && right[0] == 1 && right[1] == 2);
+
+    var longer_right: list<i32> = [5, 6, 7];
+    verify(swap_ranges_in_place(left, longer_right) == 3);
+    verify(left[0] == 5 && left[1] == 6 && left[2] == 7 && left[3] == 4);
+    verify(longer_right[0] == 8 && longer_right[1] == 9 &&
+           longer_right[2] == 3);
+
+    var empty: list<i32> = [];
+    verify(swap_ranges_in_place(empty, left) == 0);
+    verify(left[0] == 5 && left[3] == 4);
 }
 
 #[test]

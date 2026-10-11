@@ -1762,6 +1762,24 @@ pub fn swap_ranges(left: &list<T>, right: &list<T>)
     return (swapped_left, swapped_right);
 }
 
+/// @brief Swap corresponding elements of two mutable lists in place.
+/// Only the common prefix is exchanged; unmatched tails are untouched.
+/// Returns the number of positions swapped, matching the consumed range length
+/// of C++20 `std::ranges::swap_ranges` in this eager-list API.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn swap_ranges_in_place(left: &mut list<T>, right: &mut list<T>) -> i64 {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let common_len: i64 = if left_len < right_len { left_len } else { right_len };
+    for i in 0..common_len {
+        let temporary: T = left[i];
+        left[i] = right[i];
+        right[i] = temporary;
+    }
+    return common_len;
+}
+
 /// @brief Return a copied list containing elements accepted by `predicate`.
 /// This is an eager ranges-style filter/copy-if operation.
 /// @ingroup algorithm_ranges
