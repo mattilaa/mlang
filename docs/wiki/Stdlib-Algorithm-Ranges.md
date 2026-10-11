@@ -743,6 +743,10 @@ fn example() {
   storage and returns `(left_consumed, right_consumed, written)`. Short output
   receives a sorted prefix. `_projected`, `_by`, and `_by_projected` variants
   preserve this progress contract with projected keys and/or custom ordering.
+- `merge_to_heterogeneous` accepts different left and right element types and
+  a destination type assignable from both. Its `_by` and `_projected` variants
+  support cross-type ordering, independent projections, and bounded output;
+  `_by_projected` combines all three. Equal values from the left remain first.
 - `inplace_merge(data, middle)` stably merges the two sorted halves around
   `middle` into a new list; `inplace_merge_by` accepts a strict comparator.
   Despite the C++ name, these eager-list forms preserve the source and clamp

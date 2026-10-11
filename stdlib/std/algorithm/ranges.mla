@@ -10189,6 +10189,98 @@ fn ranges_merge_to_core(left: &list<T>, right: &list<T>,
     return (i, j, written);
 }
 
+generic<Left, Right>
+fn ranges_heterogeneous_less(left: Left, right: Right) -> bool {
+    return left < right;
+}
+
+generic<Left, Right, Output, Less, LeftProjection, RightProjection>
+fn ranges_merge_to_heterogeneous_core(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    less: Less, left_projection: LeftProjection,
+    right_projection: RightProjection) -> tuple<i64, i64, i64> {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let output_len: i64 = destination.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    var written: i64 = 0;
+    while written < output_len && i < left_len && j < right_len {
+        if less(right_projection(right[j]), left_projection(left[i])) {
+            destination[written] = right[j];
+            j = j + 1;
+        } else {
+            destination[written] = left[i];
+            i = i + 1;
+        }
+        written = written + 1;
+    }
+    while written < output_len && i < left_len {
+        destination[written] = left[i];
+        i = i + 1;
+        written = written + 1;
+    }
+    while written < output_len && j < right_len {
+        destination[written] = right[j];
+        j = j + 1;
+        written = written + 1;
+    }
+    return (i, j, written);
+}
+
+/// @brief Merge differently typed sorted inputs into bounded output.
+/// Stable ties prefer the left range; returns `(left_consumed, right_consumed,
+/// written)`. Cross-type ordering must be available through `<`.
+/// C++20 `std::ranges::merge` heterogeneous-range adaptation.
+/// @ingroup algorithm_ranges
+generic<Left, Right, Output>
+pub fn merge_to_heterogeneous(left: &list<Left>, right: &list<Right>,
+                              destination: &mut list<Output>)
+    -> tuple<i64, i64, i64> {
+    return ranges_merge_to_heterogeneous_core(
+        left, right, destination, ranges_heterogeneous_less,
+        ranges_identity, ranges_identity);
+}
+
+/// @brief Merge heterogeneous ranges ordered by separate projected keys.
+/// The default cross-type `<` relation orders the projections; ties prefer
+/// the left input.
+/// @ingroup algorithm_ranges
+generic<Left, Right, Output, LeftProjection, RightProjection>
+pub fn merge_to_heterogeneous_projected(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    left_projection: LeftProjection, right_projection: RightProjection)
+    -> tuple<i64, i64, i64> {
+    return ranges_merge_to_heterogeneous_core(
+        left, right, destination, ranges_heterogeneous_less,
+        left_projection, right_projection);
+}
+
+/// @brief Merge heterogeneous ranges using a custom cross-type comparator.
+/// The comparator is tested as `less(right_value, left_value)`; ties prefer
+/// the left input.
+/// @ingroup algorithm_ranges
+generic<Left, Right, Output, Less>
+pub fn merge_to_heterogeneous_by(left: &list<Left>, right: &list<Right>,
+                                 destination: &mut list<Output>, less: Less)
+    -> tuple<i64, i64, i64> {
+    return ranges_merge_to_heterogeneous_core(
+        left, right, destination, less, ranges_identity, ranges_identity);
+}
+
+/// @brief Merge projected heterogeneous ranges with a custom comparator.
+/// Comparator arguments are `(projected_right, projected_left)`; equivalent
+/// values from the left input remain first.
+/// @ingroup algorithm_ranges
+generic<Left, Right, Output, Less, LeftProjection, RightProjection>
+pub fn merge_to_heterogeneous_by_projected(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    less: Less, left_projection: LeftProjection,
+    right_projection: RightProjection) -> tuple<i64, i64, i64> {
+    return ranges_merge_to_heterogeneous_core(
+        left, right, destination, less, left_projection, right_projection);
+}
+
 /// @brief Merge sorted ranges into an existing destination using ascending order.
 /// @ingroup algorithm_ranges
 generic<T>
