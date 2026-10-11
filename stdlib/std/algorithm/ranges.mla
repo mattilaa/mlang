@@ -7046,6 +7046,180 @@ pub fn sort_in_place(data: &mut list<T>) -> i64 {
                                       ranges_identity);
 }
 
+/// @brief Build a mutable max-heap using comparator and projection.
+/// Returns the number of swaps performed.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn make_heap_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    var swaps: i64 = 0;
+    var parent: i64 = n / 2;
+    while parent > 0 {
+        parent = parent - 1;
+        swaps = swaps + ranges_sift_down_in_place(
+            data, n, parent, less, projection);
+    }
+    return swaps;
+}
+
+/// @brief Build a mutable heap according to comparator `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn make_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
+    return make_heap_in_place_by_projected(data, less, ranges_identity);
+}
+
+/// @brief Build a mutable max-heap according to projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn make_heap_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> i64 {
+    return make_heap_in_place_by_projected(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Build a mutable max-heap in place.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn make_heap_in_place(data: &mut list<T>) -> i64 {
+    return make_heap_in_place_by_projected(
+        data, ranges_default_less, ranges_identity);
+}
+
+/// @brief Restore heap order after appending an element to a mutable heap.
+/// The prefix excluding the final element must already be a heap. Returns the
+/// number of swaps performed.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn push_heap_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n < 2 { return 0; }
+    var child: i64 = n - 1;
+    var swaps: i64 = 0;
+    while child > 0 {
+        let parent: i64 = (child - 1) / 2;
+        if !less(projection(data[parent]), projection(data[child])) {
+            break;
+        }
+        let temporary: T = data[parent];
+        data[parent] = data[child];
+        data[child] = temporary;
+        swaps = swaps + 1;
+        child = parent;
+    }
+    return swaps;
+}
+
+/// @brief Restore comparator-defined heap order after appending an element.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn push_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
+    return push_heap_in_place_by_projected(data, less, ranges_identity);
+}
+
+/// @brief Restore projected max-heap order after appending an element.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn push_heap_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> i64 {
+    return push_heap_in_place_by_projected(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Restore max-heap order after appending an element to a mutable heap.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn push_heap_in_place(data: &mut list<T>) -> i64 {
+    return push_heap_in_place_by_projected(
+        data, ranges_default_less, ranges_identity);
+}
+
+/// @brief Move a mutable heap's top value to the final slot and restore its prefix.
+/// The input must be a heap; returns the number of swaps performed.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn pop_heap_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n < 2 { return 0; }
+    let last: i64 = n - 1;
+    let temporary: T = data[0];
+    data[0] = data[last];
+    data[last] = temporary;
+    return 1 + ranges_sift_down_in_place(
+        data, last, 0, less, projection);
+}
+
+/// @brief Pop the top of a comparator-defined heap into its final slot.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn pop_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
+    return pop_heap_in_place_by_projected(data, less, ranges_identity);
+}
+
+/// @brief Pop the top of a projected max-heap into its final slot.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn pop_heap_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> i64 {
+    return pop_heap_in_place_by_projected(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Pop the top of a mutable max-heap into its final slot.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn pop_heap_in_place(data: &mut list<T>) -> i64 {
+    return pop_heap_in_place_by_projected(
+        data, ranges_default_less, ranges_identity);
+}
+
+/// @brief Sort a mutable heap in ascending comparator/projection order.
+/// The input must be a heap; returns the number of swaps performed.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn sort_heap_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    var heap_len: i64 = n;
+    var swaps: i64 = 0;
+    while heap_len > 1 {
+        heap_len = heap_len - 1;
+        let temporary: T = data[0];
+        data[0] = data[heap_len];
+        data[heap_len] = temporary;
+        swaps = swaps + 1 + ranges_sift_down_in_place(
+            data, heap_len, 0, less, projection);
+    }
+    return swaps;
+}
+
+/// @brief Sort a mutable comparator-defined heap.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn sort_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
+    return sort_heap_in_place_by_projected(data, less, ranges_identity);
+}
+
+/// @brief Sort a mutable projected max-heap.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn sort_heap_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> i64 {
+    return sort_heap_in_place_by_projected(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Sort a mutable max-heap in ascending order in place.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn sort_heap_in_place(data: &mut list<T>) -> i64 {
+    return sort_heap_in_place_by_projected(
+        data, ranges_default_less, ranges_identity);
+}
+
 generic<T, Less, Projection>
 fn ranges_stable_sort_in_place_by_projected(
     data: &mut list<T>, less: Less, projection: Projection) -> i64 {

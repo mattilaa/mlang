@@ -224,6 +224,22 @@ use std::algorithm::ranges::sort_heap;
 use std::algorithm::ranges::sort_heap_by;
 use std::algorithm::ranges::sort_heap_projected;
 use std::algorithm::ranges::sort_heap_by_projected;
+use std::algorithm::ranges::make_heap_in_place;
+use std::algorithm::ranges::make_heap_in_place_by;
+use std::algorithm::ranges::make_heap_in_place_projected;
+use std::algorithm::ranges::make_heap_in_place_by_projected;
+use std::algorithm::ranges::push_heap_in_place;
+use std::algorithm::ranges::push_heap_in_place_by;
+use std::algorithm::ranges::push_heap_in_place_projected;
+use std::algorithm::ranges::push_heap_in_place_by_projected;
+use std::algorithm::ranges::pop_heap_in_place;
+use std::algorithm::ranges::pop_heap_in_place_by;
+use std::algorithm::ranges::pop_heap_in_place_projected;
+use std::algorithm::ranges::pop_heap_in_place_by_projected;
+use std::algorithm::ranges::sort_heap_in_place;
+use std::algorithm::ranges::sort_heap_in_place_by;
+use std::algorithm::ranges::sort_heap_in_place_projected;
+use std::algorithm::ranges::sort_heap_in_place_by_projected;
 use std::algorithm::ranges::partial_sort;
 use std::algorithm::ranges::partial_sort_by;
 use std::algorithm::ranges::partial_sort_projected;
@@ -1788,6 +1804,74 @@ fn test_algorithm_ranges_heap_algorithms() {
     let empty_sorted: list<i32> = sort_heap(empty);
     verify(empty_heap.len() == 0 && empty_pushed.len() == 0);
     verify(empty_popped.len() == 0 && empty_sorted.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_heap_algorithms_in_place() {
+    var heap: list<i32> = [3, 1, 8, 4, 2];
+    verify(make_heap_in_place(heap) > 0);
+    verify(is_heap(heap) && heap[0] == 8);
+    heap.push(10);
+    verify(push_heap_in_place(heap) > 0);
+    verify(is_heap(heap) && heap[0] == 10);
+    verify(pop_heap_in_place(heap) > 0);
+    verify(heap[heap.len() - 1] == 10);
+    let prefix: list<i32> = take(heap, heap.len() - 1);
+    verify(is_heap(prefix));
+    heap.pop();
+    verify(sort_heap_in_place(heap) > 0);
+    verify(heap[0] == 1 && heap[1] == 2 && heap[2] == 3 &&
+           heap[3] == 4 && heap[4] == 8);
+
+    let greater = |left: i32, right: i32| { return left > right; };
+    var min_heap: list<i32> = [3, 1, 8, 4, 2];
+    verify(make_heap_in_place_by(min_heap, greater) > 0);
+    verify(is_heap_by(min_heap, greater) && min_heap[0] == 1);
+    min_heap.push(0);
+    push_heap_in_place_by(min_heap, greater);
+    verify(is_heap_by(min_heap, greater) && min_heap[0] == 0);
+    pop_heap_in_place_by(min_heap, greater);
+    verify(min_heap[min_heap.len() - 1] == 0);
+    var descending_heap: list<i32> = [3, 1, 8, 4, 2];
+    make_heap_in_place_by(descending_heap, greater);
+    verify(sort_heap_in_place_by(descending_heap, greater) > 0);
+    verify(descending_heap[0] == 8 && descending_heap[4] == 1);
+
+    let project_tens = |value: i32| { return value / 10; };
+    var projected: list<i32> = [41, 12, 35, 24, 58, 17];
+    make_heap_in_place_projected(projected, project_tens);
+    verify(is_heap_projected(projected, project_tens));
+    projected.push(99);
+    push_heap_in_place_projected(projected, project_tens);
+    verify(projected[0] == 99);
+    pop_heap_in_place_projected(projected, project_tens);
+    verify(projected[projected.len() - 1] == 99);
+    var projected_sorted: list<i32> = [41, 12, 35, 24, 58, 17];
+    make_heap_in_place_projected(projected_sorted, project_tens);
+    sort_heap_in_place_projected(projected_sorted, project_tens);
+    verify(is_sorted_projected(projected_sorted, project_tens));
+
+    var combined: list<i32> = [41, 12, 35, 24, 58, 17];
+    make_heap_in_place_by_projected(combined, greater, project_tens);
+    verify(is_heap_by_projected(combined, greater, project_tens));
+    combined.push(9);
+    push_heap_in_place_by_projected(combined, greater, project_tens);
+    verify(combined[0] == 9);
+    pop_heap_in_place_by_projected(combined, greater, project_tens);
+    verify(combined[combined.len() - 1] == 9);
+    var combined_sorted: list<i32> = [41, 12, 35, 24, 58, 17];
+    make_heap_in_place_by_projected(
+        combined_sorted, greater, project_tens);
+    sort_heap_in_place_by_projected(
+        combined_sorted, greater, project_tens);
+    verify(is_sorted_by_projected(
+        combined_sorted, greater, project_tens));
+
+    var empty: list<i32> = [];
+    verify(make_heap_in_place(empty) == 0 &&
+           push_heap_in_place(empty) == 0 &&
+           pop_heap_in_place(empty) == 0 &&
+           sort_heap_in_place(empty) == 0);
 }
 
 #[test]

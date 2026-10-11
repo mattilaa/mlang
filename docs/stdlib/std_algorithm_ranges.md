@@ -245,6 +245,11 @@ fn example() {
   while preserving the same copied-list behavior and heap preconditions.
 - The `_by_projected` heap forms combine a strict comparator with a unary key
   projection for heap queries and make/push/pop/sort operations.
+- Mutable `make_heap_in_place`, `push_heap_in_place`, `pop_heap_in_place`, and
+  `sort_heap_in_place` variants update the caller's list using the same
+  comparator and projection forms. They return swap counts, preserve list
+  length, and follow the standard heap preconditions: push requires the prefix
+  before the final appended value to be a heap; pop and sort require a heap.
 - `partial_sort(data, count)` uses a bounded heap to return the `count`
   smallest values in ascending order. `partial_sort_by(data, count, less)`
   applies a caller-provided order (for example, to select the largest values).
