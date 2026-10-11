@@ -446,6 +446,9 @@ fn example() {
   converted while preserving each row's length, including empty rows.
 - `to_flat_set(data)` materializes a sorted [`std::flat_set`](Stdlib-Flat-Set), deduplicating keys
   according to the set's ordering equivalence. The source range is unchanged.
+- `to_flat_map(pairs)` materializes `(key, value)` tuples as a sorted,
+  unique-key [`std::flat_map`](Stdlib-Flat-Map). When equivalent keys repeat, the last pair in
+  source order supplies the retained value; the input is unchanged.
 - `swap_ranges(left, right)` returns two copied lists with corresponding
   elements in the common prefix exchanged; an unmatched tail is preserved.
   Both inputs remain unchanged.

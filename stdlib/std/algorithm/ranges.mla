@@ -10,6 +10,8 @@
 
 mod std::flat_set;
 use std::flat_set::FlatSet;
+mod std::flat_map;
+use std::flat_map::FlatMap;
 
 /// @brief Return first index of a value, or -1 when not found.
 /// Supports any type that can be equality-compared.
@@ -1581,6 +1583,22 @@ pub fn to_flat_set(data: &list<T>) -> FlatSet<T> {
     var converted: FlatSet<T> = FlatSet<T>::new();
     let n: i64 = data.len();
     for i in 0..n { converted.insert(data[i]); }
+    return converted;
+}
+
+/// @brief Materialize key/value pairs as a sorted, unique `FlatMap`.
+/// Pairs are `(key, value)` tuples. If the input contains equivalent keys, the
+/// last pair in source order supplies the retained value.
+/// C++23 `std::ranges::to` adapted to Mlang's `std::flat_map` container.
+/// @ingroup algorithm_ranges
+generic<K, V>
+pub fn to_flat_map(data: &list<tuple<K, V>>) -> FlatMap<K, V> {
+    var converted: FlatMap<K, V> = FlatMap<K, V>::new();
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<K, V> = data[i];
+        converted.insert(entry.0, entry.1);
+    }
     return converted;
 }
 
