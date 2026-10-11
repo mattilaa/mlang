@@ -3293,6 +3293,28 @@ pub fn remove_copy_to(source: &list<T>, destination: &mut list<T>,
     return (consumed, written);
 }
 
+/// @brief Copy nonmatching values to a bounded, distinct-type destination.
+/// Source values are converted to the destination element type. Returns
+/// `(consumed, written)` and stops when the source ends or output fills.
+/// @ingroup algorithm_ranges
+generic<T, Output, U>
+pub fn remove_copy_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>, value: U) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if item != value {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Copy nonmatching elements using a custom equivalence predicate.
 /// Returns `(consumed, written)` and stops when the destination fills.
 /// @ingroup algorithm_ranges
@@ -3321,6 +3343,29 @@ pub fn remove_copy_to_by(source: &list<T>, destination: &mut list<T>,
 generic<T, U, Projection>
 pub fn remove_copy_to_projected(
     source: &list<T>, destination: &mut list<T>, value: U,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if projection(item) != value {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Filter by a projected key into a distinct-type bounded output.
+/// Original nonmatching source values are converted to the output type.
+/// Returns `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output, U, Projection>
+pub fn remove_copy_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>, value: U,
     projection: Projection) -> tuple<i64, i64> {
     let source_len: i64 = source.len();
     let destination_len: i64 = destination.len();
@@ -3396,6 +3441,29 @@ pub fn remove_copy_if_to(source: &list<T>, destination: &mut list<T>,
     return (consumed, written);
 }
 
+/// @brief Copy predicate-rejected values to a distinct-type bounded output.
+/// Original source values are converted to the output type. Returns
+/// `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate>
+pub fn remove_copy_if_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>, predicate: Predicate)
+    -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !predicate(item) {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Copy predicate-rejected elements using projected keys to bounded output.
 /// Returns `(consumed, written)` and evaluates predicate/projection once per
 /// consumed element.
@@ -3403,6 +3471,28 @@ pub fn remove_copy_if_to(source: &list<T>, destination: &mut list<T>,
 generic<T, Predicate, Projection>
 pub fn remove_copy_if_to_projected(
     source: &list<T>, destination: &mut list<T>, predicate: Predicate,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !predicate(projection(item)) {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Project a predicate key, then copy original rejected values to a
+/// distinct-type bounded output. Returns `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Projection>
+pub fn remove_copy_if_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>, predicate: Predicate,
     projection: Projection) -> tuple<i64, i64> {
     let source_len: i64 = source.len();
     let destination_len: i64 = destination.len();
@@ -3503,6 +3593,23 @@ pub fn replace_copy_to(source: &list<T>, destination: &mut list<T>,
     return count;
 }
 
+/// @brief Replace-copy to bounded storage with a different output type.
+/// Both original values and `new_value` are converted to the destination type.
+/// Returns the source/destination prefix length written.
+/// @ingroup algorithm_ranges
+generic<T, Output, U>
+pub fn replace_copy_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>, old_value: U, new_value: Output) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    for i in 0..count {
+        if source[i] == old_value { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
 /// @brief Comparator form of bounded replacement-copy.
 /// @ingroup algorithm_ranges
 generic<T, U, Equivalent>
@@ -3530,6 +3637,24 @@ pub fn replace_copy_to_projected(
     let destination_len: i64 = destination.len();
     var count: i64 = source_len;
     if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        if projection(source[i]) == old_value { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Projected replace-copy to bounded storage with a distinct output.
+/// The projection tests original source elements; selected replacement and
+/// retained values are converted to the destination type.
+/// @ingroup algorithm_ranges
+generic<T, Output, U, Projection>
+pub fn replace_copy_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>, old_value: U,
+    new_value: Output, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
     for i in 0..count {
         if projection(source[i]) == old_value { destination[i] = new_value; }
         else { destination[i] = source[i]; }
@@ -3608,6 +3733,24 @@ pub fn replace_copy_if_to(source: &list<T>, destination: &mut list<T>,
     return count;
 }
 
+/// @brief Replace predicate matches in a bounded distinct-type destination.
+/// Replacement and retained source elements are converted to its output type.
+/// Returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate>
+pub fn replace_copy_if_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>, predicate: Predicate,
+    new_value: Output) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    for i in 0..count {
+        if predicate(source[i]) { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
 /// @brief Replace projected predicate matches in bounded output storage.
 /// Returns the number written and copies original source values for all
 /// nonmatching elements.
@@ -3616,6 +3759,24 @@ generic<T, Predicate, Projection>
 pub fn replace_copy_if_to_projected(
     source: &list<T>, destination: &mut list<T>, predicate: Predicate,
     new_value: T, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    for i in 0..count {
+        if predicate(projection(source[i])) { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Projected predicate replacement into distinct-type bounded output.
+/// Projection and predicate test original values; both selected replacements
+/// and retained elements are converted to the destination type.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Projection>
+pub fn replace_copy_if_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>, predicate: Predicate,
+    new_value: Output, projection: Projection) -> i64 {
     let source_len: i64 = source.len();
     let destination_len: i64 = destination.len();
     let count: i64 = source_len < destination_len ? source_len : destination_len;

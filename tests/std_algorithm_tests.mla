@@ -554,23 +554,31 @@ use std::algorithm::ranges::remove_copy_by;
 use std::algorithm::ranges::remove_copy_by_projected;
 use std::algorithm::ranges::remove_copy_projected;
 use std::algorithm::ranges::remove_copy_to;
+use std::algorithm::ranges::remove_copy_to_heterogeneous;
 use std::algorithm::ranges::remove_copy_to_by;
 use std::algorithm::ranges::remove_copy_to_projected;
+use std::algorithm::ranges::remove_copy_to_heterogeneous_projected;
 use std::algorithm::ranges::remove_copy_to_by_projected;
 use std::algorithm::ranges::remove_copy_if;
 use std::algorithm::ranges::remove_copy_if_to;
 use std::algorithm::ranges::remove_copy_if_to_projected;
+use std::algorithm::ranges::remove_copy_if_to_heterogeneous;
+use std::algorithm::ranges::remove_copy_if_to_heterogeneous_projected;
 use std::algorithm::ranges::remove_copy_if_projected;
 use std::algorithm::ranges::replace_copy;
 use std::algorithm::ranges::replace_copy_projected;
 use std::algorithm::ranges::replace_copy_by;
 use std::algorithm::ranges::replace_copy_by_projected;
 use std::algorithm::ranges::replace_copy_to;
+use std::algorithm::ranges::replace_copy_to_heterogeneous;
 use std::algorithm::ranges::replace_copy_to_by;
 use std::algorithm::ranges::replace_copy_to_projected;
+use std::algorithm::ranges::replace_copy_to_heterogeneous_projected;
 use std::algorithm::ranges::replace_copy_to_by_projected;
 use std::algorithm::ranges::replace_copy_if_to;
 use std::algorithm::ranges::replace_copy_if_to_projected;
+use std::algorithm::ranges::replace_copy_if_to_heterogeneous;
+use std::algorithm::ranges::replace_copy_if_to_heterogeneous_projected;
 use std::algorithm::ranges::replace_copy_if;
 use std::algorithm::ranges::replace_copy_if_projected;
 use std::algorithm::ranges::replace_if;
@@ -4334,6 +4342,74 @@ fn test_algorithm_ranges_copy_if_to_bounded_output() {
     let empty_progress: tuple<i64, i64> = copy_if_to(
         source, empty_destination, is_even);
     verify(empty_progress.0 == 0 && empty_progress.1 == 0 && calls == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_heterogeneous_bounded_remove_replace_copy() {
+    let source: list<i32> = [11, 22, 29, 31, 42];
+    var removed: list<f64> = [-1.0, -1.0, -1.0];
+    let remove_progress: tuple<i64, i64> =
+        remove_copy_to_heterogeneous(source, removed, 22);
+    verify(remove_progress.0 == 4 && remove_progress.1 == 3);
+    verify(removed[0] == 11.0 && removed[1] == 29.0 &&
+           removed[2] == 31.0);
+
+    let tens = |value: i32| { return value / 10; };
+    var removed_projected: list<f64> = [0.0, 0.0, 0.0];
+    let removed_projected_progress: tuple<i64, i64> =
+        remove_copy_to_heterogeneous_projected(
+            source, removed_projected, 2, tens);
+    verify(removed_projected_progress.0 == 5 &&
+           removed_projected_progress.1 == 3);
+    verify(removed_projected[0] == 11.0 &&
+           removed_projected[1] == 31.0 &&
+           removed_projected[2] == 42.0);
+
+    let is_even = |value: i32| { return value % 2 == 0; };
+    var rejected: list<i64> = [0, 0, 0];
+    let rejected_progress: tuple<i64, i64> =
+        remove_copy_if_to_heterogeneous(source, rejected, is_even);
+    verify(rejected_progress.0 == 5 && rejected_progress.1 == 3);
+    verify(rejected[0] == 11 && rejected[1] == 29 && rejected[2] == 31);
+
+    let below_three = |key: i32| { return key < 3; };
+    var projected_rejected: list<f64> = [0.0, 0.0];
+    let projected_rejected_progress: tuple<i64, i64> =
+        remove_copy_if_to_heterogeneous_projected(
+            source, projected_rejected, below_three, tens);
+    verify(projected_rejected_progress.0 == 5 &&
+           projected_rejected_progress.1 == 2);
+    verify(projected_rejected[0] == 31.0 && projected_rejected[1] == 42.0);
+
+    var replaced: list<f64> = [0.0, 0.0, 0.0, 0.0, 77.0];
+    verify(replace_copy_to_heterogeneous(
+        source, replaced, 22, 99.5) == 5);
+    verify(replaced[0] == 11.0 && replaced[1] == 99.5 &&
+           replaced[2] == 29.0 && replaced[4] == 42.0);
+
+    var replaced_projected: list<f64> = [0.0, 0.0, 0.0, 0.0, 0.0];
+    verify(replace_copy_to_heterogeneous_projected(
+        source, replaced_projected, 2, 88.5, tens) == 5);
+    verify(replaced_projected[0] == 11.0 &&
+           replaced_projected[1] == 88.5 &&
+           replaced_projected[2] == 88.5 &&
+           replaced_projected[4] == 42.0);
+
+    let is_odd = |value: i32| { return value % 2 != 0; };
+    var replaced_if: list<f64> = [0.0, 0.0, 0.0, 0.0, 0.0];
+    verify(replace_copy_if_to_heterogeneous(
+        source, replaced_if, is_odd, -1.5) == 5);
+    verify(replaced_if[0] == -1.5 && replaced_if[1] == 22.0 &&
+           replaced_if[4] == 42.0);
+
+    let key_at_least_three = |key: i32| { return key >= 3; };
+    var replaced_if_projected: list<f64> = [0.0, 0.0, 0.0, 0.0];
+    verify(replace_copy_if_to_heterogeneous_projected(
+        source, replaced_if_projected, key_at_least_three, -2.5, tens) == 4);
+    verify(replaced_if_projected[0] == 11.0 &&
+           replaced_if_projected[1] == 22.0 &&
+           replaced_if_projected[2] == -2.5 &&
+           replaced_if_projected[3] == -2.5);
 }
 
 #[test]

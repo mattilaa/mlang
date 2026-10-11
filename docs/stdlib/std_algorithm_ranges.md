@@ -455,6 +455,10 @@ fn example() {
 - `remove_copy_if_to(source, destination, predicate)` writes values rejected
   by the predicate into bounded output and reports `(consumed, written)`; the
   projected variant tests projected keys but copies the original elements.
+- `remove_copy_to_heterogeneous`, `remove_copy_to_heterogeneous_projected`,
+  `remove_copy_if_to_heterogeneous`, and
+  `remove_copy_if_to_heterogeneous_projected` preserve the bounded progress
+  behavior while converting retained source values to a distinct output type.
 - `to_list(data)` materializes a new list with an explicitly selected element
   type, converting each source element in order. This is the Mlang eager-list
   counterpart to C++23 `std::ranges::to`; the output type is inferred from the
@@ -847,9 +851,15 @@ fn example() {
   write replaced values into a caller-provided destination, bounded by the
   shorter list. They return the number written and preserve the source and any
   unused destination suffix.
+- `replace_copy_to_heterogeneous` and its `_projected` form provide the same
+  bounded behavior with a distinct destination element type. Both retained
+  values and replacement values use that output type.
 - `replace_copy_if_to` and `replace_copy_if_to_projected` provide the same
   bounded behavior for predicate-based replacement, with the projected form
   testing each element's key while copying the original nonmatches.
+- `replace_copy_if_to_heterogeneous` and
+  `replace_copy_if_to_heterogeneous_projected` extend predicate replacement
+  to distinct output types while preserving bounded prefix semantics.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 - `iota_range(start, end)` materializes a typed half-open range, preserving
