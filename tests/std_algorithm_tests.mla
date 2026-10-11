@@ -228,6 +228,10 @@ use std::algorithm::ranges::partial_sort;
 use std::algorithm::ranges::partial_sort_by;
 use std::algorithm::ranges::partial_sort_projected;
 use std::algorithm::ranges::partial_sort_by_projected;
+use std::algorithm::ranges::partial_sort_in_place;
+use std::algorithm::ranges::partial_sort_in_place_by;
+use std::algorithm::ranges::partial_sort_in_place_projected;
+use std::algorithm::ranges::partial_sort_in_place_by_projected;
 use std::algorithm::ranges::partial_sort_copy;
 use std::algorithm::ranges::partial_sort_copy_projected;
 use std::algorithm::ranges::partial_sort_copy_by;
@@ -1775,6 +1779,46 @@ fn test_algorithm_ranges_partial_sort_by_projection() {
     verify(none.len() == 0 && all.len() == values.len());
     verify(is_sorted_projected(all, project_tens));
     verify(values[0] == 42 && values[5] == 5);
+}
+
+#[test]
+fn test_algorithm_ranges_partial_sort_in_place() {
+    var values: list<i32> = [8, 5, 2, 9, 1, 7, 3];
+    verify(partial_sort_in_place(values, 3) == 3);
+    verify(values[0] == 1 && values[1] == 2 && values[2] == 3);
+    for i in 3..values.len() { verify(values[i] >= values[2]); }
+
+    let greater = |left: i32, right: i32| { return left > right; };
+    var descending: list<i32> = [8, 5, 2, 9, 1, 7, 3];
+    verify(partial_sort_in_place_by(descending, 2, greater) == 2);
+    verify(descending[0] == 9 && descending[1] == 8);
+    for i in 2..descending.len() {
+        verify(descending[i] <= descending[1]);
+    }
+
+    let project_tens = |value: i32| { return value / 10; };
+    var projected: list<i32> = [42, 11, 23, 31, 19, 5];
+    verify(partial_sort_in_place_projected(
+        projected, 3, project_tens) == 3);
+    verify(project_tens(projected[0]) <= project_tens(projected[1]) &&
+           project_tens(projected[1]) <= project_tens(projected[2]));
+    for i in 3..projected.len() {
+        verify(project_tens(projected[i]) >= project_tens(projected[2]));
+    }
+
+    let greater_key = |left: i32, right: i32| { return left > right; };
+    var combined: list<i32> = [42, 11, 23, 31, 19, 5];
+    verify(partial_sort_in_place_by_projected(
+        combined, 2, greater_key, project_tens) == 2);
+    verify(project_tens(combined[0]) >= project_tens(combined[1]));
+    for i in 2..combined.len() {
+        verify(project_tens(combined[i]) <= project_tens(combined[1]));
+    }
+
+    verify(partial_sort_in_place(values, 0) == 0);
+    verify(partial_sort_in_place(values, 99) == values.len());
+    var empty: list<i32> = [];
+    verify(partial_sort_in_place(empty, 3) == 0);
 }
 
 #[test]

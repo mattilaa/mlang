@@ -252,6 +252,10 @@ fn example() {
   `partial_sort_by_projected(data, count, less, projection)` combines both
   ordering controls. Counts clamp to the available range and the source is
   unchanged.
+- `partial_sort_in_place(&mut data, count)` uses a bounded max-heap to order
+  only the selected prefix in the original list. Comparator and projected
+  variants are provided; counts clamp to `[0, len]`, the suffix remains
+  partitioned but unsorted, and the function returns the sorted prefix length.
 - `partial_sort_copy(data, output_capacity)` and its `_by` comparator form
   use the destination capacity to select and sort a prefix into a new list;
   this eager counterpart leaves the source unchanged.

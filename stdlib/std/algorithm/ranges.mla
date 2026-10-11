@@ -6700,6 +6700,40 @@ fn ranges_sift_down_in_place(data: &mut list<T>, heap_len: i64, root: i64,
     return swaps;
 }
 
+generic<T, Less, Projection>
+fn ranges_partial_sort_in_place_by_projected(
+    data: &mut list<T>, count: i64, less: Less,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    var limit: i64 = count;
+    if limit < 0 { limit = 0; }
+    if limit > n { limit = n; }
+    if limit == 0 { return 0; }
+
+    var parent: i64 = limit / 2;
+    while parent > 0 {
+        parent = parent - 1;
+        ranges_sift_down_in_place(data, limit, parent, less, projection);
+    }
+    for i in limit..n {
+        if less(projection(data[i]), projection(data[0])) {
+            let temporary: T = data[0];
+            data[0] = data[i];
+            data[i] = temporary;
+            ranges_sift_down_in_place(data, limit, 0, less, projection);
+        }
+    }
+    var heap_len: i64 = limit;
+    while heap_len > 1 {
+        heap_len = heap_len - 1;
+        let temporary: T = data[0];
+        data[0] = data[heap_len];
+        data[heap_len] = temporary;
+        ranges_sift_down_in_place(data, heap_len, 0, less, projection);
+    }
+    return limit;
+}
+
 /// @brief Sort a mutable list in place using a heap-based O(N log N) sort.
 /// Returns the number of element swaps; unlike `sorted`, this operation is
 /// not stable and mutates its input.
@@ -6755,6 +6789,44 @@ generic<T>
 pub fn sort_in_place(data: &mut list<T>) -> i64 {
     return sort_in_place_by_projected(data, ranges_default_less,
                                       ranges_identity);
+}
+
+/// @brief Sort only the smallest requested prefix of a mutable list.
+/// The prefix is ascending and the remaining elements are not sorted. Counts
+/// clamp to the list length; returns the number of prefix elements sorted.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn partial_sort_in_place(data: &mut list<T>, count: i64) -> i64 {
+    return ranges_partial_sort_in_place_by_projected(
+        data, count, ranges_default_less, ranges_identity);
+}
+
+/// @brief Partially sort a mutable list using the strict ordering `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn partial_sort_in_place_by(data: &mut list<T>, count: i64,
+                                less: Less) -> i64 {
+    return ranges_partial_sort_in_place_by_projected(
+        data, count, less, ranges_identity);
+}
+
+/// @brief Partially sort a mutable list by projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn partial_sort_in_place_projected(
+    data: &mut list<T>, count: i64, projection: Projection) -> i64 {
+    return ranges_partial_sort_in_place_by_projected(
+        data, count, ranges_default_less, projection);
+}
+
+/// @brief Partially sort a mutable list by comparator over projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn partial_sort_in_place_by_projected(
+    data: &mut list<T>, count: i64, less: Less,
+    projection: Projection) -> i64 {
+    return ranges_partial_sort_in_place_by_projected(
+        data, count, less, projection);
 }
 
 /// @brief Return the next lexicographic permutation and whether it exists.
