@@ -373,6 +373,7 @@ use std::algorithm::ranges::for_each_n_count;
 use std::algorithm::ranges::for_each_n_projected_count;
 use std::algorithm::ranges::generate_n;
 use std::algorithm::ranges::generate;
+use std::algorithm::ranges::generate_in_place;
 use std::algorithm::ranges::fill;
 use std::algorithm::ranges::fill_in_place;
 use std::algorithm::ranges::fill_n_in_place;
@@ -5273,6 +5274,24 @@ fn test_algorithm_ranges_generate_shape() {
     let empty: list<i32> = [];
     let no_values: list<i32> = generate(empty, next);
     verify(no_values.len() == 0 && next_value == 13);
+}
+
+#[test]
+fn test_algorithm_ranges_generate_in_place() {
+    var next_value: i32 = 20;
+    let next = || {
+        next_value = next_value + 2;
+        return next_value;
+    };
+    var values: list<i32> = [0, 0, 0];
+    verify(generate_in_place(values, next) == 3);
+    verify(values.len() == 3 && values[0] == 22 &&
+           values[1] == 24 && values[2] == 26);
+    verify(next_value == 26);
+
+    var empty: list<i32> = [];
+    verify(generate_in_place(empty, next) == 0);
+    verify(next_value == 26);
 }
 
 #[test]

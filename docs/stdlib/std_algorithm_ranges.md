@@ -312,6 +312,10 @@ fn example() {
 - `generate(shape, generator)` uses the shape list's length to invoke a
   zero-argument generator into a new list; shape values are ignored and the
   source remains unchanged. Empty shape performs no calls.
+- `generate_in_place(&mut data, generator)` fills every existing list slot
+  from a zero-argument generator and returns the number written. The generated
+  type must match the list element type; empty lists do not invoke the
+  generator.
 - `fold_left(data, init, operation)` and `fold_right(data, init, operation)`
   reduce a range in forward or reverse order. The operation receives
   `(accumulator, element)` for left folds and `(element, accumulator)` for

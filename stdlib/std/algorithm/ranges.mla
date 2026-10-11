@@ -1284,6 +1284,17 @@ pub fn generate(shape: &list<Shape>, generator: Generator) -> list<Output> {
     return generated;
 }
 
+/// @brief Generate a value for every slot in a mutable list.
+/// The generated value must match the existing element type. Returns the
+/// number of slots written; an empty list does not invoke the generator.
+/// @ingroup algorithm_ranges
+generic<T, Generator>
+pub fn generate_in_place(data: &mut list<T>, generator: Generator) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n { data[i] = generator(); }
+    return n;
+}
+
 /// @brief Return a copy of `data` filled with `value` at every position.
 /// The input length acts as the output range size; the source is unchanged.
 /// Eager-list counterpart to C++20 `std::ranges::fill`.
