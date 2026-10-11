@@ -4,7 +4,8 @@
 
 Module file: `stdlib/std/algorithm/ranges.mla`
 
-Generic C++20–23-inspired algorithms for Mlang lists. Equality and ordering
+Generic C++20–23-inspired algorithms for Mlang lists and list-compatible
+sequences such as [`Vec`](Stdlib-Vec), fixed `array`, and [`multiarray`](Stdlib-Multiarray). Equality and ordering
 algorithms are monomorphized for the element type; searching supports a
 separate key type when Mlang can compare the values. Container transforms
 return a new list and leave the input unchanged.
@@ -375,8 +376,9 @@ fn example() {
   type, converting each source element in order. This is the Mlang eager-list
   counterpart to C++23 [`std::ranges::to`](Stdlib-Module-API); the output type is inferred from the
   expected result type, for example `let converted: list<f64> = to_list(values)`.
-  Nested lists are recursively materialized and converted while preserving
-  each row's length, including empty rows.
+  It accepts lists/[`Vec`](Stdlib-Vec), fixed arrays, and multidimensional arrays where their
+  element shape is compatible. Nested inputs are recursively materialized and
+  converted while preserving each row's length, including empty rows.
 - `swap_ranges(left, right)` returns two copied lists with corresponding
   elements in the common prefix exchanged; an unmatched tail is preserved.
   Both inputs remain unchanged.
