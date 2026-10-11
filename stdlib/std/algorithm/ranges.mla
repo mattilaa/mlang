@@ -1500,6 +1500,51 @@ pub fn copy_if_projected(data: &list<T>, predicate: Predicate,
     return selected;
 }
 
+/// @brief Copy predicate-matching elements into a bounded destination list.
+/// Stops when the source ends or the destination fills and returns
+/// `(consumed, written)`; each consumed input is tested once.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn copy_if_to(source: &list<T>, destination: &mut list<T>,
+                  predicate: Predicate) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if predicate(value) {
+            destination[written] = value;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Copy matching elements using a projected predicate into a bounded destination.
+/// Returns `(consumed, written)`; the predicate and projection are each run
+/// once for each consumed source item.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn copy_if_to_projected(
+    source: &list<T>, destination: &mut list<T>, predicate: Predicate,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if predicate(projection(value)) {
+            destination[written] = value;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Filter and transform in one pass, preserving the selected order.
 /// Eager equivalent of composing C++20 `views::filter` and
 /// `views::transform`, without materializing an intermediate list.

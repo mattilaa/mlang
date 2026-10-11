@@ -399,6 +399,10 @@ fn example() {
 - `copy_to(source, destination)` copies into an existing mutable list, stopping
   when either list ends and returning the number written. The source remains
   unchanged and any unused destination suffix is preserved.
+- `copy_if_to(source, destination, predicate)` writes matching source values
+  into an existing destination and stops when it fills. It returns
+  `(consumed, written)` so callers can resume from the exact source position;
+  the projected variant evaluates a projection before its predicate.
 - `to_list(data)` materializes a new list with an explicitly selected element
   type, converting each source element in order. This is the Mlang eager-list
   counterpart to C++23 `std::ranges::to`; the output type is inferred from the
