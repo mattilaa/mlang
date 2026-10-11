@@ -7759,6 +7759,51 @@ pub fn take_while_projected(data: &list<T>, predicate: Predicate,
     return out;
 }
 
+/// @brief Copy an accepted prefix into bounded output storage.
+/// Stops at the first rejected value, source end, or destination capacity and
+/// returns `(consumed, written)`. The rejected value is tested but not counted
+/// as consumed, allowing a caller to resume at that index.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate>
+pub fn take_while_to(source: &list<T>, destination: &mut list<Output>,
+    predicate: Predicate) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if !predicate(value) { break; }
+        destination[written] = value;
+        consumed = consumed + 1;
+        written = written + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Project keys while copying an accepted prefix into bounded output.
+/// The projected predicate tests each candidate; original values are
+/// converted to the destination type. Returns `(consumed, written)` and leaves
+/// the first rejected source value available for resumption.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Projection>
+pub fn take_while_to_projected(source: &list<T>,
+    destination: &mut list<Output>, predicate: Predicate,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if !predicate(projection(value)) { break; }
+        destination[written] = value;
+        consumed = consumed + 1;
+        written = written + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Materialize the integers in the half-open interval `[start, end)`.
 /// This is an eager list counterpart to C++20 `std::views::iota`.
 /// If `start >= end`, the result is empty.
@@ -7979,6 +8024,54 @@ pub fn drop_while_projected(data: &list<T>, predicate: Predicate,
         out.push(data[i]);
     }
     return out;
+}
+
+/// @brief Skip a matching prefix and copy the remainder to bounded output.
+/// Returns `(consumed, written)`; consumed includes both skipped elements and
+/// copied values. No source values are inspected when the destination is empty.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate>
+pub fn drop_while_to(source: &list<T>, destination: &mut list<Output>,
+    predicate: Predicate) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    if destination_len == 0 { return (0, 0); }
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && predicate(source[consumed]) {
+        consumed = consumed + 1;
+    }
+    while consumed < source_len && written < destination_len {
+        destination[written] = source[consumed];
+        consumed = consumed + 1;
+        written = written + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Project while skipping a prefix, then copy original values to output.
+/// Returns `(consumed, written)`; consumed includes the dropped prefix and the
+/// copied suffix. An empty destination causes no predicate/projection calls.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Projection>
+pub fn drop_while_to_projected(source: &list<T>,
+    destination: &mut list<Output>, predicate: Predicate,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    if destination_len == 0 { return (0, 0); }
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len &&
+          predicate(projection(source[consumed])) {
+        consumed = consumed + 1;
+    }
+    while consumed < source_len && written < destination_len {
+        destination[written] = source[consumed];
+        consumed = consumed + 1;
+        written = written + 1;
+    }
+    return (consumed, written);
 }
 
 generic<T>

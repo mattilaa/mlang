@@ -649,6 +649,11 @@ fn example() {
 - `take_while_projected` and `drop_while_projected` apply a predicate to
   projected keys while returning the original elements, preserving data shape
   for record-like lists.
+- `take_while_to` and `drop_while_to`, with projected forms, write prefix or
+  suffix selections into bounded output storage that may have a different
+  element type. They return `(consumed, written)`; `take_while_to` leaves the
+  first rejected value unconsumed, while `drop_while_to` counts both the
+  skipped prefix and copied suffix. Empty output performs no predicate work.
 - `take_last(data, count)` copies a suffix and `drop_last(data, count)` copies
   the prefix before it (C++23 `views::take_last`/`drop_last` counterparts).
   Counts are clamped to the range; non-positive counts yield empty/all values,

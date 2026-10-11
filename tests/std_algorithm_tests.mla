@@ -677,6 +677,10 @@ use std::algorithm::ranges::take_while;
 use std::algorithm::ranges::drop_while;
 use std::algorithm::ranges::take_while_projected;
 use std::algorithm::ranges::drop_while_projected;
+use std::algorithm::ranges::take_while_to;
+use std::algorithm::ranges::take_while_to_projected;
+use std::algorithm::ranges::drop_while_to;
+use std::algorithm::ranges::drop_while_to_projected;
 use std::algorithm::ranges::transform;
 use std::algorithm::ranges::transform_in_place;
 use std::algorithm::ranges::transform_to;
@@ -5125,6 +5129,70 @@ fn test_algorithm_ranges_take_drop_while() {
     let empty_prefix2: list<i32> = take_while(empty, below_three);
     let empty_suffix2: list<i32> = drop_while(empty, below_three);
     verify(empty_prefix2.len() == 0 && empty_suffix2.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_bounded_take_drop_while() {
+    let values: list<i32> = [1, 2, 3, 4];
+    var take_calls: i32 = 0;
+    let below_three = |value: i32| {
+        take_calls = take_calls + 1;
+        return value < 3;
+    };
+    var prefix: list<f64> = [-1.0, -1.0, 99.0];
+    let take_progress: tuple<i64, i64> =
+        take_while_to(values, prefix, below_three);
+    verify(take_progress.0 == 2 && take_progress.1 == 2 && take_calls == 3);
+    verify(prefix[0] == 1.0 && prefix[1] == 2.0 && prefix[2] == 99.0);
+
+    var suffix: list<f64> = [-1.0];
+    var drop_calls: i32 = 0;
+    let drop_below_three = |value: i32| {
+        drop_calls = drop_calls + 1;
+        return value < 3;
+    };
+    let drop_progress: tuple<i64, i64> =
+        drop_while_to(values, suffix, drop_below_three);
+    verify(drop_progress.0 == 3 && drop_progress.1 == 1 && drop_calls == 3);
+    verify(suffix[0] == 3.0);
+
+    let projected_values: list<i32> = [11, 21, 30, 41];
+    var projection_calls: i32 = 0;
+    var predicate_calls: i32 = 0;
+    let tens = |value: i32| {
+        projection_calls = projection_calls + 1;
+        return value / 10;
+    };
+    let below_three_key = |key: i32| {
+        predicate_calls = predicate_calls + 1;
+        return key < 3;
+    };
+    var projected_prefix: list<f64> = [0.0, 0.0, 99.0];
+    let projected_take_progress: tuple<i64, i64> =
+        take_while_to_projected(projected_values, projected_prefix,
+                                below_three_key, tens);
+    verify(projected_take_progress.0 == 2 &&
+           projected_take_progress.1 == 2 &&
+           projection_calls == 3 && predicate_calls == 3);
+    verify(projected_prefix[0] == 11.0 && projected_prefix[1] == 21.0 &&
+           projected_prefix[2] == 99.0);
+
+    projection_calls = 0;
+    predicate_calls = 0;
+    var projected_suffix: list<i64> = [0, 0];
+    let projected_drop_progress: tuple<i64, i64> =
+        drop_while_to_projected(projected_values, projected_suffix,
+                                below_three_key, tens);
+    verify(projected_drop_progress.0 == 4 &&
+           projected_drop_progress.1 == 2 &&
+           projection_calls == 3 && predicate_calls == 3);
+    verify(projected_suffix[0] == 30 && projected_suffix[1] == 41);
+
+    var no_output: list<i32> = [];
+    let no_output_progress: tuple<i64, i64> =
+        drop_while_to(values, no_output, drop_below_three);
+    verify(no_output_progress.0 == 0 && no_output_progress.1 == 0 &&
+           drop_calls == 3);
 }
 
 #[test]
