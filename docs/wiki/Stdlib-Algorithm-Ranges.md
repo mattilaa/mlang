@@ -189,6 +189,11 @@ fn example() {
 - `next_permutation_by_projected` and `prev_permutation_by_projected` combine
   comparator and projection ordering while preserving the same wrap and
   non-mutating behavior.
+- `next_permutation_in_place(&mut data)` and `prev_permutation_in_place`
+  advance/retreat the caller's list directly and return whether another
+  permutation existed. On wrap, they reverse the list to the first/last
+  permutation and return `false`; comparator and projected variants are also
+  available.
 - `min_element_value` and `max_element_value` return the selected value for a
   nonempty input. Use the index forms to handle empty ranges; value forms keep
   the first value on ties.

@@ -332,6 +332,14 @@ use std::algorithm::ranges::prev_permutation;
 use std::algorithm::ranges::prev_permutation_by;
 use std::algorithm::ranges::prev_permutation_projected;
 use std::algorithm::ranges::prev_permutation_by_projected;
+use std::algorithm::ranges::next_permutation_in_place;
+use std::algorithm::ranges::next_permutation_in_place_by;
+use std::algorithm::ranges::next_permutation_in_place_projected;
+use std::algorithm::ranges::next_permutation_in_place_by_projected;
+use std::algorithm::ranges::prev_permutation_in_place;
+use std::algorithm::ranges::prev_permutation_in_place_by;
+use std::algorithm::ranges::prev_permutation_in_place_projected;
+use std::algorithm::ranges::prev_permutation_in_place_by_projected;
 use std::algorithm::ranges::reversed;
 use std::algorithm::ranges::reverse_copy;
 use std::algorithm::ranges::reverse_in_place;
@@ -2882,6 +2890,61 @@ fn test_algorithm_ranges_comparator_projected_permutations() {
     verify(!wrapped_previous.0 &&
            project_tens(wrapped_previous_values[0]) == 1 &&
            project_tens(wrapped_previous_values[2]) == 2);
+}
+
+#[test]
+fn test_algorithm_ranges_permutations_in_place() {
+    var ascending: list<i32> = [1, 2, 3];
+    verify(next_permutation_in_place(ascending));
+    verify(ascending[0] == 1 && ascending[1] == 3 && ascending[2] == 2);
+    verify(prev_permutation_in_place(ascending));
+    verify(ascending[0] == 1 && ascending[1] == 2 && ascending[2] == 3);
+    verify(!prev_permutation_in_place(ascending));
+    verify(ascending[0] == 3 && ascending[1] == 2 && ascending[2] == 1);
+    verify(!next_permutation_in_place(ascending));
+    verify(ascending[0] == 1 && ascending[1] == 2 && ascending[2] == 3);
+
+    var duplicates: list<i32> = [1, 2, 2];
+    verify(next_permutation_in_place(duplicates));
+    verify(duplicates[0] == 2 && duplicates[1] == 1 &&
+           duplicates[2] == 2);
+
+    let greater = |left: i32, right: i32| { return left > right; };
+    var descending: list<i32> = [3, 2, 1];
+    verify(next_permutation_in_place_by(descending, greater));
+    verify(descending[0] == 3 && descending[1] == 1 &&
+           descending[2] == 2);
+    verify(prev_permutation_in_place_by(descending, greater));
+    verify(descending[0] == 3 && descending[1] == 2 &&
+           descending[2] == 1);
+
+    let project_tens = |value: i32| { return value / 10; };
+    var projected: list<i32> = [11, 19, 22];
+    verify(next_permutation_in_place_projected(
+        projected, project_tens));
+    verify(projected[0] == 11 && projected[1] == 22 &&
+           projected[2] == 19);
+    verify(prev_permutation_in_place_projected(
+        projected, project_tens));
+    verify(projected[0] == 11 && projected[1] == 19 &&
+           projected[2] == 22);
+
+    var combined: list<i32> = [32, 21, 19];
+    verify(next_permutation_in_place_by_projected(
+        combined, greater, project_tens));
+    verify(combined[0] == 32 && combined[1] == 19 &&
+           combined[2] == 21);
+    verify(prev_permutation_in_place_by_projected(
+        combined, greater, project_tens));
+    verify(combined[0] == 32 && combined[1] == 21 &&
+           combined[2] == 19);
+
+    var empty: list<i32> = [];
+    var singleton: list<i32> = [7];
+    verify(!next_permutation_in_place(empty) && empty.len() == 0);
+    verify(!prev_permutation_in_place(empty) && empty.len() == 0);
+    verify(!next_permutation_in_place(singleton) && singleton[0] == 7);
+    verify(!prev_permutation_in_place(singleton) && singleton[0] == 7);
 }
 
 #[test]

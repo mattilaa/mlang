@@ -7601,6 +7601,136 @@ pub fn prev_permutation_by_projected(data: &list<T>, less: Less,
     return (true, out);
 }
 
+generic<T>
+fn ranges_reverse_subrange_in_place(data: &mut list<T>, first: i64,
+                                    last: i64) -> void {
+    var left: i64 = first;
+    var right: i64 = last - 1;
+    while left < right {
+        let temporary: T = data[left];
+        data[left] = data[right];
+        data[right] = temporary;
+        left = left + 1;
+        right = right - 1;
+    }
+}
+
+generic<T, Less, Projection>
+fn ranges_next_permutation_in_place_impl(
+    data: &mut list<T>, less: Less, projection: Projection) -> bool {
+    let n: i64 = data.len();
+    var pivot: i64 = n - 2;
+    while pivot >= 0 && !less(projection(data[pivot]),
+                              projection(data[pivot + 1])) {
+        pivot = pivot - 1;
+    }
+    if pivot < 0 {
+        ranges_reverse_subrange_in_place(data, 0, n);
+        return false;
+    }
+    var successor: i64 = n - 1;
+    while !less(projection(data[pivot]), projection(data[successor])) {
+        successor = successor - 1;
+    }
+    let temporary: T = data[pivot];
+    data[pivot] = data[successor];
+    data[successor] = temporary;
+    ranges_reverse_subrange_in_place(data, pivot + 1, n);
+    return true;
+}
+
+generic<T, Less, Projection>
+fn ranges_prev_permutation_in_place_impl(
+    data: &mut list<T>, less: Less, projection: Projection) -> bool {
+    let n: i64 = data.len();
+    var pivot: i64 = n - 2;
+    while pivot >= 0 && !less(projection(data[pivot + 1]),
+                              projection(data[pivot])) {
+        pivot = pivot - 1;
+    }
+    if pivot < 0 {
+        ranges_reverse_subrange_in_place(data, 0, n);
+        return false;
+    }
+    var predecessor: i64 = n - 1;
+    while !less(projection(data[predecessor]), projection(data[pivot])) {
+        predecessor = predecessor - 1;
+    }
+    let temporary: T = data[pivot];
+    data[pivot] = data[predecessor];
+    data[predecessor] = temporary;
+    ranges_reverse_subrange_in_place(data, pivot + 1, n);
+    return true;
+}
+
+/// @brief Advance a mutable list to its next lexicographic permutation.
+/// On wrap, reverse the range to its first permutation and return false.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn next_permutation_in_place(data: &mut list<T>) -> bool {
+    return ranges_next_permutation_in_place_impl(
+        data, ranges_default_less, ranges_identity);
+}
+
+/// @brief Advance a mutable permutation under comparator `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn next_permutation_in_place_by(data: &mut list<T>, less: Less) -> bool {
+    return ranges_next_permutation_in_place_impl(
+        data, less, ranges_identity);
+}
+
+/// @brief Advance a mutable permutation by projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn next_permutation_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> bool {
+    return ranges_next_permutation_in_place_impl(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Advance by comparator ordering over projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn next_permutation_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> bool {
+    return ranges_next_permutation_in_place_impl(data, less, projection);
+}
+
+/// @brief Retreat a mutable list to its previous lexicographic permutation.
+/// On wrap, reverse the range to its last permutation and return false.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn prev_permutation_in_place(data: &mut list<T>) -> bool {
+    return ranges_prev_permutation_in_place_impl(
+        data, ranges_default_less, ranges_identity);
+}
+
+/// @brief Retreat a mutable permutation under comparator `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn prev_permutation_in_place_by(data: &mut list<T>, less: Less) -> bool {
+    return ranges_prev_permutation_in_place_impl(
+        data, less, ranges_identity);
+}
+
+/// @brief Retreat a mutable permutation by projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn prev_permutation_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> bool {
+    return ranges_prev_permutation_in_place_impl(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Retreat by comparator ordering over projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn prev_permutation_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> bool {
+    return ranges_prev_permutation_in_place_impl(data, less, projection);
+}
+
 /// @brief Return a reversed copy of a list.
 /// @ingroup algorithm_ranges
 generic<T>
