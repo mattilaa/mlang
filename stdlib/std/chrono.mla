@@ -47,6 +47,17 @@ use std::date::weekday_c_encoding as date_weekday_c_encoding;
 use std::date::weekday_iso_encoding as date_weekday_iso_encoding;
 use std::date::add_weekdays as date_add_weekdays;
 use std::date::month_days as date_month_days;
+use std::date::is_valid_civil_date as date_is_valid_civil_date;
+use std::date::add_civil_days as date_add_civil_days;
+use std::date::add_civil_years as date_add_civil_years;
+use std::date::add_civil_months as date_add_civil_months;
+use std::date::add_year_month_months as date_add_year_month_months;
+use std::date::add_year_month_years as date_add_year_month_years;
+use std::date::year_month_first_day as date_year_month_first_day;
+use std::date::year_month_last_day as date_year_month_last_day;
+use std::date::years_between as date_years_between;
+use std::date::months_between as date_months_between;
+use std::date::days_between as date_days_between;
 mod std::time;
 use std::time::now_ns;
 
@@ -297,6 +308,70 @@ pub fn add_weekdays(value: weekday, offset: i64) -> weekday {
 /// @brief Return the number of days in a valid month/year pair.
 pub fn month_days(value: month, year_value: year) -> i32 {
     return date_month_days(value, year_value.value);
+}
+
+/// @brief Check whether all year/month/day fields form a Gregorian date.
+pub fn year_month_day_is_valid(value: year_month_day) -> bool {
+    return date_is_valid_civil_date(value.year, value.month, value.day);
+}
+
+/// @brief Add years while preserving month/day fields.
+/// A leap day may become invalid in a common year; check with
+/// `year_month_day_is_valid` before converting to `sys_days`.
+pub fn year_month_day_add_years(value: year_month_day, offset: i64)
+    -> option<year_month_day> {
+    return date_add_civil_years(value, offset);
+}
+
+/// @brief Add months while preserving the day field.
+/// The resulting date can be invalid if the target month is shorter.
+pub fn year_month_day_add_months(value: year_month_day, offset: i64)
+    -> option<year_month_day> {
+    return date_add_civil_months(value, offset);
+}
+
+/// @brief Add days by converting through system-day precision.
+pub fn year_month_day_add_days(value: year_month_day, offset: i64)
+    -> option<year_month_day> {
+    return date_add_civil_days(value, offset);
+}
+
+/// @brief Add months to a year/month pair, normalizing across years.
+pub fn year_month_add_months(value: year_month, offset: i64)
+    -> option<year_month> {
+    return date_add_year_month_months(value, offset);
+}
+
+/// @brief Add years to a year/month pair while preserving the month.
+pub fn year_month_add_years(value: year_month, offset: i64)
+    -> option<year_month> {
+    return date_add_year_month_years(value, offset);
+}
+
+/// @brief Return the first day of a valid year/month pair.
+pub fn year_month_first_day(value: year_month) -> option<year_month_day> {
+    return date_year_month_first_day(value);
+}
+
+/// @brief Return the last day of a valid year/month pair.
+pub fn year_month_last_day(value: year_month) -> option<year_month_day> {
+    return date_year_month_last_day(value);
+}
+
+/// @brief Return the signed year distance between valid years.
+pub fn years_between(first: year, last: year) -> option<i64> {
+    return date_years_between(first, last);
+}
+
+/// @brief Return the signed month distance between valid year/month pairs.
+pub fn months_between(first: year_month, last: year_month) -> option<i64> {
+    return date_months_between(first, last);
+}
+
+/// @brief Return the signed day distance between valid Gregorian dates.
+pub fn days_between(first: year_month_day, last: year_month_day)
+    -> option<i64> {
+    return date_days_between(first, last);
 }
 
 /// @brief Supported fixed duration units, from nanoseconds through weeks.

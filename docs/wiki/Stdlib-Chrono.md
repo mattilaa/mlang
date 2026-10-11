@@ -78,6 +78,14 @@ let tomorrow = sys_days_add_days(epoch_point, 1).unwrap();
 - `make_weekday`, `weekday_c_encoding`, `weekday_iso_encoding`,
   `weekday_from_sys_days`, `weekday_of`, and `add_weekdays` cover typed weekday
   construction, conversion, and modular arithmetic.
+- Calendar arithmetic is exposed as checked functions: `year_month_add_months`
+  and `year_month_add_years` normalize the year/month pair;
+  `year_month_day_add_years` and `year_month_day_add_months` preserve the day
+  field (so the result can be an invalid date, like C++'s field-based
+  arithmetic); `year_month_day_add_days` converts through day precision.
+  `year_month_day_is_valid` validates fields, while `years_between`,
+  `months_between`, `days_between`, `year_month_first_day`, and
+  `year_month_last_day` provide common calendar queries.
 - `sys_days` is a distinct system-clock day-precision time point storing its
   signed day count from the Unix epoch. `make_sys_days` and the
   `to_sys_days(year_month_day)` overload construct it; `from_sys_days(sys_days)`
