@@ -319,6 +319,22 @@ use std::algorithm::ranges::symmetric_difference_sorted_to;
 use std::algorithm::ranges::symmetric_difference_sorted_to_projected;
 use std::algorithm::ranges::symmetric_difference_sorted_to_by;
 use std::algorithm::ranges::symmetric_difference_sorted_to_by_projected;
+use std::algorithm::ranges::union_sorted_to_heterogeneous;
+use std::algorithm::ranges::union_sorted_to_heterogeneous_projected;
+use std::algorithm::ranges::union_sorted_to_heterogeneous_by;
+use std::algorithm::ranges::union_sorted_to_heterogeneous_by_projected;
+use std::algorithm::ranges::intersection_sorted_to_heterogeneous;
+use std::algorithm::ranges::intersection_sorted_to_heterogeneous_projected;
+use std::algorithm::ranges::intersection_sorted_to_heterogeneous_by;
+use std::algorithm::ranges::intersection_sorted_to_heterogeneous_by_projected;
+use std::algorithm::ranges::difference_sorted_to_heterogeneous;
+use std::algorithm::ranges::difference_sorted_to_heterogeneous_projected;
+use std::algorithm::ranges::difference_sorted_to_heterogeneous_by;
+use std::algorithm::ranges::difference_sorted_to_heterogeneous_by_projected;
+use std::algorithm::ranges::symmetric_difference_sorted_to_heterogeneous;
+use std::algorithm::ranges::symmetric_difference_sorted_to_heterogeneous_projected;
+use std::algorithm::ranges::symmetric_difference_sorted_to_heterogeneous_by;
+use std::algorithm::ranges::symmetric_difference_sorted_to_heterogeneous_by_projected;
 use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::lower_bound_projected;
 use std::algorithm::ranges::lower_bound_by_projected;
@@ -2668,6 +2684,91 @@ fn test_algorithm_ranges_bounded_set_operations() {
     difference_sorted_to_by_projected([39, 28, 22], [35, 27, 12],
         combined_difference, greater, tens);
     verify(combined_difference[0] == 22);
+}
+
+#[test]
+fn test_algorithm_ranges_heterogeneous_bounded_set_operations() {
+    let left: list<i32> = [1, 2, 2, 4];
+    let right: list<i64> = [2, 3, 4, 4];
+    let less = |a: i64, b: i64| { return a < b; };
+    let left_key = |value: i32| { return i64(value); };
+    let right_key = |value: i64| { return value; };
+
+    var union: list<i64> = [0, 0, 0, 0, 0, 0];
+    let union_progress: tuple<i64, i64, i64> =
+        union_sorted_to_heterogeneous(left, right, union);
+    verify(union_progress.0 == 4 && union_progress.1 == 4 &&
+           union_progress.2 == 6);
+    verify(union[0] == 1 && union[1] == 2 && union[2] == 2 &&
+           union[3] == 3 && union[4] == 4 && union[5] == 4);
+    var short_union: list<i64> = [0, 0];
+    let short_progress: tuple<i64, i64, i64> =
+        union_sorted_to_heterogeneous(left, right, short_union);
+    verify(short_progress.0 == 2 && short_progress.1 == 1 &&
+           short_progress.2 == 2 && short_union[0] == 1 &&
+           short_union[1] == 2);
+
+    var projected_union: list<i64> = [0, 0, 0, 0, 0, 0];
+    verify(union_sorted_to_heterogeneous_projected(
+        left, right, projected_union, left_key, right_key).2 == 6);
+    var by_union: list<i64> = [0, 0, 0, 0, 0, 0];
+    verify(union_sorted_to_heterogeneous_by(
+        left, right, by_union, less).2 == 6);
+    var by_projected_union: list<i64> = [0, 0, 0, 0, 0, 0];
+    verify(union_sorted_to_heterogeneous_by_projected(
+        left, right, by_projected_union, less, left_key, right_key).2 == 6);
+
+    var intersection: list<i64> = [0, 0];
+    let intersection_progress: tuple<i64, i64, i64> =
+        intersection_sorted_to_heterogeneous(left, right, intersection);
+    verify(intersection_progress.0 == 4 && intersection_progress.1 == 3 &&
+           intersection_progress.2 == 2);
+    verify(intersection[0] == 2 && intersection[1] == 4);
+    var projected_intersection: list<i64> = [0, 0];
+    verify(intersection_sorted_to_heterogeneous_projected(
+        left, right, projected_intersection, left_key, right_key).2 == 2);
+    var by_intersection: list<i64> = [0, 0];
+    verify(intersection_sorted_to_heterogeneous_by(
+        left, right, by_intersection, less).2 == 2);
+    var by_projected_intersection: list<i64> = [0, 0];
+    verify(intersection_sorted_to_heterogeneous_by_projected(
+        left, right, by_projected_intersection,
+        less, left_key, right_key).2 == 2);
+
+    var difference: list<i64> = [0, 0];
+    let difference_progress: tuple<i64, i64, i64> =
+        difference_sorted_to_heterogeneous(left, right, difference);
+    verify(difference_progress.0 == 4 && difference_progress.1 == 4 &&
+           difference_progress.2 == 2);
+    verify(difference[0] == 1 && difference[1] == 2);
+    var projected_difference: list<i64> = [0, 0];
+    verify(difference_sorted_to_heterogeneous_projected(
+        left, right, projected_difference, left_key, right_key).2 == 2);
+    var by_difference: list<i64> = [0, 0];
+    verify(difference_sorted_to_heterogeneous_by(
+        left, right, by_difference, less).2 == 2);
+    var by_projected_difference: list<i64> = [0, 0];
+    verify(difference_sorted_to_heterogeneous_by_projected(
+        left, right, by_projected_difference,
+        less, left_key, right_key).2 == 2);
+
+    var symmetric: list<i64> = [0, 0, 0, 0];
+    let symmetric_progress: tuple<i64, i64, i64> =
+        symmetric_difference_sorted_to_heterogeneous(left, right, symmetric);
+    verify(symmetric_progress.0 == 4 && symmetric_progress.1 == 4 &&
+           symmetric_progress.2 == 4);
+    verify(symmetric[0] == 1 && symmetric[1] == 2 &&
+           symmetric[2] == 3 && symmetric[3] == 4);
+    var projected_symmetric: list<i64> = [0, 0, 0, 0];
+    verify(symmetric_difference_sorted_to_heterogeneous_projected(
+        left, right, projected_symmetric, left_key, right_key).2 == 4);
+    var by_symmetric: list<i64> = [0, 0, 0, 0];
+    verify(symmetric_difference_sorted_to_heterogeneous_by(
+        left, right, by_symmetric, less).2 == 4);
+    var by_projected_symmetric: list<i64> = [0, 0, 0, 0];
+    verify(symmetric_difference_sorted_to_heterogeneous_by_projected(
+        left, right, by_projected_symmetric,
+        less, left_key, right_key).2 == 4);
 }
 
 #[test]

@@ -777,6 +777,11 @@ fn example() {
   resumed safely. Each operation also has `_projected`, `_by`, and
   `_by_projected` forms, with the same ordering and multiplicity semantics as
   its list-returning counterpart.
+- The `*_sorted_to_heterogeneous` forms accept distinct left and right input
+  element types plus an output element type assignable from either input. Each
+  operation also has independently projected, custom-order, and combined
+  `_by_projected` variants. They preserve the same multiplicity rules and
+  `(left_consumed, right_consumed, written)` progress result.
 - `merged_projected` and the four `*_sorted_projected` set operations compare
   unary projected keys. Inputs must be sorted by the same projection; they
   retain the merge stability and multiset multiplicity rules described above.
