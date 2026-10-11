@@ -520,6 +520,11 @@ fn example() {
   each current exclusive bound; use a uniformly distributed selector for an
   unbiased permutation. Because lists are eagerly rebuilt without indexed
   mutation, this implementation is O(N²) and leaves the input unchanged.
+- `shuffle_in_place(&mut data, choose_index)` uses Fisher-Yates to shuffle a
+  mutable list in O(N) time without allocating a second list. The selector
+  receives the current exclusive bound; invalid indices are clamped. It
+  returns the number of swaps performed and does not call the selector for
+  lists shorter than two elements.
 - `unique_by(data, equivalent)` removes adjacent equivalent elements while
   keeping the first value in each run.
 - `unique_by_projected(data, equivalent, projection)` compares projected keys

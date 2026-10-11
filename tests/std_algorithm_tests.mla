@@ -504,6 +504,7 @@ use std::algorithm::ranges::copy_if_to_projected;
 use std::algorithm::ranges::sample as ranges_sample;
 use std::algorithm::ranges::sample_to as ranges_sample_to;
 use std::algorithm::ranges::shuffle as ranges_shuffle;
+use std::algorithm::ranges::shuffle_in_place as ranges_shuffle_in_place;
 use std::algorithm::ranges::remove_copy;
 use std::algorithm::ranges::remove_copy_by;
 use std::algorithm::ranges::remove_copy_by_projected;
@@ -6558,6 +6559,36 @@ fn test_algorithm_ranges_shuffle_copy() {
     let singleton: list<i32> = [8];
     let shuffled_singleton: list<i32> = ranges_shuffle(singleton, choose_last);
     verify(shuffled_singleton.len() == 1 && shuffled_singleton[0] == 8);
+}
+
+#[test]
+fn test_algorithm_ranges_shuffle_in_place() {
+    var values: list<i32> = [1, 2, 3, 4];
+    var selector_calls: i64 = 0;
+    let choose_first = |bound: i64| {
+        selector_calls = selector_calls + 1;
+        return 0;
+    };
+    verify(ranges_shuffle_in_place(values, choose_first) == 3);
+    verify(selector_calls == 3);
+    verify(values[0] == 2 && values[1] == 3 &&
+           values[2] == 4 && values[3] == 1);
+
+    let choose_last = |bound: i64| { return bound - 1; };
+    verify(ranges_shuffle_in_place(values, choose_last) == 0);
+    verify(values[0] == 2 && values[1] == 3 &&
+           values[2] == 4 && values[3] == 1);
+
+    var clamped: list<i32> = [1, 2, 3];
+    let choose_below_range = |bound: i64| { return -1; };
+    verify(ranges_shuffle_in_place(clamped, choose_below_range) == 2);
+    verify(clamped[0] == 2 && clamped[1] == 3 && clamped[2] == 1);
+
+    var empty: list<i32> = [];
+    var singleton: list<i32> = [9];
+    verify(ranges_shuffle_in_place(empty, choose_first) == 0);
+    verify(ranges_shuffle_in_place(singleton, choose_first) == 0);
+    verify(selector_calls == 3 && singleton[0] == 9);
 }
 
 

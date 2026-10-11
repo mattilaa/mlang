@@ -2929,6 +2929,33 @@ pub fn shuffle(data: &list<T>, choose_index: ChooseIndex) -> list<T> {
     return shuffled;
 }
 
+/// @brief Shuffle a mutable list in place using Fisher-Yates.
+/// `choose_index(upper_bound)` must return an index in `[0, upper_bound)`;
+/// out-of-range results are clamped. Returns the number of swaps performed.
+/// Lists shorter than two elements do not invoke the selector. This is the
+/// eager-list counterpart to C++20 `std::ranges::shuffle`.
+/// @ingroup algorithm_ranges
+generic<T, ChooseIndex>
+pub fn shuffle_in_place(data: &mut list<T>, choose_index: ChooseIndex) -> i64 {
+    let n: i64 = data.len();
+    var i: i64 = n - 1;
+    var swaps: i64 = 0;
+    while i > 0 {
+        let bound: i64 = i + 1;
+        var selected: i64 = choose_index(bound);
+        if selected < 0 { selected = 0; }
+        if selected >= bound { selected = bound - 1; }
+        if selected != i {
+            let temporary: T = data[i];
+            data[i] = data[selected];
+            data[selected] = temporary;
+            swaps = swaps + 1;
+        }
+        i = i - 1;
+    }
+    return swaps;
+}
+
 /// @brief Copy elements unequal to `value` into a new list.
 /// C++20 `std::ranges::remove_copy` counterpart; the input is unchanged.
 /// @ingroup algorithm_ranges
