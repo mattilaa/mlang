@@ -1,0 +1,59 @@
+/// \file type_traits.mla
+/// \brief Compile-time C++20-style primitive type traits for Mlang.
+///
+/// These traits are `cexpr fn`s: call them in `cexpr(...)` or
+/// `static_assert!` contexts so classification happens during compilation.
+
+generic<T, U>
+cexpr pub fn is_same(left: T, right: U) -> bool {
+    return type_id(T) == type_id(U);
+}
+
+generic<T>
+cexpr pub fn is_integral(value: T) -> bool {
+    cexpr if type_id(T) == bool || type_id(T) == bit ||
+             type_id(T) == i8 || type_id(T) == i16 ||
+             type_id(T) == i32 || type_id(T) == i64 ||
+             type_id(T) == u8 || type_id(T) == u16 ||
+             type_id(T) == u32 || type_id(T) == u64 {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+generic<T>
+cexpr pub fn is_floating_point(value: T) -> bool {
+    cexpr if type_id(T) == f32 || type_id(T) == f64 {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+generic<T>
+cexpr pub fn is_signed(value: T) -> bool {
+    cexpr if type_id(T) == i8 || type_id(T) == i16 ||
+             type_id(T) == i32 || type_id(T) == i64 ||
+             type_id(T) == f32 || type_id(T) == f64 {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+generic<T>
+cexpr pub fn is_unsigned(value: T) -> bool {
+    cexpr if type_id(T) == u8 || type_id(T) == u16 ||
+             type_id(T) == u32 || type_id(T) == u64 ||
+             type_id(T) == bool {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+generic<T>
+cexpr pub fn is_arithmetic(value: T) -> bool {
+    return is_integral(value) || is_floating_point(value);
+}

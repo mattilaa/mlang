@@ -102,6 +102,8 @@ mod std_source_location_tests;
 use std_source_location_tests::*;
 mod std_scope_exit_tests;
 use std_scope_exit_tests::*;
+mod std_type_traits_tests;
+use std_type_traits_tests::*;
 mod std_testing_tests;
 use std_testing_tests::*;
 mod update_expression_tests;
