@@ -506,6 +506,9 @@ use std::algorithm::ranges::remove_in_place;
 use std::algorithm::ranges::remove_if_in_place;
 use std::algorithm::ranges::remove_in_place_projected;
 use std::algorithm::ranges::remove_if_in_place_projected;
+use std::algorithm::ranges::erase;
+use std::algorithm::ranges::erase_if;
+use std::algorithm::ranges::erase_if_projected;
 use std::algorithm::ranges::copy_if;
 use std::algorithm::ranges::copy_if_to;
 use std::algorithm::ranges::copy_if_to_projected;
@@ -6997,6 +7000,45 @@ fn test_algorithm_ranges_remove_in_place() {
     verify(remove_in_place(empty, 2) == 0);
     verify(remove_in_place(all_removed, 2) == 0);
     verify(remove_in_place(none_removed, 2) == none_removed.len());
+}
+
+#[test]
+fn test_algorithm_ranges_erase_container_semantics() {
+    var values: list<i32> = [1, 2, 2, 3, 2, 4];
+    verify(erase(values, 2) == 3);
+    verify(values.len() == 3 && values[0] == 1 &&
+           values[1] == 3 && values[2] == 4);
+
+    var evens: list<i32> = [1, 2, 3, 4, 5, 6];
+    var predicate_calls: i64 = 0;
+    let is_even = |value: i32| {
+        predicate_calls = predicate_calls + 1;
+        return value % 2 == 0;
+    };
+    verify(erase_if(evens, is_even) == 3);
+    verify(evens.len() == 3 && evens[0] == 1 &&
+           evens[1] == 3 && evens[2] == 5);
+    verify(predicate_calls == 6);
+
+    var records: list<AlgorithmRangeItem> = [
+        AlgorithmRangeItem { key: 1, payload: 10 },
+        AlgorithmRangeItem { key: 2, payload: 20 },
+        AlgorithmRangeItem { key: 3, payload: 30 },
+        AlgorithmRangeItem { key: 4, payload: 40 }
+    ];
+    var projection_calls: i64 = 0;
+    let project_key = |item: AlgorithmRangeItem| {
+        projection_calls = projection_calls + 1;
+        return item.key;
+    };
+    let remove_below_three = |key: i32| { return key < 3; };
+    verify(erase_if_projected(records, remove_below_three, project_key) == 2);
+    verify(records.len() == 2 && records[0].key == 3 &&
+           records[1].key == 4 && projection_calls == 4);
+
+    var empty: list<i32> = [];
+    verify(erase(empty, 1) == 0 && empty.len() == 0);
+    verify(erase_if(empty, is_even) == 0 && empty.len() == 0);
 }
 
 #[test]

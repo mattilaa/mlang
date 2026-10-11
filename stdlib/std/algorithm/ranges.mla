@@ -7053,6 +7053,61 @@ pub fn remove_if_in_place_projected(data: &mut list<T>, predicate: Predicate,
     return ranges_remove_if_in_place_core(data, predicate, projection);
 }
 
+/// @brief Erase every element equal to `value` from a mutable list.
+/// Unlike `remove_in_place`, this shortens the list and returns the number
+/// erased, matching C++20 `std::erase` container semantics.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn erase(data: &mut list<T>, value: U) -> i64 {
+    var retained: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let item: T = data[i];
+        if item != value { retained.push(item); }
+    }
+    let erased: i64 = n - retained.len();
+    data.clear();
+    data.extend(retained);
+    return erased;
+}
+
+/// @brief Erase every predicate-matching element from a mutable list.
+/// Returns the number erased and shortens the list, matching C++20
+/// `std::erase_if` container semantics. The predicate runs once per element.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn erase_if(data: &mut list<T>, predicate: Predicate) -> i64 {
+    var retained: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let item: T = data[i];
+        if !predicate(item) { retained.push(item); }
+    }
+    let erased: i64 = n - retained.len();
+    data.clear();
+    data.extend(retained);
+    return erased;
+}
+
+/// @brief Erase elements accepted by a predicate over projected keys.
+/// Projection and predicate each run once per element; retained elements and
+/// their order are preserved.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn erase_if_projected(data: &mut list<T>, predicate: Predicate,
+                          projection: Projection) -> i64 {
+    var retained: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let item: T = data[i];
+        if !predicate(projection(item)) { retained.push(item); }
+    }
+    let erased: i64 = n - retained.len();
+    data.clear();
+    data.extend(retained);
+    return erased;
+}
+
 /// @brief Copy the first `n` elements (or all elements when n is larger).
 /// @ingroup algorithm_ranges
 generic<T>

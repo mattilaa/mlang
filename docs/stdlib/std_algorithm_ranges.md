@@ -801,6 +801,11 @@ fn example() {
   equality and predicates. Each predicate/projection is called once per input
   element. This mirrors C++20 `std::ranges::remove` / `remove_if`, whose result
   marks the retained prefix rather than erasing the container's tail.
+- `erase(data, value)` and `erase_if(data, predicate)` remove matching values
+  and shrink the mutable list, returning the number erased. These complement
+  the logical-end `remove_in_place` algorithms with C++20
+  `std::erase`/`std::erase_if` container semantics. `erase_if_projected` tests
+  projected keys while preserving retained elements and their order.
 - `remove_by` and `remove_copy_by` exclude every element matching a lookup key
   under a caller-supplied equivalence predicate; both preserve source order.
 - `remove_by_projected` and `remove_copy_by_projected` apply that equivalence
