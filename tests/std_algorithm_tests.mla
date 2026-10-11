@@ -695,6 +695,8 @@ use std::algorithm::ranges::transform_in_place_projected;
 use std::algorithm::ranges::transform_projected_with_count;
 use std::algorithm::ranges::zip_transform;
 use std::algorithm::ranges::zip_transform_projected;
+use std::algorithm::ranges::zip_transform_to;
+use std::algorithm::ranges::zip_transform_to_projected;
 use std::algorithm::ranges::zip_transform3_projected;
 use std::algorithm::ranges::zip_transform4_projected;
 use std::algorithm::ranges::zip_transform5_projected;
@@ -5420,6 +5422,37 @@ fn test_algorithm_ranges_transform_to_output_range() {
 
     let empty: list<i32> = [];
     verify(transform_to(empty, longer_destination, expand) == 0);
+
+    let left: list<i32> = [1, 2, 3];
+    let right: list<f64> = [10.5, 20.5];
+    let add_mixed = |a: i32, b: f64| { return f64(a) + b; };
+    var binary_output: list<f64> = [-1.0, -1.0, 99.0];
+    verify(transform_to(left, right, binary_output, add_mixed) == 2);
+    verify(binary_output[0] == 11.5 && binary_output[1] == 22.5 &&
+           binary_output[2] == 99.0);
+
+    let record_left: list<i32> = [11, 22, 33];
+    let record_right: list<i32> = [101, 202, 303];
+    let left_tens = |value: i32| { return value / 10; };
+    let right_last_digit = |value: i32| { return value % 100; };
+    let sum_projected = |a: i32, b: i32| { return i64(a + b); };
+    var projected_binary_output: list<i64> = [0, 0, 77];
+    verify(transform_to_projected(
+        record_left, record_right, projected_binary_output, sum_projected,
+        left_tens, right_last_digit) == 2);
+    verify(projected_binary_output[0] == 2 &&
+           projected_binary_output[1] == 4 &&
+           projected_binary_output[2] == 77);
+
+    var zip_output: list<f64> = [0.0, 0.0];
+    verify(zip_transform_to(left, right, zip_output, add_mixed) == 2);
+    verify(zip_output[0] == 11.5 && zip_output[1] == 22.5);
+    var projected_zip_output: list<i64> = [0, 0, 77];
+    verify(zip_transform_to_projected(
+        record_left, record_right, projected_zip_output, sum_projected,
+        left_tens, right_last_digit) == 2);
+    verify(projected_zip_output[0] == 2 && projected_zip_output[1] == 4 &&
+           projected_zip_output[2] == 77);
 }
 
 #[test]

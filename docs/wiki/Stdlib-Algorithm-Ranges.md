@@ -524,6 +524,10 @@ fn example() {
 - The binary `transform(left, right, operation)` overload transforms paired
   elements into a new list and stops at the shorter input, matching the bounded
   two-range form of C++20 [`std::ranges::transform`](Stdlib-Module-API).
+- The binary `transform_to(left, right, destination, operation)` overload
+  writes paired transform results into existing bounded storage. It stops at
+  the shortest of the two inputs and destination; the projected overload
+  accepts independent projections for each input.
 - `transform_projected` applies a projection before its unary operation;
   `zip_transform_projected` applies independent projections to paired inputs
   before the binary operation, stopping at the shorter range.
@@ -535,6 +539,10 @@ fn example() {
 - `zip_transform` applies operations to corresponding values from two through
   eight inputs, stopping at the shortest input and inferring the output type.
   This eager-list API mirrors the C++23 [`std::ranges::zip_transform`](Stdlib-Module-API) shape.
+- `zip_transform_to` and `zip_transform_to_projected` write paired results to
+  bounded caller-provided output. They stop at the shortest input or output
+  and return the number written; the projected form accepts independent input
+  projections.
 - `zip` materializes heterogeneous tuples from two through eight input ranges,
   stopping at the shortest input.
 - `find_if_not` returns the first rejected element's index; `remove_if` returns

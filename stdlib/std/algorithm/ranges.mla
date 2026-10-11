@@ -2080,6 +2080,27 @@ pub fn transform_to(source: &list<T>, destination: &mut list<Output>,
     return count;
 }
 
+/// @brief Binary transform into a caller-provided output range.
+/// Processes paired positions until either input or the destination ends and
+/// returns the number written. The two input element types and output type may
+/// all differ. C++20 `std::ranges::transform` binary output-range form.
+/// @ingroup algorithm_ranges
+generic<T, U, Output, Operation>
+pub fn transform_to(left: &list<T>, right: &list<U>,
+                    destination: &mut list<Output>,
+                    operation: Operation) -> i64 {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = left_len;
+    if right_len < count { count = right_len; }
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        destination[i] = operation(left[i], right[i]);
+    }
+    return count;
+}
+
 /// @brief Transform a range and return the consumed count with the output.
 /// The count equals the input length, including zero for empty input. This
 /// exposes an eager-list analogue of the input/output progress in C++20's
@@ -2159,6 +2180,27 @@ pub fn transform_to_projected(
     return count;
 }
 
+/// @brief Binary transform after independent input projections.
+/// Stops when either input or the destination ends; returns the number written.
+/// @ingroup algorithm_ranges
+generic<T, U, Output, Operation, LeftProjection, RightProjection>
+pub fn transform_to_projected(
+    left: &list<T>, right: &list<U>, destination: &mut list<Output>,
+    operation: Operation, left_projection: LeftProjection,
+    right_projection: RightProjection) -> i64 {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = left_len;
+    if right_len < count { count = right_len; }
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        destination[i] = operation(left_projection(left[i]),
+                                  right_projection(right[i]));
+    }
+    return count;
+}
+
 /// @brief Project and transform a range, returning its consumed count.
 /// @ingroup algorithm_ranges
 generic<T, Output, Operation, Projection>
@@ -2211,6 +2253,26 @@ pub fn zip_transform_projected(
                                    right_projection(right[i])));
     }
     return transformed;
+}
+
+/// @brief Write binary zip-transform results to bounded output storage.
+/// Stops at either input or destination end and returns the number written.
+/// @ingroup algorithm_ranges
+generic<T, U, Output, Operation>
+pub fn zip_transform_to(left: &list<T>, right: &list<U>,
+    destination: &mut list<Output>, operation: Operation) -> i64 {
+    return transform_to(left, right, destination, operation);
+}
+
+/// @brief Bounded zip-transform with independent input projections.
+/// @ingroup algorithm_ranges
+generic<T, U, Output, Operation, LeftProjection, RightProjection>
+pub fn zip_transform_to_projected(
+    left: &list<T>, right: &list<U>, destination: &mut list<Output>,
+    operation: Operation, left_projection: LeftProjection,
+    right_projection: RightProjection) -> i64 {
+    return transform_to_projected(left, right, destination, operation,
+                                  left_projection, right_projection);
 }
 
 /// @brief Transform projected values from three ranges in their common prefix.
