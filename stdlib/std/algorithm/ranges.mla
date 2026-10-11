@@ -1620,6 +1620,22 @@ pub fn to_flat_multimap(data: &list<tuple<K, V>>) -> FlatMultiMap<K, V> {
     return converted;
 }
 
+/// @brief Materialize key/value tuples into Mlang's built-in map.
+/// Iteration order is unspecified. If equivalent keys repeat, the last pair
+/// in source order supplies the stored value.
+/// C++23 `std::ranges::to` adapted to Mlang's built-in `map` container.
+/// @ingroup algorithm_ranges
+generic<K, V>
+pub fn to_map(data: &list<tuple<K, V>>) -> map<K, V> {
+    var converted: map<K, V> = {};
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<K, V> = data[i];
+        converted[entry.0] = entry.1;
+    }
+    return converted;
+}
+
 /// @brief Swap corresponding elements into two copied ranges.
 /// Swaps the common prefix and preserves either unmatched tail. Unlike the
 /// mutating C++20 algorithm, this eager-list form returns both new lists and
