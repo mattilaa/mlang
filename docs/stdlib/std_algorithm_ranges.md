@@ -574,6 +574,10 @@ fn example() {
   one original value per adjacent equivalence run into bounded storage and
   return `(consumed, written)` progress. A short destination stops the copy at
   the last complete output run.
+- `unique_copy_to_heterogeneous` and its `_by`, `_projected`, and
+  `_by_projected` variants provide the same bounded progress behavior when
+  output elements have a different type. Equivalence and projection operate on
+  source values; the first original value in each run is converted when written.
 - `unique_in_place(&mut data)` and the `unique_by_in_place`,
   `unique_in_place_projected`, and `unique_by_in_place_projected` variants
   compact adjacent duplicate runs while preserving the first element of each

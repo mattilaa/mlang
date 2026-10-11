@@ -4033,8 +4033,9 @@ fn ranges_default_equal(left: T, right: T) -> bool {
     return left == right;
 }
 
-generic<T, Equivalent, Projection>
-fn ranges_unique_copy_to_core(source: &list<T>, destination: &mut list<T>,
+generic<T, Output, Equivalent, Projection>
+fn ranges_unique_copy_to_core(source: &list<T>,
+                              destination: &mut list<Output>,
                               equivalent: Equivalent,
                               projection: Projection)
     -> tuple<i64, i64> {
@@ -4098,6 +4099,52 @@ pub fn unique_copy_to_by_projected(source: &list<T>,
                                    equivalent: Equivalent,
                                    projection: Projection)
     -> tuple<i64, i64> {
+    return ranges_unique_copy_to_core(source, destination,
+                                      equivalent, projection);
+}
+
+/// @brief Copy unique adjacent values into a distinct-type bounded output.
+/// Original source values are converted to the destination element type.
+/// Returns `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn unique_copy_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>) -> tuple<i64, i64> {
+    return ranges_unique_copy_to_core(source, destination,
+                                      ranges_default_equal,
+                                      ranges_identity);
+}
+
+/// @brief Copy adjacent equivalence-class representatives to distinct output.
+/// The caller comparator is evaluated on source values; retained representatives
+/// are converted to the bounded destination type.
+/// @ingroup algorithm_ranges
+generic<T, Output, Equivalent>
+pub fn unique_copy_to_heterogeneous_by(source: &list<T>,
+    destination: &mut list<Output>, equivalent: Equivalent)
+    -> tuple<i64, i64> {
+    return ranges_unique_copy_to_core(source, destination, equivalent,
+                                      ranges_identity);
+}
+
+/// @brief Copy first values from projected-key runs to distinct output type.
+/// Projection compares source values, while selected original values are
+/// converted to the destination element type.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn unique_copy_to_heterogeneous_projected(source: &list<T>,
+    destination: &mut list<Output>, projection: Projection)
+    -> tuple<i64, i64> {
+    return ranges_unique_copy_to_core(source, destination,
+                                      ranges_default_equal, projection);
+}
+
+/// @brief Copy projected equivalence-class representatives to distinct output.
+/// @ingroup algorithm_ranges
+generic<T, Output, Equivalent, Projection>
+pub fn unique_copy_to_heterogeneous_by_projected(source: &list<T>,
+    destination: &mut list<Output>, equivalent: Equivalent,
+    projection: Projection) -> tuple<i64, i64> {
     return ranges_unique_copy_to_core(source, destination,
                                       equivalent, projection);
 }
