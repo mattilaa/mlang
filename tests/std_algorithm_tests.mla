@@ -3275,6 +3275,19 @@ fn test_algorithm_ranges_to_list_converts_and_materializes() {
     let empty_source: list<i32> = [];
     let empty_converted: list<f64> = to_list(empty_source);
     verify(empty_converted.len() == 0);
+
+    let nested: list<list<i32>> = [[1, 2], [], [7, -4, 9]];
+    let converted_nested: list<list<f64>> = to_list(nested);
+    verify(converted_nested.len() == 3);
+    verify(converted_nested[0].len() == 2 &&
+           converted_nested[0][0] == 1.0 &&
+           converted_nested[0][1] == 2.0);
+    verify(converted_nested[1].len() == 0);
+    verify(converted_nested[2].len() == 3 &&
+           converted_nested[2][0] == 7.0 &&
+           converted_nested[2][1] == -4.0 &&
+           converted_nested[2][2] == 9.0);
+    verify(nested[0][0] == 1 && nested[2][1] == -4);
 }
 
 #[test]

@@ -368,6 +368,8 @@ fn example() {
   type, converting each source element in order. This is the Mlang eager-list
   counterpart to C++23 `std::ranges::to`; the output type is inferred from the
   expected result type, for example `let converted: list<f64> = to_list(values)`.
+  Nested lists are recursively materialized and converted while preserving
+  each row's length, including empty rows.
 - `swap_ranges(left, right)` returns two copied lists with corresponding
   elements in the common prefix exchanged; an unmatched tail is preserved.
   Both inputs remain unchanged.
