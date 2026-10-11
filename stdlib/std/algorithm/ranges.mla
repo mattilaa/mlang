@@ -1404,6 +1404,19 @@ pub fn copy(data: &list<T>) -> list<T> {
     return copied;
 }
 
+/// @brief Copy into an existing mutable list, stopping at either range's end.
+/// Returns the number of elements written; the source is unchanged.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn copy_to(source: &list<T>, destination: &mut list<T>) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count { destination[i] = source[i]; }
+    return count;
+}
+
 /// @brief Materialize a range as a new list with the requested element type.
 /// This is the eager-list counterpart of C++23 `std::ranges::to` for list
 /// construction. Each source element is converted to `Output` in order.
@@ -1487,6 +1500,51 @@ pub fn copy_if_projected(data: &list<T>, predicate: Predicate,
     return selected;
 }
 
+/// @brief Copy predicate-matching elements into a bounded destination list.
+/// Stops when the source ends or the destination fills and returns
+/// `(consumed, written)`; each consumed input is tested once.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn copy_if_to(source: &list<T>, destination: &mut list<T>,
+                  predicate: Predicate) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if predicate(value) {
+            destination[written] = value;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Copy matching elements using a projected predicate into a bounded destination.
+/// Returns `(consumed, written)`; the predicate and projection are each run
+/// once for each consumed source item.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn copy_if_to_projected(
+    source: &list<T>, destination: &mut list<T>, predicate: Predicate,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if predicate(projection(value)) {
+            destination[written] = value;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Filter and transform in one pass, preserving the selected order.
 /// Eager equivalent of composing C++20 `views::filter` and
 /// `views::transform`, without materializing an intermediate list.
@@ -1549,6 +1607,22 @@ pub fn transform_in_place(data: &mut list<T>, operation: Operation) -> i64 {
     return n;
 }
 
+/// @brief Transform into a caller-provided output range.
+/// Stops when either range ends and returns the number of elements written;
+/// source and destination element types may differ.
+/// C++20 bounded `std::ranges::transform` output-range form.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn transform_to(source: &list<T>, destination: &mut list<Output>,
+                    operation: Operation) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count { destination[i] = operation(source[i]); }
+    return count;
+}
+
 /// @brief Transform a range and return the consumed count with the output.
 /// The count equals the input length, including zero for empty input. This
 /// exposes an eager-list analogue of the input/output progress in C++20's
@@ -1609,6 +1683,23 @@ pub fn transform_in_place_projected(data: &mut list<T>, operation: Operation,
         data[i] = operation(projection(data[i]));
     }
     return n;
+}
+
+/// @brief Project and transform into a caller-provided output range.
+/// Stops when either range ends; returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn transform_to_projected(
+    source: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        destination[i] = operation(projection(source[i]));
+    }
+    return count;
 }
 
 /// @brief Project and transform a range, returning its consumed count.
@@ -2167,6 +2258,52 @@ pub fn stable_partition_projected(data: &list<T>, predicate: Predicate,
     return partitioned;
 }
 
+/// @brief Stable-partition a mutable list and return the first nonmatch index.
+/// Matching and nonmatching elements retain their original order.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn stable_partition_in_place(data: &mut list<T>,
+                                 predicate: Predicate) -> i64 {
+    var matches: list<T> = [];
+    var nonmatches: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let value: T = data[i];
+        if predicate(value) { matches.push(value); }
+        else { nonmatches.push(value); }
+    }
+    let boundary: i64 = matches.len();
+    for i in 0..boundary { data[i] = matches[i]; }
+    let nonmatch_count: i64 = nonmatches.len();
+    for i in 0..nonmatch_count {
+        data[boundary + i] = nonmatches[i];
+    }
+    return boundary;
+}
+
+/// @brief Stable-partition a mutable list using projected predicate keys.
+/// Each element is projected and tested once; returns the first nonmatch index.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn stable_partition_in_place_projected(
+    data: &mut list<T>, predicate: Predicate, projection: Projection) -> i64 {
+    var matches: list<T> = [];
+    var nonmatches: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let value: T = data[i];
+        if predicate(projection(value)) { matches.push(value); }
+        else { nonmatches.push(value); }
+    }
+    let boundary: i64 = matches.len();
+    for i in 0..boundary { data[i] = matches[i]; }
+    let nonmatch_count: i64 = nonmatches.len();
+    for i in 0..nonmatch_count {
+        data[boundary + i] = nonmatches[i];
+    }
+    return boundary;
+}
+
 /// @brief Return a partitioned copy and the boundary between both groups.
 /// Matching elements precede nonmatching elements; the eager list is left
 /// unchanged and each predicate result is evaluated exactly once. The copy
@@ -2555,6 +2692,94 @@ pub fn remove_copy_projected(data: &list<T>, value: U,
     return copied;
 }
 
+/// @brief Copy nonmatching elements into a bounded destination list.
+/// Stops when the source ends or the destination fills, returning
+/// `(consumed, written)` so bounded progress is explicit.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn remove_copy_to(source: &list<T>, destination: &mut list<T>,
+                      value: U) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if item != value {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Copy nonmatching elements using a custom equivalence predicate.
+/// Returns `(consumed, written)` and stops when the destination fills.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn remove_copy_to_by(source: &list<T>, destination: &mut list<T>,
+                         value: U, equivalent: Equivalent)
+    -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !equivalent(item, value) {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Copy nonmatching elements using equality on projected keys.
+/// Returns `(consumed, written)` and stops when the destination fills.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn remove_copy_to_projected(
+    source: &list<T>, destination: &mut list<T>, value: U,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if projection(item) != value {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Copy nonmatches by a predicate over projected keys.
+/// Returns `(consumed, written)` and stops when the destination fills.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, Projection>
+pub fn remove_copy_to_by_projected(
+    source: &list<T>, destination: &mut list<T>, value: U,
+    equivalent: Equivalent, projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !equivalent(projection(item), value) {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Copy elements rejected by `predicate` into a new list.
 /// C++20 `std::ranges::remove_copy_if` counterpart; the input is unchanged.
 /// @ingroup algorithm_ranges
@@ -2634,6 +2859,78 @@ pub fn replace_copy_by_projected(data: &list<T>, old_key: U, new_value: V,
         else { copied.push(data[i]); }
     }
     return copied;
+}
+
+/// @brief Replace matching source values into an existing destination list.
+/// Stops at the shorter list, returns the number written, and preserves the
+/// source and any unused destination tail.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn replace_copy_to(source: &list<T>, destination: &mut list<T>,
+                       old_value: U, new_value: T) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        if source[i] == old_value { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Comparator form of bounded replacement-copy.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn replace_copy_to_by(source: &list<T>, destination: &mut list<T>,
+                          old_value: U, new_value: T,
+                          equivalent: Equivalent) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        if equivalent(source[i], old_value) { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Projected equality form of bounded replacement-copy.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn replace_copy_to_projected(
+    source: &list<T>, destination: &mut list<T>, old_value: U,
+    new_value: T, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        if projection(source[i]) == old_value { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Comparator-and-projection form of bounded replacement-copy.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, Projection>
+pub fn replace_copy_to_by_projected(
+    source: &list<T>, destination: &mut list<T>, old_key: U,
+    new_value: T, equivalent: Equivalent, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        if equivalent(projection(source[i]), old_key) {
+            destination[i] = new_value;
+        } else {
+            destination[i] = source[i];
+        }
+    }
+    return count;
 }
 
 /// @brief Copy a range, replacing each element accepted by `predicate`.
@@ -4617,6 +4914,56 @@ pub fn partial_sort_copy_by_projected(data: &list<T>, output_capacity: i64,
     return partial_sort_by_projected(data, output_capacity, less, projection);
 }
 
+/// @brief Select and sort values into an existing destination list.
+/// Writes up to the destination capacity and returns the number written;
+/// the source remains unchanged and any unused destination suffix is kept.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn partial_sort_copy_to(source: &list<T>, destination: &mut list<T>) -> i64 {
+    let selected: list<T> = partial_sort_copy(source, destination.len());
+    let count: i64 = selected.len();
+    for i in 0..count { destination[i] = selected[i]; }
+    return count;
+}
+
+/// @brief Partial-sort into an existing destination by projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn partial_sort_copy_to_projected(
+    source: &list<T>, destination: &mut list<T>,
+    projection: Projection) -> i64 {
+    let selected: list<T> = partial_sort_copy_projected(
+        source, destination.len(), projection);
+    let count: i64 = selected.len();
+    for i in 0..count { destination[i] = selected[i]; }
+    return count;
+}
+
+/// @brief Comparator form of partial-sorting into an existing destination.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn partial_sort_copy_to_by(
+    source: &list<T>, destination: &mut list<T>, less: Less) -> i64 {
+    let selected: list<T> = partial_sort_copy_by(
+        source, destination.len(), less);
+    let count: i64 = selected.len();
+    for i in 0..count { destination[i] = selected[i]; }
+    return count;
+}
+
+/// @brief Comparator-and-projection form of partial-sorting to a destination.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn partial_sort_copy_to_by_projected(
+    source: &list<T>, destination: &mut list<T>, less: Less,
+    projection: Projection) -> i64 {
+    let selected: list<T> = partial_sort_copy_by_projected(
+        source, destination.len(), less, projection);
+    let count: i64 = selected.len();
+    for i in 0..count { destination[i] = selected[i]; }
+    return count;
+}
+
 generic<T, Less>
 fn nth_element_impl_by(data: &list<T>, nth: i64, less: Less) -> list<T> {
     let n: i64 = data.len();
@@ -4807,6 +5154,84 @@ fn nth_element_impl_by_projected(data: &list<T>, nth: i64, less: Less,
 generic<T>
 pub fn nth_element(data: &list<T>, nth: i64) -> list<T> {
     return nth_element_impl(data, nth);
+}
+
+/// @brief Partition a mutable list around the selected element using 3-way quickselect.
+/// Returns `nth` when it is valid and -1 otherwise. Values on either side are
+/// partitioned but not sorted; average work is linear in the input length.
+/// @ingroup algorithm_ranges
+generic<T, Key, Less, Projection>
+fn nth_element_in_place_impl(data: &mut list<T>, nth: i64, less: Less,
+                             projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if nth < 0 || nth >= n { return -1; }
+    var first: i64 = 0;
+    var last: i64 = n - 1;
+    while first <= last {
+        let middle: i64 = first + (last - first) / 2;
+        let pivot: Key = projection(data[middle]);
+        var less_end: i64 = first;
+        var current: i64 = first;
+        var greater_start: i64 = last;
+        while current <= greater_start {
+            if less(projection(data[current]), pivot) {
+                let temporary: T = data[less_end];
+                data[less_end] = data[current];
+                data[current] = temporary;
+                less_end = less_end + 1;
+                current = current + 1;
+            } else if less(pivot, projection(data[current])) {
+                let temporary: T = data[current];
+                data[current] = data[greater_start];
+                data[greater_start] = temporary;
+                greater_start = greater_start - 1;
+            } else {
+                current = current + 1;
+            }
+        }
+        if nth < less_end {
+            last = less_end - 1;
+        } else if nth > greater_start {
+            first = greater_start + 1;
+        } else {
+            return nth;
+        }
+    }
+    return -1;
+}
+
+/// @brief Select the nth ascending element in a mutable list in place.
+/// Returns `nth` when valid and -1 for an invalid index; neither side is sorted.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn nth_element_in_place(data: &mut list<T>, nth: i64) -> i64 {
+    return nth_element_in_place_impl(data, nth, ranges_default_less,
+                                     ranges_identity);
+}
+
+/// @brief Select by a caller-provided ordering in a mutable list in place.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn nth_element_in_place_by(data: &mut list<T>, nth: i64,
+                               less: Less) -> i64 {
+    return nth_element_in_place_impl(data, nth, less, ranges_identity);
+}
+
+/// @brief Select by projected key in a mutable list in place.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn nth_element_in_place_projected(
+    data: &mut list<T>, nth: i64, projection: Projection) -> i64 {
+    return nth_element_in_place_impl(data, nth, ranges_default_less,
+                                     projection);
+}
+
+/// @brief Select by comparator and projection in a mutable list in place.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn nth_element_in_place_by_projected(
+    data: &mut list<T>, nth: i64, less: Less, projection: Projection) -> i64 {
+    return nth_element_in_place_impl(data, nth, less, projection);
 }
 
 /// @brief Comparator-based `nth_element`; invalid indices return an empty list.
@@ -6530,6 +6955,40 @@ fn ranges_sift_down_in_place(data: &mut list<T>, heap_len: i64, root: i64,
     return swaps;
 }
 
+generic<T, Less, Projection>
+fn ranges_partial_sort_in_place_by_projected(
+    data: &mut list<T>, count: i64, less: Less,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    var limit: i64 = count;
+    if limit < 0 { limit = 0; }
+    if limit > n { limit = n; }
+    if limit == 0 { return 0; }
+
+    var parent: i64 = limit / 2;
+    while parent > 0 {
+        parent = parent - 1;
+        ranges_sift_down_in_place(data, limit, parent, less, projection);
+    }
+    for i in limit..n {
+        if less(projection(data[i]), projection(data[0])) {
+            let temporary: T = data[0];
+            data[0] = data[i];
+            data[i] = temporary;
+            ranges_sift_down_in_place(data, limit, 0, less, projection);
+        }
+    }
+    var heap_len: i64 = limit;
+    while heap_len > 1 {
+        heap_len = heap_len - 1;
+        let temporary: T = data[0];
+        data[0] = data[heap_len];
+        data[heap_len] = temporary;
+        ranges_sift_down_in_place(data, heap_len, 0, less, projection);
+    }
+    return limit;
+}
+
 /// @brief Sort a mutable list in place using a heap-based O(N log N) sort.
 /// Returns the number of element swaps; unlike `sorted`, this operation is
 /// not stable and mutates its input.
@@ -6585,6 +7044,262 @@ generic<T>
 pub fn sort_in_place(data: &mut list<T>) -> i64 {
     return sort_in_place_by_projected(data, ranges_default_less,
                                       ranges_identity);
+}
+
+/// @brief Build a mutable max-heap using comparator and projection.
+/// Returns the number of swaps performed.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn make_heap_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    var swaps: i64 = 0;
+    var parent: i64 = n / 2;
+    while parent > 0 {
+        parent = parent - 1;
+        swaps = swaps + ranges_sift_down_in_place(
+            data, n, parent, less, projection);
+    }
+    return swaps;
+}
+
+/// @brief Build a mutable heap according to comparator `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn make_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
+    return make_heap_in_place_by_projected(data, less, ranges_identity);
+}
+
+/// @brief Build a mutable max-heap according to projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn make_heap_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> i64 {
+    return make_heap_in_place_by_projected(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Build a mutable max-heap in place.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn make_heap_in_place(data: &mut list<T>) -> i64 {
+    return make_heap_in_place_by_projected(
+        data, ranges_default_less, ranges_identity);
+}
+
+/// @brief Restore heap order after appending an element to a mutable heap.
+/// The prefix excluding the final element must already be a heap. Returns the
+/// number of swaps performed.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn push_heap_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n < 2 { return 0; }
+    var child: i64 = n - 1;
+    var swaps: i64 = 0;
+    while child > 0 {
+        let parent: i64 = (child - 1) / 2;
+        if !less(projection(data[parent]), projection(data[child])) {
+            break;
+        }
+        let temporary: T = data[parent];
+        data[parent] = data[child];
+        data[child] = temporary;
+        swaps = swaps + 1;
+        child = parent;
+    }
+    return swaps;
+}
+
+/// @brief Restore comparator-defined heap order after appending an element.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn push_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
+    return push_heap_in_place_by_projected(data, less, ranges_identity);
+}
+
+/// @brief Restore projected max-heap order after appending an element.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn push_heap_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> i64 {
+    return push_heap_in_place_by_projected(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Restore max-heap order after appending an element to a mutable heap.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn push_heap_in_place(data: &mut list<T>) -> i64 {
+    return push_heap_in_place_by_projected(
+        data, ranges_default_less, ranges_identity);
+}
+
+/// @brief Move a mutable heap's top value to the final slot and restore its prefix.
+/// The input must be a heap; returns the number of swaps performed.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn pop_heap_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n < 2 { return 0; }
+    let last: i64 = n - 1;
+    let temporary: T = data[0];
+    data[0] = data[last];
+    data[last] = temporary;
+    return 1 + ranges_sift_down_in_place(
+        data, last, 0, less, projection);
+}
+
+/// @brief Pop the top of a comparator-defined heap into its final slot.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn pop_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
+    return pop_heap_in_place_by_projected(data, less, ranges_identity);
+}
+
+/// @brief Pop the top of a projected max-heap into its final slot.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn pop_heap_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> i64 {
+    return pop_heap_in_place_by_projected(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Pop the top of a mutable max-heap into its final slot.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn pop_heap_in_place(data: &mut list<T>) -> i64 {
+    return pop_heap_in_place_by_projected(
+        data, ranges_default_less, ranges_identity);
+}
+
+/// @brief Sort a mutable heap in ascending comparator/projection order.
+/// The input must be a heap; returns the number of swaps performed.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn sort_heap_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    var heap_len: i64 = n;
+    var swaps: i64 = 0;
+    while heap_len > 1 {
+        heap_len = heap_len - 1;
+        let temporary: T = data[0];
+        data[0] = data[heap_len];
+        data[heap_len] = temporary;
+        swaps = swaps + 1 + ranges_sift_down_in_place(
+            data, heap_len, 0, less, projection);
+    }
+    return swaps;
+}
+
+/// @brief Sort a mutable comparator-defined heap.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn sort_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
+    return sort_heap_in_place_by_projected(data, less, ranges_identity);
+}
+
+/// @brief Sort a mutable projected max-heap.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn sort_heap_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> i64 {
+    return sort_heap_in_place_by_projected(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Sort a mutable max-heap in ascending order in place.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn sort_heap_in_place(data: &mut list<T>) -> i64 {
+    return sort_heap_in_place_by_projected(
+        data, ranges_default_less, ranges_identity);
+}
+
+generic<T, Less, Projection>
+fn ranges_stable_sort_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> i64 {
+    let ordered: list<T> = sorted_by_projected(data, less, projection);
+    let n: i64 = ordered.len();
+    for i in 0..n { data[i] = ordered[i]; }
+    return n;
+}
+
+/// @brief Stably sort a mutable list using a strict comparator and projection.
+/// Equal keys retain their original order; uses O(N) temporary list storage.
+/// Returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn stable_sort_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> i64 {
+    return ranges_stable_sort_in_place_by_projected(data, less, projection);
+}
+
+/// @brief Stably sort a mutable list by a caller-provided strict comparator.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn stable_sort_in_place_by(data: &mut list<T>, less: Less) -> i64 {
+    return ranges_stable_sort_in_place_by_projected(
+        data, less, ranges_identity);
+}
+
+/// @brief Stably sort a mutable list by projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn stable_sort_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> i64 {
+    return ranges_stable_sort_in_place_by_projected(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Stably sort a mutable list in ascending order.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn stable_sort_in_place(data: &mut list<T>) -> i64 {
+    return ranges_stable_sort_in_place_by_projected(
+        data, ranges_default_less, ranges_identity);
+}
+
+/// @brief Sort only the smallest requested prefix of a mutable list.
+/// The prefix is ascending and the remaining elements are not sorted. Counts
+/// clamp to the list length; returns the number of prefix elements sorted.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn partial_sort_in_place(data: &mut list<T>, count: i64) -> i64 {
+    return ranges_partial_sort_in_place_by_projected(
+        data, count, ranges_default_less, ranges_identity);
+}
+
+/// @brief Partially sort a mutable list using the strict ordering `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn partial_sort_in_place_by(data: &mut list<T>, count: i64,
+                                less: Less) -> i64 {
+    return ranges_partial_sort_in_place_by_projected(
+        data, count, less, ranges_identity);
+}
+
+/// @brief Partially sort a mutable list by projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn partial_sort_in_place_projected(
+    data: &mut list<T>, count: i64, projection: Projection) -> i64 {
+    return ranges_partial_sort_in_place_by_projected(
+        data, count, ranges_default_less, projection);
+}
+
+/// @brief Partially sort a mutable list by comparator over projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn partial_sort_in_place_by_projected(
+    data: &mut list<T>, count: i64, less: Less,
+    projection: Projection) -> i64 {
+    return ranges_partial_sort_in_place_by_projected(
+        data, count, less, projection);
 }
 
 /// @brief Return the next lexicographic permutation and whether it exists.
@@ -6886,6 +7601,136 @@ pub fn prev_permutation_by_projected(data: &list<T>, less: Less,
     return (true, out);
 }
 
+generic<T>
+fn ranges_reverse_subrange_in_place(data: &mut list<T>, first: i64,
+                                    last: i64) -> void {
+    var left: i64 = first;
+    var right: i64 = last - 1;
+    while left < right {
+        let temporary: T = data[left];
+        data[left] = data[right];
+        data[right] = temporary;
+        left = left + 1;
+        right = right - 1;
+    }
+}
+
+generic<T, Less, Projection>
+fn ranges_next_permutation_in_place_impl(
+    data: &mut list<T>, less: Less, projection: Projection) -> bool {
+    let n: i64 = data.len();
+    var pivot: i64 = n - 2;
+    while pivot >= 0 && !less(projection(data[pivot]),
+                              projection(data[pivot + 1])) {
+        pivot = pivot - 1;
+    }
+    if pivot < 0 {
+        ranges_reverse_subrange_in_place(data, 0, n);
+        return false;
+    }
+    var successor: i64 = n - 1;
+    while !less(projection(data[pivot]), projection(data[successor])) {
+        successor = successor - 1;
+    }
+    let temporary: T = data[pivot];
+    data[pivot] = data[successor];
+    data[successor] = temporary;
+    ranges_reverse_subrange_in_place(data, pivot + 1, n);
+    return true;
+}
+
+generic<T, Less, Projection>
+fn ranges_prev_permutation_in_place_impl(
+    data: &mut list<T>, less: Less, projection: Projection) -> bool {
+    let n: i64 = data.len();
+    var pivot: i64 = n - 2;
+    while pivot >= 0 && !less(projection(data[pivot + 1]),
+                              projection(data[pivot])) {
+        pivot = pivot - 1;
+    }
+    if pivot < 0 {
+        ranges_reverse_subrange_in_place(data, 0, n);
+        return false;
+    }
+    var predecessor: i64 = n - 1;
+    while !less(projection(data[predecessor]), projection(data[pivot])) {
+        predecessor = predecessor - 1;
+    }
+    let temporary: T = data[pivot];
+    data[pivot] = data[predecessor];
+    data[predecessor] = temporary;
+    ranges_reverse_subrange_in_place(data, pivot + 1, n);
+    return true;
+}
+
+/// @brief Advance a mutable list to its next lexicographic permutation.
+/// On wrap, reverse the range to its first permutation and return false.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn next_permutation_in_place(data: &mut list<T>) -> bool {
+    return ranges_next_permutation_in_place_impl(
+        data, ranges_default_less, ranges_identity);
+}
+
+/// @brief Advance a mutable permutation under comparator `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn next_permutation_in_place_by(data: &mut list<T>, less: Less) -> bool {
+    return ranges_next_permutation_in_place_impl(
+        data, less, ranges_identity);
+}
+
+/// @brief Advance a mutable permutation by projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn next_permutation_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> bool {
+    return ranges_next_permutation_in_place_impl(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Advance by comparator ordering over projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn next_permutation_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> bool {
+    return ranges_next_permutation_in_place_impl(data, less, projection);
+}
+
+/// @brief Retreat a mutable list to its previous lexicographic permutation.
+/// On wrap, reverse the range to its last permutation and return false.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn prev_permutation_in_place(data: &mut list<T>) -> bool {
+    return ranges_prev_permutation_in_place_impl(
+        data, ranges_default_less, ranges_identity);
+}
+
+/// @brief Retreat a mutable permutation under comparator `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn prev_permutation_in_place_by(data: &mut list<T>, less: Less) -> bool {
+    return ranges_prev_permutation_in_place_impl(
+        data, less, ranges_identity);
+}
+
+/// @brief Retreat a mutable permutation by projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn prev_permutation_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> bool {
+    return ranges_prev_permutation_in_place_impl(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Retreat by comparator ordering over projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn prev_permutation_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> bool {
+    return ranges_prev_permutation_in_place_impl(data, less, projection);
+}
+
 /// @brief Return a reversed copy of a list.
 /// @ingroup algorithm_ranges
 generic<T>
@@ -7043,6 +7888,39 @@ pub fn shift_right(data: &list<T>, count: i64) -> list<T> {
         out.push(data[i]);
     }
     return out;
+}
+
+/// @brief Shift the retained suffix to the front of a mutable list.
+/// Returns the new logical end index; elements in the remaining suffix are
+/// unspecified. Non-positive counts are no-ops, and counts at least the length
+/// return the beginning of the range.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn shift_left_in_place(data: &mut list<T>, count: i64) -> i64 {
+    let n: i64 = data.len();
+    if count <= 0 { return n; }
+    if count >= n { return 0; }
+    let retained: i64 = n - count;
+    for i in 0..retained { data[i] = data[i + count]; }
+    return retained;
+}
+
+/// @brief Shift the retained prefix toward the end of a mutable list.
+/// Returns the first index of the shifted range; preceding elements are
+/// unspecified. Non-positive counts are no-ops, and counts at least the length
+/// return the end of the range.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn shift_right_in_place(data: &mut list<T>, count: i64) -> i64 {
+    let n: i64 = data.len();
+    if count <= 0 { return 0; }
+    if count >= n { return n; }
+    var source: i64 = n - count;
+    while source > 0 {
+        source = source - 1;
+        data[source + count] = data[source];
+    }
+    return count;
 }
 
 /// @brief Materialize consecutive chunks of at most `chunk_size` elements.
@@ -8453,6 +9331,118 @@ pub fn inplace_merge_by_projected(data: &list<T>, middle: i64, less: Less,
     while left < split { out.push(data[left]); left = left + 1; }
     while right < n { out.push(data[right]); right = right + 1; }
     return out;
+}
+
+/// @brief Stably merge sorted halves into the original mutable list.
+/// Uses O(N) temporary storage and returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn inplace_merge_in_place(data: &mut list<T>, middle: i64) -> i64 {
+    var split: i64 = middle;
+    let n: i64 = data.len();
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    var out: list<T> = [];
+    var left: i64 = 0;
+    var right: i64 = split;
+    while left < split && right < n {
+        if data[right] < data[left] {
+            out.push(data[right]);
+            right = right + 1;
+        } else {
+            out.push(data[left]);
+            left = left + 1;
+        }
+    }
+    while left < split { out.push(data[left]); left = left + 1; }
+    while right < n { out.push(data[right]); right = right + 1; }
+    for i in 0..n { data[i] = out[i]; }
+    return n;
+}
+
+/// @brief Stably merge sorted halves into the original list by comparator.
+/// Uses O(N) temporary storage and returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn inplace_merge_in_place_by(data: &mut list<T>, middle: i64,
+                                 less: Less) -> i64 {
+    var split: i64 = middle;
+    let n: i64 = data.len();
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    var out: list<T> = [];
+    var left: i64 = 0;
+    var right: i64 = split;
+    while left < split && right < n {
+        if less(data[right], data[left]) {
+            out.push(data[right]);
+            right = right + 1;
+        } else {
+            out.push(data[left]);
+            left = left + 1;
+        }
+    }
+    while left < split { out.push(data[left]); left = left + 1; }
+    while right < n { out.push(data[right]); right = right + 1; }
+    for i in 0..n { data[i] = out[i]; }
+    return n;
+}
+
+/// @brief Stably merge sorted halves into the original list by projected key.
+/// Uses O(N) temporary storage and returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn inplace_merge_in_place_projected(
+    data: &mut list<T>, middle: i64, projection: Projection) -> i64 {
+    var split: i64 = middle;
+    let n: i64 = data.len();
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    var out: list<T> = [];
+    var left: i64 = 0;
+    var right: i64 = split;
+    while left < split && right < n {
+        if projection(data[right]) < projection(data[left]) {
+            out.push(data[right]);
+            right = right + 1;
+        } else {
+            out.push(data[left]);
+            left = left + 1;
+        }
+    }
+    while left < split { out.push(data[left]); left = left + 1; }
+    while right < n { out.push(data[right]); right = right + 1; }
+    for i in 0..n { data[i] = out[i]; }
+    return n;
+}
+
+/// @brief Stably merge by comparator over projected keys into the original list.
+/// Uses O(N) temporary storage and returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn inplace_merge_in_place_by_projected(
+    data: &mut list<T>, middle: i64, less: Less,
+    projection: Projection) -> i64 {
+    var split: i64 = middle;
+    let n: i64 = data.len();
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    var out: list<T> = [];
+    var left: i64 = 0;
+    var right: i64 = split;
+    while left < split && right < n {
+        if less(projection(data[right]), projection(data[left])) {
+            out.push(data[right]);
+            right = right + 1;
+        } else {
+            out.push(data[left]);
+            left = left + 1;
+        }
+    }
+    while left < split { out.push(data[left]); left = left + 1; }
+    while right < n { out.push(data[right]); right = right + 1; }
+    for i in 0..n { data[i] = out[i]; }
+    return n;
 }
 
 /// @brief Return the sorted multiset union using `less` as the ordering.

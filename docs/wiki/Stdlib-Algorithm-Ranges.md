@@ -189,6 +189,11 @@ fn example() {
 - `next_permutation_by_projected` and `prev_permutation_by_projected` combine
   comparator and projection ordering while preserving the same wrap and
   non-mutating behavior.
+- `next_permutation_in_place(&mut data)` and `prev_permutation_in_place`
+  advance/retreat the caller's list directly and return whether another
+  permutation existed. On wrap, they reverse the list to the first/last
+  permutation and return `false`; comparator and projected variants are also
+  available.
 - `min_element_value` and `max_element_value` return the selected value for a
   nonempty input. Use the index forms to handle empty ranges; value forms keep
   the first value on ties.
@@ -247,6 +252,11 @@ fn example() {
   while preserving the same copied-list behavior and heap preconditions.
 - The `_by_projected` heap forms combine a strict comparator with a unary key
   projection for heap queries and make/push/pop/sort operations.
+- Mutable `make_heap_in_place`, `push_heap_in_place`, `pop_heap_in_place`, and
+  `sort_heap_in_place` variants update the caller's list using the same
+  comparator and projection forms. They return swap counts, preserve list
+  length, and follow the standard heap preconditions: push requires the prefix
+  before the final appended value to be a heap; pop and sort require a heap.
 - `partial_sort(data, count)` uses a bounded heap to return the `count`
   smallest values in ascending order. `partial_sort_by(data, count, less)`
   applies a caller-provided order (for example, to select the largest values).
@@ -254,6 +264,10 @@ fn example() {
   `partial_sort_by_projected(data, count, less, projection)` combines both
   ordering controls. Counts clamp to the available range and the source is
   unchanged.
+- `partial_sort_in_place(&mut data, count)` uses a bounded max-heap to order
+  only the selected prefix in the original list. Comparator and projected
+  variants are provided; counts clamp to `[0, len]`, the suffix remains
+  partitioned but unsorted, and the function returns the sorted prefix length.
 - `partial_sort_copy(data, output_capacity)` and its `_by` comparator form
   use the destination capacity to select and sort a prefix into a new list;
   this eager counterpart leaves the source unchanged.
@@ -261,6 +275,10 @@ fn example() {
   according to projected keys while retaining original values.
 - `partial_sort_copy_by_projected` applies both a comparator and a projection
   while returning the selected original values in comparator order.
+- `partial_sort_copy_to(source, destination)` writes the sorted selection into
+  an existing destination list up to its capacity, returns the number written,
+  and preserves any unused destination tail. Comparator and projected forms
+  are available; the source is never modified.
 - `nth_element(data, nth)` returns a copied partitioned list with its selected
   value at `nth`; under ascending order, preceding values are no greater and
   following values are no smaller. The two partitions are not otherwise
@@ -268,6 +286,12 @@ fn example() {
   `nth_element_projected` partitions by a unary projected key, and
   `nth_element_by_projected` combines both controls. An invalid index returns
   an empty list.
+- `nth_element_in_place(&mut data, nth)` applies three-way quickselect to the
+  original list. It returns `nth` on success or `-1` for an invalid index;
+  `nth_element_in_place_by`, `_projected`, and `_by_projected` provide ordering
+  customization. The selected key is in its final sorted position, with the
+  corresponding partition guarantees on both sides, but neither side is
+  sorted. Selection is average O(N), with O(N²) worst-case work.
 - `lower_bound`, `upper_bound`, and `binary_search` perform logarithmic-time
   queries on a list sorted in nondecreasing order. The bounds return insertion
   indices; binary search returns [`bool`](Quick-Guide#types).
@@ -384,6 +408,16 @@ fn example() {
   observe the actual bounded progress alongside the copied prefix.
 - `copy(data)` materializes a full list copy, the eager-list counterpart to
   [`std::ranges::copy`](Stdlib-Module-API); the source remains unchanged.
+- `copy_to(source, destination)` copies into an existing mutable list, stopping
+  when either list ends and returning the number written. The source remains
+  unchanged and any unused destination suffix is preserved.
+- `copy_if_to(source, destination, predicate)` writes matching source values
+  into an existing destination and stops when it fills. It returns
+  `(consumed, written)` so callers can resume from the exact source position;
+  the projected variant evaluates a projection before its predicate.
+- `remove_copy_to(source, destination, value)` writes nonmatching values into
+  an existing destination and reports `(consumed, written)`. Its comparator
+  and projected variants have the same bounded-progress behavior.
 - `to_list(data)` materializes a new list with an explicitly selected element
   type, converting each source element in order. This is the Mlang eager-list
   counterpart to C++23 [`std::ranges::to`](Stdlib-Module-API); the output type is inferred from the
@@ -402,6 +436,12 @@ fn example() {
   return the list's existing element type; use `transform` when the result has
   a different type. `transform_in_place_projected` applies a projection before
   the operation and also writes back to the original list.
+- `transform_to(source, destination, operation)` writes transformed values to
+  a caller-provided mutable destination, stopping at the shorter list and
+  returning the number written. Source and destination element types may
+  differ; `transform_to_projected` also applies a projection before the
+  operation. This is the bounded output-range form of C++20
+  [`std::ranges::transform`](Stdlib-Module-API) and avoids allocating an intermediate list.
 - `transform_with_count` returns `(consumed, output)` with the transformed
   list, exposing the full input progress of the eager unary transform.
 - The binary `transform(left, right, operation)` overload transforms paired
@@ -462,6 +502,11 @@ fn example() {
   returns a copied range with matching elements
   first, preserving order within both groups and evaluating its predicate once
   per element.
+- `stable_partition_in_place(&mut data, predicate)` stably rearranges a mutable
+  list and returns the first nonmatching index. The projected form evaluates
+  each projection and predicate once and preserves original order in both
+  groups, matching the in-place behavior of C++20
+  [`std::ranges::stable_partition`](Stdlib-Module-API).
 - `partition_copy(data, predicate)` returns a tuple of stable matching and
   nonmatching lists, evaluating the predicate once per element and preserving
   the input.
@@ -530,6 +575,11 @@ fn example() {
   the number of swaps and mutate the input; unlike `sorted*`, they are not
   stable. Use the comparator and projection forms to order records by custom
   keys without building an intermediate sorted list.
+- `stable_sort_in_place(&mut data)` and its `_by`, `_projected`, and
+  `_by_projected` variants update the original list while preserving input
+  order among equivalent keys. They use O(N) temporary list storage and return
+  the number of elements written; use `sort_in_place` when stability is not
+  required and heap-sort's O(1) auxiliary storage is preferred.
 - `reversed` returns the elements in reverse order; `rotate_left` returns a
   copy rotated by a normalized signed offset. `rotate(data, middle)` places
   the suffix beginning at the split before the prefix (C++20 `ranges::rotate`
@@ -547,6 +597,10 @@ fn example() {
   eager C++20 `ranges::shift_left`/`shift_right` counterparts leave the input
   unchanged; non-positive counts are no-ops and counts at least the length
   yield an empty list.
+- `shift_left_in_place(&mut data, count)` and `shift_right_in_place` move the
+  retained elements within the original list and return the logical boundary
+  index. The list length is unchanged; the elements outside the retained range
+  are unspecified, matching C++20 [`std::ranges::shift_left`](Stdlib-Module-API)/`shift_right`.
 - `chunked(data, size)` materializes consecutive sublists (C++23
   `views::chunk` style); the final chunk can be shorter, and non-positive sizes
   produce an empty list. `chunk(data, size)` is the standard view spelling.
@@ -613,6 +667,10 @@ fn example() {
 - `inplace_merge_projected` merges halves sorted by the same projected key,
   retaining the original values and taking equivalent keys from the left half
   first.
+- `inplace_merge_in_place(&mut data, middle)` and its comparator/projected
+  variants stably merge two sorted halves back into the mutable list. They
+  return the number of written elements and use O(N) temporary list storage;
+  the source list itself is updated rather than returning a separate result.
 - `merged_by_projected` and `inplace_merge_by_projected` combine a strict
   comparator with a projection for stable ordering. Equal projected keys keep
   left-range precedence, and the split index is clamped for the half-merge.
@@ -662,6 +720,10 @@ fn example() {
 - `replace_by` and `replace_copy_by` substitute values matching a lookup key
   under a caller-supplied equivalence predicate. Their `_by_projected` forms
   apply that predicate to each projected element key and the supplied old key.
+- `replace_copy_to` and its `_by`, `_projected`, and `_by_projected` forms
+  write replaced values into a caller-provided destination, bounded by the
+  shorter list. They return the number written and preserve the source and any
+  unused destination suffix.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 - `iota_range(start, end)` materializes a typed half-open range, preserving
