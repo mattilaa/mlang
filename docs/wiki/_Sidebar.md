@@ -73,6 +73,7 @@
 - [[std::net|Stdlib-Net]]
 - [[std::platform|Stdlib-Platform]]
 - [[std::printf|Stdlib-Printf]]
+- [[std::print|Stdlib-Print]]
 - [[std::process|Stdlib-Process]]
 - [[std::protocol|Stdlib-Protocol]]
 - [[std::regex|Stdlib-Regex]]

@@ -1,0 +1,25 @@
+mod std::print;
+use std::print::print as std_print;
+use std::print::println as std_println;
+use std::print::eprint as std_eprint;
+use std::print::eprintln as std_eprintln;
+use std::print::print_to as std_print_to;
+use std::print::println_to as std_println_to;
+
+fn test_print_writes_preformatted_text() {
+    std_print(format!("std::print {}", 1));
+    std_println(format!("std::println {}", 2));
+    std_eprint(format!("std::eprint {}", 3));
+    std_eprintln(format!("std::eprintln {}", 4));
+    std_print_to(1, format!("std::print_to {}", 5));
+    std_println_to(2, format!("std::println_to {}", 6));
+}
+
+fn test_print_accepts_empty_strings() {
+    std_print("");
+    std_println("");
+    std_eprint("");
+    std_eprintln("");
+    std_print_to(1, "");
+    std_println_to(2, "");
+}

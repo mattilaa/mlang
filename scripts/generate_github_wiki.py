@@ -74,6 +74,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::net", "std_net.md"),
     ("std::platform", "std_platform.md"),
     ("std::printf", "std_printf.md"),
+    ("std::print", "std_print.md"),
     ("std::process", "std_process.md"),
     ("std::protocol", "std_protocol.md"),
     ("std::rand", "std_rand.md"),

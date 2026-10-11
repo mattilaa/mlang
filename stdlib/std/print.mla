@@ -1,0 +1,52 @@
+/// \file print.mla
+/// \brief C++23-style formatted output wrappers for Mlang (std::print).
+///
+/// Mlang's `format!` expression builds the formatted string before output:
+///
+/// ```mla
+/// mod std::print;
+/// use std::print::*;
+///
+/// print(format!("value = {}", value));
+/// println(format!("answer = {}", 42));
+/// ```
+///
+/// The output functions accept a preformatted `str8`, since Mlang represents
+/// formatting as the `format!` expression rather than a variadic function.
+
+mod std::printf;
+use std::printf::printf as write_stdout;
+use std::printf::eprintf as write_stderr;
+use std::printf::fprintf as write_fd;
+
+/// @brief Write a preformatted string to stdout without adding a newline.
+/// C++23 `std::print` counterpart; format arguments with `format!` first.
+pub fn print(text: str8) -> void {
+    write_stdout(text);
+}
+
+/// @brief Write a preformatted string to stdout and append a newline.
+pub fn println(text: str8) -> void {
+    write_stdout(format!("{}\n", text));
+}
+
+/// @brief Write a preformatted string to stderr without adding a newline.
+pub fn eprint(text: str8) -> void {
+    write_stderr(text);
+}
+
+/// @brief Write a preformatted string to stderr and append a newline.
+pub fn eprintln(text: str8) -> void {
+    write_stderr(format!("{}\n", text));
+}
+
+/// @brief Write a preformatted string to a file descriptor.
+/// Descriptor 1 is stdout and descriptor 2 is stderr.
+pub fn print_to(fd: i32, text: str8) -> void {
+    write_fd(fd, text);
+}
+
+/// @brief Write a preformatted string to a file descriptor and append newline.
+pub fn println_to(fd: i32, text: str8) -> void {
+    write_fd(fd, format!("{}\n", text));
+}
