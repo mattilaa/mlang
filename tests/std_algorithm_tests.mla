@@ -549,6 +549,7 @@ use std::algorithm::ranges::copy_if_to_heterogeneous_projected;
 use std::algorithm::ranges::copy_if_to_projected;
 use std::algorithm::ranges::sample as ranges_sample;
 use std::algorithm::ranges::sample_to as ranges_sample_to;
+use std::algorithm::ranges::sample_to_heterogeneous;
 use std::algorithm::ranges::shuffle as ranges_shuffle;
 use std::algorithm::ranges::shuffle_in_place as ranges_shuffle_in_place;
 use std::algorithm::ranges::remove_copy;
@@ -7077,6 +7078,12 @@ fn test_algorithm_ranges_sample_to_bounded_output() {
            destination[2] == 6 && destination[3] == -1);
     var empty_destination: list<i32> = [];
     verify(ranges_sample_to(source, empty_destination, 2, choose_last) == 0);
+
+    var heterogeneous: list<f64> = [-1.0, -1.0, 99.0];
+    verify(sample_to_heterogeneous(
+        source, heterogeneous, 2, choose_last) == 2);
+    verify(heterogeneous[0] == 5.0 && heterogeneous[1] == 6.0 &&
+           heterogeneous[2] == 99.0);
 }
 
 #[test]

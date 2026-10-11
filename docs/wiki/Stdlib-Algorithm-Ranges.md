@@ -554,6 +554,8 @@ fn example() {
   prefix into a caller-provided list, clamping to the requested count, source
   length, and destination capacity. It returns the number written and leaves
   the destination suffix unchanged.
+- `sample_to_heterogeneous` provides the same bounded behavior while
+  converting selected source values to an independently typed destination.
 - `shuffle(data, choose_index)` returns a randomized copy. The selector receives
   each current exclusive bound; use a uniformly distributed selector for an
   unbiased permutation. Because lists are eagerly rebuilt without indexed

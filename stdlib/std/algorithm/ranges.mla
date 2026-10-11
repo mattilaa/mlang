@@ -3161,6 +3161,23 @@ pub fn sample_to(source: &list<T>, destination: &mut list<T>, count: i64,
     return written;
 }
 
+/// @brief Sample into a bounded destination with a distinct element type.
+/// Selects at most `count`, destination capacity, and source length; original
+/// values are converted when written. Returns the number written and preserves
+/// both source and unwritten destination elements.
+/// @ingroup algorithm_ranges
+generic<T, Output, ChooseIndex>
+pub fn sample_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>, count: i64,
+    choose_index: ChooseIndex) -> i64 {
+    let capacity: i64 = destination.len();
+    let sample_count: i64 = if count < capacity { count } else { capacity };
+    let sampled: list<T> = sample(source, sample_count, choose_index);
+    let written: i64 = sampled.len();
+    for i in 0..written { destination[i] = sampled[i]; }
+    return written;
+}
+
 /// @brief Return a shuffled copy using a bounded random-index selector.
 /// `choose_index(upper_bound)` must return an index in
 /// `[0, upper_bound)`. The eager implementation leaves the source unchanged;
