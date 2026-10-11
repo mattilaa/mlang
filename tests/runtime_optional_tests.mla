@@ -53,6 +53,12 @@ fn test_optional_or_else_and_value_fallbacks() {
     verify(value_or(present, fallback_value) == 12);
     verify(value_or(absent, fallback_value) == 19);
 
+    let present_wide: option<i64> = Some<i64>(41);
+    let absent_wide: option<i64> = None<i64>();
+    let narrow_fallback: i32 = 27;
+    verify(value_or(present_wide, narrow_fallback) == 41);
+    verify(value_or(absent_wide, narrow_fallback) == 27);
+
     var value_calls: i32 = 0;
     let make_value = || {
         value_calls = value_calls + 1;

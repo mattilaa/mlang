@@ -732,6 +732,32 @@ pub fn for_each(data: &list<T>, operation: Operation) -> void {
     }
 }
 
+/// @brief Apply an operation to every element and return the callable.
+/// This eager-list counterpart to the callable portion of C++20
+/// `std::ranges::for_each` is useful when the operation stores state by value.
+/// @ingroup algorithm_ranges
+generic<T, Operation>
+pub fn for_each_result(data: &list<T>, operation: Operation) -> Operation {
+    let n: i64 = data.len();
+    for i in 0..n {
+        operation(data[i]);
+    }
+    return operation;
+}
+
+/// @brief Apply a projected operation to the full range and return the callable.
+/// The callable may then be reused with its accumulated state.
+/// @ingroup algorithm_ranges
+generic<T, Operation, Projection>
+pub fn for_each_projected_result(data: &list<T>, operation: Operation,
+                                 projection: Projection) -> Operation {
+    let n: i64 = data.len();
+    for i in 0..n {
+        operation(projection(data[i]));
+    }
+    return operation;
+}
+
 /// @brief Invoke `operation` on each element's projected value in order.
 /// @ingroup algorithm_ranges
 generic<T, Operation, Projection>
@@ -760,6 +786,22 @@ pub fn for_each_n(data: &list<T>, count: i64, operation: Operation) -> void {
     for i in 0..n {
         operation(data[i]);
     }
+}
+
+/// @brief Process a bounded prefix and return the callable for reuse.
+/// Non-positive counts perform no calls; oversized counts clamp to the range.
+/// @ingroup algorithm_ranges
+generic<T, Operation>
+pub fn for_each_n_result(data: &list<T>, count: i64,
+                         operation: Operation) -> Operation {
+    let data_len: i64 = data.len();
+    var n: i64 = count;
+    if n < 0 { n = 0; }
+    if n > data_len { n = data_len; }
+    for i in 0..n {
+        operation(data[i]);
+    }
+    return operation;
 }
 
 /// @brief Invoke an operation on a bounded prefix and return its end index.
@@ -794,6 +836,22 @@ pub fn for_each_n_projected(data: &list<T>, count: i64,
     for i in 0..n {
         operation(projection(data[i]));
     }
+}
+
+/// @brief Process projected values from a bounded prefix and return the callable.
+/// @ingroup algorithm_ranges
+generic<T, Operation, Projection>
+pub fn for_each_n_projected_result(
+    data: &list<T>, count: i64, operation: Operation, projection: Projection)
+    -> Operation {
+    let data_len: i64 = data.len();
+    var n: i64 = count;
+    if n < 0 { n = 0; }
+    if n > data_len { n = data_len; }
+    for i in 0..n {
+        operation(projection(data[i]));
+    }
+    return operation;
 }
 
 /// @brief Process a projected bounded prefix and return the consumed count.
@@ -1309,6 +1367,34 @@ pub fn copy(data: &list<T>) -> list<T> {
         copied.push(data[i]);
     }
     return copied;
+}
+
+/// @brief Materialize a range as a new list with the requested element type.
+/// This is the eager-list counterpart of C++23 `std::ranges::to` for list
+/// construction. Each source element is converted to `Output` in order.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn to_list(data: &list<T>) -> list<Output> {
+    var converted: list<Output> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        converted.push(Output(data[i]));
+    }
+    return converted;
+}
+
+/// @brief Recursively materialize a nested range as nested output lists.
+/// Inner list elements are converted using the same rules as `to_list`.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn to_list(data: &list<list<T>>) -> list<list<Output>> {
+    var converted: list<list<Output>> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let row: list<Output> = to_list(data[i]);
+        converted.push(row);
+    }
+    return converted;
 }
 
 /// @brief Swap corresponding elements into two copied ranges.

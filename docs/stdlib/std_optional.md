@@ -30,6 +30,7 @@ fn example() {
 - `or_else(input, fallback)` returns the original `Some`, or lazily invokes a
   zero-argument closure to produce an option for `None`.
 - `value_or(input, fallback)` extracts a `Some` value or returns the supplied
-  fallback. The fallback expression is evaluated before the call, as in C++.
+  fallback, which may be implicitly convertible to the option's value type.
+  The fallback expression is evaluated before the call, as in C++23.
 - `value_or_else(input, fallback)` lazily computes a plain fallback value for
   `None`; this convenience complements C++23's API.

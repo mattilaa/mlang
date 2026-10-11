@@ -2,7 +2,8 @@
 
 Module file: `stdlib/std/algorithm/ranges.mla`
 
-Generic C++20–23-inspired algorithms for Mlang lists. Equality and ordering
+Generic C++20–23-inspired algorithms for Mlang lists and list-compatible
+sequences such as `Vec`, fixed `array`, and `multiarray`. Equality and ordering
 algorithms are monomorphized for the element type; searching supports a
 separate key type when Mlang can compare the values. Container transforms
 return a new list and leave the input unchanged.
@@ -290,6 +291,11 @@ fn example() {
   end for the final element accepted or rejected by a predicate on its key.
 - `for_each(data, operation)` invokes a closure once per element in iteration
   order; captured mutable state can collect side effects or a result.
+- `for_each_result` and `for_each_projected_result` return the callable after
+  processing, preserving callable-local state for later reuse. The bounded
+  forms `for_each_n_result` and `for_each_n_projected_result` do the same for
+  a clamped prefix. Mlang exposes the callable separately because it does not
+  currently return closure values inside iterator/result tuples.
 - `for_each_n(data, count, operation)` invokes a closure on a bounded prefix
   in iteration order. Negative counts perform no calls and oversized counts
   clamp to the input length.
@@ -364,6 +370,13 @@ fn example() {
   observe the actual bounded progress alongside the copied prefix.
 - `copy(data)` materializes a full list copy, the eager-list counterpart to
   `std::ranges::copy`; the source remains unchanged.
+- `to_list(data)` materializes a new list with an explicitly selected element
+  type, converting each source element in order. This is the Mlang eager-list
+  counterpart to C++23 `std::ranges::to`; the output type is inferred from the
+  expected result type, for example `let converted: list<f64> = to_list(values)`.
+  It accepts lists/`Vec`, fixed arrays, and multidimensional arrays where their
+  element shape is compatible. Nested inputs are recursively materialized and
+  converted while preserving each row's length, including empty rows.
 - `swap_ranges(left, right)` returns two copied lists with corresponding
   elements in the common prefix exchanged; an unmatched tail is preserved.
   Both inputs remain unchanged.

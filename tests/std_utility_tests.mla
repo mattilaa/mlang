@@ -15,6 +15,18 @@ use std::utility::cmp_less_equal_signed_unsigned;
 use std::utility::cmp_less_equal_unsigned_signed;
 use std::utility::cmp_greater_equal_signed_unsigned;
 use std::utility::cmp_greater_equal_unsigned_signed;
+use std::utility::cmp_equal_signed_signed;
+use std::utility::cmp_not_equal_signed_signed;
+use std::utility::cmp_less_signed_signed;
+use std::utility::cmp_greater_signed_signed;
+use std::utility::cmp_less_equal_signed_signed;
+use std::utility::cmp_greater_equal_signed_signed;
+use std::utility::cmp_equal_unsigned_unsigned;
+use std::utility::cmp_not_equal_unsigned_unsigned;
+use std::utility::cmp_less_unsigned_unsigned;
+use std::utility::cmp_greater_unsigned_unsigned;
+use std::utility::cmp_less_equal_unsigned_unsigned;
+use std::utility::cmp_greater_equal_unsigned_unsigned;
 use std::utility::in_range_i8_from_i64;
 use std::utility::in_range_i64_from_i64;
 use std::utility::in_range_i16_from_i64;
@@ -31,6 +43,54 @@ use std::utility::in_range_u64_from_u64;
 use std::utility::in_range_u8_from_u64;
 use std::utility::in_range_u16_from_u64;
 use std::utility::in_range_u32_from_u64;
+use std::utility::in_range_i8_from_i8;
+use std::utility::in_range_i16_from_i8;
+use std::utility::in_range_i32_from_i8;
+use std::utility::in_range_i64_from_i8;
+use std::utility::in_range_u8_from_i8;
+use std::utility::in_range_u16_from_i8;
+use std::utility::in_range_u32_from_i8;
+use std::utility::in_range_u64_from_i8;
+use std::utility::in_range_i8_from_i16;
+use std::utility::in_range_i16_from_i16;
+use std::utility::in_range_i32_from_i16;
+use std::utility::in_range_i64_from_i16;
+use std::utility::in_range_u8_from_i16;
+use std::utility::in_range_u16_from_i16;
+use std::utility::in_range_u32_from_i16;
+use std::utility::in_range_u64_from_i16;
+use std::utility::in_range_i8_from_i32;
+use std::utility::in_range_i16_from_i32;
+use std::utility::in_range_i32_from_i32;
+use std::utility::in_range_i64_from_i32;
+use std::utility::in_range_u8_from_i32;
+use std::utility::in_range_u16_from_i32;
+use std::utility::in_range_u32_from_i32;
+use std::utility::in_range_u64_from_i32;
+use std::utility::in_range_i8_from_u8;
+use std::utility::in_range_i16_from_u8;
+use std::utility::in_range_i32_from_u8;
+use std::utility::in_range_i64_from_u8;
+use std::utility::in_range_u8_from_u8;
+use std::utility::in_range_u16_from_u8;
+use std::utility::in_range_u32_from_u8;
+use std::utility::in_range_u64_from_u8;
+use std::utility::in_range_i8_from_u16;
+use std::utility::in_range_i16_from_u16;
+use std::utility::in_range_i32_from_u16;
+use std::utility::in_range_i64_from_u16;
+use std::utility::in_range_u8_from_u16;
+use std::utility::in_range_u16_from_u16;
+use std::utility::in_range_u32_from_u16;
+use std::utility::in_range_u64_from_u16;
+use std::utility::in_range_i8_from_u32;
+use std::utility::in_range_i16_from_u32;
+use std::utility::in_range_i32_from_u32;
+use std::utility::in_range_i64_from_u32;
+use std::utility::in_range_u8_from_u32;
+use std::utility::in_range_u16_from_u32;
+use std::utility::in_range_u32_from_u32;
+use std::utility::in_range_u64_from_u32;
 use std::testing::verify;
 
 enum ByteCode : u8 {
@@ -100,6 +160,29 @@ fn test_mixed_sign_integer_comparisons() {
 }
 
 #[test]
+fn test_same_sign_heterogeneous_integer_comparisons() {
+    let small_signed: i8 = -128;
+    let wide_signed: i64 = -128;
+    let larger_signed: i32 = 1;
+    verify(cmp_equal_signed_signed(small_signed, wide_signed));
+    verify(cmp_not_equal_signed_signed(small_signed, larger_signed));
+    verify(cmp_less_signed_signed(small_signed, larger_signed));
+    verify(cmp_greater_signed_signed(larger_signed, small_signed));
+    verify(cmp_less_equal_signed_signed(small_signed, wide_signed));
+    verify(cmp_greater_equal_signed_signed(larger_signed, small_signed));
+
+    let small_unsigned: u8 = 255;
+    let wide_unsigned: u64 = 255;
+    let larger_unsigned: u16 = 256;
+    verify(cmp_equal_unsigned_unsigned(small_unsigned, wide_unsigned));
+    verify(cmp_not_equal_unsigned_unsigned(small_unsigned, larger_unsigned));
+    verify(cmp_less_unsigned_unsigned(small_unsigned, larger_unsigned));
+    verify(cmp_greater_unsigned_unsigned(larger_unsigned, small_unsigned));
+    verify(cmp_less_equal_unsigned_unsigned(small_unsigned, wide_unsigned));
+    verify(cmp_greater_equal_unsigned_unsigned(larger_unsigned, small_unsigned));
+}
+
+#[test]
 fn test_integer_conversion_range_checks() {
     verify(in_range_i64_from_i64(-9223372036854775807 - 1));
     verify(in_range_i8_from_i64(-128));
@@ -133,4 +216,91 @@ fn test_integer_conversion_range_checks() {
     verify(!in_range_u16_from_u64(65536));
     verify(in_range_u32_from_u64(4294967295));
     verify(!in_range_u32_from_u64(4294967296));
+}
+
+#[test]
+fn test_integer_conversion_range_checks_for_narrow_sources() {
+    let zero_i8: i8 = 0;
+    verify(in_range_i8_from_i8(zero_i8));
+    verify(in_range_i16_from_i8(zero_i8));
+    verify(in_range_i32_from_i8(zero_i8));
+    verify(in_range_i64_from_i8(zero_i8));
+    verify(in_range_u8_from_i8(zero_i8));
+    verify(in_range_u16_from_i8(zero_i8));
+    verify(in_range_u32_from_i8(zero_i8));
+    verify(in_range_u64_from_i8(zero_i8));
+    let zero_i16: i16 = 0;
+    verify(in_range_i8_from_i16(zero_i16));
+    verify(in_range_i16_from_i16(zero_i16));
+    verify(in_range_i32_from_i16(zero_i16));
+    verify(in_range_i64_from_i16(zero_i16));
+    verify(in_range_u8_from_i16(zero_i16));
+    verify(in_range_u16_from_i16(zero_i16));
+    verify(in_range_u32_from_i16(zero_i16));
+    verify(in_range_u64_from_i16(zero_i16));
+    let zero_i32: i32 = 0;
+    verify(in_range_i8_from_i32(zero_i32));
+    verify(in_range_i16_from_i32(zero_i32));
+    verify(in_range_i32_from_i32(zero_i32));
+    verify(in_range_i64_from_i32(zero_i32));
+    verify(in_range_u8_from_i32(zero_i32));
+    verify(in_range_u16_from_i32(zero_i32));
+    verify(in_range_u32_from_i32(zero_i32));
+    verify(in_range_u64_from_i32(zero_i32));
+    let zero_u8: u8 = 0;
+    verify(in_range_i8_from_u8(zero_u8));
+    verify(in_range_i16_from_u8(zero_u8));
+    verify(in_range_i32_from_u8(zero_u8));
+    verify(in_range_i64_from_u8(zero_u8));
+    verify(in_range_u8_from_u8(zero_u8));
+    verify(in_range_u16_from_u8(zero_u8));
+    verify(in_range_u32_from_u8(zero_u8));
+    verify(in_range_u64_from_u8(zero_u8));
+    let zero_u16: u16 = 0;
+    verify(in_range_i8_from_u16(zero_u16));
+    verify(in_range_i16_from_u16(zero_u16));
+    verify(in_range_i32_from_u16(zero_u16));
+    verify(in_range_i64_from_u16(zero_u16));
+    verify(in_range_u8_from_u16(zero_u16));
+    verify(in_range_u16_from_u16(zero_u16));
+    verify(in_range_u32_from_u16(zero_u16));
+    verify(in_range_u64_from_u16(zero_u16));
+    let zero_u32: u32 = 0;
+    verify(in_range_i8_from_u32(zero_u32));
+    verify(in_range_i16_from_u32(zero_u32));
+    verify(in_range_i32_from_u32(zero_u32));
+    verify(in_range_i64_from_u32(zero_u32));
+    verify(in_range_u8_from_u32(zero_u32));
+    verify(in_range_u16_from_u32(zero_u32));
+    verify(in_range_u32_from_u32(zero_u32));
+    verify(in_range_u64_from_u32(zero_u32));
+    let negative: i8 = -128;
+    let positive: i8 = 127;
+    verify(in_range_i8_from_i8(negative));
+    verify(in_range_u8_from_i8(positive));
+    verify(!in_range_u8_from_i8(negative));
+
+    let signed16: i16 = 32767;
+    verify(in_range_i32_from_i16(signed16));
+    verify(in_range_u16_from_i16(signed16));
+    verify(!in_range_u16_from_i16(-1));
+
+    let signed32: i32 = -2147483648;
+    verify(in_range_i64_from_i32(signed32));
+    verify(!in_range_u64_from_i32(signed32));
+
+    let unsigned8: u8 = 255;
+    verify(in_range_i8_from_u8(127u8));
+    verify(!in_range_i8_from_u8(unsigned8));
+    verify(in_range_u16_from_u8(unsigned8));
+
+    let unsigned16: u16 = 65535;
+    verify(in_range_i16_from_u16(32767u16));
+    verify(!in_range_i16_from_u16(unsigned16));
+    verify(in_range_u32_from_u16(unsigned16));
+
+    let unsigned32: u32 = 4294967295u32;
+    verify(in_range_i32_from_u32(2147483647u32));
+    verify(!in_range_i32_from_u32(unsigned32));
+    verify(in_range_u64_from_u32(unsigned32));
 }

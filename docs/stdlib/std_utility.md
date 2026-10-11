@@ -27,12 +27,14 @@ let previous: i32 = exchange(current, 20); // previous = 12, current = 20
   `cmp_less_equal_*`, and `cmp_greater_equal_*` compare signed and unsigned
   integer operands without converting a negative signed value or a large
   unsigned value through the wrong domain. The suffix identifies operand
-  order: `_signed_unsigned` or `_unsigned_signed`. Inputs are widened losslessly
-  to `i64` and `u64`, so smaller integer types are supported too.
-- `in_range_<target>_from_i64(value)` and `in_range_<target>_from_u64(value)`
-  check whether a value can be represented by the named integer target (`i8`,
-  `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, or `u64`) before a cast. The source
-  width can be widened to `i64` or `u64` first without loss.
+  signedness and order: `_signed_unsigned`, `_unsigned_signed`,
+  `_signed_signed`, or `_unsigned_unsigned`. Same-signedness operands of
+  different widths are widened losslessly to `i64` or `u64` before comparison.
+- `in_range_<target>_from_<source>(value)` checks whether a value can be
+  represented by the named integer target (`i8`, `i16`, `i32`, `i64`, `u8`,
+  `u16`, `u32`, or `u64`) before a cast. All eight source widths are supported;
+  narrower values are widened without loss before checking, so callers do not
+  need to cast to `i64` or `u64` themselves.
 
 This follows the behavior of C++23 `std::to_underlying` when the destination
 type matches the enum's declared underlying type. Mixed-sign comparison and

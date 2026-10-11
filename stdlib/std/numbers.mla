@@ -95,3 +95,117 @@ pub fn egamma() -> f64 {
 pub fn phi() -> f64 {
     return 1.61803398874989484820;
 }
+
+
+/// @brief Return `e` as a single-precision floating-point constant.
+pub fn e_f32() -> f32 {
+    return f32(2.71828182845904523536);
+}
+
+
+/// @brief Return `ln2` as a single-precision floating-point constant.
+pub fn ln2_f32() -> f32 {
+    return f32(0.69314718055994530942);
+}
+
+
+/// @brief Return `ln10` as a single-precision floating-point constant.
+pub fn ln10_f32() -> f32 {
+    return f32(2.30258509299404568402);
+}
+
+
+/// @brief Return `log2e` as a single-precision floating-point constant.
+pub fn log2e_f32() -> f32 {
+    return f32(1.44269504088896340736);
+}
+
+
+/// @brief Return `log10e` as a single-precision floating-point constant.
+pub fn log10e_f32() -> f32 {
+    return f32(0.43429448190325182765);
+}
+
+
+/// @brief Return `pi` as a single-precision floating-point constant.
+pub fn pi_f32() -> f32 {
+    return f32(3.14159265358979323846);
+}
+
+
+/// @brief Return `two_pi` as a single-precision floating-point constant.
+pub fn two_pi_f32() -> f32 {
+    return f32(6.28318530717958647693);
+}
+
+
+/// @brief Return `pi_over_2` as a single-precision floating-point constant.
+pub fn pi_over_2_f32() -> f32 {
+    return f32(1.57079632679489661923);
+}
+
+
+/// @brief Return `pi_over_4` as a single-precision floating-point constant.
+pub fn pi_over_4_f32() -> f32 {
+    return f32(0.78539816339744830962);
+}
+
+
+/// @brief Return `inv_pi` as a single-precision floating-point constant.
+pub fn inv_pi_f32() -> f32 {
+    return f32(0.31830988618379067154);
+}
+
+
+/// @brief Return `two_inv_pi` as a single-precision floating-point constant.
+pub fn two_inv_pi_f32() -> f32 {
+    return f32(0.63661977236758134308);
+}
+
+
+/// @brief Return `inv_sqrtpi` as a single-precision floating-point constant.
+pub fn inv_sqrtpi_f32() -> f32 {
+    return f32(0.56418958354775628695);
+}
+
+
+/// @brief Return `two_inv_sqrtpi` as a single-precision floating-point constant.
+pub fn two_inv_sqrtpi_f32() -> f32 {
+    return f32(1.12837916709551257390);
+}
+
+
+/// @brief Return `sqrt2` as a single-precision floating-point constant.
+pub fn sqrt2_f32() -> f32 {
+    return f32(1.41421356237309504880);
+}
+
+
+/// @brief Return `inv_sqrt2` as a single-precision floating-point constant.
+pub fn inv_sqrt2_f32() -> f32 {
+    return f32(0.70710678118654752440);
+}
+
+
+/// @brief Return `sqrt3` as a single-precision floating-point constant.
+pub fn sqrt3_f32() -> f32 {
+    return f32(1.73205080756887729353);
+}
+
+
+/// @brief Return `inv_sqrt3` as a single-precision floating-point constant.
+pub fn inv_sqrt3_f32() -> f32 {
+    return f32(0.57735026918962576451);
+}
+
+
+/// @brief Return `egamma` as a single-precision floating-point constant.
+pub fn egamma_f32() -> f32 {
+    return f32(0.57721566490153286061);
+}
+
+
+/// @brief Return `phi` as a single-precision floating-point constant.
+pub fn phi_f32() -> f32 {
+    return f32(1.61803398874989484820);
+}
