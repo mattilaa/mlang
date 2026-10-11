@@ -447,6 +447,9 @@ fn example() {
 - `to_flat_map(pairs)` materializes `(key, value)` tuples as a sorted,
   unique-key `std::flat_map`. When equivalent keys repeat, the last pair in
   source order supplies the retained value; the input is unchanged.
+- `to_flat_multimap(pairs)` materializes the same pair range as a sorted
+  `std::flat_multimap`, retaining all equivalent keys and preserving their
+  relative input order within each key group.
 - `swap_ranges(left, right)` returns two copied lists with corresponding
   elements in the common prefix exchanged; an unmatched tail is preserved.
   Both inputs remain unchanged.

@@ -6,6 +6,7 @@ mod std::algorithm::order;
 mod std::algorithm::ranges;
 mod std::flat_set;
 mod std::flat_map;
+mod std::flat_multimap;
 mod std::algorithm::rand;
 mod std::algorithm::regex;
 mod std::algorithm::genetic;
@@ -440,7 +441,9 @@ use std::algorithm::ranges::copy_backward_to_projected;
 use std::algorithm::ranges::to_list;
 use std::algorithm::ranges::to_flat_set;
 use std::algorithm::ranges::to_flat_map;
+use std::algorithm::ranges::to_flat_multimap;
 use std::flat_map::FlatMap;
+use std::flat_multimap::FlatMultiMap;
 use std::flat_set::FlatSet;
 use std::algorithm::ranges::swap_ranges;
 use std::algorithm::ranges::filter;
@@ -3929,6 +3932,24 @@ fn test_algorithm_ranges_to_flat_map_sorts_and_assigns_last_duplicate() {
 
     let empty: list<tuple<i32, i32>> = [];
     let empty_map: FlatMap<i32, i32> = to_flat_map(empty);
+    verify(empty_map.is_empty());
+}
+
+#[test]
+fn test_algorithm_ranges_to_flat_multimap_retains_duplicate_order() {
+    let source_keys: list<i32> = [3, 1, 3, 2, 3];
+    let source_values: list<i32> = [30, 10, 33, 20, 36];
+    let pairs: list<tuple<i32, i32>> = zip(source_keys, source_values);
+    let converted: FlatMultiMap<i32, i32> = to_flat_multimap(pairs);
+    verify(converted.len() == 5 && converted.key_at(0) == 1 &&
+           converted.key_at(1) == 2 && converted.key_at(2) == 3 &&
+           converted.key_at(3) == 3 && converted.key_at(4) == 3);
+    verify(converted.count(3) == 3 && converted.value_at(2) == 30 &&
+           converted.value_at(3) == 33 && converted.value_at(4) == 36);
+    verify(source_keys.len() == 5 && source_values[2] == 33);
+
+    let empty: list<tuple<i32, i32>> = [];
+    let empty_map: FlatMultiMap<i32, i32> = to_flat_multimap(empty);
     verify(empty_map.is_empty());
 }
 
