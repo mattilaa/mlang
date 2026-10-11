@@ -340,6 +340,10 @@ fn example() {
   from a zero-argument generator and returns the number written. The generated
   type must match the list element type; empty lists do not invoke the
   generator.
+- `generate_n_in_place(&mut data, count, generator)` generates into a bounded
+  prefix of an existing list. It writes at most `count` slots (never beyond
+  the destination length), returns the number written, and does not invoke the
+  generator when the count is non-positive or the destination is empty.
 - `fold_left(data, init, operation)` and `fold_right(data, init, operation)`
   reduce a range in forward or reverse order. The operation receives
   `(accumulator, element)` for left folds and `(element, accumulator)` for

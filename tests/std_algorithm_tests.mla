@@ -445,6 +445,7 @@ use std::algorithm::ranges::for_each_n_projected_count;
 use std::algorithm::ranges::generate_n;
 use std::algorithm::ranges::generate;
 use std::algorithm::ranges::generate_in_place;
+use std::algorithm::ranges::generate_n_in_place;
 use std::algorithm::ranges::fill;
 use std::algorithm::ranges::fill_in_place;
 use std::algorithm::ranges::fill_n_in_place;
@@ -6269,6 +6270,30 @@ fn test_algorithm_ranges_generate_in_place() {
     var empty: list<i32> = [];
     verify(generate_in_place(empty, next) == 0);
     verify(next_value == 26);
+}
+
+#[test]
+fn test_algorithm_ranges_generate_n_in_place() {
+    var next_value: i32 = 30;
+    let next = || {
+        next_value = next_value + 3;
+        return next_value;
+    };
+    var values: list<i32> = [0, 0, 0, 0];
+    verify(generate_n_in_place(values, 2, next) == 2);
+    verify(values[0] == 33 && values[1] == 36 &&
+           values[2] == 0 && values[3] == 0);
+    verify(next_value == 36);
+
+    verify(generate_n_in_place(values, 20, next) == 4);
+    verify(values[0] == 39 && values[1] == 42 &&
+           values[2] == 45 && values[3] == 48);
+    verify(next_value == 48);
+
+    verify(generate_n_in_place(values, -1, next) == 0);
+    var empty: list<i32> = [];
+    verify(generate_n_in_place(empty, 3, next) == 0);
+    verify(next_value == 48);
 }
 
 #[test]

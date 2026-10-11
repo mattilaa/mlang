@@ -1302,6 +1302,21 @@ pub fn generate_in_place(data: &mut list<T>, generator: Generator) -> i64 {
     return n;
 }
 
+/// @brief Generate values into at most the first `count` slots of a mutable list.
+/// The requested count is clamped to the destination length and to zero.
+/// Returns the number of slots written; no calls are made for an empty prefix.
+/// Bounded-destination counterpart to C++ `std::ranges::generate_n`.
+/// @ingroup algorithm_ranges
+generic<T, Generator>
+pub fn generate_n_in_place(data: &mut list<T>, count: i64,
+                           generator: Generator) -> i64 {
+    let n: i64 = data.len();
+    let limit: i64 = if count < n { count } else { n };
+    if limit <= 0 { return 0; }
+    for i in 0..limit { data[i] = generator(); }
+    return limit;
+}
+
 /// @brief Return a copy of `data` filled with `value` at every position.
 /// The input length acts as the output range size; the source is unchanged.
 /// Eager-list counterpart to C++20 `std::ranges::fill`.
