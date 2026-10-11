@@ -367,6 +367,7 @@ use std::algorithm::ranges::fill_n;
 use std::algorithm::ranges::copy_n;
 use std::algorithm::ranges::copy_n_with_count;
 use std::algorithm::ranges::copy as ranges_copy;
+use std::algorithm::ranges::to_list;
 use std::algorithm::ranges::swap_ranges;
 use std::algorithm::ranges::filter;
 use std::algorithm::ranges::copy_if_projected;
@@ -3260,6 +3261,20 @@ fn test_algorithm_ranges_copy_remove_replace_copy() {
     verify(empty_without_predicate.len() == 0);
     verify(empty_replaced.len() == 0);
     verify(empty_replaced_if.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_to_list_converts_and_materializes() {
+    let source: list<i32> = [3, -2, 9];
+    let converted: list<f64> = to_list(source);
+    verify(converted.len() == 3);
+    verify(converted[0] == 3.0 && converted[1] == -2.0 &&
+           converted[2] == 9.0);
+    verify(source[0] == 3 && source[1] == -2 && source[2] == 9);
+
+    let empty_source: list<i32> = [];
+    let empty_converted: list<f64> = to_list(empty_source);
+    verify(empty_converted.len() == 0);
 }
 
 #[test]

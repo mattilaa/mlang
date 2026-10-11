@@ -364,6 +364,10 @@ fn example() {
   observe the actual bounded progress alongside the copied prefix.
 - `copy(data)` materializes a full list copy, the eager-list counterpart to
   `std::ranges::copy`; the source remains unchanged.
+- `to_list(data)` materializes a new list with an explicitly selected element
+  type, converting each source element in order. This is the Mlang eager-list
+  counterpart to C++23 `std::ranges::to`; the output type is inferred from the
+  expected result type, for example `let converted: list<f64> = to_list(values)`.
 - `swap_ranges(left, right)` returns two copied lists with corresponding
   elements in the common prefix exchanged; an unmatched tail is preserved.
   Both inputs remain unchanged.
