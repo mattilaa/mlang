@@ -774,6 +774,9 @@ fn example() {
   write replaced values into a caller-provided destination, bounded by the
   shorter list. They return the number written and preserve the source and any
   unused destination suffix.
+- `replace_copy_if_to` and `replace_copy_if_to_projected` provide the same
+  bounded behavior for predicate-based replacement, with the projected form
+  testing each element's key while copying the original nonmatches.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 - `iota_range(start, end)` materializes a typed half-open range, preserving

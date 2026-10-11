@@ -522,6 +522,8 @@ use std::algorithm::ranges::replace_copy_to;
 use std::algorithm::ranges::replace_copy_to_by;
 use std::algorithm::ranges::replace_copy_to_projected;
 use std::algorithm::ranges::replace_copy_to_by_projected;
+use std::algorithm::ranges::replace_copy_if_to;
+use std::algorithm::ranges::replace_copy_if_to_projected;
 use std::algorithm::ranges::replace_copy_if;
 use std::algorithm::ranges::replace_copy_if_projected;
 use std::algorithm::ranges::replace_if;
@@ -4318,6 +4320,32 @@ fn test_algorithm_ranges_replace_copy_to_bounded_output() {
     verify(replace_copy_to(source, short_destination, 22, 99) == 2);
     verify(short_destination[0] == 11 && short_destination[1] == 99);
     verify(source[0] == 11 && source[1] == 22);
+}
+
+#[test]
+fn test_algorithm_ranges_replace_copy_if_to_bounded_output() {
+    let source: list<i32> = [11, 22, 29, 31, 42];
+    let is_even = |value: i32| { return value % 2 == 0; };
+    var destination: list<i32> = [0, 0, 0, 0, 77];
+    verify(replace_copy_if_to(source, destination, is_even, 99) == 4);
+    verify(destination[0] == 11 && destination[1] == 99 &&
+           destination[2] == 29 && destination[3] == 31 &&
+           destination[4] == 77);
+
+    let tens = |value: i32| { return value / 10; };
+    let key_at_least_three = |key: i32| { return key >= 3; };
+    var projected: list<i32> = [0, 0, 0, 0];
+    verify(replace_copy_if_to_projected(
+        source, projected, key_at_least_three, 99, tens) == 4);
+    verify(projected[0] == 11 && projected[1] == 22 &&
+           projected[2] == 29 && projected[3] == 99);
+
+    var short_destination: list<i32> = [0, 0];
+    verify(replace_copy_if_to(source, short_destination, is_even, 99) == 2);
+    verify(short_destination[0] == 11 && short_destination[1] == 99);
+    var no_output: list<i32> = [];
+    verify(replace_copy_if_to(source, no_output, is_even, 99) == 0);
+    verify(source[0] == 11 && source[4] == 42);
 }
 
 #[test]

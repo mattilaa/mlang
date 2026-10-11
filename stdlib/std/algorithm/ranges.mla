@@ -3265,6 +3265,41 @@ pub fn replace_copy_if_projected(data: &list<T>, predicate: Predicate,
     return copied;
 }
 
+/// @brief Replace predicate-matching values in a bounded destination copy.
+/// Returns the number written, bounded by both source and destination lengths.
+/// Any unused destination suffix and the source range are left unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn replace_copy_if_to(source: &list<T>, destination: &mut list<T>,
+                          predicate: Predicate, new_value: T) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    for i in 0..count {
+        if predicate(source[i]) { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Replace projected predicate matches in bounded output storage.
+/// Returns the number written and copies original source values for all
+/// nonmatching elements.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn replace_copy_if_to_projected(
+    source: &list<T>, destination: &mut list<T>, predicate: Predicate,
+    new_value: T, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    for i in 0..count {
+        if predicate(projection(source[i])) { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
 /// @brief Replace each element accepted by `predicate` in a copied range.
 /// The original range is unchanged.
 /// @ingroup algorithm_ranges
