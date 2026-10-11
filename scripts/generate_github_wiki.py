@@ -69,6 +69,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::math", "std_math.md"),
     ("std::numbers", "std_numbers.md"),
     ("std::source_location", "std_source_location.md"),
+    ("std::scope_exit", "std_scope_exit.md"),
     ("std::matrix", "std_matrix.md"),
     ("std::multiarray", "std_multiarray.md"),
     ("std::mutmultiarray", "std_mutmultiarray.md"),

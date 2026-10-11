@@ -69,6 +69,7 @@
 - [[std::limits|Stdlib-Limits]]
 - [[std::log|Stdlib-Log]]
 - [[std::source_location|Stdlib-Source-Location]]
+- [[std::scope_exit|Stdlib-Scope-Exit]]
 - [[std::multiarray|Stdlib-Multiarray]]
 - [[std::mutmultiarray|Stdlib-Mutmultiarray]]
 - [[std::net|Stdlib-Net]]

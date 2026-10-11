@@ -1,0 +1,34 @@
+/// \file scope_exit.mla
+/// \brief C++23-style scope-exit cleanup guards.
+
+/// @brief Run an action exactly once when this guard leaves scope unless released.
+pub struct ScopeExit<Action> {
+    var action: Action;
+    var active: bool;
+};
+
+impl<Action> ScopeExit {
+    /// @brief Disable the cleanup action. The guard remains valid until scope exit.
+    pub fn release(self: &mut ScopeExit<Action>) -> void {
+        self.active = false;
+    }
+
+    /// @brief Whether this guard will execute its action at scope exit.
+    pub fn is_active(self: &ScopeExit<Action>) -> bool {
+        return self.active;
+    }
+
+    /// @brief Runtime cleanup hook used by Mlang's deterministic scope cleanup.
+    pub fn free(self: ScopeExit<Action>) -> i32 {
+        if self.active {
+            self.action();
+        }
+        return 0;
+    }
+}
+
+/// @brief Create a guard that runs `action` when its owning scope exits.
+generic<Action>
+pub fn scope_exit(action: Action) -> ScopeExit<Action> {
+    return ScopeExit<Action> { action: action, active: true };
+}
