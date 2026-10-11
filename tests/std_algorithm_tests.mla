@@ -423,8 +423,12 @@ use std::algorithm::ranges::replace_if;
 use std::algorithm::ranges::replace_if_in_place;
 use std::algorithm::ranges::replace_if_projected;
 use std::algorithm::ranges::unique_by;
+use std::algorithm::ranges::unique_in_place;
+use std::algorithm::ranges::unique_by_in_place;
 use std::algorithm::ranges::unique_copy_by;
 use std::algorithm::ranges::unique_projected;
+use std::algorithm::ranges::unique_in_place_projected;
+use std::algorithm::ranges::unique_by_in_place_projected;
 use std::algorithm::ranges::unique_copy_projected;
 use std::algorithm::ranges::unique_by_projected;
 use std::algorithm::ranges::unique_copy_by_projected;
@@ -5586,4 +5590,46 @@ fn test_algorithm_ranges_unique_projected() {
     let empty_unique: list<i32> = unique_projected(empty, project_tens);
     let empty_copy: list<i32> = unique_copy_projected(empty, project_tens);
     verify(empty_unique.len() == 0 && empty_copy.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_unique_in_place_variants() {
+    var values: list<i32> = [1, 1, 2, 2, 2, 3, 1, 1];
+    let logical_end: i64 = unique_in_place(values);
+    verify(logical_end == 4 && values.len() == 8);
+    verify(values[0] == 1 && values[1] == 2 &&
+           values[2] == 3 && values[3] == 1);
+
+    let same_last_digit = |left: i32, right: i32| {
+        return left % 10 == right % 10;
+    };
+    var equivalent: list<i32> = [11, 21, 12, 22, 32, 13];
+    let equivalent_end: i64 = unique_by_in_place(equivalent,
+                                                 same_last_digit);
+    verify(equivalent_end == 3 && equivalent[0] == 11 &&
+           equivalent[1] == 12 && equivalent[2] == 13);
+
+    let tens = |value: i32| { return value / 10; };
+    var projected: list<i32> = [11, 12, 21, 22, 31, 33];
+    let projected_end: i64 = unique_in_place_projected(projected, tens);
+    verify(projected_end == 3 && projected[0] == 11 &&
+           projected[1] == 21 && projected[2] == 31);
+
+    let equivalent_key = |left: i32, right: i32| {
+        return left % 2 == right % 2;
+    };
+    var projected_equivalent: list<i32> = [11, 12, 21, 22, 31];
+    let projected_equivalent_end = unique_by_in_place_projected(
+        projected_equivalent, equivalent_key, tens);
+    verify(projected_equivalent_end == 3 &&
+           projected_equivalent[0] == 11 &&
+           projected_equivalent[1] == 21 &&
+           projected_equivalent[2] == 13);
+
+    var empty: list<i32> = [];
+    var singleton: list<i32> = [5];
+    var all_equal: list<i32> = [7, 7, 7];
+    verify(unique_in_place(empty) == 0);
+    verify(unique_in_place(singleton) == 1 && singleton[0] == 5);
+    verify(unique_in_place(all_equal) == 1 && all_equal[0] == 7);
 }

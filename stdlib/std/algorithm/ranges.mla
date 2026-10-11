@@ -2751,6 +2751,91 @@ pub fn unique_by_projected(data: &list<T>, equivalent: Equivalent,
     return unique_values;
 }
 
+/// @brief Compact adjacent duplicate values in a mutable list.
+/// Returns the logical end; the suffix is unspecified and list length is
+/// unchanged. Retained values remain in their original order.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn unique_in_place(data: &mut list<T>) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 { return 0; }
+    var output: i64 = 1;
+    var previous: T = data[0];
+    for input in 1..n {
+        let item: T = data[input];
+        if item != previous {
+            if output != input { data[output] = item; }
+            output = output + 1;
+            previous = item;
+        }
+    }
+    return output;
+}
+
+/// @brief Compact adjacent equivalent values in a mutable list.
+/// The first value in each run is retained; returns the logical end index.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent>
+pub fn unique_by_in_place(data: &mut list<T>, equivalent: Equivalent) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 { return 0; }
+    var output: i64 = 1;
+    var previous: T = data[0];
+    for input in 1..n {
+        let item: T = data[input];
+        if !equivalent(previous, item) {
+            if output != input { data[output] = item; }
+            output = output + 1;
+            previous = item;
+        }
+    }
+    return output;
+}
+
+/// @brief Compact adjacent runs with equal projected keys in place.
+/// Returns the logical end index; list length is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn unique_in_place_projected(data: &mut list<T>,
+                                 projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 { return 0; }
+    var output: i64 = 1;
+    var previous_key = projection(data[0]);
+    for input in 1..n {
+        let item: T = data[input];
+        let current_key = projection(item);
+        if current_key != previous_key {
+            if output != input { data[output] = item; }
+            output = output + 1;
+            previous_key = current_key;
+        }
+    }
+    return output;
+}
+
+/// @brief Compact adjacent equivalence classes of projected keys in place.
+/// Returns the logical end index and retains the first value in each run.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent, Projection>
+pub fn unique_by_in_place_projected(data: &mut list<T>,
+    equivalent: Equivalent, projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 { return 0; }
+    var output: i64 = 1;
+    var previous_key = projection(data[0]);
+    for input in 1..n {
+        let item: T = data[input];
+        let current_key = projection(item);
+        if !equivalent(previous_key, current_key) {
+            if output != input { data[output] = item; }
+            output = output + 1;
+            previous_key = current_key;
+        }
+    }
+    return output;
+}
+
 /// @brief Copy one value from each adjacent equivalence class.
 /// C++20 `std::ranges::unique_copy` counterpart; the source is unchanged.
 /// @ingroup algorithm_ranges

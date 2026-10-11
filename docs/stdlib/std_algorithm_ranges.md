@@ -434,6 +434,11 @@ fn example() {
   adjacent run in a new list and leave the source unchanged.
 - `unique_copy_by_projected(data, equivalent, projection)` provides the same
   copied behavior using equivalence over projected keys.
+- `unique_in_place(&mut data)` and the `unique_by_in_place`,
+  `unique_in_place_projected`, and `unique_by_in_place_projected` variants
+  compact adjacent duplicate runs while preserving the first element of each
+  run. They return the logical end index; the list length is unchanged and its
+  suffix is unspecified, matching C++20 `std::ranges::unique`.
 - `all_of`, `any_of`, and `none_of` accept predicates as well as retaining the
   one-argument `list<bool>` identity forms. Empty-range results match the
   standard algorithms: true, false, and true respectively.
