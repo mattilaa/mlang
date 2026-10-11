@@ -7,6 +7,12 @@ Checked integral durations with explicit runtime units, inspired by C++20
 value instead of a compile-time period parameter. Supported units range from
 nanoseconds through weeks.
 
+`std::chrono` also exposes Mlang's checked C++20 civil-calendar types and
+operations (`year`, `month`, `day`, `weekday`, `year_month`,
+`year_month_day`, and the month/day/weekday recurrence types). Their underlying
+implementations remain shared with `std::date`; timezone and wall-clock
+formatting APIs continue to live there.
+
 ```mla
 mod std::chrono;
 use std::chrono::Duration;
@@ -47,7 +53,27 @@ let rounded_start = time_point_round(start, DurationUnit::Second).unwrap();
 let clock_fields: HhMmSs = make_hh_mm_ss(elapsed).unwrap();
 let formatted_time: str8 = format_hh_mm_ss(elapsed).unwrap(); // 00:01:30
 let evening_hour: i32 = make24(7, true).unwrap(); // 19
+
+let y = make_year(2024).unwrap();
+let m = make_month(2).unwrap();
+let d = make_day(29).unwrap();
+let leap_day = make_year_month_day(y, m, d).unwrap();
+let epoch_days = to_sys_days(1970, 1, 1).unwrap(); // 0
+let epoch = from_sys_days(epoch_days).unwrap();
 ```
+
+- Calendar constructors such as `make_year`, `make_month`, `make_day`,
+  `make_year_month`, and `make_year_month_day` return `option` so invalid
+  values are handled explicitly. Calendar arithmetic and conversion helpers
+  include `year_is_leap`, `month_days`, `to_sys_days`, and `from_sys_days`.
+- Recurring dates are available through `make_month_day` /
+  `resolve_month_day`, `make_month_day_last` /
+  `resolve_month_day_last`, `make_year_month_day_last`, and the numbered or
+  final weekday helpers `make_year_month_weekday` and
+  `make_year_month_weekday_last` with their corresponding `resolve_` forms.
+- `make_weekday`, `weekday_c_encoding`, `weekday_iso_encoding`,
+  `weekday_from_sys_days`, `weekday_of`, and `add_weekdays` cover typed weekday
+  construction, conversion, and modular arithmetic.
 
 - `make_duration(count, unit)` constructs a value for one of the declared
   `DurationUnit` alternatives.

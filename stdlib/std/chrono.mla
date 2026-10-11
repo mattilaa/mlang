@@ -7,8 +7,222 @@
 
 mod std::date;
 use std::date::unix_now;
+use std::date::Year as DateYear;
+use std::date::Month as DateMonth;
+use std::date::Day as DateDay;
+use std::date::Weekday as DateWeekday;
+use std::date::YearMonth as DateYearMonth;
+use std::date::CivilDate as DateYearMonthDay;
+use std::date::MonthDay as DateMonthDay;
+use std::date::MonthDayLast as DateMonthDayLast;
+use std::date::YearMonthDayLast as DateYearMonthDayLast;
+use std::date::YearMonthWeekday as DateYearMonthWeekday;
+use std::date::YearMonthWeekdayLast as DateYearMonthWeekdayLast;
+use std::date::make_year as date_make_year;
+use std::date::year_number as date_year_number;
+use std::date::add_years as date_add_years;
+use std::date::year_is_leap as date_year_is_leap;
+use std::date::month_from_number as date_month_from_number;
+use std::date::month_number as date_month_number;
+use std::date::make_day as date_make_day;
+use std::date::day_number as date_day_number;
+use std::date::make_year_month_from_parts as date_make_year_month_from_parts;
+use std::date::make_civil_date_from_parts as date_make_civil_date_from_parts;
+use std::date::to_sys_days as date_to_sys_days;
+use std::date::from_sys_days as date_from_sys_days;
+use std::date::weekday_from_sys_days_typed as date_weekday_from_sys_days;
+use std::date::weekday_of as date_weekday_of;
+use std::date::make_month_day as date_make_month_day;
+use std::date::resolve_month_day as date_resolve_month_day;
+use std::date::make_month_day_last as date_make_month_day_last;
+use std::date::resolve_month_day_last as date_resolve_month_day_last;
+use std::date::make_year_month_day_last as date_make_year_month_day_last;
+use std::date::resolve_year_month_day_last as date_resolve_year_month_day_last;
+use std::date::make_year_month_weekday as date_make_year_month_weekday;
+use std::date::resolve_year_month_weekday as date_resolve_year_month_weekday;
+use std::date::make_year_month_weekday_last as date_make_year_month_weekday_last;
+use std::date::resolve_year_month_weekday_last as date_resolve_year_month_weekday_last;
+use std::date::weekday_from_c_encoding as date_weekday_from_c_encoding;
+use std::date::weekday_c_encoding as date_weekday_c_encoding;
+use std::date::weekday_iso_encoding as date_weekday_iso_encoding;
+use std::date::add_weekdays as date_add_weekdays;
+use std::date::month_days as date_month_days;
 mod std::time;
 use std::time::now_ns;
+
+/// C++20 `std::chrono` calendar types are also available through `std::date`.
+/// These aliases let chrono users use the standard calendar namespace.
+alias year = DateYear;
+alias month = DateMonth;
+alias day = DateDay;
+alias weekday = DateWeekday;
+alias year_month = DateYearMonth;
+alias year_month_day = DateYearMonthDay;
+alias month_day = DateMonthDay;
+alias month_day_last = DateMonthDayLast;
+alias year_month_day_last = DateYearMonthDayLast;
+alias year_month_weekday = DateYearMonthWeekday;
+alias year_month_weekday_last = DateYearMonthWeekdayLast;
+
+/// @brief Construct a checked chrono calendar year.
+pub fn make_year(value: i32) -> option<year> {
+    return date_make_year(value);
+}
+
+/// @brief Return a calendar year's numeric value.
+pub fn year_number(value: year) -> i32 {
+    return date_year_number(value);
+}
+
+/// @brief Add years with checked chrono calendar bounds.
+pub fn add_years(value: year, offset: i64) -> option<year> {
+    return date_add_years(value, offset);
+}
+
+/// @brief Return whether a valid chrono year is a leap year.
+pub fn year_is_leap(value: year) -> bool {
+    return date_year_is_leap(value);
+}
+
+/// @brief Construct a typed month from its 1-based numeric representation.
+pub fn make_month(value: i32) -> option<month> {
+    return date_month_from_number(value);
+}
+
+/// @brief Return a typed month's 1-based numeric representation.
+pub fn month_number(value: month) -> i32 {
+    return date_month_number(value);
+}
+
+/// @brief Construct a day-of-month field (values outside 1..31 remain invalid).
+pub fn make_day(value: i32) -> option<day> {
+    return date_make_day(value);
+}
+
+/// @brief Return a day-of-month field's numeric value.
+pub fn day_number(value: day) -> i32 {
+    return date_day_number(value);
+}
+
+/// @brief Combine valid year and month fields.
+pub fn make_year_month(year_value: year, month_value: month)
+    -> option<year_month> {
+    return date_make_year_month_from_parts(year_value, month_value);
+}
+
+/// @brief Construct a checked Gregorian year/month/day value.
+pub fn make_year_month_day(year_value: year, month_value: month,
+                           day_value: day) -> option<year_month_day> {
+    return date_make_civil_date_from_parts(year_value, month_value, day_value);
+}
+
+/// @brief Convert a valid Gregorian date to days since 1970-01-01.
+pub fn to_sys_days(year_value: i32, month_value: i32, day_value: i32)
+    -> option<i64> {
+    return date_to_sys_days(year_value, month_value, day_value);
+}
+
+/// @brief Convert a system-day count to a checked chrono calendar date.
+pub fn from_sys_days(value: i64) -> option<year_month_day> {
+    return date_from_sys_days(value);
+}
+
+/// @brief Return the weekday corresponding to a system-day count.
+pub fn weekday_from_sys_days(value: i64) -> weekday {
+    return date_weekday_from_sys_days(value);
+}
+
+/// @brief Return the weekday of a valid chrono calendar date.
+pub fn weekday_of(value: year_month_day) -> option<weekday> {
+    return date_weekday_of(value);
+}
+
+/// @brief Construct a recurring calendar month/day pair.
+pub fn make_month_day(month_value: i32, day_value: i32) -> option<month_day> {
+    return date_make_month_day(month_value, day_value);
+}
+
+/// @brief Resolve a recurring month/day pair in a particular year.
+pub fn resolve_month_day(value: month_day, year_value: i32)
+    -> option<year_month_day> {
+    return date_resolve_month_day(value, year_value);
+}
+
+/// @brief Construct a recurring final-day-of-month value.
+pub fn make_month_day_last(value: i32) -> option<month_day_last> {
+    return date_make_month_day_last(value);
+}
+
+/// @brief Resolve a final-day-of-month value in a particular year.
+pub fn resolve_month_day_last(value: month_day_last, year_value: i32)
+    -> option<year_month_day> {
+    return date_resolve_month_day_last(value, year_value);
+}
+
+/// @brief Construct a typed year/month/last-day calendar value.
+pub fn make_year_month_day_last(year_value: year, month_value: month)
+    -> option<year_month_day_last> {
+    return date_make_year_month_day_last(year_value, month_value);
+}
+
+/// @brief Resolve a year/month/last-day calendar value to its civil date.
+pub fn resolve_year_month_day_last(value: year_month_day_last)
+    -> option<year_month_day> {
+    return date_resolve_year_month_day_last(value);
+}
+
+/// @brief Construct a numbered weekday occurrence within a month.
+pub fn make_year_month_weekday(year_value: i32, month_value: i32,
+                               weekday_value: weekday, occurrence: i32)
+    -> option<year_month_weekday> {
+    return date_make_year_month_weekday(year_value, month_value,
+                                        weekday_value, occurrence);
+}
+
+/// @brief Resolve a numbered weekday occurrence to a Gregorian date.
+pub fn resolve_year_month_weekday(value: year_month_weekday)
+    -> option<year_month_day> {
+    return date_resolve_year_month_weekday(value);
+}
+
+/// @brief Construct the final weekday occurrence within a month.
+pub fn make_year_month_weekday_last(year_value: i32, month_value: i32,
+                                    weekday_value: weekday)
+    -> option<year_month_weekday_last> {
+    return date_make_year_month_weekday_last(year_value, month_value,
+                                             weekday_value);
+}
+
+/// @brief Resolve the final weekday occurrence to a Gregorian date.
+pub fn resolve_year_month_weekday_last(value: year_month_weekday_last)
+    -> option<year_month_day> {
+    return date_resolve_year_month_weekday_last(value);
+}
+
+/// @brief Construct a weekday from its Sunday=0 through Saturday=6 encoding.
+pub fn make_weekday(value: i32) -> option<weekday> {
+    return date_weekday_from_c_encoding(value);
+}
+
+/// @brief Return the Sunday-based weekday encoding.
+pub fn weekday_c_encoding(value: weekday) -> i32 {
+    return date_weekday_c_encoding(value);
+}
+
+/// @brief Return the ISO Monday=1 through Sunday=7 weekday encoding.
+pub fn weekday_iso_encoding(value: weekday) -> i32 {
+    return date_weekday_iso_encoding(value);
+}
+
+/// @brief Add a signed number of days to a weekday, wrapping within the week.
+pub fn add_weekdays(value: weekday, offset: i64) -> weekday {
+    return date_add_weekdays(value, offset);
+}
+
+/// @brief Return the number of days in a valid month/year pair.
+pub fn month_days(value: month, year_value: year) -> i32 {
+    return date_month_days(value, year_value.value);
+}
 
 /// @brief Supported fixed duration units, from nanoseconds through weeks.
 pub enum DurationUnit : i32 {

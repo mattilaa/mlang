@@ -29,12 +29,100 @@ use std::chrono::steady_now;
 use std::chrono::system_now;
 use std::chrono::make_hh_mm_ss;
 use std::chrono::format_hh_mm_ss;
+use std::chrono::year;
+use std::chrono::month;
+use std::chrono::day;
+use std::chrono::weekday;
+use std::chrono::year_month;
+use std::chrono::year_month_day;
+use std::chrono::make_year;
+use std::chrono::year_number;
+use std::chrono::year_is_leap;
+use std::chrono::make_month;
+use std::chrono::month_number;
+use std::chrono::make_day;
+use std::chrono::day_number;
+use std::chrono::make_year_month;
+use std::chrono::make_year_month_day;
+use std::chrono::to_sys_days;
+use std::chrono::from_sys_days;
+use std::chrono::weekday_from_sys_days;
+use std::chrono::weekday_of;
+use std::chrono::make_month_day;
+use std::chrono::resolve_month_day;
+use std::chrono::make_month_day_last;
+use std::chrono::resolve_month_day_last;
+use std::chrono::make_year_month_day_last;
+use std::chrono::resolve_year_month_day_last;
+use std::chrono::make_year_month_weekday;
+use std::chrono::resolve_year_month_weekday;
+use std::chrono::make_year_month_weekday_last;
+use std::chrono::resolve_year_month_weekday_last;
+use std::chrono::make_weekday;
+use std::chrono::weekday_c_encoding;
+use std::chrono::weekday_iso_encoding;
+use std::chrono::add_weekdays;
+use std::chrono::month_days;
 use std::chrono::is_am;
 use std::chrono::is_pm;
 use std::chrono::make12;
 use std::chrono::make24;
 use std::testing::verify;
 use std::testing::verify_eq_i64;
+
+#[test]
+fn test_chrono_calendar_types_and_system_days() {
+    let y: year = make_year(2000).unwrap();
+    let m: month = make_month(2).unwrap();
+    let d: day = make_day(29).unwrap();
+    verify(year_number(y) == 2000 && year_is_leap(y));
+    verify(month_number(m) == 2 && day_number(d) == 29);
+
+    let ym: year_month = make_year_month(y, m).unwrap();
+    let date: year_month_day = make_year_month_day(y, m, d).unwrap();
+    verify(ym.year == 2000 && ym.month == 2);
+    verify(date.year == 2000 && date.month == 2 && date.day == 29);
+
+    let epoch_days: i64 = to_sys_days(1970, 1, 1).unwrap();
+    verify(epoch_days == 0);
+    let epoch: year_month_day = from_sys_days(epoch_days).unwrap();
+    verify(epoch.year == 1970 && epoch.month == 1 && epoch.day == 1);
+    let leap_day: weekday = weekday_of(date).unwrap();
+    verify(leap_day == weekday::Tuesday);
+    verify(weekday_from_sys_days(0) == weekday::Thursday);
+
+    verify(make_year_month_day(y, m, make_day(30).unwrap()).is_none());
+}
+
+#[test]
+fn test_chrono_calendar_recurrence_and_weekday_helpers() {
+    let leap_day = make_month_day(2, 29).unwrap();
+    let leap_date = resolve_month_day(leap_day, 2024).unwrap();
+    verify(leap_date.year == 2024 && leap_date.month == 2 &&
+           leap_date.day == 29);
+    verify(resolve_month_day(leap_day, 2023).is_none());
+
+    let y: year = make_year(2000).unwrap();
+    let february: month = make_month(2).unwrap();
+    let last_february = make_year_month_day_last(y, february).unwrap();
+    let leap_month_end = resolve_year_month_day_last(last_february).unwrap();
+    verify(leap_month_end.day == 29 && month_days(february, y) == 29);
+
+    let monday: weekday = make_weekday(1).unwrap();
+    verify(weekday_c_encoding(monday) == 1 &&
+           weekday_iso_encoding(monday) == 1);
+    verify(weekday_c_encoding(add_weekdays(monday, -1)) == 0);
+    let first_monday = make_year_month_weekday(2024, 3, monday, 1).unwrap();
+    let first_monday_date = resolve_year_month_weekday(first_monday).unwrap();
+    verify(first_monday_date.year == 2024 && first_monday_date.month == 3 &&
+           first_monday_date.day == 4);
+    let last_monday = make_year_month_weekday_last(2024, 9, monday).unwrap();
+    let last_monday_date = resolve_year_month_weekday_last(last_monday).unwrap();
+    verify(last_monday_date.month == 9 && last_monday_date.day == 30);
+
+    let last_day = make_month_day_last(2).unwrap();
+    verify(resolve_month_day_last(last_day, 2023).unwrap().day == 28);
+}
 
 #[test]
 fn test_chrono_duration_casts_and_truncation() {
