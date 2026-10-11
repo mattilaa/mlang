@@ -521,6 +521,10 @@ fn example() {
   adjacent run in a new list and leave the source unchanged.
 - `unique_copy_by_projected(data, equivalent, projection)` provides the same
   copied behavior using equivalence over projected keys.
+- `unique_copy_to` and its `_by`, `_projected`, and `_by_projected` forms write
+  one original value per adjacent equivalence run into bounded storage and
+  return `(consumed, written)` progress. A short destination stops the copy at
+  the last complete output run.
 - `unique_in_place(&mut data)` and the `unique_by_in_place`,
   `unique_in_place_projected`, and `unique_by_in_place_projected` variants
   compact adjacent duplicate runs while preserving the first element of each

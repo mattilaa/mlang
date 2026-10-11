@@ -3541,6 +3541,80 @@ pub fn unique_copy_by_projected(data: &list<T>, equivalent: Equivalent,
     return unique_by_projected(data, equivalent, projection);
 }
 
+generic<T>
+fn ranges_default_equal(left: T, right: T) -> bool {
+    return left == right;
+}
+
+generic<T, Equivalent, Projection>
+fn ranges_unique_copy_to_core(source: &list<T>, destination: &mut list<T>,
+                              equivalent: Equivalent,
+                              projection: Projection)
+    -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    if source_len == 0 || destination_len == 0 { return (0, 0); }
+    var consumed: i64 = 1;
+    var written: i64 = 1;
+    destination[0] = source[0];
+    var previous_key = projection(source[0]);
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        let current_key = projection(item);
+        if !equivalent(previous_key, current_key) {
+            destination[written] = item;
+            written = written + 1;
+            previous_key = current_key;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Copy one value per adjacent equal run into bounded storage.
+/// Returns `(consumed, written)` and stops at the source end or when the
+/// destination fills. The first value in each run is kept.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn unique_copy_to(source: &list<T>, destination: &mut list<T>)
+    -> tuple<i64, i64> {
+    return ranges_unique_copy_to_core(source, destination,
+                                      ranges_default_equal,
+                                      ranges_identity);
+}
+
+/// @brief Copy one value per adjacent equivalence run into bounded storage.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent>
+pub fn unique_copy_to_by(source: &list<T>, destination: &mut list<T>,
+                         equivalent: Equivalent) -> tuple<i64, i64> {
+    return ranges_unique_copy_to_core(source, destination, equivalent,
+                                      ranges_identity);
+}
+
+/// @brief Copy first values from projected-key runs into bounded storage.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn unique_copy_to_projected(source: &list<T>,
+                                destination: &mut list<T>,
+                                projection: Projection)
+    -> tuple<i64, i64> {
+    return ranges_unique_copy_to_core(source, destination,
+                                      ranges_default_equal, projection);
+}
+
+/// @brief Copy first values from projected equivalence runs into bounded output.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent, Projection>
+pub fn unique_copy_to_by_projected(source: &list<T>,
+                                   destination: &mut list<T>,
+                                   equivalent: Equivalent,
+                                   projection: Projection)
+    -> tuple<i64, i64> {
+    return ranges_unique_copy_to_core(source, destination,
+                                      equivalent, projection);
+}
+
 
 /// @brief Return whether two lists contain the same elements in order.
 /// The ranges may have different, equality-comparable element types.
