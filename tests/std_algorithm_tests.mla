@@ -325,6 +325,8 @@ use std::algorithm::ranges::rotate_copy;
 use std::algorithm::ranges::rotate_in_place;
 use std::algorithm::ranges::shift_left;
 use std::algorithm::ranges::shift_right;
+use std::algorithm::ranges::shift_left_in_place;
+use std::algorithm::ranges::shift_right_in_place;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::chunk;
 use std::algorithm::ranges::windows;
@@ -741,6 +743,34 @@ fn test_algorithm_ranges_shift_algorithms() {
     let empty: list<i32> = [];
     let shifted_empty: list<i32> = shift_left(empty, 1);
     verify(shifted_empty.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_shift_in_place() {
+    var left: list<i32> = [1, 2, 3, 4, 5];
+    verify(shift_left_in_place(left, 2) == 3);
+    verify(left.len() == 5 && left[0] == 3 && left[1] == 4 &&
+           left[2] == 5);
+    verify(shift_left_in_place(left, 0) == 5);
+    verify(shift_left_in_place(left, -2) == 5);
+    verify(shift_left_in_place(left, 99) == 0);
+    verify(left.len() == 5);
+
+    var right: list<i32> = [1, 2, 3, 4, 5];
+    verify(shift_right_in_place(right, 2) == 2);
+    verify(right.len() == 5 && right[2] == 1 && right[3] == 2 &&
+           right[4] == 3);
+    verify(shift_right_in_place(right, 0) == 0);
+    verify(shift_right_in_place(right, -3) == 0);
+    verify(shift_right_in_place(right, 99) == 5);
+    verify(right.len() == 5);
+
+    var empty: list<i32> = [];
+    var singleton: list<i32> = [7];
+    verify(shift_left_in_place(empty, 1) == 0);
+    verify(shift_right_in_place(empty, 1) == 0);
+    verify(shift_left_in_place(singleton, 1) == 0);
+    verify(shift_right_in_place(singleton, 1) == 1);
 }
 
 #[test]

@@ -7586,6 +7586,39 @@ pub fn shift_right(data: &list<T>, count: i64) -> list<T> {
     return out;
 }
 
+/// @brief Shift the retained suffix to the front of a mutable list.
+/// Returns the new logical end index; elements in the remaining suffix are
+/// unspecified. Non-positive counts are no-ops, and counts at least the length
+/// return the beginning of the range.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn shift_left_in_place(data: &mut list<T>, count: i64) -> i64 {
+    let n: i64 = data.len();
+    if count <= 0 { return n; }
+    if count >= n { return 0; }
+    let retained: i64 = n - count;
+    for i in 0..retained { data[i] = data[i + count]; }
+    return retained;
+}
+
+/// @brief Shift the retained prefix toward the end of a mutable list.
+/// Returns the first index of the shifted range; preceding elements are
+/// unspecified. Non-positive counts are no-ops, and counts at least the length
+/// return the end of the range.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn shift_right_in_place(data: &mut list<T>, count: i64) -> i64 {
+    let n: i64 = data.len();
+    if count <= 0 { return 0; }
+    if count >= n { return n; }
+    var source: i64 = n - count;
+    while source > 0 {
+        source = source - 1;
+        data[source + count] = data[source];
+    }
+    return count;
+}
+
 /// @brief Materialize consecutive chunks of at most `chunk_size` elements.
 /// Eager-list counterpart to C++23 `views::chunk`; non-positive sizes are empty.
 /// @ingroup algorithm_ranges

@@ -587,6 +587,10 @@ fn example() {
   eager C++20 `ranges::shift_left`/`shift_right` counterparts leave the input
   unchanged; non-positive counts are no-ops and counts at least the length
   yield an empty list.
+- `shift_left_in_place(&mut data, count)` and `shift_right_in_place` move the
+  retained elements within the original list and return the logical boundary
+  index. The list length is unchanged; the elements outside the retained range
+  are unspecified, matching C++20 [`std::ranges::shift_left`](Stdlib-Module-API)/`shift_right`.
 - `chunked(data, size)` materializes consecutive sublists (C++23
   `views::chunk` style); the final chunk can be shorter, and non-positive sizes
   produce an empty list. `chunk(data, size)` is the standard view spelling.
