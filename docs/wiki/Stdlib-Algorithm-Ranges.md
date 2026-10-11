@@ -268,6 +268,12 @@ fn example() {
   `nth_element_projected` partitions by a unary projected key, and
   `nth_element_by_projected` combines both controls. An invalid index returns
   an empty list.
+- `nth_element_in_place(&mut data, nth)` applies three-way quickselect to the
+  original list. It returns `nth` on success or `-1` for an invalid index;
+  `nth_element_in_place_by`, `_projected`, and `_by_projected` provide ordering
+  customization. The selected key is in its final sorted position, with the
+  corresponding partition guarantees on both sides, but neither side is
+  sorted. Selection is average O(N), with O(N²) worst-case work.
 - `lower_bound`, `upper_bound`, and `binary_search` perform logarithmic-time
   queries on a list sorted in nondecreasing order. The bounds return insertion
   indices; binary search returns [`bool`](Quick-Guide#types).

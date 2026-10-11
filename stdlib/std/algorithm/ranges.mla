@@ -4901,6 +4901,84 @@ pub fn nth_element(data: &list<T>, nth: i64) -> list<T> {
     return nth_element_impl(data, nth);
 }
 
+/// @brief Partition a mutable list around the selected element using 3-way quickselect.
+/// Returns `nth` when it is valid and -1 otherwise. Values on either side are
+/// partitioned but not sorted; average work is linear in the input length.
+/// @ingroup algorithm_ranges
+generic<T, Key, Less, Projection>
+fn nth_element_in_place_impl(data: &mut list<T>, nth: i64, less: Less,
+                             projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if nth < 0 || nth >= n { return -1; }
+    var first: i64 = 0;
+    var last: i64 = n - 1;
+    while first <= last {
+        let middle: i64 = first + (last - first) / 2;
+        let pivot: Key = projection(data[middle]);
+        var less_end: i64 = first;
+        var current: i64 = first;
+        var greater_start: i64 = last;
+        while current <= greater_start {
+            if less(projection(data[current]), pivot) {
+                let temporary: T = data[less_end];
+                data[less_end] = data[current];
+                data[current] = temporary;
+                less_end = less_end + 1;
+                current = current + 1;
+            } else if less(pivot, projection(data[current])) {
+                let temporary: T = data[current];
+                data[current] = data[greater_start];
+                data[greater_start] = temporary;
+                greater_start = greater_start - 1;
+            } else {
+                current = current + 1;
+            }
+        }
+        if nth < less_end {
+            last = less_end - 1;
+        } else if nth > greater_start {
+            first = greater_start + 1;
+        } else {
+            return nth;
+        }
+    }
+    return -1;
+}
+
+/// @brief Select the nth ascending element in a mutable list in place.
+/// Returns `nth` when valid and -1 for an invalid index; neither side is sorted.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn nth_element_in_place(data: &mut list<T>, nth: i64) -> i64 {
+    return nth_element_in_place_impl(data, nth, ranges_default_less,
+                                     ranges_identity);
+}
+
+/// @brief Select by a caller-provided ordering in a mutable list in place.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn nth_element_in_place_by(data: &mut list<T>, nth: i64,
+                               less: Less) -> i64 {
+    return nth_element_in_place_impl(data, nth, less, ranges_identity);
+}
+
+/// @brief Select by projected key in a mutable list in place.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn nth_element_in_place_projected(
+    data: &mut list<T>, nth: i64, projection: Projection) -> i64 {
+    return nth_element_in_place_impl(data, nth, ranges_default_less,
+                                     projection);
+}
+
+/// @brief Select by comparator and projection in a mutable list in place.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn nth_element_in_place_by_projected(
+    data: &mut list<T>, nth: i64, less: Less, projection: Projection) -> i64 {
+    return nth_element_in_place_impl(data, nth, less, projection);
+}
+
 /// @brief Comparator-based `nth_element`; invalid indices return an empty list.
 /// `less` defines the order and partitions the result around the selected value.
 /// @ingroup algorithm_ranges

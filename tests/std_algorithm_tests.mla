@@ -236,6 +236,10 @@ use std::algorithm::ranges::nth_element;
 use std::algorithm::ranges::nth_element_by;
 use std::algorithm::ranges::nth_element_projected;
 use std::algorithm::ranges::nth_element_by_projected;
+use std::algorithm::ranges::nth_element_in_place;
+use std::algorithm::ranges::nth_element_in_place_by;
+use std::algorithm::ranges::nth_element_in_place_projected;
+use std::algorithm::ranges::nth_element_in_place_by_projected;
 use std::algorithm::ranges::merged;
 use std::algorithm::ranges::merged_projected;
 use std::algorithm::ranges::union_sorted;
@@ -1949,6 +1953,52 @@ fn test_algorithm_ranges_nth_element_comparator_projection() {
     let invalid_high: list<i32> = nth_element_by_projected(
         values, values.len(), greater, project_tens);
     verify(invalid_low.len() == 0 && invalid_high.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_nth_element_in_place() {
+    var values: list<i32> = [7, 2, 9, 1, 5, 3];
+    verify(nth_element_in_place(values, 2) == 2);
+    let selected: i32 = values[2];
+    verify(selected == 3);
+    for i in 0..2 { verify(values[i] <= selected); }
+    for i in 3..values.len() { verify(values[i] >= selected); }
+
+    let greater = |left: i32, right: i32| { return left > right; };
+    var descending: list<i32> = [7, 2, 9, 1, 5, 3];
+    verify(nth_element_in_place_by(descending, 1, greater) == 1);
+    let selected_descending: i32 = descending[1];
+    verify(selected_descending == 7);
+    for i in 0..1 { verify(descending[i] >= selected_descending); }
+    for i in 2..descending.len() {
+        verify(descending[i] <= selected_descending);
+    }
+
+    let project_tens = |value: i32| { return value / 10; };
+    var projected: list<i32> = [42, 11, 23, 31, 19, 5];
+    verify(nth_element_in_place_projected(
+        projected, 2, project_tens) == 2);
+    let selected_key: i32 = project_tens(projected[2]);
+    for i in 0..2 { verify(project_tens(projected[i]) <= selected_key); }
+    for i in 3..projected.len() {
+        verify(project_tens(projected[i]) >= selected_key);
+    }
+
+    let greater_key = |left: i32, right: i32| { return left > right; };
+    var projected_descending: list<i32> = [42, 11, 23, 31, 19, 5];
+    verify(nth_element_in_place_by_projected(
+        projected_descending, 2, greater_key, project_tens) == 2);
+    let selected_desc_key: i32 = project_tens(projected_descending[2]);
+    for i in 0..2 {
+        verify(project_tens(projected_descending[i]) >= selected_desc_key);
+    }
+    for i in 3..projected_descending.len() {
+        verify(project_tens(projected_descending[i]) <= selected_desc_key);
+    }
+
+    verify(nth_element_in_place(values, -1) == -1);
+    verify(nth_element_in_place(values, values.len()) == -1);
+    verify(values[2] == selected);
 }
 
 #[test]
