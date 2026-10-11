@@ -425,11 +425,16 @@ use std::algorithm::ranges::fill_in_place;
 use std::algorithm::ranges::fill_n_in_place;
 use std::algorithm::ranges::fill_n;
 use std::algorithm::ranges::copy_n;
+use std::algorithm::ranges::copy_projected;
+use std::algorithm::ranges::copy_n_projected;
 use std::algorithm::ranges::copy_n_with_count;
 use std::algorithm::ranges::copy as ranges_copy;
 use std::algorithm::ranges::copy_to;
+use std::algorithm::ranges::copy_to_projected;
 use std::algorithm::ranges::copy_n_to;
+use std::algorithm::ranges::copy_n_to_projected;
 use std::algorithm::ranges::copy_backward_to;
+use std::algorithm::ranges::copy_backward_to_projected;
 use std::algorithm::ranges::to_list;
 use std::algorithm::ranges::swap_ranges;
 use std::algorithm::ranges::filter;
@@ -5963,6 +5968,36 @@ fn test_algorithm_ranges_copy_n_to_is_bounded_by_all_ranges() {
     verify(copy_n_to(empty, unchanged, 4) == 0);
     var no_output: list<i32> = [];
     verify(copy_n_to(source, no_output, 4) == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_copy_projection_family() {
+    let source: list<i32> = [11, 22, 35, 48];
+    let tens = |value: i32| { return value / 10; };
+
+    let projected: list<i32> = copy_projected(source, tens);
+    verify(projected.len() == 4 && projected[0] == 1 &&
+           projected[2] == 3 && projected[3] == 4);
+    let prefix: list<i32> = copy_n_projected(source, 2, tens);
+    verify(prefix.len() == 2 && prefix[0] == 1 && prefix[1] == 2);
+    let oversized: list<i32> = copy_n_projected(source, 20, tens);
+    let negative: list<i32> = copy_n_projected(source, -1, tens);
+    verify(oversized.len() == 4 && negative.len() == 0);
+
+    var destination: list<i32> = [0, 0, 0, 99];
+    verify(copy_to_projected(source, destination, tens) == 4);
+    verify(destination[0] == 1 && destination[3] == 4);
+    var bounded: list<i32> = [-1, -1];
+    verify(copy_n_to_projected(source, bounded, 3, tens) == 2);
+    verify(bounded[0] == 1 && bounded[1] == 2);
+    verify(copy_n_to_projected(source, bounded, -1, tens) == 0);
+
+    var backward: list<i32> = [0, 0];
+    let progress: tuple<i64, i64> =
+        copy_backward_to_projected(source, backward, tens);
+    verify(progress.0 == 2 && progress.1 == 0 &&
+           backward[0] == 3 && backward[1] == 4);
+    verify(source[0] == 11 && source[3] == 48);
 }
 
 #[test]

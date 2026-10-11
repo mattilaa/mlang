@@ -1368,6 +1368,34 @@ pub fn copy_n(data: &list<T>, count: i64) -> list<T> {
     return copied;
 }
 
+/// @brief Copy the projected value of every element into a new list.
+/// The source remains unchanged; the output element type is inferred from the
+/// projection. C++20 `std::ranges::copy` projection support.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn copy_projected(data: &list<T>, projection: Projection)
+    -> list<Output> {
+    var copied: list<Output> = [];
+    let n: i64 = data.len();
+    for i in 0..n { copied.push(projection(data[i])); }
+    return copied;
+}
+
+/// @brief Copy a projected prefix into a new list, clamped to the range.
+/// Negative counts return an empty list.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn copy_n_projected(data: &list<T>, count: i64,
+                        projection: Projection) -> list<Output> {
+    var copied: list<Output> = [];
+    let data_len: i64 = data.len();
+    var copy_len: i64 = count;
+    if copy_len < 0 { copy_len = 0; }
+    if copy_len > data_len { copy_len = data_len; }
+    for i in 0..copy_len { copied.push(projection(data[i])); }
+    return copied;
+}
+
 /// @brief Copy a bounded prefix and return the consumed count with the copy.
 /// Counts below zero consume zero elements; oversized counts clamp to the list
 /// length. This exposes the output-iterator progress of C++20 `copy_n` in an
@@ -1435,6 +1463,38 @@ pub fn copy_n_to(source: &list<T>, destination: &mut list<T>,
     return copied;
 }
 
+/// @brief Project and copy the common source/destination prefix.
+/// Returns the number of elements written; neither list changes length.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn copy_to_projected(source: &list<T>, destination: &mut list<Output>,
+                         projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var copied: i64 = source_len;
+    if destination_len < copied { copied = destination_len; }
+    for i in 0..copied { destination[i] = projection(source[i]); }
+    return copied;
+}
+
+/// @brief Copy a projected prefix into a bounded existing destination.
+/// Stops at the requested count or either range's end; negative counts write
+/// nothing. Returns the number of output elements written.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn copy_n_to_projected(source: &list<T>,
+                           destination: &mut list<Output>, count: i64,
+                           projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var copied: i64 = count;
+    if copied < 0 { copied = 0; }
+    if copied > source_len { copied = source_len; }
+    if copied > destination_len { copied = destination_len; }
+    for i in 0..copied { destination[i] = projection(source[i]); }
+    return copied;
+}
+
 /// @brief Copy a range backward into an existing destination list.
 /// Values align at the end of the destination. If the destination is shorter,
 /// the source suffix that fits is copied. Returns `(source_first,
@@ -1454,6 +1514,29 @@ pub fn copy_backward_to(source: &list<T>, destination: &mut list<T>)
     while offset > 0 {
         offset = offset - 1;
         destination[destination_first + offset] = source[source_first + offset];
+    }
+    return (source_first, destination_first);
+}
+
+/// @brief Project and copy a source suffix aligned to the destination end.
+/// Returns the first copied indices in both lists, matching
+/// `copy_backward_to`'s bounded-output convention.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn copy_backward_to_projected(source: &list<T>,
+                                  destination: &mut list<Output>,
+                                  projection: Projection)
+    -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    let source_first: i64 = source_len - count;
+    let destination_first: i64 = destination_len - count;
+    var offset: i64 = count;
+    while offset > 0 {
+        offset = offset - 1;
+        destination[destination_first + offset] =
+            projection(source[source_first + offset]);
     }
     return (source_first, destination_first);
 }

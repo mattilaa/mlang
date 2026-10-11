@@ -406,6 +406,10 @@ fn example() {
   observe the actual bounded progress alongside the copied prefix.
 - `copy(data)` materializes a full list copy, the eager-list counterpart to
   `std::ranges::copy`; the source remains unchanged.
+- `copy_projected(data, projection)` and `copy_n_projected(data, count,
+  projection)` copy projected values into newly materialized lists. Their output
+  type is inferred from the projection, while the source elements are left
+  unchanged.
 - `copy_to(source, destination)` copies into an existing mutable list, stopping
   when either list ends and returning the number written. The source remains
   unchanged and any unused destination suffix is preserved.
@@ -413,12 +417,17 @@ fn example() {
   of elements into existing output storage, stopping at the source or
   destination end and returning the count written. Negative counts write
   nothing; neither list changes length.
+- `copy_to_projected` and `copy_n_to_projected` apply a projection before
+  writing into an existing destination list. They retain the same bounded
+  output and progress semantics as their non-projected counterparts.
 - `copy_backward_to(source, destination)` copies values aligned to the end of
   an existing destination list and returns `(source_first, destination_first)`
   for the copied subranges. If the destination is shorter, the source suffix
   that fits is copied; unused destination prefix elements are preserved. This
   bounded eager-list adaptation corresponds to C++20
   `std::ranges::copy_backward`.
+- `copy_backward_to_projected` applies a projection while aligning the source
+  suffix to the destination end, and returns the copied subrange start indices.
 - `copy_if_to(source, destination, predicate)` writes matching source values
   into an existing destination and stops when it fills. It returns
   `(consumed, written)` so callers can resume from the exact source position;
