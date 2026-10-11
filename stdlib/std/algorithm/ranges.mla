@@ -7046,6 +7046,50 @@ pub fn sort_in_place(data: &mut list<T>) -> i64 {
                                       ranges_identity);
 }
 
+generic<T, Less, Projection>
+fn ranges_stable_sort_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> i64 {
+    let ordered: list<T> = sorted_by_projected(data, less, projection);
+    let n: i64 = ordered.len();
+    for i in 0..n { data[i] = ordered[i]; }
+    return n;
+}
+
+/// @brief Stably sort a mutable list using a strict comparator and projection.
+/// Equal keys retain their original order; uses O(N) temporary list storage.
+/// Returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn stable_sort_in_place_by_projected(
+    data: &mut list<T>, less: Less, projection: Projection) -> i64 {
+    return ranges_stable_sort_in_place_by_projected(data, less, projection);
+}
+
+/// @brief Stably sort a mutable list by a caller-provided strict comparator.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn stable_sort_in_place_by(data: &mut list<T>, less: Less) -> i64 {
+    return ranges_stable_sort_in_place_by_projected(
+        data, less, ranges_identity);
+}
+
+/// @brief Stably sort a mutable list by projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn stable_sort_in_place_projected(
+    data: &mut list<T>, projection: Projection) -> i64 {
+    return ranges_stable_sort_in_place_by_projected(
+        data, ranges_default_less, projection);
+}
+
+/// @brief Stably sort a mutable list in ascending order.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn stable_sort_in_place(data: &mut list<T>) -> i64 {
+    return ranges_stable_sort_in_place_by_projected(
+        data, ranges_default_less, ranges_identity);
+}
+
 /// @brief Sort only the smallest requested prefix of a mutable list.
 /// The prefix is ascending and the remaining elements are not sorted. Counts
 /// clamp to the list length; returns the number of prefix elements sorted.

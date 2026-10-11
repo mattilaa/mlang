@@ -563,6 +563,11 @@ fn example() {
   the number of swaps and mutate the input; unlike `sorted*`, they are not
   stable. Use the comparator and projection forms to order records by custom
   keys without building an intermediate sorted list.
+- `stable_sort_in_place(&mut data)` and its `_by`, `_projected`, and
+  `_by_projected` variants update the original list while preserving input
+  order among equivalent keys. They use O(N) temporary list storage and return
+  the number of elements written; use `sort_in_place` when stability is not
+  required and heap-sort's O(1) auxiliary storage is preferred.
 - `reversed` returns the elements in reverse order; `rotate_left` returns a
   copy rotated by a normalized signed offset. `rotate(data, middle)` places
   the suffix beginning at the split before the prefix (C++20 `ranges::rotate`
