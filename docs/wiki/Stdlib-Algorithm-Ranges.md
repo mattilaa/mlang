@@ -292,6 +292,11 @@ fn example() {
   end for the final element accepted or rejected by a predicate on its key.
 - `for_each(data, operation)` invokes a closure once per element in iteration
   order; captured mutable state can collect side effects or a result.
+- `for_each_result` and `for_each_projected_result` return the callable after
+  processing, preserving callable-local state for later reuse. The bounded
+  forms `for_each_n_result` and `for_each_n_projected_result` do the same for
+  a clamped prefix. Mlang exposes the callable separately because it does not
+  currently return closure values inside iterator/result tuples.
 - `for_each_n(data, count, operation)` invokes a closure on a bounded prefix
   in iteration order. Negative counts perform no calls and oversized counts
   clamp to the input length.
