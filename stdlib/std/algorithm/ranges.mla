@@ -2810,6 +2810,69 @@ pub fn partition_copy_to_projected(
     return (consumed, matching_written, nonmatching_written);
 }
 
+/// @brief Partition into bounded destinations with independent element types.
+/// Matching and nonmatching source values are converted to their respective
+/// destination element types. Stops when either destination fills and returns
+/// `(consumed, matching_written, nonmatching_written)`.
+/// @ingroup algorithm_ranges
+generic<T, Matching, Nonmatching, Predicate>
+pub fn partition_copy_to_heterogeneous(
+    source: &list<T>, matching: &mut list<Matching>,
+    nonmatching: &mut list<Nonmatching>, predicate: Predicate)
+    -> tuple<i64, i64, i64> {
+    let source_len: i64 = source.len();
+    let matching_capacity: i64 = matching.len();
+    let nonmatching_capacity: i64 = nonmatching.len();
+    var consumed: i64 = 0;
+    var matching_written: i64 = 0;
+    var nonmatching_written: i64 = 0;
+    while consumed < source_len && matching_written < matching_capacity &&
+          nonmatching_written < nonmatching_capacity {
+        let value: T = source[consumed];
+        if predicate(value) {
+            matching[matching_written] = value;
+            matching_written = matching_written + 1;
+        } else {
+            nonmatching[nonmatching_written] = value;
+            nonmatching_written = nonmatching_written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, matching_written, nonmatching_written);
+}
+
+/// @brief Projected bounded partition-copy with independently typed outputs.
+/// The predicate receives the projected key; original source values are
+/// converted to the corresponding destination element type. Stops when either
+/// destination fills and returns `(consumed, matching_written,
+/// nonmatching_written)`.
+/// @ingroup algorithm_ranges
+generic<T, Matching, Nonmatching, Predicate, Projection>
+pub fn partition_copy_to_heterogeneous_projected(
+    source: &list<T>, matching: &mut list<Matching>,
+    nonmatching: &mut list<Nonmatching>, predicate: Predicate,
+    projection: Projection) -> tuple<i64, i64, i64> {
+    let source_len: i64 = source.len();
+    let matching_capacity: i64 = matching.len();
+    let nonmatching_capacity: i64 = nonmatching.len();
+    var consumed: i64 = 0;
+    var matching_written: i64 = 0;
+    var nonmatching_written: i64 = 0;
+    while consumed < source_len && matching_written < matching_capacity &&
+          nonmatching_written < nonmatching_capacity {
+        let value: T = source[consumed];
+        if predicate(projection(value)) {
+            matching[matching_written] = value;
+            matching_written = matching_written + 1;
+        } else {
+            nonmatching[nonmatching_written] = value;
+            nonmatching_written = nonmatching_written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, matching_written, nonmatching_written);
+}
+
 /// @brief Return the first index rejected by `predicate`, or -1 if all match.
 /// C++20 `std::ranges::find_if_not` semantics.
 /// @ingroup algorithm_ranges

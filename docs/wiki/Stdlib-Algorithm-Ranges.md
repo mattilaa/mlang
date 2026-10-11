@@ -589,6 +589,11 @@ fn example() {
   existing output lists and stops when either destination fills. It returns
   `(consumed, matching_written, nonmatching_written)`; the projected variant
   applies its projection before testing while retaining the original elements.
+- `partition_copy_to_heterogeneous` and
+  `partition_copy_to_heterogeneous_projected` allow the matching and
+  nonmatching destinations to have independent element types. Original source
+  values are converted to each selected output type; both forms preserve the
+  same bounded progress tuple and stop behavior.
 - `partition(data, predicate)` returns `(partitioned_copy, boundary_index)`.
   Matching elements precede the rest; this eager-list counterpart preserves
   order within both groups and evaluates the predicate once per element.
