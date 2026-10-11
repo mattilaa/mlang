@@ -502,6 +502,7 @@ use std::algorithm::ranges::copy_if;
 use std::algorithm::ranges::copy_if_to;
 use std::algorithm::ranges::copy_if_to_projected;
 use std::algorithm::ranges::sample as ranges_sample;
+use std::algorithm::ranges::sample_to as ranges_sample_to;
 use std::algorithm::ranges::shuffle as ranges_shuffle;
 use std::algorithm::ranges::remove_copy;
 use std::algorithm::ranges::remove_copy_by;
@@ -6519,6 +6520,26 @@ fn test_algorithm_ranges_sample_without_replacement() {
     verify(sampled_records.len() == 2 && first_record.key == 3 &&
            first_record.payload == 30 && second_record.key == 4 &&
            second_record.payload == 40);
+}
+
+#[test]
+fn test_algorithm_ranges_sample_to_bounded_output() {
+    let source: list<i32> = [1, 2, 3, 4, 5, 6];
+    let choose_last = |bound: i64| { return bound - 1; };
+    var destination: list<i32> = [-1, -1, -1, -1];
+    verify(ranges_sample_to(source, destination, 3, choose_last) == 3);
+    verify(destination[0] == 4 && destination[1] == 5 &&
+           destination[2] == 6 && destination[3] == -1);
+
+    var short_destination: list<i32> = [-1, -1];
+    verify(ranges_sample_to(source, short_destination, 10, choose_last) == 2);
+    verify(short_destination[0] == 5 && short_destination[1] == 6);
+
+    verify(ranges_sample_to(source, destination, -2, choose_last) == 0);
+    verify(destination[0] == 4 && destination[1] == 5 &&
+           destination[2] == 6 && destination[3] == -1);
+    var empty_destination: list<i32> = [];
+    verify(ranges_sample_to(source, empty_destination, 2, choose_last) == 0);
 }
 
 #[test]

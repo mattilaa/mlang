@@ -510,6 +510,10 @@ fn example() {
   receives the current exclusive bound, allowing a caller-owned random engine
   (for example, `range_i64(0, bound - 1)`); the selection pass is O(N).
   Negative counts return empty and oversized counts clamp to the input length.
+- `sample_to(source, destination, count, choose_index)` writes the sampled
+  prefix into a caller-provided list, clamping to the requested count, source
+  length, and destination capacity. It returns the number written and leaves
+  the destination suffix unchanged.
 - `shuffle(data, choose_index)` returns a randomized copy. The selector receives
   each current exclusive bound; use a uniformly distributed selector for an
   unbiased permutation. Because lists are eagerly rebuilt without indexed

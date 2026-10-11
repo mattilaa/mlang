@@ -2877,6 +2877,22 @@ pub fn sample(data: &list<T>, count: i64, choose_index: ChooseIndex) -> list<T> 
     return sampled;
 }
 
+/// @brief Sample into a caller-provided bounded destination.
+/// Selects at most `count` values, the destination capacity, and the source
+/// length; returns the number written. The source and unwritten destination
+/// suffix remain unchanged.
+/// @ingroup algorithm_ranges
+generic<T, ChooseIndex>
+pub fn sample_to(source: &list<T>, destination: &mut list<T>, count: i64,
+                 choose_index: ChooseIndex) -> i64 {
+    let capacity: i64 = destination.len();
+    let mut_count: i64 = if count < capacity { count } else { capacity };
+    let sampled: list<T> = sample(source, mut_count, choose_index);
+    let written: i64 = sampled.len();
+    for i in 0..written { destination[i] = sampled[i]; }
+    return written;
+}
+
 /// @brief Return a shuffled copy using a bounded random-index selector.
 /// `choose_index(upper_bound)` must return an index in
 /// `[0, upper_bound)`. The eager implementation leaves the source unchanged;
