@@ -1992,6 +1992,52 @@ pub fn filter_transform_projected(data: &list<T>, predicate: Predicate,
     return transformed;
 }
 
+/// @brief Filter and transform into a bounded, caller-provided output range.
+/// Stops when the source ends or the destination fills; returns
+/// `(consumed, written)` so callers can resume at the exact source position.
+/// Predicate runs once per consumed input and operation only for matches.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Operation>
+pub fn filter_transform_to(source: &list<T>, destination: &mut list<Output>,
+    predicate: Predicate, operation: Operation) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if predicate(value) {
+            destination[written] = operation(value);
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Projected filter-transform into bounded output storage.
+/// Projection and predicate run once per consumed input; operation transforms
+/// each selected original value. Returns `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Operation, Projection>
+pub fn filter_transform_to_projected(
+    source: &list<T>, destination: &mut list<Output>, predicate: Predicate,
+    operation: Operation, projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if predicate(projection(value)) {
+            destination[written] = operation(value);
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Transform every element into a new list using `operation`.
 /// The output element type is inferred from the operation's return type,
 /// so input and output ranges may have different element types.

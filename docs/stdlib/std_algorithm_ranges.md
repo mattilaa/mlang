@@ -633,6 +633,11 @@ fn example() {
   transform in one pass, without allocating an intermediate selected list.
   The output type may differ from the input type. The projected form tests a
   projected key while transforming the original selected element.
+- `filter_transform_to` and `filter_transform_to_projected` perform the same
+  fused pipeline into existing bounded output storage. They return
+  `(consumed, written)` progress, run the transform only for matches, and leave
+  the unused destination suffix unchanged; projected filtering still
+  transforms the original selected element.
 - `remove`, `take`, `drop`, `unique`, `unique_stable`, and `clamp` return a
   transformed copy. `unique` removes only adjacent duplicates;
   `unique_stable` keeps the first occurrence of each value.

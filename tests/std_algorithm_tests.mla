@@ -683,6 +683,8 @@ use std::algorithm::ranges::transform_to;
 use std::algorithm::ranges::transform_to_projected;
 use std::algorithm::ranges::filter_transform;
 use std::algorithm::ranges::filter_transform_projected;
+use std::algorithm::ranges::filter_transform_to;
+use std::algorithm::ranges::filter_transform_to_projected;
 use std::algorithm::ranges::transform_with_count;
 use std::algorithm::ranges::transform_projected;
 use std::algorithm::ranges::transform_in_place_projected;
@@ -5211,6 +5213,58 @@ fn test_algorithm_ranges_filter_transform_composition() {
     let empty: list<i32> = [];
     let empty_result: list<i64> = filter_transform(empty, is_even, to_double);
     verify(empty_result.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_bounded_filter_transform() {
+    let values: list<i32> = [1, 2, 3, 4, 5, 6];
+    var predicate_calls: i32 = 0;
+    var operation_calls: i32 = 0;
+    let is_even = |value: i32| {
+        predicate_calls = predicate_calls + 1;
+        return value % 2 == 0;
+    };
+    let to_double = |value: i32| {
+        operation_calls = operation_calls + 1;
+        return f64(value * 2);
+    };
+    var output: list<f64> = [-1.0, -1.0, 77.0];
+    let progress: tuple<i64, i64> =
+        filter_transform_to(values, output, is_even, to_double);
+    verify(progress.0 == 4 && progress.1 == 2);
+    verify(predicate_calls == 4 && operation_calls == 2);
+    verify(output[0] == 4.0 && output[1] == 8.0 && output[2] == 77.0);
+
+    let records: list<i32> = [11, 22, 33, 14, 25];
+    var projection_calls: i32 = 0;
+    var projected_predicate_calls: i32 = 0;
+    var projected_operation_calls: i32 = 0;
+    let tens = |value: i32| {
+        projection_calls = projection_calls + 1;
+        return value / 10;
+    };
+    let at_least_two = |key: i32| {
+        projected_predicate_calls = projected_predicate_calls + 1;
+        return key >= 2;
+    };
+    let add_hundred = |value: i32| {
+        projected_operation_calls = projected_operation_calls + 1;
+        return i64(value + 100);
+    };
+    var projected_output: list<i64> = [-1, -1];
+    let projected_progress: tuple<i64, i64> =
+        filter_transform_to_projected(
+            records, projected_output, at_least_two, add_hundred, tens);
+    verify(projected_progress.0 == 3 && projected_progress.1 == 2);
+    verify(projection_calls == 3 && projected_predicate_calls == 3 &&
+           projected_operation_calls == 2);
+    verify(projected_output[0] == 122 && projected_output[1] == 133);
+
+    var no_output: list<f64> = [];
+    let empty_progress: tuple<i64, i64> =
+        filter_transform_to(values, no_output, is_even, to_double);
+    verify(empty_progress.0 == 0 && empty_progress.1 == 0);
+    verify(predicate_calls == 4 && operation_calls == 2);
 }
 
 #[test]
