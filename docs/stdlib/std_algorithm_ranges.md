@@ -435,6 +435,9 @@ fn example() {
 - `remove_copy_to(source, destination, value)` writes nonmatching values into
   an existing destination and reports `(consumed, written)`. Its comparator
   and projected variants have the same bounded-progress behavior.
+- `remove_copy_if_to(source, destination, predicate)` writes values rejected
+  by the predicate into bounded output and reports `(consumed, written)`; the
+  projected variant tests projected keys but copies the original elements.
 - `to_list(data)` materializes a new list with an explicitly selected element
   type, converting each source element in order. This is the Mlang eager-list
   counterpart to C++23 `std::ranges::to`; the output type is inferred from the

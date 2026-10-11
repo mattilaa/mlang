@@ -511,6 +511,8 @@ use std::algorithm::ranges::remove_copy_to_by;
 use std::algorithm::ranges::remove_copy_to_projected;
 use std::algorithm::ranges::remove_copy_to_by_projected;
 use std::algorithm::ranges::remove_copy_if;
+use std::algorithm::ranges::remove_copy_if_to;
+use std::algorithm::ranges::remove_copy_if_to_projected;
 use std::algorithm::ranges::remove_copy_if_projected;
 use std::algorithm::ranges::replace_copy;
 use std::algorithm::ranges::replace_copy_projected;
@@ -4047,6 +4049,34 @@ fn test_algorithm_ranges_remove_copy_to_bounded_output() {
         source, empty_destination, 2);
     verify(empty_progress.0 == 0 && empty_progress.1 == 0);
     verify(source[0] == 1 && source[4] == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_remove_copy_if_to_bounded_output() {
+    let source: list<i32> = [1, 2, 3, 4, 5, 6];
+    let even = |value: i32| { return value % 2 == 0; };
+    var destination: list<i32> = [0, 0];
+    let progress: tuple<i64, i64> =
+        remove_copy_if_to(source, destination, even);
+    verify(progress.0 == 4 && progress.1 == 2 &&
+           destination[0] == 1 && destination[1] == 3);
+    verify(source[0] == 1 && source[5] == 6);
+
+    let projected_source: list<i32> = [11, 12, 23, 24, 35, 36];
+    let tens = |value: i32| { return value / 10; };
+    let below_three = |key: i32| { return key < 3; };
+    var projected_destination: list<i32> = [0, 0];
+    let projected_progress: tuple<i64, i64> =
+        remove_copy_if_to_projected(projected_source,
+                                    projected_destination,
+                                    below_three, tens);
+    verify(projected_progress.0 == 6 && projected_progress.1 == 2 &&
+           projected_destination[0] == 35 &&
+           projected_destination[1] == 36);
+    var no_output: list<i32> = [];
+    let empty_progress: tuple<i64, i64> =
+        remove_copy_if_to(source, no_output, even);
+    verify(empty_progress.0 == 0 && empty_progress.1 == 0);
 }
 
 #[test]

@@ -3048,6 +3048,51 @@ pub fn remove_copy_if(data: &list<T>, predicate: Predicate) -> list<T> {
     return copied;
 }
 
+/// @brief Copy predicate-rejected elements into bounded output storage.
+/// Stops at the source end or when the destination fills and returns
+/// `(consumed, written)`. The source and destination lengths are unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn remove_copy_if_to(source: &list<T>, destination: &mut list<T>,
+                         predicate: Predicate) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !predicate(item) {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Copy predicate-rejected elements using projected keys to bounded output.
+/// Returns `(consumed, written)` and evaluates predicate/projection once per
+/// consumed element.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn remove_copy_if_to_projected(
+    source: &list<T>, destination: &mut list<T>, predicate: Predicate,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !predicate(projection(item)) {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Copy a range while replacing each value equal to `old_value`.
 /// C++20 `std::ranges::replace_copy` counterpart; the input is unchanged.
 /// @ingroup algorithm_ranges
