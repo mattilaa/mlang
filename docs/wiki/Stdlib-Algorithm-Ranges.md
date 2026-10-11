@@ -540,6 +540,10 @@ fn example() {
 - `partition_copy(data, predicate)` returns a tuple of stable matching and
   nonmatching lists, evaluating the predicate once per element and preserving
   the input.
+- `partition_copy_to(source, matching, nonmatching, predicate)` writes into
+  existing output lists and stops when either destination fills. It returns
+  `(consumed, matching_written, nonmatching_written)`; the projected variant
+  applies its projection before testing while retaining the original elements.
 - `partition(data, predicate)` returns `(partitioned_copy, boundary_index)`.
   Matching elements precede the rest; this eager-list counterpart preserves
   order within both groups and evaluates the predicate once per element.

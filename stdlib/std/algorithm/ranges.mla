@@ -2630,6 +2630,68 @@ pub fn partition_copy_projected(data: &list<T>, predicate: Predicate,
     return (matching, nonmatching);
 }
 
+/// @brief Partition into two bounded destinations.
+/// Stops at the source end or as soon as either destination fills, so each
+/// predicate is evaluated exactly once per consumed element. Returns
+/// `(consumed, matching_written, nonmatching_written)`; list lengths are
+/// unchanged. This is the bounded-output adaptation of C++20
+/// `std::ranges::partition_copy`.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn partition_copy_to(source: &list<T>, matching: &mut list<T>,
+                         nonmatching: &mut list<T>, predicate: Predicate)
+    -> tuple<i64, i64, i64> {
+    let source_len: i64 = source.len();
+    let matching_capacity: i64 = matching.len();
+    let nonmatching_capacity: i64 = nonmatching.len();
+    var consumed: i64 = 0;
+    var matching_written: i64 = 0;
+    var nonmatching_written: i64 = 0;
+    while consumed < source_len && matching_written < matching_capacity &&
+          nonmatching_written < nonmatching_capacity {
+        let value: T = source[consumed];
+        if predicate(value) {
+            matching[matching_written] = value;
+            matching_written = matching_written + 1;
+        } else {
+            nonmatching[nonmatching_written] = value;
+            nonmatching_written = nonmatching_written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, matching_written, nonmatching_written);
+}
+
+/// @brief Partition projected values into two bounded destinations.
+/// Stops when either destination fills and returns
+/// `(consumed, matching_written, nonmatching_written)`. The projection and
+/// predicate are each evaluated once per consumed element.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn partition_copy_to_projected(
+    source: &list<T>, matching: &mut list<T>, nonmatching: &mut list<T>,
+    predicate: Predicate, projection: Projection) -> tuple<i64, i64, i64> {
+    let source_len: i64 = source.len();
+    let matching_capacity: i64 = matching.len();
+    let nonmatching_capacity: i64 = nonmatching.len();
+    var consumed: i64 = 0;
+    var matching_written: i64 = 0;
+    var nonmatching_written: i64 = 0;
+    while consumed < source_len && matching_written < matching_capacity &&
+          nonmatching_written < nonmatching_capacity {
+        let value: T = source[consumed];
+        if predicate(projection(value)) {
+            matching[matching_written] = value;
+            matching_written = matching_written + 1;
+        } else {
+            nonmatching[nonmatching_written] = value;
+            nonmatching_written = nonmatching_written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, matching_written, nonmatching_written);
+}
+
 /// @brief Return the first index rejected by `predicate`, or -1 if all match.
 /// C++20 `std::ranges::find_if_not` semantics.
 /// @ingroup algorithm_ranges
