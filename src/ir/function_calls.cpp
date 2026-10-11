@@ -1855,6 +1855,122 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
         }
     }
+
+    // C++20-style source_location::current(): unlike an ordinary function,
+    // this value belongs to the call expression, so lower it before emitting
+    // a regular call into the stdlib module.
+    const std::string sourceLocationName = qualifiedPos == std::string::npos
+        ? node->name
+        : node->name.substr(qualifiedPos + 2);
+    auto sourceLocationOverloads =
+        functionOverloads.find(sourceLocationName);
+    bool isSourceLocationCurrent = false;
+    FunctionOverloadInfo* sourceLocationOverload = nullptr;
+    if(sourceLocationName == "current" &&
+       sourceLocationOverloads != functionOverloads.end())
+    {
+        for(auto& candidate : sourceLocationOverloads->second)
+        {
+            if(candidate.sourceModule.size() >=
+                   std::string("std::source_location").size() &&
+               candidate.sourceModule.compare(
+                   candidate.sourceModule.size() -
+                       std::string("std::source_location").size(),
+                   std::string("std::source_location").size(),
+                   "std::source_location") == 0)
+            {
+                isSourceLocationCurrent = true;
+                sourceLocationOverload = &candidate;
+                break;
+            }
+        }
+    }
+    if(isSourceLocationCurrent)
+    {
+        if(!node->arguments.empty())
+        {
+            reportError(node->line,
+                        "std::source_location::current() takes no arguments");
+            return nullptr;
+        }
+        if(!sourceLocationOverload || !sourceLocationOverload->function ||
+           !sourceLocationOverload->function->getReturnType()->isStructTy())
+        {
+            reportError(node->line,
+                        "std::source_location::current() has an invalid "
+                        "return type");
+            return nullptr;
+        }
+
+        auto* resultType = llvm::cast<llvm::StructType>(
+            sourceLocationOverload->function->getReturnType());
+        const std::string resultName = resultType->getName().str();
+        auto members = structMembers.find(resultName);
+        auto layouts = structFieldLayouts.find(resultName);
+        if(members == structMembers.end() || layouts == structFieldLayouts.end())
+        {
+            reportError(node->line,
+                        "std::source_location::current() requires the "
+                        "std::source_location::SourceLocation struct");
+            return nullptr;
+        }
+
+        std::string callFile = node->file ? node->file : "";
+        if(callFile.empty())
+            callFile = diagnosticFileName();
+#if LLVM_VERSION_MAJOR >= 21
+        llvm::Value* fileValue = builder.CreateGlobalString(
+            callFile, "source.location.file");
+#else
+        llvm::Value* fileValue = builder.CreateGlobalStringPtr(
+            callFile, "source.location.file");
+#endif
+        llvm::Function* caller = builder.GetInsertBlock()
+            ? builder.GetInsertBlock()->getParent()
+            : nullptr;
+#if LLVM_VERSION_MAJOR >= 21
+        llvm::Value* functionValue = builder.CreateGlobalString(
+            caller ? caller->getName().str() : std::string("<global>"),
+            "source.location.function");
+#else
+        llvm::Value* functionValue = builder.CreateGlobalStringPtr(
+            caller ? caller->getName().str() : std::string("<global>"),
+            "source.location.function");
+#endif
+        llvm::Value* lineValue = llvm::ConstantInt::get(
+            llvm::Type::getInt64Ty(context),
+            static_cast<uint64_t>(std::max(node->line, 0)));
+        llvm::Value* columnValue = llvm::ConstantInt::get(
+            llvm::Type::getInt64Ty(context),
+            static_cast<uint64_t>(std::max(node->col, 1)));
+
+        llvm::Value* result = llvm::UndefValue::get(resultType);
+        for(size_t i = 0; i < members->second.size(); ++i)
+        {
+            const std::string& fieldName = members->second[i].first;
+            const auto& layout = layouts->second[i];
+            llvm::Value* fieldValue = nullptr;
+            if(fieldName == "file")
+                fieldValue = fileValue;
+            else if(fieldName == "function")
+                fieldValue = functionValue;
+            else if(fieldName == "line")
+                fieldValue = lineValue;
+            else if(fieldName == "column")
+                fieldValue = columnValue;
+            else
+            {
+                reportError(node->line,
+                            "unknown field '" + fieldName +
+                                "' in std::source_location::SourceLocation");
+                return nullptr;
+            }
+            result = builder.CreateInsertValue(
+                result, fieldValue, {layout.storageIndex},
+                "source.location." + fieldName);
+        }
+        return result;
+    }
     if(overloadIt != functionOverloads.end())
         instantiateGenericFunctionOverloads(node, node->name,
                                             overloadIt->second);

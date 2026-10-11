@@ -1,0 +1,59 @@
+/// \file compare.mla
+/// \brief C++20-style comparison category and relation helpers.
+
+/// @brief Unified partial-order result for generic three-way comparisons.
+/// Mlang uses one value type for strong, weak, and partial outcomes; floating
+/// NaNs are represented explicitly as `Unordered`.
+pub enum PartialOrdering : i32 {
+    Less = -1,
+    Equivalent = 0,
+    Greater = 1,
+    Unordered = 2
+};
+
+/// @brief Compare values using their equality and ordering operators.
+/// Incomparable values (for example, a NaN) produce `Unordered`.
+generic<T>
+pub fn compare(left: T, right: T) -> PartialOrdering {
+    if left == right { return PartialOrdering::Equivalent; }
+    if left < right { return PartialOrdering::Less; }
+    if left > right { return PartialOrdering::Greater; }
+    return PartialOrdering::Unordered;
+}
+
+/// @brief Compare values using a strict ordering predicate.
+/// Neither value preceding the other produces `Equivalent`.
+generic<T, Less>
+pub fn compare_by(left: T, right: T, less: Less) -> PartialOrdering {
+    if less(left, right) { return PartialOrdering::Less; }
+    if less(right, left) { return PartialOrdering::Greater; }
+    return PartialOrdering::Equivalent;
+}
+
+/// @brief Whether a comparison result is equivalent.
+pub fn is_eq(order: PartialOrdering) -> bool {
+    return order == PartialOrdering::Equivalent;
+}
+
+/// @brief Whether a comparison result is not equivalent, including unordered.
+pub fn is_neq(order: PartialOrdering) -> bool {
+    return order != PartialOrdering::Equivalent;
+}
+
+pub fn is_lt(order: PartialOrdering) -> bool {
+    return order == PartialOrdering::Less;
+}
+
+pub fn is_lteq(order: PartialOrdering) -> bool {
+    return order == PartialOrdering::Less ||
+           order == PartialOrdering::Equivalent;
+}
+
+pub fn is_gt(order: PartialOrdering) -> bool {
+    return order == PartialOrdering::Greater;
+}
+
+pub fn is_gteq(order: PartialOrdering) -> bool {
+    return order == PartialOrdering::Greater ||
+           order == PartialOrdering::Equivalent;
+}

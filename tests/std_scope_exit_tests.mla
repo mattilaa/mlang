@@ -1,0 +1,44 @@
+mod std::scope_exit;
+use std::scope_exit::scope_exit;
+
+var g_scope_exit_runs: i32 = 0;
+
+fn scope_exit_early_return() -> i32 {
+    let guard = scope_exit(|| {
+        g_scope_exit_runs = g_scope_exit_runs + 1;
+    });
+    if guard.is_active() {
+        return 17;
+    }
+    return 0;
+}
+
+fn test_scope_exit_runs_at_block_exit() {
+    g_scope_exit_runs = 0;
+    {
+        let guard = scope_exit(|| {
+            g_scope_exit_runs = g_scope_exit_runs + 1;
+        });
+        verify(guard.is_active());
+        verify(g_scope_exit_runs == 0);
+    }
+    verify(g_scope_exit_runs == 1);
+}
+
+fn test_scope_exit_release_cancels_action() {
+    g_scope_exit_runs = 0;
+    {
+        var guard = scope_exit(|| {
+            g_scope_exit_runs = g_scope_exit_runs + 1;
+        });
+        guard.release();
+        verify(!guard.is_active());
+    }
+    verify(g_scope_exit_runs == 0);
+}
+
+fn test_scope_exit_runs_during_early_return() {
+    g_scope_exit_runs = 0;
+    verify(scope_exit_early_return() == 17);
+    verify(g_scope_exit_runs == 1);
+}

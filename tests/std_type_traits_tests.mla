@@ -1,0 +1,44 @@
+mod std::type_traits;
+use std::type_traits::is_same;
+use std::type_traits::is_integral;
+use std::type_traits::is_floating_point;
+use std::type_traits::is_signed;
+use std::type_traits::is_unsigned;
+use std::type_traits::is_arithmetic;
+
+fn test_type_traits_same_type_and_integral() {
+    static_assert!(cexpr(is_same(1i32, 2i32)));
+    static_assert!(!cexpr(is_same(1i32, 2u32)));
+    static_assert!(cexpr(is_integral(true)));
+    static_assert!(cexpr(is_integral(bit(1))));
+    static_assert!(cexpr(is_integral(1i8)));
+    static_assert!(cexpr(is_integral(1i16)));
+    static_assert!(cexpr(is_integral(1i32)));
+    static_assert!(cexpr(is_integral(1i64)));
+    static_assert!(cexpr(is_integral(1u8)));
+    static_assert!(cexpr(is_integral(1u16)));
+    static_assert!(cexpr(is_integral(1u32)));
+    static_assert!(cexpr(is_integral(1u64)));
+    static_assert!(!cexpr(is_integral(1.0)));
+}
+
+fn test_type_traits_floating_signedness_and_arithmetic() {
+    static_assert!(cexpr(is_floating_point(1.0f)));
+    static_assert!(cexpr(is_floating_point(1.0)));
+    static_assert!(!cexpr(is_floating_point(1i32)));
+    static_assert!(cexpr(is_signed(-1i8)));
+    static_assert!(cexpr(is_signed(-1i16)));
+    static_assert!(cexpr(is_signed(-1i32)));
+    static_assert!(cexpr(is_signed(-1i64)));
+    static_assert!(cexpr(is_signed(1.0f)));
+    static_assert!(cexpr(is_signed(1.0)));
+    static_assert!(cexpr(is_unsigned(1u8)));
+    static_assert!(cexpr(is_unsigned(1u16)));
+    static_assert!(cexpr(is_unsigned(1u32)));
+    static_assert!(cexpr(is_unsigned(1u64)));
+    static_assert!(cexpr(is_unsigned(true)));
+    static_assert!(!cexpr(is_unsigned(-1i32)));
+    static_assert!(cexpr(is_arithmetic(1i64)));
+    static_assert!(cexpr(is_arithmetic(1.0)));
+    static_assert!(!cexpr(is_arithmetic("text")));
+}
