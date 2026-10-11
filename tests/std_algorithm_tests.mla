@@ -302,6 +302,7 @@ use std::algorithm::ranges::reverse_in_place;
 use std::algorithm::ranges::rotate_left;
 use std::algorithm::ranges::rotate;
 use std::algorithm::ranges::rotate_copy;
+use std::algorithm::ranges::rotate_in_place;
 use std::algorithm::ranges::shift_left;
 use std::algorithm::ranges::shift_right;
 use std::algorithm::ranges::chunked;
@@ -668,6 +669,20 @@ fn test_algorithm_ranges_rotate_at_middle() {
            copied[2] == 5 && copied[3] == 1 && copied[4] == 2);
     let copied_end: list<i32> = rotate_copy(values, 5);
     verify(copied_end[0] == 1 && copied_end[4] == 5);
+
+    var mutable: list<i32> = [1, 2, 3, 4, 5];
+    verify(rotate_in_place(mutable, 2) == 3);
+    verify(mutable[0] == 3 && mutable[1] == 4 && mutable[2] == 5 &&
+           mutable[3] == 1 && mutable[4] == 2);
+    verify(rotate_in_place(mutable, 0) == 5);
+    verify(mutable[0] == 3 && mutable[4] == 2);
+    verify(rotate_in_place(mutable, 5) == 0);
+    verify(mutable[0] == 3 && mutable[4] == 2);
+    verify(rotate_in_place(mutable, -3) == 5);
+    verify(rotate_in_place(mutable, 99) == 0);
+
+    var mutable_empty: list<i32> = [];
+    verify(rotate_in_place(mutable_empty, 4) == 0);
 }
 
 #[test]

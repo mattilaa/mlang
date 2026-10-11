@@ -523,6 +523,11 @@ fn example() {
 - `reverse_copy(data)` and `rotate_copy(data, middle)` provide the C++20
   ranges algorithm names for those eager copying operations; both preserve the
   input, and `rotate_copy` clamps the split index.
+- `rotate_in_place(&mut data, middle)` moves the suffix beginning at `middle`
+  before the prefix using at most O(N) swaps and no output allocation. It
+  returns the index of the original first element after rotation (the Mlang
+  analogue of C++20 `std::ranges::rotate`'s returned iterator); the split is
+  clamped to the list bounds.
 - `shift_left(data, count)` returns the retained suffix after a left shift;
   `shift_right(data, count)` returns the retained prefix moved right. These
   eager C++20 `ranges::shift_left`/`shift_right` counterparts leave the input

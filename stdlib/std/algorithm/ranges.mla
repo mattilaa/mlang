@@ -6864,6 +6864,39 @@ pub fn reverse_in_place(data: &mut list<T>) -> i64 {
     return swaps;
 }
 
+generic<T>
+fn ranges_reverse_segment_in_place(data: &mut list<T>, first: i64,
+                                   last: i64) -> void {
+    var left: i64 = first;
+    var right: i64 = last;
+    while left < right {
+        right = right - 1;
+        if left >= right { break; }
+        let temporary: T = data[left];
+        data[left] = data[right];
+        data[right] = temporary;
+        left = left + 1;
+    }
+}
+
+/// @brief Rotate a mutable list left in place so `middle` becomes first.
+/// Returns the index of the original first element after rotation, matching
+/// `std::ranges::rotate`'s returned iterator. `middle` is clamped to the list
+/// bounds; rotation uses at most O(N) swaps and allocates no output list.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn rotate_in_place(data: &mut list<T>, middle: i64) -> i64 {
+    let n: i64 = data.len();
+    var split: i64 = middle;
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    if split == 0 || split == n { return n - split; }
+    ranges_reverse_segment_in_place(data, 0, split);
+    ranges_reverse_segment_in_place(data, split, n);
+    ranges_reverse_segment_in_place(data, 0, n);
+    return n - split;
+}
+
 /// @brief Copy a range in reverse order.
 /// Eager-list counterpart to C++20 `std::ranges::reverse_copy`.
 /// @ingroup algorithm_ranges
