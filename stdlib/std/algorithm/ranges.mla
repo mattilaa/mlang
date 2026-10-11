@@ -8,6 +8,9 @@
 /// @brief Ranges-style sequence algorithms.
 /// @{
 
+mod std::flat_set;
+use std::flat_set::FlatSet;
+
 /// @brief Return first index of a value, or -1 when not found.
 /// Supports any type that can be equality-compared.
 /// @ingroup algorithm_ranges
@@ -1566,6 +1569,18 @@ pub fn to_list(data: &list<list<T>>) -> list<list<Output>> {
         let row: list<Output> = to_list(data[i]);
         converted.push(row);
     }
+    return converted;
+}
+
+/// @brief Materialize a range as a sorted, unique `FlatSet`.
+/// Duplicate values collapse according to `FlatSet` ordering equivalence.
+/// C++23 `std::ranges::to` adapted to Mlang's `std::flat_set` container.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn to_flat_set(data: &list<T>) -> FlatSet<T> {
+    var converted: FlatSet<T> = FlatSet<T>::new();
+    let n: i64 = data.len();
+    for i in 0..n { converted.insert(data[i]); }
     return converted;
 }
 

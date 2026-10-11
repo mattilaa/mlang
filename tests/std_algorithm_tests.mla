@@ -4,6 +4,7 @@ mod dsp::fft;
 mod std::algorithm::numeric;
 mod std::algorithm::order;
 mod std::algorithm::ranges;
+mod std::flat_set;
 mod std::algorithm::rand;
 mod std::algorithm::regex;
 mod std::algorithm::genetic;
@@ -436,6 +437,8 @@ use std::algorithm::ranges::copy_n_to_projected;
 use std::algorithm::ranges::copy_backward_to;
 use std::algorithm::ranges::copy_backward_to_projected;
 use std::algorithm::ranges::to_list;
+use std::algorithm::ranges::to_flat_set;
+use std::flat_set::FlatSet;
 use std::algorithm::ranges::swap_ranges;
 use std::algorithm::ranges::filter;
 use std::algorithm::ranges::copy_if_projected;
@@ -3890,6 +3893,22 @@ fn test_algorithm_ranges_to_list_converts_and_materializes() {
            converted_nested[2][1] == -4.0 &&
            converted_nested[2][2] == 9.0);
     verify(nested[0][0] == 1 && nested[2][1] == -4);
+}
+
+#[test]
+fn test_algorithm_ranges_to_flat_set_sorts_and_deduplicates() {
+    let source: list<i32> = [7, 2, 5, 2, 7, 1];
+    let converted: FlatSet<i32> = to_flat_set(source);
+    verify(converted.len() == 4 && converted.contains(1) &&
+           converted.contains(2) && converted.contains(5) &&
+           converted.contains(7));
+    verify(converted.key_at(0) == 1 && converted.key_at(1) == 2 &&
+           converted.key_at(2) == 5 && converted.key_at(3) == 7);
+    verify(source.len() == 6 && source[0] == 7 && source[5] == 1);
+
+    let empty: list<i32> = [];
+    let empty_set: FlatSet<i32> = to_flat_set(empty);
+    verify(empty_set.is_empty());
 }
 
 #[test]

@@ -444,6 +444,8 @@ fn example() {
   It accepts lists/[`Vec`](Stdlib-Vec), fixed arrays, and multidimensional arrays where their
   element shape is compatible. Nested inputs are recursively materialized and
   converted while preserving each row's length, including empty rows.
+- `to_flat_set(data)` materializes a sorted [`std::flat_set`](Stdlib-Flat-Set), deduplicating keys
+  according to the set's ordering equivalence. The source range is unchanged.
 - `swap_ranges(left, right)` returns two copied lists with corresponding
   elements in the common prefix exchanged; an unmatched tail is preserved.
   Both inputs remain unchanged.
