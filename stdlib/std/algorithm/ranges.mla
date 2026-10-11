@@ -3332,6 +3332,29 @@ pub fn remove_copy_to_heterogeneous(source: &list<T>,
     return (consumed, written);
 }
 
+/// @brief Copy values not equivalent to `value` into distinct-type output.
+/// The equivalence predicate operates on source values; retained values are
+/// converted to the output type. Returns `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output, U, Equivalent>
+pub fn remove_copy_to_heterogeneous_by(source: &list<T>,
+    destination: &mut list<Output>, value: U, equivalent: Equivalent)
+    -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !equivalent(item, value) {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Copy nonmatching elements using a custom equivalence predicate.
 /// Returns `(consumed, written)` and stops when the destination fills.
 /// @ingroup algorithm_ranges
@@ -3391,6 +3414,29 @@ pub fn remove_copy_to_heterogeneous_projected(
     while consumed < source_len && written < destination_len {
         let item: T = source[consumed];
         if projection(item) != value {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Remove-copy with custom equivalence over projected keys.
+/// Nonmatching original source values are converted to the distinct output
+/// type; returns `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output, U, Equivalent, Projection>
+pub fn remove_copy_to_heterogeneous_by_projected(
+    source: &list<T>, destination: &mut list<Output>, value: U,
+    equivalent: Equivalent, projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !equivalent(projection(item), value) {
             destination[written] = item;
             written = written + 1;
         }
@@ -3627,6 +3673,22 @@ pub fn replace_copy_to_heterogeneous(source: &list<T>,
     return count;
 }
 
+/// @brief Comparator form of heterogeneous bounded replace-copy.
+/// @ingroup algorithm_ranges
+generic<T, Output, U, Equivalent>
+pub fn replace_copy_to_heterogeneous_by(source: &list<T>,
+    destination: &mut list<Output>, old_value: U, new_value: Output,
+    equivalent: Equivalent) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    for i in 0..count {
+        if equivalent(source[i], old_value) { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
 /// @brief Comparator form of bounded replacement-copy.
 /// @ingroup algorithm_ranges
 generic<T, U, Equivalent>
@@ -3675,6 +3737,25 @@ pub fn replace_copy_to_heterogeneous_projected(
     for i in 0..count {
         if projection(source[i]) == old_value { destination[i] = new_value; }
         else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Comparator and projection form of heterogeneous bounded replacement.
+/// @ingroup algorithm_ranges
+generic<T, Output, U, Equivalent, Projection>
+pub fn replace_copy_to_heterogeneous_by_projected(
+    source: &list<T>, destination: &mut list<Output>, old_key: U,
+    new_value: Output, equivalent: Equivalent, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    for i in 0..count {
+        if equivalent(projection(source[i]), old_key) {
+            destination[i] = new_value;
+        } else {
+            destination[i] = source[i];
+        }
     }
     return count;
 }

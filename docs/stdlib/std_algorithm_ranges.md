@@ -456,6 +456,8 @@ fn example() {
   by the predicate into bounded output and reports `(consumed, written)`; the
   projected variant tests projected keys but copies the original elements.
 - `remove_copy_to_heterogeneous`, `remove_copy_to_heterogeneous_projected`,
+  `remove_copy_to_heterogeneous_by`,
+  `remove_copy_to_heterogeneous_by_projected`,
   `remove_copy_if_to_heterogeneous`, and
   `remove_copy_if_to_heterogeneous_projected` preserve the bounded progress
   behavior while converting retained source values to a distinct output type.
@@ -863,6 +865,9 @@ fn example() {
 - `replace_copy_to_heterogeneous` and its `_projected` form provide the same
   bounded behavior with a distinct destination element type. Both retained
   values and replacement values use that output type.
+- `replace_copy_to_heterogeneous_by` and
+  `replace_copy_to_heterogeneous_by_projected` add custom equivalence matching
+  to heterogeneous bounded replacement.
 - `replace_copy_if_to` and `replace_copy_if_to_projected` provide the same
   bounded behavior for predicate-based replacement, with the projected form
   testing each element's key while copying the original nonmatches.

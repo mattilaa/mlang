@@ -558,9 +558,11 @@ use std::algorithm::ranges::remove_copy_by_projected;
 use std::algorithm::ranges::remove_copy_projected;
 use std::algorithm::ranges::remove_copy_to;
 use std::algorithm::ranges::remove_copy_to_heterogeneous;
+use std::algorithm::ranges::remove_copy_to_heterogeneous_by;
 use std::algorithm::ranges::remove_copy_to_by;
 use std::algorithm::ranges::remove_copy_to_projected;
 use std::algorithm::ranges::remove_copy_to_heterogeneous_projected;
+use std::algorithm::ranges::remove_copy_to_heterogeneous_by_projected;
 use std::algorithm::ranges::remove_copy_to_by_projected;
 use std::algorithm::ranges::remove_copy_if;
 use std::algorithm::ranges::remove_copy_if_to;
@@ -574,9 +576,11 @@ use std::algorithm::ranges::replace_copy_by;
 use std::algorithm::ranges::replace_copy_by_projected;
 use std::algorithm::ranges::replace_copy_to;
 use std::algorithm::ranges::replace_copy_to_heterogeneous;
+use std::algorithm::ranges::replace_copy_to_heterogeneous_by;
 use std::algorithm::ranges::replace_copy_to_by;
 use std::algorithm::ranges::replace_copy_to_projected;
 use std::algorithm::ranges::replace_copy_to_heterogeneous_projected;
+use std::algorithm::ranges::replace_copy_to_heterogeneous_by_projected;
 use std::algorithm::ranges::replace_copy_to_by_projected;
 use std::algorithm::ranges::replace_copy_if_to;
 use std::algorithm::ranges::replace_copy_if_to_projected;
@@ -4375,6 +4379,17 @@ fn test_algorithm_ranges_heterogeneous_bounded_remove_replace_copy() {
     verify(removed[0] == 11.0 && removed[1] == 29.0 &&
            removed[2] == 31.0);
 
+    let same_decade = |item: i32, key: i32| {
+        return item / 10 == key / 10;
+    };
+    var removed_by: list<f64> = [0.0, 0.0, 0.0];
+    let removed_by_progress: tuple<i64, i64> =
+        remove_copy_to_heterogeneous_by(
+            source, removed_by, 20, same_decade);
+    verify(removed_by_progress.0 == 5 && removed_by_progress.1 == 3);
+    verify(removed_by[0] == 11.0 && removed_by[1] == 31.0 &&
+           removed_by[2] == 42.0);
+
     let tens = |value: i32| { return value / 10; };
     var removed_projected: list<f64> = [0.0, 0.0, 0.0];
     let removed_projected_progress: tuple<i64, i64> =
@@ -4385,6 +4400,17 @@ fn test_algorithm_ranges_heterogeneous_bounded_remove_replace_copy() {
     verify(removed_projected[0] == 11.0 &&
            removed_projected[1] == 31.0 &&
            removed_projected[2] == 42.0);
+
+    let same_parity = |left: i32, right: i32| {
+        return left % 2 == right % 2;
+    };
+    var removed_combined: list<f64> = [0.0, 0.0];
+    let removed_combined_progress: tuple<i64, i64> =
+        remove_copy_to_heterogeneous_by_projected(
+            source, removed_combined, 2, same_parity, tens);
+    verify(removed_combined_progress.0 == 4 &&
+           removed_combined_progress.1 == 2);
+    verify(removed_combined[0] == 11.0 && removed_combined[1] == 31.0);
 
     let is_even = |value: i32| { return value % 2 == 0; };
     var rejected: list<i64> = [0, 0, 0];
@@ -4408,6 +4434,12 @@ fn test_algorithm_ranges_heterogeneous_bounded_remove_replace_copy() {
     verify(replaced[0] == 11.0 && replaced[1] == 99.5 &&
            replaced[2] == 29.0 && replaced[4] == 42.0);
 
+    var replaced_by: list<f64> = [0.0, 0.0, 0.0, 0.0, 0.0];
+    verify(replace_copy_to_heterogeneous_by(
+        source, replaced_by, 20, 98.5, same_decade) == 5);
+    verify(replaced_by[0] == 11.0 && replaced_by[1] == 98.5 &&
+           replaced_by[2] == 98.5 && replaced_by[4] == 42.0);
+
     var replaced_projected: list<f64> = [0.0, 0.0, 0.0, 0.0, 0.0];
     verify(replace_copy_to_heterogeneous_projected(
         source, replaced_projected, 2, 88.5, tens) == 5);
@@ -4415,6 +4447,15 @@ fn test_algorithm_ranges_heterogeneous_bounded_remove_replace_copy() {
            replaced_projected[1] == 88.5 &&
            replaced_projected[2] == 88.5 &&
            replaced_projected[4] == 42.0);
+
+    var replaced_combined: list<f64> = [0.0, 0.0, 0.0, 0.0, 0.0];
+    verify(replace_copy_to_heterogeneous_by_projected(
+        source, replaced_combined, 2, 87.5, same_parity, tens) == 5);
+    verify(replaced_combined[0] == 11.0 &&
+           replaced_combined[1] == 87.5 &&
+           replaced_combined[2] == 87.5 &&
+           replaced_combined[3] == 31.0 &&
+           replaced_combined[4] == 87.5);
 
     let is_odd = |value: i32| { return value % 2 != 0; };
     var replaced_if: list<f64> = [0.0, 0.0, 0.0, 0.0, 0.0];
