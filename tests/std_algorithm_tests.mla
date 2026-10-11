@@ -507,6 +507,8 @@ use std::algorithm::ranges::remove_if_in_place;
 use std::algorithm::ranges::remove_in_place_projected;
 use std::algorithm::ranges::remove_if_in_place_projected;
 use std::algorithm::ranges::erase;
+use std::algorithm::ranges::erase_by;
+use std::algorithm::ranges::erase_by_projected;
 use std::algorithm::ranges::erase_if;
 use std::algorithm::ranges::erase_if_projected;
 use std::algorithm::ranges::copy_if;
@@ -7039,6 +7041,32 @@ fn test_algorithm_ranges_erase_container_semantics() {
     var empty: list<i32> = [];
     verify(erase(empty, 1) == 0 && empty.len() == 0);
     verify(erase_if(empty, is_even) == 0 && empty.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_erase_by_equivalence() {
+    let same_tens = |left: i32, right: i32| {
+        return left / 10 == right / 10;
+    };
+    var values: list<i32> = [11, 21, 12, 33, 19];
+    verify(erase_by(values, 15, same_tens) == 3);
+    verify(values.len() == 2 && values[0] == 21 && values[1] == 33);
+
+    var records: list<AlgorithmRangeItem> = [
+        AlgorithmRangeItem { key: 11, payload: 110 },
+        AlgorithmRangeItem { key: 21, payload: 210 },
+        AlgorithmRangeItem { key: 12, payload: 120 },
+        AlgorithmRangeItem { key: 33, payload: 330 }
+    ];
+    var projection_calls: i64 = 0;
+    let project_key = |item: AlgorithmRangeItem| {
+        projection_calls = projection_calls + 1;
+        return item.key;
+    };
+    verify(erase_by_projected(records, 19, same_tens, project_key) == 2);
+    verify(records.len() == 2 && records[0].key == 21 &&
+           records[1].key == 33 && projection_calls == 4);
+    verify(records[0].payload == 210 && records[1].payload == 330);
 }
 
 #[test]

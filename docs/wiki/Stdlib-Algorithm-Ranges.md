@@ -808,6 +808,9 @@ fn example() {
   the logical-end `remove_in_place` algorithms with C++20
   [`std::erase`](Stdlib-Module-API)/[`std::erase_if`](Stdlib-Module-API) container semantics. `erase_if_projected` tests
   projected keys while preserving retained elements and their order.
+- `erase_by(data, key, equivalent)` and `erase_by_projected` erase values
+  matched by a caller-provided equivalence predicate, optionally after
+  projection. Projection and equivalence are each evaluated once per element.
 - `remove_by` and `remove_copy_by` exclude every element matching a lookup key
   under a caller-supplied equivalence predicate; both preserve source order.
 - `remove_by_projected` and `remove_copy_by_projected` apply that equivalence
