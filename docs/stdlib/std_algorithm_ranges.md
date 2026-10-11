@@ -312,6 +312,10 @@ fn example() {
 - `generate(shape, generator)` uses the shape list's length to invoke a
   zero-argument generator into a new list; shape values are ignored and the
   source remains unchanged. Empty shape performs no calls.
+- `generate_in_place(&mut data, generator)` fills every existing list slot
+  from a zero-argument generator and returns the number written. The generated
+  type must match the list element type; empty lists do not invoke the
+  generator.
 - `fold_left(data, init, operation)` and `fold_right(data, init, operation)`
   reduce a range in forward or reverse order. The operation receives
   `(accumulator, element)` for left folds and `(element, accumulator)` for
@@ -359,6 +363,14 @@ fn example() {
 - `fill(data, value)` returns a new list of the same length with every item set
   to `value`; the source list is unchanged, matching the result of applying
   C++20 `std::ranges::fill` to an equal-sized destination range.
+- Mutable counterparts are explicit: `fill_in_place(&mut data, value)` writes
+  every element and returns the number written; `replace_in_place` and
+  `replace_if_in_place` update matching elements and return the replacement
+  count; `reverse_in_place` reverses the list and returns the number of swaps.
+  These operations require a mutable list and preserve its length.
+- `fill_n_in_place(&mut data, count, value)` fills only a prefix and returns
+  the number of elements written. Negative counts write zero values; counts
+  larger than the list length are clamped, matching a counted output range.
 - `fill_n(count, value)` materializes exactly `count` copies in a new list;
   non-positive counts return an empty list. This eager-list helper adapts C++20
   `std::ranges::fill_n`, whose output length is normally defined by an output
@@ -383,6 +395,11 @@ fn example() {
 - `transform(data, operation)` eagerly maps every element into a new list;
   the output element type is inferred from the closure return type and may
   differ from the input element type.
+- `transform_in_place(&mut data, operation)` overwrites each element using its
+  transformed value and returns the number processed. The operation must
+  return the list's existing element type; use `transform` when the result has
+  a different type. `transform_in_place_projected` applies a projection before
+  the operation and also writes back to the original list.
 - `transform_with_count` returns `(consumed, output)` with the transformed
   list, exposing the full input progress of the eager unary transform.
 - The binary `transform(left, right, operation)` overload transforms paired
@@ -429,6 +446,11 @@ fn example() {
   adjacent run in a new list and leave the source unchanged.
 - `unique_copy_by_projected(data, equivalent, projection)` provides the same
   copied behavior using equivalence over projected keys.
+- `unique_in_place(&mut data)` and the `unique_by_in_place`,
+  `unique_in_place_projected`, and `unique_by_in_place_projected` variants
+  compact adjacent duplicate runs while preserving the first element of each
+  run. They return the logical end index; the list length is unchanged and its
+  suffix is unspecified, matching C++20 `std::ranges::unique`.
 - `all_of`, `any_of`, and `none_of` accept predicates as well as retaining the
   one-argument `list<bool>` identity forms. Empty-range results match the
   standard algorithms: true, false, and true respectively.
@@ -444,8 +466,13 @@ fn example() {
 - `partition(data, predicate)` returns `(partitioned_copy, boundary_index)`.
   Matching elements precede the rest; this eager-list counterpart preserves
   order within both groups and evaluates the predicate once per element.
+- `partition_in_place(&mut data, predicate)` rearranges a mutable list without
+  allocating a second list, returns the first nonmatching index, and evaluates
+  the predicate exactly once per element. Order within each group is
+  unspecified, matching C++20 `std::ranges::partition`.
 - `copy_if_projected`, `is_partitioned_projected`,
-  `partition_point_projected`, `stable_partition_projected`,
+  `partition_point_projected`, `partition_in_place_projected`,
+  `stable_partition_projected`,
   `partition_projected`, and `partition_copy_projected` apply the predicate to
   each element's projected key. Partition-copy forms retain original elements;
   the partition-point form requires a true prefix followed by false values.
@@ -496,6 +523,11 @@ fn example() {
   projected key, preserving input order among equivalent keys.
 - `sorted_by_projected(data, less, projection)` combines projected keys with a
   custom strict ordering and preserves input order among equivalent keys.
+- `sort_in_place(data)` and its `_by`, `_projected`, and `_by_projected`
+  variants sort a mutable list in O(N log N) time using heap sort. They return
+  the number of swaps and mutate the input; unlike `sorted*`, they are not
+  stable. Use the comparator and projection forms to order records by custom
+  keys without building an intermediate sorted list.
 - `reversed` returns the elements in reverse order; `rotate_left` returns a
   copy rotated by a normalized signed offset. `rotate(data, middle)` places
   the suffix beginning at the split before the prefix (C++20 `ranges::rotate`
@@ -503,6 +535,11 @@ fn example() {
 - `reverse_copy(data)` and `rotate_copy(data, middle)` provide the C++20
   ranges algorithm names for those eager copying operations; both preserve the
   input, and `rotate_copy` clamps the split index.
+- `rotate_in_place(&mut data, middle)` moves the suffix beginning at `middle`
+  before the prefix using at most O(N) swaps and no output allocation. It
+  returns the index of the original first element after rotation (the Mlang
+  analogue of C++20 `std::ranges::rotate`'s returned iterator); the split is
+  clamped to the list bounds.
 - `shift_left(data, count)` returns the retained suffix after a left shift;
   `shift_right(data, count)` returns the retained prefix moved right. These
   eager C++20 `ranges::shift_left`/`shift_right` counterparts leave the input
@@ -609,6 +646,13 @@ fn example() {
   projected key matches a value. `replace_projected` and
   `replace_copy_projected` replace elements by projected-key equality; all
   four return a new list and leave the input unchanged.
+- `remove_in_place(&mut data, value)` compacts nonmatching elements into the
+  front of the existing list and returns the logical end index. The list length
+  is unchanged, and elements at or after that index are unspecified. The
+  `remove_if_in_place` form uses a predicate; projected forms support key-based
+  equality and predicates. Each predicate/projection is called once per input
+  element. This mirrors C++20 `std::ranges::remove` / `remove_if`, whose result
+  marks the retained prefix rather than erasing the container's tail.
 - `remove_by` and `remove_copy_by` exclude every element matching a lookup key
   under a caller-supplied equivalence predicate; both preserve source order.
 - `remove_by_projected` and `remove_copy_by_projected` apply that equivalence

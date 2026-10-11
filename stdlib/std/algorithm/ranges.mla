@@ -1284,6 +1284,17 @@ pub fn generate(shape: &list<Shape>, generator: Generator) -> list<Output> {
     return generated;
 }
 
+/// @brief Generate a value for every slot in a mutable list.
+/// The generated value must match the existing element type. Returns the
+/// number of slots written; an empty list does not invoke the generator.
+/// @ingroup algorithm_ranges
+generic<T, Generator>
+pub fn generate_in_place(data: &mut list<T>, generator: Generator) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n { data[i] = generator(); }
+    return n;
+}
+
 /// @brief Return a copy of `data` filled with `value` at every position.
 /// The input length acts as the output range size; the source is unchanged.
 /// Eager-list counterpart to C++20 `std::ranges::fill`.
@@ -1294,6 +1305,30 @@ pub fn fill(data: &list<T>, value: T) -> list<T> {
     for i in 0..data.len() {
         filled.push(value);
     }
+    return filled;
+}
+
+/// @brief Fill every existing element of a mutable list with `value`.
+/// Returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn fill_in_place(data: &mut list<T>, value: T) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n { data[i] = value; }
+    return n;
+}
+
+/// @brief Fill a bounded prefix of a mutable list.
+/// Non-positive counts write nothing; oversized counts clamp to list length.
+/// Returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn fill_n_in_place(data: &mut list<T>, count: i64, value: T) -> i64 {
+    let n: i64 = data.len();
+    var filled: i64 = count;
+    if filled < 0 { filled = 0; }
+    if filled > n { filled = n; }
+    for i in 0..filled { data[i] = value; }
     return filled;
 }
 
@@ -1503,6 +1538,17 @@ pub fn transform(data: &list<T>, operation: Operation) -> list<Output> {
     return transformed;
 }
 
+/// @brief Transform each element of a mutable list in place.
+/// The operation must return the list's element type; returns the number of
+/// elements transformed.
+/// @ingroup algorithm_ranges
+generic<T, Operation>
+pub fn transform_in_place(data: &mut list<T>, operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n { data[i] = operation(data[i]); }
+    return n;
+}
+
 /// @brief Transform a range and return the consumed count with the output.
 /// The count equals the input length, including zero for empty input. This
 /// exposes an eager-list analogue of the input/output progress in C++20's
@@ -1549,6 +1595,20 @@ pub fn transform_projected(data: &list<T>, operation: Operation,
         transformed.push(operation(projection(data[i])));
     }
     return transformed;
+}
+
+/// @brief Project and transform each element of a mutable list in place.
+/// The operation must return the list's element type; each input element is
+/// projected before it is overwritten. Returns the number transformed.
+/// @ingroup algorithm_ranges
+generic<T, Operation, Projection>
+pub fn transform_in_place_projected(data: &mut list<T>, operation: Operation,
+                                    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n {
+        data[i] = operation(projection(data[i]));
+    }
+    return n;
 }
 
 /// @brief Project and transform a range, returning its consumed count.
@@ -2156,6 +2216,55 @@ pub fn partition_projected(data: &list<T>, predicate: Predicate,
     return (output, boundary);
 }
 
+generic<T, Predicate, Projection>
+fn ranges_partition_in_place_core(data: &mut list<T>, predicate: Predicate,
+                                  projection: Projection) -> i64 {
+    var first: i64 = 0;
+    var last: i64 = data.len();
+    var first_known_nonmatching: bool = false;
+    while first < last {
+        if !first_known_nonmatching {
+            if predicate(projection(data[first])) {
+                first = first + 1;
+                continue;
+            }
+            first_known_nonmatching = true;
+        }
+        let opposite: i64 = last - 1;
+        if first == opposite {
+            last = opposite;
+        } else if predicate(projection(data[opposite])) {
+            let temporary: T = data[first];
+            data[first] = data[opposite];
+            data[opposite] = temporary;
+            first = first + 1;
+            last = last - 1;
+            first_known_nonmatching = false;
+        } else {
+            last = opposite;
+        }
+    }
+    return first;
+}
+
+/// @brief Partition a mutable list in place and return the first nonmatch.
+/// Matching values precede nonmatching values; order within either group is
+/// unspecified. Each element is tested at most once.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn partition_in_place(data: &mut list<T>, predicate: Predicate) -> i64 {
+    return ranges_partition_in_place_core(data, predicate, ranges_identity);
+}
+
+/// @brief Partition a mutable list by projected keys in place.
+/// Returns the first nonmatch; order within each group is unspecified.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn partition_in_place_projected(data: &mut list<T>, predicate: Predicate,
+                                    projection: Projection) -> i64 {
+    return ranges_partition_in_place_core(data, predicate, projection);
+}
+
 /// @brief Copy matching and nonmatching elements into separate stable lists.
 /// Each element's predicate is evaluated exactly once; the source is unchanged.
 /// C++20 `std::ranges::partition_copy` equivalent.
@@ -2578,6 +2687,40 @@ pub fn replace_if(data: &list<T>, predicate: Predicate, replacement: T) -> list<
     return replaced;
 }
 
+/// @brief Replace each value equivalent to `old_value` in a mutable list.
+/// Returns the number of elements replaced.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn replace_in_place(data: &mut list<T>, old_value: U,
+                        replacement: T) -> i64 {
+    var replaced: i64 = 0;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if data[i] == old_value {
+            data[i] = replacement;
+            replaced = replaced + 1;
+        }
+    }
+    return replaced;
+}
+
+/// @brief Replace predicate-matching values in a mutable list.
+/// Returns the number of elements replaced.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn replace_if_in_place(data: &mut list<T>, predicate: Predicate,
+                           replacement: T) -> i64 {
+    var replaced: i64 = 0;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            data[i] = replacement;
+            replaced = replaced + 1;
+        }
+    }
+    return replaced;
+}
+
 /// @brief Replace matching projected-key values in a copied list.
 /// The original range is unchanged.
 /// @ingroup algorithm_ranges
@@ -2656,6 +2799,91 @@ pub fn unique_by_projected(data: &list<T>, equivalent: Equivalent,
         }
     }
     return unique_values;
+}
+
+/// @brief Compact adjacent duplicate values in a mutable list.
+/// Returns the logical end; the suffix is unspecified and list length is
+/// unchanged. Retained values remain in their original order.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn unique_in_place(data: &mut list<T>) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 { return 0; }
+    var output: i64 = 1;
+    var previous: T = data[0];
+    for input in 1..n {
+        let item: T = data[input];
+        if item != previous {
+            if output != input { data[output] = item; }
+            output = output + 1;
+            previous = item;
+        }
+    }
+    return output;
+}
+
+/// @brief Compact adjacent equivalent values in a mutable list.
+/// The first value in each run is retained; returns the logical end index.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent>
+pub fn unique_by_in_place(data: &mut list<T>, equivalent: Equivalent) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 { return 0; }
+    var output: i64 = 1;
+    var previous: T = data[0];
+    for input in 1..n {
+        let item: T = data[input];
+        if !equivalent(previous, item) {
+            if output != input { data[output] = item; }
+            output = output + 1;
+            previous = item;
+        }
+    }
+    return output;
+}
+
+/// @brief Compact adjacent runs with equal projected keys in place.
+/// Returns the logical end index; list length is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn unique_in_place_projected(data: &mut list<T>,
+                                 projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 { return 0; }
+    var output: i64 = 1;
+    var previous_key = projection(data[0]);
+    for input in 1..n {
+        let item: T = data[input];
+        let current_key = projection(item);
+        if current_key != previous_key {
+            if output != input { data[output] = item; }
+            output = output + 1;
+            previous_key = current_key;
+        }
+    }
+    return output;
+}
+
+/// @brief Compact adjacent equivalence classes of projected keys in place.
+/// Returns the logical end index and retains the first value in each run.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent, Projection>
+pub fn unique_by_in_place_projected(data: &mut list<T>,
+    equivalent: Equivalent, projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if n == 0 { return 0; }
+    var output: i64 = 1;
+    var previous_key = projection(data[0]);
+    for input in 1..n {
+        let item: T = data[input];
+        let current_key = projection(item);
+        if !equivalent(previous_key, current_key) {
+            if output != input { data[output] = item; }
+            output = output + 1;
+            previous_key = current_key;
+        }
+    }
+    return output;
 }
 
 /// @brief Copy one value from each adjacent equivalence class.
@@ -5762,6 +5990,76 @@ pub fn remove_projected(data: &list<T>, value: U,
     return out;
 }
 
+generic<T, Predicate, Projection>
+fn ranges_remove_if_in_place_core(data: &mut list<T>, predicate: Predicate,
+                                  projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    var output: i64 = 0;
+    for input in 0..n {
+        let item: T = data[input];
+        if !predicate(projection(item)) {
+            if output != input { data[output] = item; }
+            output = output + 1;
+        }
+    }
+    return output;
+}
+
+/// @brief Compact a mutable list, retaining values not equal to `value`.
+/// Returns the logical end index; values from that index to `len()` are
+/// unspecified and the list length is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn remove_in_place(data: &mut list<T>, value: U) -> i64 {
+    let n: i64 = data.len();
+    var output: i64 = 0;
+    for input in 0..n {
+        let item: T = data[input];
+        if item != value {
+            if output != input { data[output] = item; }
+            output = output + 1;
+        }
+    }
+    return output;
+}
+
+/// @brief Compact a mutable list by rejecting predicate-matching values.
+/// Returns the logical end index; the suffix is unspecified and length stays
+/// unchanged. The predicate is called exactly once per element.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn remove_if_in_place(data: &mut list<T>, predicate: Predicate) -> i64 {
+    return ranges_remove_if_in_place_core(data, predicate, ranges_identity);
+}
+
+/// @brief Remove values whose projected key equals `value`, in place.
+/// Returns the logical end index; the suffix is unspecified.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn remove_in_place_projected(data: &mut list<T>, value: U,
+                                 projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    var output: i64 = 0;
+    for input in 0..n {
+        let item: T = data[input];
+        if projection(item) != value {
+            if output != input { data[output] = item; }
+            output = output + 1;
+        }
+    }
+    return output;
+}
+
+/// @brief Compact a mutable list using a predicate on projected keys.
+/// Returns the logical end index; the suffix is unspecified and length remains
+/// unchanged. Predicate and projection each run exactly once per element.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn remove_if_in_place_projected(data: &mut list<T>, predicate: Predicate,
+                                    projection: Projection) -> i64 {
+    return ranges_remove_if_in_place_core(data, predicate, projection);
+}
+
 /// @brief Copy the first `n` elements (or all elements when n is larger).
 /// @ingroup algorithm_ranges
 generic<T>
@@ -6201,6 +6499,94 @@ pub fn sorted_by_projected(data: &list<T>, less: Less,
     return merge_by_projected_runs(left, right, less, projection);
 }
 
+generic<T>
+fn ranges_identity(value: T) -> T { return value; }
+
+generic<T>
+fn ranges_default_less(left: T, right: T) -> bool { return left < right; }
+
+generic<T, Less, Projection>
+fn ranges_sift_down_in_place(data: &mut list<T>, heap_len: i64, root: i64,
+                             less: Less, projection: Projection) -> i64 {
+    var parent: i64 = root;
+    var swaps: i64 = 0;
+    while parent < heap_len / 2 {
+        let left: i64 = parent * 2 + 1;
+        var larger: i64 = left;
+        let right: i64 = left + 1;
+        if right < heap_len &&
+           less(projection(data[left]), projection(data[right])) {
+            larger = right;
+        }
+        if !less(projection(data[parent]), projection(data[larger])) {
+            break;
+        }
+        let temporary: T = data[parent];
+        data[parent] = data[larger];
+        data[larger] = temporary;
+        swaps = swaps + 1;
+        parent = larger;
+    }
+    return swaps;
+}
+
+/// @brief Sort a mutable list in place using a heap-based O(N log N) sort.
+/// Returns the number of element swaps; unlike `sorted`, this operation is
+/// not stable and mutates its input.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn sort_in_place_by_projected(data: &mut list<T>, less: Less,
+                                  projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    var swaps: i64 = 0;
+    var parent: i64 = n / 2;
+    while parent > 0 {
+        parent = parent - 1;
+        swaps = swaps + ranges_sift_down_in_place(
+            data, n, parent, less, projection);
+    }
+    var heap_len: i64 = n;
+    while heap_len > 1 {
+        heap_len = heap_len - 1;
+        let temporary: T = data[0];
+        data[0] = data[heap_len];
+        data[heap_len] = temporary;
+        swaps = swaps + 1;
+        if heap_len > 1 {
+            swaps = swaps + ranges_sift_down_in_place(
+                data, heap_len, 0, less, projection);
+        }
+    }
+    return swaps;
+}
+
+/// @brief Sort a mutable list by a strict comparison function.
+/// Returns the number of swaps; equivalent values are not kept stable.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn sort_in_place_by(data: &mut list<T>, less: Less) -> i64 {
+    return sort_in_place_by_projected(data, less, ranges_identity);
+}
+
+/// @brief Sort a mutable list by its projected keys in place.
+/// Returns the number of swaps.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn sort_in_place_projected(data: &mut list<T>,
+                               projection: Projection) -> i64 {
+    return sort_in_place_by_projected(data, ranges_default_less,
+                                      projection);
+}
+
+/// @brief Sort a mutable list in ascending order in place.
+/// Returns the number of swaps; use `sorted` when a stable copy is required.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn sort_in_place(data: &mut list<T>) -> i64 {
+    return sort_in_place_by_projected(data, ranges_default_less,
+                                      ranges_identity);
+}
+
 /// @brief Return the next lexicographic permutation and whether it exists.
 /// If no next permutation exists, return the ascending first permutation.
 /// The source range is unchanged (C++20 `std::ranges::next_permutation`).
@@ -6510,6 +6896,55 @@ pub fn reversed(data: &list<T>) -> list<T> {
         out.push(data[n - 1 - i]);
     }
     return out;
+}
+
+/// @brief Reverse the elements of a mutable list in place.
+/// Returns the number of element swaps performed.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn reverse_in_place(data: &mut list<T>) -> i64 {
+    let n: i64 = data.len();
+    let swaps: i64 = n / 2;
+    for i in 0..swaps {
+        let opposite: i64 = n - 1 - i;
+        let temporary: T = data[i];
+        data[i] = data[opposite];
+        data[opposite] = temporary;
+    }
+    return swaps;
+}
+
+generic<T>
+fn ranges_reverse_segment_in_place(data: &mut list<T>, first: i64,
+                                   last: i64) -> void {
+    var left: i64 = first;
+    var right: i64 = last;
+    while left < right {
+        right = right - 1;
+        if left >= right { break; }
+        let temporary: T = data[left];
+        data[left] = data[right];
+        data[right] = temporary;
+        left = left + 1;
+    }
+}
+
+/// @brief Rotate a mutable list left in place so `middle` becomes first.
+/// Returns the index of the original first element after rotation, matching
+/// `std::ranges::rotate`'s returned iterator. `middle` is clamped to the list
+/// bounds; rotation uses at most O(N) swaps and allocates no output list.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn rotate_in_place(data: &mut list<T>, middle: i64) -> i64 {
+    let n: i64 = data.len();
+    var split: i64 = middle;
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    if split == 0 || split == n { return n - split; }
+    ranges_reverse_segment_in_place(data, 0, split);
+    ranges_reverse_segment_in_place(data, split, n);
+    ranges_reverse_segment_in_place(data, 0, n);
+    return n - split;
 }
 
 /// @brief Copy a range in reverse order.
