@@ -1307,6 +1307,20 @@ pub fn fill_in_place(data: &mut list<T>, value: T) -> i64 {
     return n;
 }
 
+/// @brief Fill a bounded prefix of a mutable list.
+/// Non-positive counts write nothing; oversized counts clamp to list length.
+/// Returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn fill_n_in_place(data: &mut list<T>, count: i64, value: T) -> i64 {
+    let n: i64 = data.len();
+    var filled: i64 = count;
+    if filled < 0 { filled = 0; }
+    if filled > n { filled = n; }
+    for i in 0..filled { data[i] = value; }
+    return filled;
+}
+
 /// @brief Materialize `count` copies of `value` in a new list.
 /// Non-positive counts return an empty list. Eager-list counterpart to C++20
 /// `std::ranges::fill_n`; the input count defines the output length.

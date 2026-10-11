@@ -375,6 +375,7 @@ use std::algorithm::ranges::generate_n;
 use std::algorithm::ranges::generate;
 use std::algorithm::ranges::fill;
 use std::algorithm::ranges::fill_in_place;
+use std::algorithm::ranges::fill_n_in_place;
 use std::algorithm::ranges::fill_n;
 use std::algorithm::ranges::copy_n;
 use std::algorithm::ranges::copy_n_with_count;
@@ -5292,6 +5293,22 @@ fn test_algorithm_ranges_fill_copy() {
     let zero_count: list<i32> = fill_n(0, fill_value);
     let negative_count: list<i32> = fill_n(-2, fill_value);
     verify(zero_count.len() == 0 && negative_count.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_fill_n_in_place() {
+    var values: list<i32> = [1, 2, 3, 4];
+    verify(fill_n_in_place(values, 2, 9) == 2);
+    verify(values[0] == 9 && values[1] == 9 &&
+           values[2] == 3 && values[3] == 4);
+    verify(fill_n_in_place(values, 99, 7) == 4);
+    verify(values[0] == 7 && values[3] == 7);
+    verify(fill_n_in_place(values, 0, 5) == 0);
+    verify(fill_n_in_place(values, -3, 5) == 0);
+    verify(values[0] == 7 && values[3] == 7);
+
+    var empty: list<i32> = [];
+    verify(fill_n_in_place(empty, 4, 6) == 0 && empty.len() == 0);
 }
 
 #[test]

@@ -364,6 +364,9 @@ fn example() {
   `replace_if_in_place` update matching elements and return the replacement
   count; `reverse_in_place` reverses the list and returns the number of swaps.
   These operations require a mutable list and preserve its length.
+- `fill_n_in_place(&mut data, count, value)` fills only a prefix and returns
+  the number of elements written. Negative counts write zero values; counts
+  larger than the list length are clamped, matching a counted output range.
 - `fill_n(count, value)` materializes exactly `count` copies in a new list;
   non-positive counts return an empty list. This eager-list helper adapts C++20
   `std::ranges::fill_n`, whose output length is normally defined by an output
