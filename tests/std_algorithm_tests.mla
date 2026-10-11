@@ -299,6 +299,22 @@ use std::algorithm::ranges::union_sorted_by_projected;
 use std::algorithm::ranges::intersection_sorted_by_projected;
 use std::algorithm::ranges::difference_sorted_by_projected;
 use std::algorithm::ranges::symmetric_difference_sorted_by_projected;
+use std::algorithm::ranges::union_sorted_to;
+use std::algorithm::ranges::union_sorted_to_projected;
+use std::algorithm::ranges::union_sorted_to_by;
+use std::algorithm::ranges::union_sorted_to_by_projected;
+use std::algorithm::ranges::intersection_sorted_to;
+use std::algorithm::ranges::intersection_sorted_to_projected;
+use std::algorithm::ranges::intersection_sorted_to_by;
+use std::algorithm::ranges::intersection_sorted_to_by_projected;
+use std::algorithm::ranges::difference_sorted_to;
+use std::algorithm::ranges::difference_sorted_to_projected;
+use std::algorithm::ranges::difference_sorted_to_by;
+use std::algorithm::ranges::difference_sorted_to_by_projected;
+use std::algorithm::ranges::symmetric_difference_sorted_to;
+use std::algorithm::ranges::symmetric_difference_sorted_to_projected;
+use std::algorithm::ranges::symmetric_difference_sorted_to_by;
+use std::algorithm::ranges::symmetric_difference_sorted_to_by_projected;
 use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::lower_bound_projected;
 use std::algorithm::ranges::lower_bound_by_projected;
@@ -2436,6 +2452,127 @@ fn test_algorithm_ranges_generic_symmetric_difference_sorted() {
     let empty: list<i32> = [];
     let unchanged: list<i32> = symmetric_difference_sorted(left, empty);
     verify(unchanged.len() == left.len() && unchanged[2] == 2);
+}
+
+#[test]
+fn test_algorithm_ranges_bounded_set_operations() {
+    let left: list<i32> = [1, 2, 2, 4, 7];
+    let right: list<i32> = [2, 2, 3, 4, 4];
+    var union_output: list<i32> = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let union_progress: tuple<i64, i64, i64> =
+        union_sorted_to(left, right, union_output);
+    verify(union_progress.0 == 5 && union_progress.1 == 5 &&
+           union_progress.2 == 9);
+    verify(union_output[0] == 1 && union_output[1] == 2 &&
+           union_output[2] == 2 && union_output[3] == 2 &&
+           union_output[4] == 2 && union_output[5] == 3 &&
+           union_output[6] == 4 && union_output[7] == 4 &&
+           union_output[8] == 7);
+
+    var intersection_output: list<i32> = [0, 0, 0];
+    let intersection_progress: tuple<i64, i64, i64> =
+        intersection_sorted_to(left, right, intersection_output);
+    verify(intersection_progress.0 == 4 && intersection_progress.1 == 5 &&
+           intersection_progress.2 == 3);
+    verify(intersection_output[0] == 2 && intersection_output[1] == 2 &&
+           intersection_output[2] == 4);
+
+    var difference_output: list<i32> = [0, 0];
+    let difference_progress: tuple<i64, i64, i64> =
+        difference_sorted_to(left, right, difference_output);
+    verify(difference_progress.0 == 5 && difference_progress.1 == 5 &&
+           difference_progress.2 == 2 && difference_output[0] == 1 &&
+           difference_output[1] == 7);
+
+    var symmetric_output: list<i32> = [0, 0, 0, 0];
+    let symmetric_progress: tuple<i64, i64, i64> =
+        symmetric_difference_sorted_to(left, right, symmetric_output);
+    verify(symmetric_progress.0 == 5 && symmetric_progress.1 == 5 &&
+           symmetric_progress.2 == 4 && symmetric_output[0] == 1 &&
+           symmetric_output[1] == 3 && symmetric_output[2] == 4 &&
+           symmetric_output[3] == 7);
+
+    var short_union: list<i32> = [0, 0];
+    let short_progress: tuple<i64, i64, i64> =
+        union_sorted_to(left, right, short_union);
+    verify(short_progress.0 == 2 && short_progress.1 == 0 &&
+           short_progress.2 == 2 && short_union[0] == 1 &&
+           short_union[1] == 2);
+
+    let projected_left: list<i32> = [11, 21, 31];
+    let projected_right: list<i32> = [12, 22, 22, 42];
+    let tens = |value: i32| { return value / 10; };
+    var projected_union: list<i32> = [0, 0, 0, 0, 0];
+    let projected_union_progress: tuple<i64, i64, i64> =
+        union_sorted_to_projected(projected_left, projected_right,
+                                  projected_union, tens);
+    verify(projected_union_progress.2 == 5 &&
+           projected_union[0] == 11 && projected_union[1] == 21 &&
+           projected_union[2] == 22 && projected_union[3] == 31 &&
+           projected_union[4] == 42);
+    var projected_intersection: list<i32> = [0, 0];
+    intersection_sorted_to_projected(projected_left, projected_right,
+                                     projected_intersection, tens);
+    verify(projected_intersection[0] == 11 &&
+           projected_intersection[1] == 21);
+    var projected_difference: list<i32> = [0];
+    difference_sorted_to_projected(projected_left, projected_right,
+                                   projected_difference, tens);
+    verify(projected_difference[0] == 31);
+    var projected_symmetric: list<i32> = [0, 0, 0];
+    symmetric_difference_sorted_to_projected(
+        projected_left, projected_right, projected_symmetric, tens);
+    verify(projected_symmetric[0] == 22 &&
+           projected_symmetric[1] == 31 &&
+           projected_symmetric[2] == 42);
+
+    let greater = |a: i32, b: i32| { return a > b; };
+    let descending_left: list<i32> = [9, 7, 7, 3, 1];
+    let descending_right: list<i32> = [8, 7, 4, 3, 3];
+    var custom_difference: list<i32> = [0, 0, 0];
+    difference_sorted_to_by(descending_left, descending_right,
+                            custom_difference, greater);
+    verify(custom_difference[0] == 9 && custom_difference[1] == 7 &&
+           custom_difference[2] == 1);
+    var custom_intersection: list<i32> = [0, 0];
+    intersection_sorted_to_by(descending_left, descending_right,
+                              custom_intersection, greater);
+    verify(custom_intersection[0] == 7 && custom_intersection[1] == 3);
+    var custom_union: list<i32> = [0, 0, 0, 0, 0, 0, 0, 0];
+    union_sorted_to_by(descending_left, descending_right,
+                       custom_union, greater);
+    verify(custom_union[0] == 9 && custom_union[1] == 8 &&
+           custom_union[2] == 7 && custom_union[3] == 7 &&
+           custom_union[4] == 4 && custom_union[5] == 3 &&
+           custom_union[6] == 3 && custom_union[7] == 1);
+    var custom_symmetric: list<i32> = [0, 0, 0, 0, 0, 0];
+    symmetric_difference_sorted_to_by(descending_left, descending_right,
+                                      custom_symmetric, greater);
+    verify(custom_symmetric[0] == 9 && custom_symmetric[1] == 8 &&
+           custom_symmetric[2] == 7 && custom_symmetric[3] == 4 &&
+           custom_symmetric[4] == 3 && custom_symmetric[5] == 1);
+
+    var combined_symmetric: list<i32> = [0, 0];
+    let combined_progress: tuple<i64, i64, i64> =
+        symmetric_difference_sorted_to_by_projected(
+            [39, 28, 22], [35, 27, 12], combined_symmetric,
+            greater, tens);
+    verify(combined_progress.2 == 2 && combined_symmetric[0] == 22 &&
+           combined_symmetric[1] == 12);
+    var combined_union: list<i32> = [0, 0, 0, 0];
+    union_sorted_to_by_projected([39, 28, 22], [35, 27, 12],
+        combined_union, greater, tens);
+    verify(combined_union[0] == 39 && combined_union[1] == 28 &&
+           combined_union[2] == 22 && combined_union[3] == 12);
+    var combined_intersection: list<i32> = [0, 0];
+    intersection_sorted_to_by_projected([39, 28, 22], [35, 27, 12],
+        combined_intersection, greater, tens);
+    verify(combined_intersection[0] == 39 &&
+           combined_intersection[1] == 28);
+    var combined_difference: list<i32> = [0];
+    difference_sorted_to_by_projected([39, 28, 22], [35, 27, 12],
+        combined_difference, greater, tens);
+    verify(combined_difference[0] == 22);
 }
 
 #[test]

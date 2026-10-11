@@ -721,6 +721,13 @@ fn example() {
 - `symmetric_difference_sorted(left, right)` returns values present in exactly
   one sorted input, with each value's output count equal to the difference in
   input multiplicities.
+- `union_sorted_to`, `intersection_sorted_to`, `difference_sorted_to`, and
+  `symmetric_difference_sorted_to` write these multiset operations into
+  caller-owned bounded output. They return
+  `(left_consumed, right_consumed, written)` so a short destination can be
+  resumed safely. Each operation also has `_projected`, `_by`, and
+  `_by_projected` forms, with the same ordering and multiplicity semantics as
+  its list-returning counterpart.
 - `merged_projected` and the four `*_sorted_projected` set operations compare
   unary projected keys. Inputs must be sorted by the same projection; they
   retain the merge stability and multiset multiplicity rules described above.
