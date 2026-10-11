@@ -441,6 +441,10 @@ use std::algorithm::ranges::replace_copy;
 use std::algorithm::ranges::replace_copy_projected;
 use std::algorithm::ranges::replace_copy_by;
 use std::algorithm::ranges::replace_copy_by_projected;
+use std::algorithm::ranges::replace_copy_to;
+use std::algorithm::ranges::replace_copy_to_by;
+use std::algorithm::ranges::replace_copy_to_projected;
+use std::algorithm::ranges::replace_copy_to_by_projected;
 use std::algorithm::ranges::replace_copy_if;
 use std::algorithm::ranges::replace_copy_if_projected;
 use std::algorithm::ranges::replace_if;
@@ -3667,6 +3671,47 @@ fn test_algorithm_ranges_equivalence_replace() {
     verify(copied_projected.len() == 5 &&
            copied_projected[1] == 99 && copied_projected[4] == 99);
     verify(values[0] == 11 && values[1] == 22 && values[4] == 42);
+}
+
+#[test]
+fn test_algorithm_ranges_replace_copy_to_bounded_output() {
+    let source: list<i32> = [11, 22, 29, 31, 42];
+    var destination: list<i32> = [0, 0, 0, 0, 77, 88];
+    verify(replace_copy_to(source, destination, 22, 99) == 5);
+    verify(destination[0] == 11 && destination[1] == 99 &&
+           destination[2] == 29 && destination[3] == 31 &&
+           destination[4] == 42 && destination[5] == 88);
+
+    let same_decade = |item: i32, key: i32| {
+        return item / 10 == key / 10;
+    };
+    var by_destination: list<i32> = [0, 0, 0];
+    verify(replace_copy_to_by(
+        source, by_destination, 20, 99, same_decade) == 3);
+    verify(by_destination[0] == 99 && by_destination[1] == 99 &&
+           by_destination[2] == 99);
+
+    let project_tens = |value: i32| { return value / 10; };
+    var projected: list<i32> = [0, 0, 0, 0];
+    verify(replace_copy_to_projected(
+        source, projected, 2, 99, project_tens) == 4);
+    verify(projected[0] == 11 && projected[1] == 99 &&
+           projected[2] == 99 && projected[3] == 31);
+
+    let same_parity = |left: i32, right: i32| {
+        return left % 2 == right % 2;
+    };
+    var combined: list<i32> = [0, 0, 0, 0, 0, 77];
+    verify(replace_copy_to_by_projected(
+        source, combined, 2, 99, same_parity, project_tens) == 5);
+    verify(combined[0] == 11 && combined[1] == 99 &&
+           combined[2] == 99 && combined[3] == 31 &&
+           combined[4] == 99 && combined[5] == 77);
+
+    var short_destination: list<i32> = [0, 0];
+    verify(replace_copy_to(source, short_destination, 22, 99) == 2);
+    verify(short_destination[0] == 11 && short_destination[1] == 99);
+    verify(source[0] == 11 && source[1] == 22);
 }
 
 #[test]

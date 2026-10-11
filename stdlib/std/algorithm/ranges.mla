@@ -2773,6 +2773,78 @@ pub fn replace_copy_by_projected(data: &list<T>, old_key: U, new_value: V,
     return copied;
 }
 
+/// @brief Replace matching source values into an existing destination list.
+/// Stops at the shorter list, returns the number written, and preserves the
+/// source and any unused destination tail.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn replace_copy_to(source: &list<T>, destination: &mut list<T>,
+                       old_value: U, new_value: T) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        if source[i] == old_value { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Comparator form of bounded replacement-copy.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn replace_copy_to_by(source: &list<T>, destination: &mut list<T>,
+                          old_value: U, new_value: T,
+                          equivalent: Equivalent) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        if equivalent(source[i], old_value) { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Projected equality form of bounded replacement-copy.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn replace_copy_to_projected(
+    source: &list<T>, destination: &mut list<T>, old_value: U,
+    new_value: T, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        if projection(source[i]) == old_value { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Comparator-and-projection form of bounded replacement-copy.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, Projection>
+pub fn replace_copy_to_by_projected(
+    source: &list<T>, destination: &mut list<T>, old_key: U,
+    new_value: T, equivalent: Equivalent, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        if equivalent(projection(source[i]), old_key) {
+            destination[i] = new_value;
+        } else {
+            destination[i] = source[i];
+        }
+    }
+    return count;
+}
+
 /// @brief Copy a range, replacing each element accepted by `predicate`.
 /// C++20 `std::ranges::replace_copy_if` counterpart; the input is unchanged.
 /// @ingroup algorithm_ranges

@@ -698,6 +698,10 @@ fn example() {
 - `replace_by` and `replace_copy_by` substitute values matching a lookup key
   under a caller-supplied equivalence predicate. Their `_by_projected` forms
   apply that predicate to each projected element key and the supplied old key.
+- `replace_copy_to` and its `_by`, `_projected`, and `_by_projected` forms
+  write replaced values into a caller-provided destination, bounded by the
+  shorter list. They return the number written and preserve the source and any
+  unused destination suffix.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 - `iota_range(start, end)` materializes a typed half-open range, preserving
