@@ -64,6 +64,13 @@ alias year_month_day_last = DateYearMonthDayLast;
 alias year_month_weekday = DateYearMonthWeekday;
 alias year_month_weekday_last = DateYearMonthWeekdayLast;
 
+/// @brief System-clock time point with day precision, like C++20 `sys_days`.
+pub struct SysDays {
+    var count: i64;
+};
+
+alias sys_days = SysDays;
+
 /// @brief Construct a checked chrono calendar year.
 pub fn make_year(value: i32) -> option<year> {
     return date_make_year(value);
@@ -122,14 +129,82 @@ pub fn to_sys_days(year_value: i32, month_value: i32, day_value: i32)
     return date_to_sys_days(year_value, month_value, day_value);
 }
 
+/// @brief Convert a valid calendar date to a typed `sys_days` time point.
+pub fn to_sys_days(value: year_month_day) -> option<sys_days> {
+    let count: option<i64> = date_to_sys_days(value.year, value.month,
+                                              value.day);
+    if count.is_none() { return None<sys_days>(); }
+    return Some<sys_days>(SysDays { count: count.unwrap() });
+}
+
+/// @brief Construct `sys_days` from checked Gregorian date fields.
+pub fn make_sys_days(year_value: i32, month_value: i32, day_value: i32)
+    -> option<sys_days> {
+    let count: option<i64> = date_to_sys_days(year_value, month_value,
+                                              day_value);
+    if count.is_none() { return None<sys_days>(); }
+    return Some<sys_days>(SysDays { count: count.unwrap() });
+}
+
 /// @brief Convert a system-day count to a checked chrono calendar date.
 pub fn from_sys_days(value: i64) -> option<year_month_day> {
     return date_from_sys_days(value);
 }
 
+/// @brief Convert typed system days to a calendar date.
+pub fn from_sys_days(value: sys_days) -> option<year_month_day> {
+    return date_from_sys_days(value.count);
+}
+
+/// @brief Add whole days to `sys_days`, returning `None` on i64 overflow.
+pub fn sys_days_add_days(value: sys_days, offset: i64) -> option<sys_days> {
+    if offset > 0 && value.count > 9223372036854775807 - offset {
+        return None<sys_days>();
+    }
+    if offset < 0 && value.count < (-9223372036854775807 - 1) - offset {
+        return None<sys_days>();
+    }
+    return Some<sys_days>(SysDays { count: value.count + offset });
+}
+
+/// @brief Subtract whole days from `sys_days`, returning `None` on overflow.
+pub fn sys_days_subtract_days(value: sys_days, offset: i64)
+    -> option<sys_days> {
+    if offset > 0 && value.count < (-9223372036854775807 - 1) + offset {
+        return None<sys_days>();
+    }
+    if offset < 0 && value.count > 9223372036854775807 + offset {
+        return None<sys_days>();
+    }
+    return Some<sys_days>(SysDays { count: value.count - offset });
+}
+
+/// @brief Return a checked difference between two system-day points.
+pub fn sys_days_difference(first: sys_days, last: sys_days) -> option<i64> {
+    if last.count > 0 && first.count < (-9223372036854775807 - 1) + last.count {
+        return None<i64>();
+    }
+    if last.count < 0 && first.count > 9223372036854775807 + last.count {
+        return None<i64>();
+    }
+    return Some<i64>(first.count - last.count);
+}
+
+/// @brief Compare two system-day points.
+pub fn sys_days_compare(left: sys_days, right: sys_days) -> DurationOrder {
+    if left.count < right.count { return DurationOrder::Less; }
+    if left.count > right.count { return DurationOrder::Greater; }
+    return DurationOrder::Equivalent;
+}
+
 /// @brief Return the weekday corresponding to a system-day count.
 pub fn weekday_from_sys_days(value: i64) -> weekday {
     return date_weekday_from_sys_days(value);
+}
+
+/// @brief Return the weekday corresponding to a typed system-day point.
+pub fn weekday_from_sys_days(value: sys_days) -> weekday {
+    return date_weekday_from_sys_days(value.count);
 }
 
 /// @brief Return the weekday of a valid chrono calendar date.

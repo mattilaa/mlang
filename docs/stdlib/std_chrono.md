@@ -60,6 +60,8 @@ let d = make_day(29).unwrap();
 let leap_day = make_year_month_day(y, m, d).unwrap();
 let epoch_days = to_sys_days(1970, 1, 1).unwrap(); // 0
 let epoch = from_sys_days(epoch_days).unwrap();
+let epoch_point: sys_days = to_sys_days(epoch).unwrap();
+let tomorrow = sys_days_add_days(epoch_point, 1).unwrap();
 ```
 
 - Calendar constructors such as `make_year`, `make_month`, `make_day`,
@@ -74,6 +76,13 @@ let epoch = from_sys_days(epoch_days).unwrap();
 - `make_weekday`, `weekday_c_encoding`, `weekday_iso_encoding`,
   `weekday_from_sys_days`, `weekday_of`, and `add_weekdays` cover typed weekday
   construction, conversion, and modular arithmetic.
+- `sys_days` is a distinct system-clock day-precision time point storing its
+  signed day count from the Unix epoch. `make_sys_days` and the
+  `to_sys_days(year_month_day)` overload construct it; `from_sys_days(sys_days)`
+  converts back. Day addition, subtraction, difference, and comparison use
+  `sys_days_add_days`, `sys_days_subtract_days`, `sys_days_difference`, and
+  `sys_days_compare`, with arithmetic overflow reported as `None`. The existing
+  integer overloads remain available for compatibility.
 
 - `make_duration(count, unit)` constructs a value for one of the declared
   `DurationUnit` alternatives.

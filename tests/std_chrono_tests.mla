@@ -35,6 +35,8 @@ use std::chrono::day;
 use std::chrono::weekday;
 use std::chrono::year_month;
 use std::chrono::year_month_day;
+use std::chrono::sys_days;
+use std::chrono::SysDays;
 use std::chrono::make_year;
 use std::chrono::year_number;
 use std::chrono::year_is_leap;
@@ -48,6 +50,10 @@ use std::chrono::to_sys_days;
 use std::chrono::from_sys_days;
 use std::chrono::weekday_from_sys_days;
 use std::chrono::weekday_of;
+use std::chrono::sys_days_add_days;
+use std::chrono::sys_days_subtract_days;
+use std::chrono::sys_days_difference;
+use std::chrono::sys_days_compare;
 use std::chrono::make_month_day;
 use std::chrono::resolve_month_day;
 use std::chrono::make_month_day_last;
@@ -92,6 +98,29 @@ fn test_chrono_calendar_types_and_system_days() {
     verify(weekday_from_sys_days(0) == weekday::Thursday);
 
     verify(make_year_month_day(y, m, make_day(30).unwrap()).is_none());
+}
+
+#[test]
+fn test_chrono_typed_sys_days_arithmetic_and_overflow() {
+    let epoch_date: year_month_day = from_sys_days(0).unwrap();
+    let epoch: sys_days = to_sys_days(epoch_date).unwrap();
+    verify(epoch.count == 0);
+
+    let next = sys_days_add_days(epoch, 1).unwrap();
+    verify(next.count == 1);
+    verify(from_sys_days(next).unwrap().day == 2);
+    let previous = sys_days_subtract_days(epoch, 1).unwrap();
+    verify(previous.count == -1);
+    verify(from_sys_days(previous).unwrap().day == 31);
+    verify(sys_days_difference(next, previous).unwrap() == 2);
+    verify(sys_days_compare(previous, epoch) == DurationOrder::Less);
+    verify(sys_days_compare(epoch, epoch) == DurationOrder::Equivalent);
+
+    let maximum: SysDays = SysDays { count: 9223372036854775807 };
+    let minimum: SysDays = SysDays { count: -9223372036854775807 - 1 };
+    verify(sys_days_add_days(maximum, 1).is_none());
+    verify(sys_days_subtract_days(minimum, 1).is_none());
+    verify(sys_days_difference(maximum, minimum).is_none());
 }
 
 #[test]
