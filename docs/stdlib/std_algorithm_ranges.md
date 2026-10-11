@@ -277,6 +277,10 @@ fn example() {
   an existing destination list up to its capacity, returns the number written,
   and preserves any unused destination tail. Comparator and projected forms
   are available; the source is never modified.
+- `partial_sort_copy_to_heterogeneous` and its `_projected`, `_by`, and
+  `_by_projected` variants allow the destination element type to differ from
+  the source when assignments are compatible. They retain the existing
+  bounded-capacity, suffix-preserving behavior.
 - `nth_element(data, nth)` returns a copied partitioned list with its selected
   value at `nth`; under ascending order, preceding values are no greater and
   following values are no smaller. The two partitions are not otherwise

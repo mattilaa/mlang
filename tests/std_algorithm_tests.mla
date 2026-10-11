@@ -259,6 +259,10 @@ use std::algorithm::ranges::partial_sort_copy_to;
 use std::algorithm::ranges::partial_sort_copy_to_projected;
 use std::algorithm::ranges::partial_sort_copy_to_by;
 use std::algorithm::ranges::partial_sort_copy_to_by_projected;
+use std::algorithm::ranges::partial_sort_copy_to_heterogeneous;
+use std::algorithm::ranges::partial_sort_copy_to_heterogeneous_projected;
+use std::algorithm::ranges::partial_sort_copy_to_heterogeneous_by;
+use std::algorithm::ranges::partial_sort_copy_to_heterogeneous_by_projected;
 use std::algorithm::ranges::nth_element;
 use std::algorithm::ranges::nth_element_by;
 use std::algorithm::ranges::nth_element_projected;
@@ -2200,6 +2204,37 @@ fn test_algorithm_ranges_partial_sort_copy_to() {
     let empty_source: list<i32> = [];
     verify(partial_sort_copy_to(empty_source, destination) == 0);
     verify(destination[0] == 1 && destination[4] == 100);
+}
+
+#[test]
+fn test_algorithm_ranges_partial_sort_copy_to_heterogeneous_output() {
+    let source: list<i32> = [8, 5, 2, 9, 1, 7, 3];
+    var destination: list<i64> = [0, 0, 0, 99];
+    verify(partial_sort_copy_to_heterogeneous(source, destination) == 3);
+    verify(destination[0] == 1 && destination[1] == 2 &&
+           destination[2] == 3 && destination[3] == 99);
+
+    let half = |value: i32| { return value / 2; };
+    var projected: list<i64> = [0, 0, 0];
+    verify(partial_sort_copy_to_heterogeneous_projected(
+        source, projected, half) == 3);
+    verify(projected[0] == 1 && projected[1] == 2 && projected[2] == 3);
+
+    let greater = |left: i32, right: i32| { return left > right; };
+    var descending: list<i64> = [0, 0];
+    verify(partial_sort_copy_to_heterogeneous_by(
+        source, descending, greater) == 2);
+    verify(descending[0] == 9 && descending[1] == 8);
+
+    let tens = |value: i32| { return value / 10; };
+    var combined: list<i64> = [0, 0, 0];
+    verify(partial_sort_copy_to_heterogeneous_by_projected(
+        source, combined, greater, tens) == 3);
+    verify(combined[0] == 9 && combined[1] == 8 && combined[2] == 7);
+
+    var empty: list<i64> = [];
+    verify(partial_sort_copy_to_heterogeneous(source, empty) == 0);
+    verify(source[0] == 8 && source[4] == 1);
 }
 
 #[test]

@@ -5482,6 +5482,57 @@ pub fn partial_sort_copy_by_projected(data: &list<T>, output_capacity: i64,
     return partial_sort_by_projected(data, output_capacity, less, projection);
 }
 
+generic<T, Output, Less, Projection>
+fn ranges_partial_sort_copy_to_heterogeneous_core(
+    source: &list<T>, destination: &mut list<Output>, less: Less,
+    projection: Projection) -> i64 {
+    let selected: list<T> = partial_sort_copy_by_projected(
+        source, destination.len(), less, projection);
+    let count: i64 = selected.len();
+    for i in 0..count { destination[i] = selected[i]; }
+    return count;
+}
+
+/// @brief Partial-sort-copy into a destination with a compatible distinct type.
+/// Selects up to destination capacity, returns the count written, and leaves
+/// the source and unused destination suffix unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn partial_sort_copy_to_heterogeneous(
+    source: &list<T>, destination: &mut list<Output>) -> i64 {
+    return ranges_partial_sort_copy_to_heterogeneous_core(
+        source, destination, ranges_default_less, ranges_identity);
+}
+
+/// @brief Heterogeneous-output partial-sort-copy ordered by projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn partial_sort_copy_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>,
+    projection: Projection) -> i64 {
+    return ranges_partial_sort_copy_to_heterogeneous_core(
+        source, destination, ranges_default_less, projection);
+}
+
+/// @brief Heterogeneous-output partial-sort-copy using a custom comparator.
+/// @ingroup algorithm_ranges
+generic<T, Output, Less>
+pub fn partial_sort_copy_to_heterogeneous_by(
+    source: &list<T>, destination: &mut list<Output>, less: Less) -> i64 {
+    return ranges_partial_sort_copy_to_heterogeneous_core(
+        source, destination, less, ranges_identity);
+}
+
+/// @brief Heterogeneous-output partial-sort-copy with comparator and projection.
+/// @ingroup algorithm_ranges
+generic<T, Output, Less, Projection>
+pub fn partial_sort_copy_to_heterogeneous_by_projected(
+    source: &list<T>, destination: &mut list<Output>, less: Less,
+    projection: Projection) -> i64 {
+    return ranges_partial_sort_copy_to_heterogeneous_core(
+        source, destination, less, projection);
+}
+
 /// @brief Select and sort values into an existing destination list.
 /// Writes up to the destination capacity and returns the number written;
 /// the source remains unchanged and any unused destination suffix is kept.
