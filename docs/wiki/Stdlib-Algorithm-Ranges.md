@@ -626,6 +626,13 @@ fn example() {
   projected key matches a value. `replace_projected` and
   `replace_copy_projected` replace elements by projected-key equality; all
   four return a new list and leave the input unchanged.
+- `remove_in_place(&mut data, value)` compacts nonmatching elements into the
+  front of the existing list and returns the logical end index. The list length
+  is unchanged, and elements at or after that index are unspecified. The
+  `remove_if_in_place` form uses a predicate; projected forms support key-based
+  equality and predicates. Each predicate/projection is called once per input
+  element. This mirrors C++20 [`std::ranges::remove`](Stdlib-Module-API) / `remove_if`, whose result
+  marks the retained prefix rather than erasing the container's tail.
 - `remove_by` and `remove_copy_by` exclude every element matching a lookup key
   under a caller-supplied equivalence predicate; both preserve source order.
 - `remove_by_projected` and `remove_copy_by_projected` apply that equivalence

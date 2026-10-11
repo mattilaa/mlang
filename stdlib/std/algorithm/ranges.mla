@@ -5855,6 +5855,76 @@ pub fn remove_projected(data: &list<T>, value: U,
     return out;
 }
 
+generic<T, Predicate, Projection>
+fn ranges_remove_if_in_place_core(data: &mut list<T>, predicate: Predicate,
+                                  projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    var output: i64 = 0;
+    for input in 0..n {
+        let item: T = data[input];
+        if !predicate(projection(item)) {
+            if output != input { data[output] = item; }
+            output = output + 1;
+        }
+    }
+    return output;
+}
+
+/// @brief Compact a mutable list, retaining values not equal to `value`.
+/// Returns the logical end index; values from that index to `len()` are
+/// unspecified and the list length is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn remove_in_place(data: &mut list<T>, value: U) -> i64 {
+    let n: i64 = data.len();
+    var output: i64 = 0;
+    for input in 0..n {
+        let item: T = data[input];
+        if item != value {
+            if output != input { data[output] = item; }
+            output = output + 1;
+        }
+    }
+    return output;
+}
+
+/// @brief Compact a mutable list by rejecting predicate-matching values.
+/// Returns the logical end index; the suffix is unspecified and length stays
+/// unchanged. The predicate is called exactly once per element.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn remove_if_in_place(data: &mut list<T>, predicate: Predicate) -> i64 {
+    return ranges_remove_if_in_place_core(data, predicate, ranges_identity);
+}
+
+/// @brief Remove values whose projected key equals `value`, in place.
+/// Returns the logical end index; the suffix is unspecified.
+/// @ingroup algorithm_ranges
+generic<T, U, Projection>
+pub fn remove_in_place_projected(data: &mut list<T>, value: U,
+                                 projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    var output: i64 = 0;
+    for input in 0..n {
+        let item: T = data[input];
+        if projection(item) != value {
+            if output != input { data[output] = item; }
+            output = output + 1;
+        }
+    }
+    return output;
+}
+
+/// @brief Compact a mutable list using a predicate on projected keys.
+/// Returns the logical end index; the suffix is unspecified and length remains
+/// unchanged. Predicate and projection each run exactly once per element.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn remove_if_in_place_projected(data: &mut list<T>, predicate: Predicate,
+                                    projection: Projection) -> i64 {
+    return ranges_remove_if_in_place_core(data, predicate, projection);
+}
+
 /// @brief Copy the first `n` elements (or all elements when n is larger).
 /// @ingroup algorithm_ranges
 generic<T>
