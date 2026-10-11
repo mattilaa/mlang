@@ -14,6 +14,8 @@ mod std::flat_map;
 use std::flat_map::FlatMap;
 mod std::flat_multimap;
 use std::flat_multimap::FlatMultiMap;
+mod std::flat_multiset;
+use std::flat_multiset::FlatMultiSet;
 
 /// @brief Return first index of a value, or -1 when not found.
 /// Supports any type that can be equality-compared.
@@ -1302,6 +1304,21 @@ pub fn generate_in_place(data: &mut list<T>, generator: Generator) -> i64 {
     return n;
 }
 
+/// @brief Generate values into at most the first `count` slots of a mutable list.
+/// The requested count is clamped to the destination length and to zero.
+/// Returns the number of slots written; no calls are made for an empty prefix.
+/// Bounded-destination counterpart to C++ `std::ranges::generate_n`.
+/// @ingroup algorithm_ranges
+generic<T, Generator>
+pub fn generate_n_in_place(data: &mut list<T>, count: i64,
+                           generator: Generator) -> i64 {
+    let n: i64 = data.len();
+    let limit: i64 = if count < n { count } else { n };
+    if limit <= 0 { return 0; }
+    for i in 0..limit { data[i] = generator(); }
+    return limit;
+}
+
 /// @brief Return a copy of `data` filled with `value` at every position.
 /// The input length acts as the output range size; the source is unchanged.
 /// Eager-list counterpart to C++20 `std::ranges::fill`.
@@ -1588,6 +1605,44 @@ pub fn to_flat_set(data: &list<T>) -> FlatSet<T> {
     return converted;
 }
 
+/// @brief Materialize projected keys as a sorted, unique `FlatSet`.
+/// The projection is evaluated once per source element and the input is
+/// unchanged. This fuses a transform with C++23-style range materialization.
+/// @ingroup algorithm_ranges
+generic<T, Key, Projection>
+pub fn to_flat_set_projected(data: &list<T>, projection: Projection)
+    -> FlatSet<Key> {
+    var converted: FlatSet<Key> = FlatSet<Key>::new();
+    let n: i64 = data.len();
+    for i in 0..n { converted.insert(projection(data[i])); }
+    return converted;
+}
+
+/// @brief Materialize a range as a sorted `FlatMultiSet`, retaining duplicates.
+/// Equivalent values retain their source order within the sorted key group.
+/// C++23 `std::ranges::to` adapted to Mlang's flat multiset container.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn to_flat_multiset(data: &list<T>) -> FlatMultiSet<T> {
+    var converted: FlatMultiSet<T> = FlatMultiSet<T>::new();
+    let n: i64 = data.len();
+    for i in 0..n { converted.insert(data[i]); }
+    return converted;
+}
+
+/// @brief Materialize projected keys as a sorted `FlatMultiSet`.
+/// Duplicate projected keys are retained in source order within each group;
+/// the projection is evaluated once per input element.
+/// @ingroup algorithm_ranges
+generic<T, Key, Projection>
+pub fn to_flat_multiset_projected(data: &list<T>, projection: Projection)
+    -> FlatMultiSet<Key> {
+    var converted: FlatMultiSet<Key> = FlatMultiSet<Key>::new();
+    let n: i64 = data.len();
+    for i in 0..n { converted.insert(projection(data[i])); }
+    return converted;
+}
+
 /// @brief Materialize key/value pairs as a sorted, unique `FlatMap`.
 /// Pairs are `(key, value)` tuples. If the input contains equivalent keys, the
 /// last pair in source order supplies the retained value.
@@ -1599,6 +1654,22 @@ pub fn to_flat_map(data: &list<tuple<K, V>>) -> FlatMap<K, V> {
     let n: i64 = data.len();
     for i in 0..n {
         let entry: tuple<K, V> = data[i];
+        converted.insert(entry.0, entry.1);
+    }
+    return converted;
+}
+
+/// @brief Materialize projected key/value pairs as a sorted `FlatMap`.
+/// The projection runs once per source element. Repeated equivalent keys keep
+/// the value from the last source element, matching `to_flat_map`.
+/// @ingroup algorithm_ranges
+generic<T, K, V, Projection>
+pub fn to_flat_map_projected(data: &list<T>, projection: Projection)
+    -> FlatMap<K, V> {
+    var converted: FlatMap<K, V> = FlatMap<K, V>::new();
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<K, V> = projection(data[i]);
         converted.insert(entry.0, entry.1);
     }
     return converted;
@@ -1620,6 +1691,21 @@ pub fn to_flat_multimap(data: &list<tuple<K, V>>) -> FlatMultiMap<K, V> {
     return converted;
 }
 
+/// @brief Materialize projected pairs as a sorted `FlatMultiMap`.
+/// Duplicate keys are retained and projection runs once per source element.
+/// @ingroup algorithm_ranges
+generic<T, K, V, Projection>
+pub fn to_flat_multimap_projected(data: &list<T>, projection: Projection)
+    -> FlatMultiMap<K, V> {
+    var converted: FlatMultiMap<K, V> = FlatMultiMap<K, V>::new();
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<K, V> = projection(data[i]);
+        converted.insert(entry.0, entry.1);
+    }
+    return converted;
+}
+
 /// @brief Materialize key/value tuples into Mlang's built-in map.
 /// Iteration order is unspecified. If equivalent keys repeat, the last pair
 /// in source order supplies the stored value.
@@ -1631,6 +1717,20 @@ pub fn to_map(data: &list<tuple<K, V>>) -> map<K, V> {
     let n: i64 = data.len();
     for i in 0..n {
         let entry: tuple<K, V> = data[i];
+        converted[entry.0] = entry.1;
+    }
+    return converted;
+}
+
+/// @brief Materialize projected pairs into Mlang's built-in map.
+/// As with `to_map`, the last source element for a repeated key wins.
+/// @ingroup algorithm_ranges
+generic<T, K, V, Projection>
+pub fn to_map_projected(data: &list<T>, projection: Projection) -> map<K, V> {
+    var converted: map<K, V> = {};
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<K, V> = projection(data[i]);
         converted[entry.0] = entry.1;
     }
     return converted;
@@ -1660,6 +1760,24 @@ pub fn swap_ranges(left: &list<T>, right: &list<T>)
         swapped_right.push(right[i]);
     }
     return (swapped_left, swapped_right);
+}
+
+/// @brief Swap corresponding elements of two mutable lists in place.
+/// Only the common prefix is exchanged; unmatched tails are untouched.
+/// Returns the number of positions swapped, matching the consumed range length
+/// of C++20 `std::ranges::swap_ranges` in this eager-list API.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn swap_ranges_in_place(left: &mut list<T>, right: &mut list<T>) -> i64 {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let common_len: i64 = if left_len < right_len { left_len } else { right_len };
+    for i in 0..common_len {
+        let temporary: T = left[i];
+        left[i] = right[i];
+        right[i] = temporary;
+    }
+    return common_len;
 }
 
 /// @brief Return a copied list containing elements accepted by `predicate`.
@@ -2862,6 +2980,22 @@ pub fn sample(data: &list<T>, count: i64, choose_index: ChooseIndex) -> list<T> 
     return sampled;
 }
 
+/// @brief Sample into a caller-provided bounded destination.
+/// Selects at most `count` values, the destination capacity, and the source
+/// length; returns the number written. The source and unwritten destination
+/// suffix remain unchanged.
+/// @ingroup algorithm_ranges
+generic<T, ChooseIndex>
+pub fn sample_to(source: &list<T>, destination: &mut list<T>, count: i64,
+                 choose_index: ChooseIndex) -> i64 {
+    let capacity: i64 = destination.len();
+    let mut_count: i64 = if count < capacity { count } else { capacity };
+    let sampled: list<T> = sample(source, mut_count, choose_index);
+    let written: i64 = sampled.len();
+    for i in 0..written { destination[i] = sampled[i]; }
+    return written;
+}
+
 /// @brief Return a shuffled copy using a bounded random-index selector.
 /// `choose_index(upper_bound)` must return an index in
 /// `[0, upper_bound)`. The eager implementation leaves the source unchanged;
@@ -2896,6 +3030,33 @@ pub fn shuffle(data: &list<T>, choose_index: ChooseIndex) -> list<T> {
         remaining = next_remaining;
     }
     return shuffled;
+}
+
+/// @brief Shuffle a mutable list in place using Fisher-Yates.
+/// `choose_index(upper_bound)` must return an index in `[0, upper_bound)`;
+/// out-of-range results are clamped. Returns the number of swaps performed.
+/// Lists shorter than two elements do not invoke the selector. This is the
+/// eager-list counterpart to C++20 `std::ranges::shuffle`.
+/// @ingroup algorithm_ranges
+generic<T, ChooseIndex>
+pub fn shuffle_in_place(data: &mut list<T>, choose_index: ChooseIndex) -> i64 {
+    let n: i64 = data.len();
+    var i: i64 = n - 1;
+    var swaps: i64 = 0;
+    while i > 0 {
+        let bound: i64 = i + 1;
+        var selected: i64 = choose_index(bound);
+        if selected < 0 { selected = 0; }
+        if selected >= bound { selected = bound - 1; }
+        if selected != i {
+            let temporary: T = data[i];
+            data[i] = data[selected];
+            data[selected] = temporary;
+            swaps = swaps + 1;
+        }
+        i = i - 1;
+    }
+    return swaps;
 }
 
 /// @brief Copy elements unequal to `value` into a new list.
@@ -5321,6 +5482,57 @@ pub fn partial_sort_copy_by_projected(data: &list<T>, output_capacity: i64,
     return partial_sort_by_projected(data, output_capacity, less, projection);
 }
 
+generic<T, Output, Less, Projection>
+fn ranges_partial_sort_copy_to_heterogeneous_core(
+    source: &list<T>, destination: &mut list<Output>, less: Less,
+    projection: Projection) -> i64 {
+    let selected: list<T> = partial_sort_copy_by_projected(
+        source, destination.len(), less, projection);
+    let count: i64 = selected.len();
+    for i in 0..count { destination[i] = selected[i]; }
+    return count;
+}
+
+/// @brief Partial-sort-copy into a destination with a compatible distinct type.
+/// Selects up to destination capacity, returns the count written, and leaves
+/// the source and unused destination suffix unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn partial_sort_copy_to_heterogeneous(
+    source: &list<T>, destination: &mut list<Output>) -> i64 {
+    return ranges_partial_sort_copy_to_heterogeneous_core(
+        source, destination, ranges_default_less, ranges_identity);
+}
+
+/// @brief Heterogeneous-output partial-sort-copy ordered by projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn partial_sort_copy_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>,
+    projection: Projection) -> i64 {
+    return ranges_partial_sort_copy_to_heterogeneous_core(
+        source, destination, ranges_default_less, projection);
+}
+
+/// @brief Heterogeneous-output partial-sort-copy using a custom comparator.
+/// @ingroup algorithm_ranges
+generic<T, Output, Less>
+pub fn partial_sort_copy_to_heterogeneous_by(
+    source: &list<T>, destination: &mut list<Output>, less: Less) -> i64 {
+    return ranges_partial_sort_copy_to_heterogeneous_core(
+        source, destination, less, ranges_identity);
+}
+
+/// @brief Heterogeneous-output partial-sort-copy with comparator and projection.
+/// @ingroup algorithm_ranges
+generic<T, Output, Less, Projection>
+pub fn partial_sort_copy_to_heterogeneous_by_projected(
+    source: &list<T>, destination: &mut list<Output>, less: Less,
+    projection: Projection) -> i64 {
+    return ranges_partial_sort_copy_to_heterogeneous_core(
+        source, destination, less, projection);
+}
+
 /// @brief Select and sort values into an existing destination list.
 /// Writes up to the destination capacity and returns the number written;
 /// the source remains unchanged and any unused destination suffix is kept.
@@ -6890,6 +7102,97 @@ generic<T, Predicate, Projection>
 pub fn remove_if_in_place_projected(data: &mut list<T>, predicate: Predicate,
                                     projection: Projection) -> i64 {
     return ranges_remove_if_in_place_core(data, predicate, projection);
+}
+
+/// @brief Erase every element equal to `value` from a mutable list.
+/// Unlike `remove_in_place`, this shortens the list and returns the number
+/// erased, matching C++20 `std::erase` container semantics.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn erase(data: &mut list<T>, value: U) -> i64 {
+    var retained: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let item: T = data[i];
+        if item != value { retained.push(item); }
+    }
+    let erased: i64 = n - retained.len();
+    data.clear();
+    data.extend(retained);
+    return erased;
+}
+
+/// @brief Erase values equivalent to `value` under a custom predicate.
+/// The retained list order is preserved and the number erased is returned.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn erase_by(data: &mut list<T>, value: U, equivalent: Equivalent) -> i64 {
+    var retained: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let item: T = data[i];
+        if !equivalent(item, value) { retained.push(item); }
+    }
+    let erased: i64 = n - retained.len();
+    data.clear();
+    data.extend(retained);
+    return erased;
+}
+
+/// @brief Erase projected keys equivalent to `value` under a custom predicate.
+/// Each projection and equivalence test runs once per original element.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, Projection>
+pub fn erase_by_projected(data: &mut list<T>, value: U,
+                          equivalent: Equivalent, projection: Projection)
+    -> i64 {
+    var retained: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let item: T = data[i];
+        if !equivalent(projection(item), value) { retained.push(item); }
+    }
+    let erased: i64 = n - retained.len();
+    data.clear();
+    data.extend(retained);
+    return erased;
+}
+
+/// @brief Erase every predicate-matching element from a mutable list.
+/// Returns the number erased and shortens the list, matching C++20
+/// `std::erase_if` container semantics. The predicate runs once per element.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn erase_if(data: &mut list<T>, predicate: Predicate) -> i64 {
+    var retained: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let item: T = data[i];
+        if !predicate(item) { retained.push(item); }
+    }
+    let erased: i64 = n - retained.len();
+    data.clear();
+    data.extend(retained);
+    return erased;
+}
+
+/// @brief Erase elements accepted by a predicate over projected keys.
+/// Projection and predicate each run once per element; retained elements and
+/// their order are preserved.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn erase_if_projected(data: &mut list<T>, predicate: Predicate,
+                          projection: Projection) -> i64 {
+    var retained: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let item: T = data[i];
+        if !predicate(projection(item)) { retained.push(item); }
+    }
+    let erased: i64 = n - retained.len();
+    data.clear();
+    data.extend(retained);
+    return erased;
 }
 
 /// @brief Copy the first `n` elements (or all elements when n is larger).
@@ -9438,6 +9741,62 @@ fn ranges_set_operation_to_core(
     return (i, j, written);
 }
 
+generic<Left, Right, Output, Less, LeftProjection, RightProjection>
+fn ranges_set_operation_to_heterogeneous_core(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    less: Less, left_projection: LeftProjection,
+    right_projection: RightProjection, operation: i32)
+    -> tuple<i64, i64, i64> {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let output_len: i64 = destination.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    var written: i64 = 0;
+    while i < left_len && j < right_len {
+        let left_key = left_projection(left[i]);
+        let right_key = right_projection(right[j]);
+        if less(left_key, right_key) {
+            if operation == 0 || operation == 2 || operation == 3 {
+                if written >= output_len { break; }
+                destination[written] = left[i];
+                written = written + 1;
+            }
+            i = i + 1;
+        } else if less(right_key, left_key) {
+            if operation == 0 || operation == 3 {
+                if written >= output_len { break; }
+                destination[written] = right[j];
+                written = written + 1;
+            }
+            j = j + 1;
+        } else {
+            if operation == 0 || operation == 1 {
+                if written >= output_len { break; }
+                destination[written] = left[i];
+                written = written + 1;
+            }
+            i = i + 1;
+            j = j + 1;
+        }
+    }
+    if operation == 0 || operation == 2 || operation == 3 {
+        while i < left_len && written < output_len {
+            destination[written] = left[i];
+            i = i + 1;
+            written = written + 1;
+        }
+    }
+    if operation == 0 || operation == 3 {
+        while j < right_len && written < output_len {
+            destination[written] = right[j];
+            j = j + 1;
+            written = written + 1;
+        }
+    }
+    return (i, j, written);
+}
+
 /// @brief Write sorted union into a bounded destination.
 /// Operation aliases use C++20 `ranges::set_union` multiplicity rules.
 /// Returns `(left_consumed, right_consumed, written)`.
@@ -9592,6 +9951,164 @@ pub fn symmetric_difference_sorted_to_by_projected(
     less: Less, projection: Projection) -> tuple<i64, i64, i64> {
     return ranges_set_operation_to_core(left, right, destination,
         less, projection, 3);
+}
+
+/// @brief Write heterogeneous sorted union to a bounded destination.
+/// Inputs may have different element types; output must accept values from
+/// both. The `_projected` and `_by` forms add independent keys or ordering.
+/// @ingroup algorithm_ranges
+generic<Left, Right, Output>
+pub fn union_sorted_to_heterogeneous(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>)
+    -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, ranges_heterogeneous_less,
+        ranges_identity, ranges_identity, 0);
+}
+
+generic<Left, Right, Output, LeftProjection, RightProjection>
+pub fn union_sorted_to_heterogeneous_projected(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    left_projection: LeftProjection, right_projection: RightProjection)
+    -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, ranges_heterogeneous_less,
+        left_projection, right_projection, 0);
+}
+
+generic<Left, Right, Output, Less>
+pub fn union_sorted_to_heterogeneous_by(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    less: Less) -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, less, ranges_identity, ranges_identity, 0);
+}
+
+generic<Left, Right, Output, Less, LeftProjection, RightProjection>
+pub fn union_sorted_to_heterogeneous_by_projected(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    less: Less, left_projection: LeftProjection,
+    right_projection: RightProjection) -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, less, left_projection, right_projection, 0);
+}
+
+/// @brief Write heterogeneous sorted intersection to bounded output.
+/// Equal keys emit the left-side representative and consume one item from each
+/// input, preserving the minimum multiplicity.
+/// @ingroup algorithm_ranges
+generic<Left, Right, Output>
+pub fn intersection_sorted_to_heterogeneous(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>)
+    -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, ranges_heterogeneous_less,
+        ranges_identity, ranges_identity, 1);
+}
+
+generic<Left, Right, Output, LeftProjection, RightProjection>
+pub fn intersection_sorted_to_heterogeneous_projected(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    left_projection: LeftProjection, right_projection: RightProjection)
+    -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, ranges_heterogeneous_less,
+        left_projection, right_projection, 1);
+}
+
+generic<Left, Right, Output, Less>
+pub fn intersection_sorted_to_heterogeneous_by(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    less: Less) -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, less, ranges_identity, ranges_identity, 1);
+}
+
+generic<Left, Right, Output, Less, LeftProjection, RightProjection>
+pub fn intersection_sorted_to_heterogeneous_by_projected(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    less: Less, left_projection: LeftProjection,
+    right_projection: RightProjection) -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, less, left_projection, right_projection, 1);
+}
+
+/// @brief Write heterogeneous sorted left-minus-right difference.
+/// Values appearing only on the left are copied to bounded output.
+/// @ingroup algorithm_ranges
+generic<Left, Right, Output>
+pub fn difference_sorted_to_heterogeneous(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>)
+    -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, ranges_heterogeneous_less,
+        ranges_identity, ranges_identity, 2);
+}
+
+generic<Left, Right, Output, LeftProjection, RightProjection>
+pub fn difference_sorted_to_heterogeneous_projected(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    left_projection: LeftProjection, right_projection: RightProjection)
+    -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, ranges_heterogeneous_less,
+        left_projection, right_projection, 2);
+}
+
+generic<Left, Right, Output, Less>
+pub fn difference_sorted_to_heterogeneous_by(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    less: Less) -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, less, ranges_identity, ranges_identity, 2);
+}
+
+generic<Left, Right, Output, Less, LeftProjection, RightProjection>
+pub fn difference_sorted_to_heterogeneous_by_projected(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    less: Less, left_projection: LeftProjection,
+    right_projection: RightProjection) -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, less, left_projection, right_projection, 2);
+}
+
+/// @brief Write heterogeneous sorted symmetric difference to bounded output.
+/// Keys present in only one range are retained, including multiplicity excess.
+/// @ingroup algorithm_ranges
+generic<Left, Right, Output>
+pub fn symmetric_difference_sorted_to_heterogeneous(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>)
+    -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, ranges_heterogeneous_less,
+        ranges_identity, ranges_identity, 3);
+}
+
+generic<Left, Right, Output, LeftProjection, RightProjection>
+pub fn symmetric_difference_sorted_to_heterogeneous_projected(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    left_projection: LeftProjection, right_projection: RightProjection)
+    -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, ranges_heterogeneous_less,
+        left_projection, right_projection, 3);
+}
+
+generic<Left, Right, Output, Less>
+pub fn symmetric_difference_sorted_to_heterogeneous_by(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    less: Less) -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, less, ranges_identity, ranges_identity, 3);
+}
+
+generic<Left, Right, Output, Less, LeftProjection, RightProjection>
+pub fn symmetric_difference_sorted_to_heterogeneous_by_projected(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    less: Less, left_projection: LeftProjection,
+    right_projection: RightProjection) -> tuple<i64, i64, i64> {
+    return ranges_set_operation_to_heterogeneous_core(
+        left, right, destination, less, left_projection, right_projection, 3);
 }
 
 /// @brief Return the sorted multiset union of two sorted ranges.
@@ -9935,6 +10452,98 @@ fn ranges_merge_to_core(left: &list<T>, right: &list<T>,
         written = written + 1;
     }
     return (i, j, written);
+}
+
+generic<Left, Right>
+fn ranges_heterogeneous_less(left: Left, right: Right) -> bool {
+    return left < right;
+}
+
+generic<Left, Right, Output, Less, LeftProjection, RightProjection>
+fn ranges_merge_to_heterogeneous_core(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    less: Less, left_projection: LeftProjection,
+    right_projection: RightProjection) -> tuple<i64, i64, i64> {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let output_len: i64 = destination.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    var written: i64 = 0;
+    while written < output_len && i < left_len && j < right_len {
+        if less(right_projection(right[j]), left_projection(left[i])) {
+            destination[written] = right[j];
+            j = j + 1;
+        } else {
+            destination[written] = left[i];
+            i = i + 1;
+        }
+        written = written + 1;
+    }
+    while written < output_len && i < left_len {
+        destination[written] = left[i];
+        i = i + 1;
+        written = written + 1;
+    }
+    while written < output_len && j < right_len {
+        destination[written] = right[j];
+        j = j + 1;
+        written = written + 1;
+    }
+    return (i, j, written);
+}
+
+/// @brief Merge differently typed sorted inputs into bounded output.
+/// Stable ties prefer the left range; returns `(left_consumed, right_consumed,
+/// written)`. Cross-type ordering must be available through `<`.
+/// C++20 `std::ranges::merge` heterogeneous-range adaptation.
+/// @ingroup algorithm_ranges
+generic<Left, Right, Output>
+pub fn merge_to_heterogeneous(left: &list<Left>, right: &list<Right>,
+                              destination: &mut list<Output>)
+    -> tuple<i64, i64, i64> {
+    return ranges_merge_to_heterogeneous_core(
+        left, right, destination, ranges_heterogeneous_less,
+        ranges_identity, ranges_identity);
+}
+
+/// @brief Merge heterogeneous ranges ordered by separate projected keys.
+/// The default cross-type `<` relation orders the projections; ties prefer
+/// the left input.
+/// @ingroup algorithm_ranges
+generic<Left, Right, Output, LeftProjection, RightProjection>
+pub fn merge_to_heterogeneous_projected(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    left_projection: LeftProjection, right_projection: RightProjection)
+    -> tuple<i64, i64, i64> {
+    return ranges_merge_to_heterogeneous_core(
+        left, right, destination, ranges_heterogeneous_less,
+        left_projection, right_projection);
+}
+
+/// @brief Merge heterogeneous ranges using a custom cross-type comparator.
+/// The comparator is tested as `less(right_value, left_value)`; ties prefer
+/// the left input.
+/// @ingroup algorithm_ranges
+generic<Left, Right, Output, Less>
+pub fn merge_to_heterogeneous_by(left: &list<Left>, right: &list<Right>,
+                                 destination: &mut list<Output>, less: Less)
+    -> tuple<i64, i64, i64> {
+    return ranges_merge_to_heterogeneous_core(
+        left, right, destination, less, ranges_identity, ranges_identity);
+}
+
+/// @brief Merge projected heterogeneous ranges with a custom comparator.
+/// Comparator arguments are `(projected_right, projected_left)`; equivalent
+/// values from the left input remain first.
+/// @ingroup algorithm_ranges
+generic<Left, Right, Output, Less, LeftProjection, RightProjection>
+pub fn merge_to_heterogeneous_by_projected(
+    left: &list<Left>, right: &list<Right>, destination: &mut list<Output>,
+    less: Less, left_projection: LeftProjection,
+    right_projection: RightProjection) -> tuple<i64, i64, i64> {
+    return ranges_merge_to_heterogeneous_core(
+        left, right, destination, less, left_projection, right_projection);
 }
 
 /// @brief Merge sorted ranges into an existing destination using ascending order.

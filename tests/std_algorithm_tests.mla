@@ -259,6 +259,10 @@ use std::algorithm::ranges::partial_sort_copy_to;
 use std::algorithm::ranges::partial_sort_copy_to_projected;
 use std::algorithm::ranges::partial_sort_copy_to_by;
 use std::algorithm::ranges::partial_sort_copy_to_by_projected;
+use std::algorithm::ranges::partial_sort_copy_to_heterogeneous;
+use std::algorithm::ranges::partial_sort_copy_to_heterogeneous_projected;
+use std::algorithm::ranges::partial_sort_copy_to_heterogeneous_by;
+use std::algorithm::ranges::partial_sort_copy_to_heterogeneous_by_projected;
 use std::algorithm::ranges::nth_element;
 use std::algorithm::ranges::nth_element_by;
 use std::algorithm::ranges::nth_element_projected;
@@ -283,6 +287,10 @@ use std::algorithm::ranges::merge_to;
 use std::algorithm::ranges::merge_to_projected;
 use std::algorithm::ranges::merge_to_by;
 use std::algorithm::ranges::merge_to_by_projected;
+use std::algorithm::ranges::merge_to_heterogeneous;
+use std::algorithm::ranges::merge_to_heterogeneous_projected;
+use std::algorithm::ranges::merge_to_heterogeneous_by;
+use std::algorithm::ranges::merge_to_heterogeneous_by_projected;
 use std::algorithm::ranges::inplace_merge;
 use std::algorithm::ranges::inplace_merge_by;
 use std::algorithm::ranges::inplace_merge_projected;
@@ -315,6 +323,22 @@ use std::algorithm::ranges::symmetric_difference_sorted_to;
 use std::algorithm::ranges::symmetric_difference_sorted_to_projected;
 use std::algorithm::ranges::symmetric_difference_sorted_to_by;
 use std::algorithm::ranges::symmetric_difference_sorted_to_by_projected;
+use std::algorithm::ranges::union_sorted_to_heterogeneous;
+use std::algorithm::ranges::union_sorted_to_heterogeneous_projected;
+use std::algorithm::ranges::union_sorted_to_heterogeneous_by;
+use std::algorithm::ranges::union_sorted_to_heterogeneous_by_projected;
+use std::algorithm::ranges::intersection_sorted_to_heterogeneous;
+use std::algorithm::ranges::intersection_sorted_to_heterogeneous_projected;
+use std::algorithm::ranges::intersection_sorted_to_heterogeneous_by;
+use std::algorithm::ranges::intersection_sorted_to_heterogeneous_by_projected;
+use std::algorithm::ranges::difference_sorted_to_heterogeneous;
+use std::algorithm::ranges::difference_sorted_to_heterogeneous_projected;
+use std::algorithm::ranges::difference_sorted_to_heterogeneous_by;
+use std::algorithm::ranges::difference_sorted_to_heterogeneous_by_projected;
+use std::algorithm::ranges::symmetric_difference_sorted_to_heterogeneous;
+use std::algorithm::ranges::symmetric_difference_sorted_to_heterogeneous_projected;
+use std::algorithm::ranges::symmetric_difference_sorted_to_heterogeneous_by;
+use std::algorithm::ranges::symmetric_difference_sorted_to_heterogeneous_by_projected;
 use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::lower_bound_projected;
 use std::algorithm::ranges::lower_bound_by_projected;
@@ -445,6 +469,7 @@ use std::algorithm::ranges::for_each_n_projected_count;
 use std::algorithm::ranges::generate_n;
 use std::algorithm::ranges::generate;
 use std::algorithm::ranges::generate_in_place;
+use std::algorithm::ranges::generate_n_in_place;
 use std::algorithm::ranges::fill;
 use std::algorithm::ranges::fill_in_place;
 use std::algorithm::ranges::fill_n_in_place;
@@ -462,13 +487,21 @@ use std::algorithm::ranges::copy_backward_to;
 use std::algorithm::ranges::copy_backward_to_projected;
 use std::algorithm::ranges::to_list;
 use std::algorithm::ranges::to_flat_set;
+use std::algorithm::ranges::to_flat_set_projected;
+use std::algorithm::ranges::to_flat_multiset;
+use std::algorithm::ranges::to_flat_multiset_projected;
 use std::algorithm::ranges::to_flat_map;
+use std::algorithm::ranges::to_flat_map_projected;
 use std::algorithm::ranges::to_flat_multimap;
+use std::algorithm::ranges::to_flat_multimap_projected;
 use std::algorithm::ranges::to_map as ranges_to_map;
+use std::algorithm::ranges::to_map_projected as ranges_to_map_projected;
 use std::flat_map::FlatMap;
 use std::flat_multimap::FlatMultiMap;
+use std::flat_multiset::FlatMultiSet;
 use std::flat_set::FlatSet;
 use std::algorithm::ranges::swap_ranges;
+use std::algorithm::ranges::swap_ranges_in_place;
 use std::algorithm::ranges::filter;
 use std::algorithm::ranges::copy_if_projected;
 use std::algorithm::ranges::is_partitioned;
@@ -497,11 +530,18 @@ use std::algorithm::ranges::remove_in_place;
 use std::algorithm::ranges::remove_if_in_place;
 use std::algorithm::ranges::remove_in_place_projected;
 use std::algorithm::ranges::remove_if_in_place_projected;
+use std::algorithm::ranges::erase;
+use std::algorithm::ranges::erase_by;
+use std::algorithm::ranges::erase_by_projected;
+use std::algorithm::ranges::erase_if;
+use std::algorithm::ranges::erase_if_projected;
 use std::algorithm::ranges::copy_if;
 use std::algorithm::ranges::copy_if_to;
 use std::algorithm::ranges::copy_if_to_projected;
 use std::algorithm::ranges::sample as ranges_sample;
+use std::algorithm::ranges::sample_to as ranges_sample_to;
 use std::algorithm::ranges::shuffle as ranges_shuffle;
+use std::algorithm::ranges::shuffle_in_place as ranges_shuffle_in_place;
 use std::algorithm::ranges::remove_copy;
 use std::algorithm::ranges::remove_copy_by;
 use std::algorithm::ranges::remove_copy_by_projected;
@@ -2167,6 +2207,37 @@ fn test_algorithm_ranges_partial_sort_copy_to() {
 }
 
 #[test]
+fn test_algorithm_ranges_partial_sort_copy_to_heterogeneous_output() {
+    let source: list<i32> = [8, 5, 2, 9, 1, 7, 3];
+    var destination: list<i64> = [0, 0, 0, 99];
+    verify(partial_sort_copy_to_heterogeneous(source, destination) == 3);
+    verify(destination[0] == 1 && destination[1] == 2 &&
+           destination[2] == 3 && destination[3] == 99);
+
+    let half = |value: i32| { return value / 2; };
+    var projected: list<i64> = [0, 0, 0];
+    verify(partial_sort_copy_to_heterogeneous_projected(
+        source, projected, half) == 3);
+    verify(projected[0] == 1 && projected[1] == 2 && projected[2] == 3);
+
+    let greater = |left: i32, right: i32| { return left > right; };
+    var descending: list<i64> = [0, 0];
+    verify(partial_sort_copy_to_heterogeneous_by(
+        source, descending, greater) == 2);
+    verify(descending[0] == 9 && descending[1] == 8);
+
+    let tens = |value: i32| { return value / 10; };
+    var combined: list<i64> = [0, 0, 0];
+    verify(partial_sort_copy_to_heterogeneous_by_projected(
+        source, combined, greater, tens) == 3);
+    verify(combined[0] == 9 && combined[1] == 8 && combined[2] == 7);
+
+    var empty: list<i64> = [];
+    verify(partial_sort_copy_to_heterogeneous(source, empty) == 0);
+    verify(source[0] == 8 && source[4] == 1);
+}
+
+#[test]
 fn test_algorithm_ranges_nth_element() {
     let values: list<i32> = [7, 2, 9, 1, 5, 3];
     let partitioned: list<i32> = nth_element(values, 2);
@@ -2354,6 +2425,57 @@ fn test_algorithm_ranges_merge_to_bounded_output_and_stability() {
            projected_descending[2] == 28 &&
            projected_descending[3] == 22 &&
            projected_descending[4] == 27);
+}
+
+#[test]
+fn test_algorithm_ranges_merge_to_heterogeneous_inputs() {
+    let left: list<i32> = [1, 4, 7];
+    let right: list<i64> = [2, 4, 8];
+    var output: list<i64> = [0, 0, 0, 0, 0, 0];
+    let progress: tuple<i64, i64, i64> =
+        merge_to_heterogeneous(left, right, output);
+    verify(progress.0 == 3 && progress.1 == 3 && progress.2 == 6);
+    verify(output[0] == 1 && output[1] == 2 && output[2] == 4 &&
+           output[3] == 4 && output[4] == 7 && output[5] == 8);
+
+    let left_projection = |value: i32| { return i64(value / 10); };
+    let right_projection = |value: i64| { return value / 10; };
+    let projected_left: list<i32> = [11, 21, 31];
+    let projected_right: list<i64> = [12, 22, 32];
+    var projected_output: list<i64> = [0, 0, 0, 0, 0, 0];
+    let projected_progress: tuple<i64, i64, i64> =
+        merge_to_heterogeneous_projected(
+            projected_left, projected_right, projected_output,
+            left_projection, right_projection);
+    verify(projected_progress.0 == 3 && projected_progress.1 == 3 &&
+           projected_progress.2 == 6);
+    verify(projected_output[0] == 11 && projected_output[1] == 12 &&
+           projected_output[2] == 21 && projected_output[3] == 22 &&
+           projected_output[4] == 31 && projected_output[5] == 32);
+
+    let right_less = |right_value: i64, left_value: i32| {
+        return right_value < i64(left_value);
+    };
+    var limited: list<i64> = [0, 0, 0];
+    let limited_progress: tuple<i64, i64, i64> =
+        merge_to_heterogeneous_by(left, right, limited, right_less);
+    verify(limited_progress.0 == 2 && limited_progress.1 == 1 &&
+           limited_progress.2 == 3);
+    verify(limited[0] == 1 && limited[1] == 2 && limited[2] == 4);
+
+    let projected_right_less = |right_key: i64, left_key: i64| {
+        return right_key < left_key;
+    };
+    var projected_limited: list<i64> = [0, 0, 0, 0];
+    let projected_limited_progress: tuple<i64, i64, i64> =
+        merge_to_heterogeneous_by_projected(
+            projected_left, projected_right, projected_limited,
+            projected_right_less, left_projection, right_projection);
+    verify(projected_limited_progress.0 == 2 &&
+           projected_limited_progress.1 == 2 &&
+           projected_limited_progress.2 == 4);
+    verify(projected_limited[0] == 11 && projected_limited[1] == 12 &&
+           projected_limited[2] == 21 && projected_limited[3] == 22);
 }
 
 #[test]
@@ -2597,6 +2719,91 @@ fn test_algorithm_ranges_bounded_set_operations() {
     difference_sorted_to_by_projected([39, 28, 22], [35, 27, 12],
         combined_difference, greater, tens);
     verify(combined_difference[0] == 22);
+}
+
+#[test]
+fn test_algorithm_ranges_heterogeneous_bounded_set_operations() {
+    let left: list<i32> = [1, 2, 2, 4];
+    let right: list<i64> = [2, 3, 4, 4];
+    let less = |a: i64, b: i64| { return a < b; };
+    let left_key = |value: i32| { return i64(value); };
+    let right_key = |value: i64| { return value; };
+
+    var union: list<i64> = [0, 0, 0, 0, 0, 0];
+    let union_progress: tuple<i64, i64, i64> =
+        union_sorted_to_heterogeneous(left, right, union);
+    verify(union_progress.0 == 4 && union_progress.1 == 4 &&
+           union_progress.2 == 6);
+    verify(union[0] == 1 && union[1] == 2 && union[2] == 2 &&
+           union[3] == 3 && union[4] == 4 && union[5] == 4);
+    var short_union: list<i64> = [0, 0];
+    let short_progress: tuple<i64, i64, i64> =
+        union_sorted_to_heterogeneous(left, right, short_union);
+    verify(short_progress.0 == 2 && short_progress.1 == 1 &&
+           short_progress.2 == 2 && short_union[0] == 1 &&
+           short_union[1] == 2);
+
+    var projected_union: list<i64> = [0, 0, 0, 0, 0, 0];
+    verify(union_sorted_to_heterogeneous_projected(
+        left, right, projected_union, left_key, right_key).2 == 6);
+    var by_union: list<i64> = [0, 0, 0, 0, 0, 0];
+    verify(union_sorted_to_heterogeneous_by(
+        left, right, by_union, less).2 == 6);
+    var by_projected_union: list<i64> = [0, 0, 0, 0, 0, 0];
+    verify(union_sorted_to_heterogeneous_by_projected(
+        left, right, by_projected_union, less, left_key, right_key).2 == 6);
+
+    var intersection: list<i64> = [0, 0];
+    let intersection_progress: tuple<i64, i64, i64> =
+        intersection_sorted_to_heterogeneous(left, right, intersection);
+    verify(intersection_progress.0 == 4 && intersection_progress.1 == 3 &&
+           intersection_progress.2 == 2);
+    verify(intersection[0] == 2 && intersection[1] == 4);
+    var projected_intersection: list<i64> = [0, 0];
+    verify(intersection_sorted_to_heterogeneous_projected(
+        left, right, projected_intersection, left_key, right_key).2 == 2);
+    var by_intersection: list<i64> = [0, 0];
+    verify(intersection_sorted_to_heterogeneous_by(
+        left, right, by_intersection, less).2 == 2);
+    var by_projected_intersection: list<i64> = [0, 0];
+    verify(intersection_sorted_to_heterogeneous_by_projected(
+        left, right, by_projected_intersection,
+        less, left_key, right_key).2 == 2);
+
+    var difference: list<i64> = [0, 0];
+    let difference_progress: tuple<i64, i64, i64> =
+        difference_sorted_to_heterogeneous(left, right, difference);
+    verify(difference_progress.0 == 4 && difference_progress.1 == 4 &&
+           difference_progress.2 == 2);
+    verify(difference[0] == 1 && difference[1] == 2);
+    var projected_difference: list<i64> = [0, 0];
+    verify(difference_sorted_to_heterogeneous_projected(
+        left, right, projected_difference, left_key, right_key).2 == 2);
+    var by_difference: list<i64> = [0, 0];
+    verify(difference_sorted_to_heterogeneous_by(
+        left, right, by_difference, less).2 == 2);
+    var by_projected_difference: list<i64> = [0, 0];
+    verify(difference_sorted_to_heterogeneous_by_projected(
+        left, right, by_projected_difference,
+        less, left_key, right_key).2 == 2);
+
+    var symmetric: list<i64> = [0, 0, 0, 0];
+    let symmetric_progress: tuple<i64, i64, i64> =
+        symmetric_difference_sorted_to_heterogeneous(left, right, symmetric);
+    verify(symmetric_progress.0 == 4 && symmetric_progress.1 == 4 &&
+           symmetric_progress.2 == 4);
+    verify(symmetric[0] == 1 && symmetric[1] == 2 &&
+           symmetric[2] == 3 && symmetric[3] == 4);
+    var projected_symmetric: list<i64> = [0, 0, 0, 0];
+    verify(symmetric_difference_sorted_to_heterogeneous_projected(
+        left, right, projected_symmetric, left_key, right_key).2 == 4);
+    var by_symmetric: list<i64> = [0, 0, 0, 0];
+    verify(symmetric_difference_sorted_to_heterogeneous_by(
+        left, right, by_symmetric, less).2 == 4);
+    var by_projected_symmetric: list<i64> = [0, 0, 0, 0];
+    verify(symmetric_difference_sorted_to_heterogeneous_by_projected(
+        left, right, by_projected_symmetric,
+        less, left_key, right_key).2 == 4);
 }
 
 #[test]
@@ -4180,6 +4387,63 @@ fn test_algorithm_ranges_to_flat_set_sorts_and_deduplicates() {
 }
 
 #[test]
+fn test_algorithm_ranges_to_flat_set_projected() {
+    let records: list<AlgorithmRangeItem> = [
+        AlgorithmRangeItem { key: 7, payload: 70 },
+        AlgorithmRangeItem { key: 2, payload: 20 },
+        AlgorithmRangeItem { key: 7, payload: 71 },
+        AlgorithmRangeItem { key: 1, payload: 10 }
+    ];
+    var calls: i64 = 0;
+    let project_key = |item: AlgorithmRangeItem| {
+        calls = calls + 1;
+        return item.key;
+    };
+    let keys: FlatSet<i32> = to_flat_set_projected(records, project_key);
+    verify(keys.len() == 3 && keys.key_at(0) == 1 &&
+           keys.key_at(1) == 2 && keys.key_at(2) == 7);
+    verify(calls == records.len() && records[0].payload == 70);
+}
+
+#[test]
+fn test_algorithm_ranges_to_flat_multiset_retains_duplicates() {
+    let source: list<i32> = [7, 2, 5, 2, 7, 1];
+    let converted: FlatMultiSet<i32> = to_flat_multiset(source);
+    verify(converted.len() == 6 && converted.count(2) == 2 &&
+           converted.count(7) == 2 && converted.count(5) == 1);
+    verify(converted.key_at(0) == 1 && converted.key_at(1) == 2 &&
+           converted.key_at(2) == 2 && converted.key_at(3) == 5 &&
+           converted.key_at(4) == 7 && converted.key_at(5) == 7);
+    verify(source.len() == 6 && source[0] == 7 && source[5] == 1);
+
+    let empty: list<i32> = [];
+    let empty_set: FlatMultiSet<i32> = to_flat_multiset(empty);
+    verify(empty_set.is_empty());
+}
+
+#[test]
+fn test_algorithm_ranges_to_flat_multiset_projected() {
+    let records: list<AlgorithmRangeItem> = [
+        AlgorithmRangeItem { key: 7, payload: 70 },
+        AlgorithmRangeItem { key: 2, payload: 20 },
+        AlgorithmRangeItem { key: 7, payload: 71 },
+        AlgorithmRangeItem { key: 1, payload: 10 }
+    ];
+    var calls: i64 = 0;
+    let project_key = |item: AlgorithmRangeItem| {
+        calls = calls + 1;
+        return item.key;
+    };
+    let keys: FlatMultiSet<i32> =
+        to_flat_multiset_projected(records, project_key);
+    verify(keys.len() == 4 && keys.key_at(0) == 1 &&
+           keys.key_at(1) == 2 && keys.key_at(2) == 7 &&
+           keys.key_at(3) == 7);
+    verify(keys.count(7) == 2 && calls == records.len());
+    verify(records[0].payload == 70 && records[2].payload == 71);
+}
+
+#[test]
 fn test_algorithm_ranges_to_flat_map_sorts_and_assigns_last_duplicate() {
     let source_keys: list<i32> = [3, 1, 3, 2];
     let source_values: list<i32> = [30, 10, 33, 20];
@@ -4195,6 +4459,27 @@ fn test_algorithm_ranges_to_flat_map_sorts_and_assigns_last_duplicate() {
     let empty: list<tuple<i32, i32>> = [];
     let empty_map: FlatMap<i32, i32> = to_flat_map(empty);
     verify(empty_map.is_empty());
+}
+
+#[test]
+fn test_algorithm_ranges_to_flat_map_projected() {
+    let records: list<AlgorithmRangeItem> = [
+        AlgorithmRangeItem { key: 3, payload: 30 },
+        AlgorithmRangeItem { key: 1, payload: 10 },
+        AlgorithmRangeItem { key: 3, payload: 33 },
+        AlgorithmRangeItem { key: 2, payload: 20 }
+    ];
+    var calls: i64 = 0;
+    let project_entry = |item: AlgorithmRangeItem| {
+        calls = calls + 1;
+        return (item.key, item.payload);
+    };
+    let converted: FlatMap<i32, i32> =
+        to_flat_map_projected(records, project_entry);
+    verify(converted.len() == 3 && converted.key_at(0) == 1 &&
+           converted.key_at(1) == 2 && converted.key_at(2) == 3);
+    verify(converted.get(3).unwrap() == 33 && calls == records.len());
+    verify(records[0].payload == 30 && records[2].payload == 33);
 }
 
 #[test]
@@ -4216,6 +4501,29 @@ fn test_algorithm_ranges_to_flat_multimap_retains_duplicate_order() {
 }
 
 #[test]
+fn test_algorithm_ranges_to_flat_multimap_projected() {
+    let records: list<AlgorithmRangeItem> = [
+        AlgorithmRangeItem { key: 3, payload: 30 },
+        AlgorithmRangeItem { key: 1, payload: 10 },
+        AlgorithmRangeItem { key: 3, payload: 33 },
+        AlgorithmRangeItem { key: 2, payload: 20 }
+    ];
+    var calls: i64 = 0;
+    let project_entry = |item: AlgorithmRangeItem| {
+        calls = calls + 1;
+        return (item.key, item.payload);
+    };
+    let converted: FlatMultiMap<i32, i32> =
+        to_flat_multimap_projected(records, project_entry);
+    verify(converted.len() == 4 && converted.key_at(0) == 1 &&
+           converted.key_at(1) == 2 && converted.key_at(2) == 3 &&
+           converted.key_at(3) == 3);
+    verify(converted.value_at(2) == 30 && converted.value_at(3) == 33 &&
+           calls == records.len());
+    verify(records[0].payload == 30 && records[2].payload == 33);
+}
+
+#[test]
 fn test_algorithm_ranges_to_builtin_map_uses_last_duplicate() {
     let source_keys: list<i32> = [3, 1, 3, 2];
     let source_values: list<i32> = [30, 10, 33, 20];
@@ -4228,6 +4536,26 @@ fn test_algorithm_ranges_to_builtin_map_uses_last_duplicate() {
     let empty: list<tuple<i32, i32>> = [];
     let empty_map: map<i32, i32> = ranges_to_map(empty);
     verify(empty_map.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_to_builtin_map_projected() {
+    let records: list<AlgorithmRangeItem> = [
+        AlgorithmRangeItem { key: 3, payload: 30 },
+        AlgorithmRangeItem { key: 1, payload: 10 },
+        AlgorithmRangeItem { key: 3, payload: 33 },
+        AlgorithmRangeItem { key: 2, payload: 20 }
+    ];
+    var calls: i64 = 0;
+    let project_entry = |item: AlgorithmRangeItem| {
+        calls = calls + 1;
+        return (item.key, item.payload);
+    };
+    let converted: map<i32, i32> =
+        ranges_to_map_projected(records, project_entry);
+    verify(converted.len() == 3 && converted[1] == 10 &&
+           converted[2] == 20 && converted[3] == 33);
+    verify(calls == records.len() && records[0].payload == 30);
 }
 
 #[test]
@@ -6272,6 +6600,30 @@ fn test_algorithm_ranges_generate_in_place() {
 }
 
 #[test]
+fn test_algorithm_ranges_generate_n_in_place() {
+    var next_value: i32 = 30;
+    let next = || {
+        next_value = next_value + 3;
+        return next_value;
+    };
+    var values: list<i32> = [0, 0, 0, 0];
+    verify(generate_n_in_place(values, 2, next) == 2);
+    verify(values[0] == 33 && values[1] == 36 &&
+           values[2] == 0 && values[3] == 0);
+    verify(next_value == 36);
+
+    verify(generate_n_in_place(values, 20, next) == 4);
+    verify(values[0] == 39 && values[1] == 42 &&
+           values[2] == 45 && values[3] == 48);
+    verify(next_value == 48);
+
+    verify(generate_n_in_place(values, -1, next) == 0);
+    var empty: list<i32> = [];
+    verify(generate_n_in_place(empty, 3, next) == 0);
+    verify(next_value == 48);
+}
+
+#[test]
 fn test_algorithm_ranges_fill_copy() {
     let shape: list<i32> = [1, 2, 3, 4];
     let fill_value: i32 = 9;
@@ -6460,6 +6812,26 @@ fn test_algorithm_ranges_swap_ranges_copy() {
 }
 
 #[test]
+fn test_algorithm_ranges_swap_ranges_in_place() {
+    var left: list<i32> = [1, 2, 3, 4];
+    var right: list<i32> = [8, 9];
+    verify(swap_ranges_in_place(left, right) == 2);
+    verify(left.len() == 4 && left[0] == 8 && left[1] == 9 &&
+           left[2] == 3 && left[3] == 4);
+    verify(right.len() == 2 && right[0] == 1 && right[1] == 2);
+
+    var longer_right: list<i32> = [5, 6, 7];
+    verify(swap_ranges_in_place(left, longer_right) == 3);
+    verify(left[0] == 5 && left[1] == 6 && left[2] == 7 && left[3] == 4);
+    verify(longer_right[0] == 8 && longer_right[1] == 9 &&
+           longer_right[2] == 3);
+
+    var empty: list<i32> = [];
+    verify(swap_ranges_in_place(empty, left) == 0);
+    verify(left[0] == 5 && left[3] == 4);
+}
+
+#[test]
 fn test_algorithm_ranges_sample_without_replacement() {
     let values: list<i32> = [1, 2, 3, 4, 5, 6];
     let choose_last = |bound: i64| { return bound - 1; };
@@ -6497,6 +6869,26 @@ fn test_algorithm_ranges_sample_without_replacement() {
 }
 
 #[test]
+fn test_algorithm_ranges_sample_to_bounded_output() {
+    let source: list<i32> = [1, 2, 3, 4, 5, 6];
+    let choose_last = |bound: i64| { return bound - 1; };
+    var destination: list<i32> = [-1, -1, -1, -1];
+    verify(ranges_sample_to(source, destination, 3, choose_last) == 3);
+    verify(destination[0] == 4 && destination[1] == 5 &&
+           destination[2] == 6 && destination[3] == -1);
+
+    var short_destination: list<i32> = [-1, -1];
+    verify(ranges_sample_to(source, short_destination, 10, choose_last) == 2);
+    verify(short_destination[0] == 5 && short_destination[1] == 6);
+
+    verify(ranges_sample_to(source, destination, -2, choose_last) == 0);
+    verify(destination[0] == 4 && destination[1] == 5 &&
+           destination[2] == 6 && destination[3] == -1);
+    var empty_destination: list<i32> = [];
+    verify(ranges_sample_to(source, empty_destination, 2, choose_last) == 0);
+}
+
+#[test]
 fn test_algorithm_ranges_shuffle_copy() {
     let values: list<i32> = [1, 2, 3, 4];
     let choose_last = |bound: i64| { return bound - 1; };
@@ -6512,6 +6904,36 @@ fn test_algorithm_ranges_shuffle_copy() {
     let singleton: list<i32> = [8];
     let shuffled_singleton: list<i32> = ranges_shuffle(singleton, choose_last);
     verify(shuffled_singleton.len() == 1 && shuffled_singleton[0] == 8);
+}
+
+#[test]
+fn test_algorithm_ranges_shuffle_in_place() {
+    var values: list<i32> = [1, 2, 3, 4];
+    var selector_calls: i64 = 0;
+    let choose_first = |bound: i64| {
+        selector_calls = selector_calls + 1;
+        return 0;
+    };
+    verify(ranges_shuffle_in_place(values, choose_first) == 3);
+    verify(selector_calls == 3);
+    verify(values[0] == 2 && values[1] == 3 &&
+           values[2] == 4 && values[3] == 1);
+
+    let choose_last = |bound: i64| { return bound - 1; };
+    verify(ranges_shuffle_in_place(values, choose_last) == 0);
+    verify(values[0] == 2 && values[1] == 3 &&
+           values[2] == 4 && values[3] == 1);
+
+    var clamped: list<i32> = [1, 2, 3];
+    let choose_below_range = |bound: i64| { return -1; };
+    verify(ranges_shuffle_in_place(clamped, choose_below_range) == 2);
+    verify(clamped[0] == 2 && clamped[1] == 3 && clamped[2] == 1);
+
+    var empty: list<i32> = [];
+    var singleton: list<i32> = [9];
+    verify(ranges_shuffle_in_place(empty, choose_first) == 0);
+    verify(ranges_shuffle_in_place(singleton, choose_first) == 0);
+    verify(selector_calls == 3 && singleton[0] == 9);
 }
 
 
@@ -6771,6 +7193,71 @@ fn test_algorithm_ranges_remove_in_place() {
     verify(remove_in_place(empty, 2) == 0);
     verify(remove_in_place(all_removed, 2) == 0);
     verify(remove_in_place(none_removed, 2) == none_removed.len());
+}
+
+#[test]
+fn test_algorithm_ranges_erase_container_semantics() {
+    var values: list<i32> = [1, 2, 2, 3, 2, 4];
+    verify(erase(values, 2) == 3);
+    verify(values.len() == 3 && values[0] == 1 &&
+           values[1] == 3 && values[2] == 4);
+
+    var evens: list<i32> = [1, 2, 3, 4, 5, 6];
+    var predicate_calls: i64 = 0;
+    let is_even = |value: i32| {
+        predicate_calls = predicate_calls + 1;
+        return value % 2 == 0;
+    };
+    verify(erase_if(evens, is_even) == 3);
+    verify(evens.len() == 3 && evens[0] == 1 &&
+           evens[1] == 3 && evens[2] == 5);
+    verify(predicate_calls == 6);
+
+    var records: list<AlgorithmRangeItem> = [
+        AlgorithmRangeItem { key: 1, payload: 10 },
+        AlgorithmRangeItem { key: 2, payload: 20 },
+        AlgorithmRangeItem { key: 3, payload: 30 },
+        AlgorithmRangeItem { key: 4, payload: 40 }
+    ];
+    var projection_calls: i64 = 0;
+    let project_key = |item: AlgorithmRangeItem| {
+        projection_calls = projection_calls + 1;
+        return item.key;
+    };
+    let remove_below_three = |key: i32| { return key < 3; };
+    verify(erase_if_projected(records, remove_below_three, project_key) == 2);
+    verify(records.len() == 2 && records[0].key == 3 &&
+           records[1].key == 4 && projection_calls == 4);
+
+    var empty: list<i32> = [];
+    verify(erase(empty, 1) == 0 && empty.len() == 0);
+    verify(erase_if(empty, is_even) == 0 && empty.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_erase_by_equivalence() {
+    let same_tens = |left: i32, right: i32| {
+        return left / 10 == right / 10;
+    };
+    var values: list<i32> = [11, 21, 12, 33, 19];
+    verify(erase_by(values, 15, same_tens) == 3);
+    verify(values.len() == 2 && values[0] == 21 && values[1] == 33);
+
+    var records: list<AlgorithmRangeItem> = [
+        AlgorithmRangeItem { key: 11, payload: 110 },
+        AlgorithmRangeItem { key: 21, payload: 210 },
+        AlgorithmRangeItem { key: 12, payload: 120 },
+        AlgorithmRangeItem { key: 33, payload: 330 }
+    ];
+    var projection_calls: i64 = 0;
+    let project_key = |item: AlgorithmRangeItem| {
+        projection_calls = projection_calls + 1;
+        return item.key;
+    };
+    verify(erase_by_projected(records, 19, same_tens, project_key) == 2);
+    verify(records.len() == 2 && records[0].key == 21 &&
+           records[1].key == 33 && projection_calls == 4);
+    verify(records[0].payload == 210 && records[1].payload == 330);
 }
 
 #[test]

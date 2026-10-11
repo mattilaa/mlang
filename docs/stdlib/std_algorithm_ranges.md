@@ -277,6 +277,10 @@ fn example() {
   an existing destination list up to its capacity, returns the number written,
   and preserves any unused destination tail. Comparator and projected forms
   are available; the source is never modified.
+- `partial_sort_copy_to_heterogeneous` and its `_projected`, `_by`, and
+  `_by_projected` variants allow the destination element type to differ from
+  the source when assignments are compatible. They retain the existing
+  bounded-capacity, suffix-preserving behavior.
 - `nth_element(data, nth)` returns a copied partitioned list with its selected
   value at `nth`; under ascending order, preceding values are no greater and
   following values are no smaller. The two partitions are not otherwise
@@ -340,6 +344,10 @@ fn example() {
   from a zero-argument generator and returns the number written. The generated
   type must match the list element type; empty lists do not invoke the
   generator.
+- `generate_n_in_place(&mut data, count, generator)` generates into a bounded
+  prefix of an existing list. It writes at most `count` slots (never beyond
+  the destination length), returns the number written, and does not invoke the
+  generator when the count is non-positive or the destination is empty.
 - `fold_left(data, init, operation)` and `fold_right(data, init, operation)`
   reduce a range in forward or reverse order. The operation receives
   `(accumulator, element)` for left folds and `(element, accumulator)` for
@@ -447,18 +455,39 @@ fn example() {
   converted while preserving each row's length, including empty rows.
 - `to_flat_set(data)` materializes a sorted `std::flat_set`, deduplicating keys
   according to the set's ordering equivalence. The source range is unchanged.
+- `to_flat_set_projected(data, projection)` materializes projected keys into a
+  sorted `FlatSet`, evaluating the projection once per source value and
+  deduplicating equivalent keys without an intermediate list.
+- `to_flat_multiset(data)` materializes a sorted `std::flat_multiset`, retaining
+  duplicate keys in source order within equivalent-key groups. The source
+  range is unchanged.
+- `to_flat_multiset_projected(data, projection)` materializes projected keys
+  into a sorted `FlatMultiSet`, retaining duplicates and their source order
+  within equivalent-key groups, again without an intermediate list.
 - `to_flat_map(pairs)` materializes `(key, value)` tuples as a sorted,
   unique-key `std::flat_map`. When equivalent keys repeat, the last pair in
   source order supplies the retained value; the input is unchanged.
+- `to_flat_map_projected(data, projection)` materializes projected
+  `(key, value)` tuples directly into a sorted `FlatMap`, evaluating the
+  projection once per source element and keeping the last value for duplicate
+  keys.
 - `to_flat_multimap(pairs)` materializes the same pair range as a sorted
   `std::flat_multimap`, retaining all equivalent keys and preserving their
   relative input order within each key group.
+- `to_flat_multimap_projected(data, projection)` directly materializes
+  projected pairs into a sorted `FlatMultiMap`, retaining duplicate keys and
+  evaluating the projection once per source element.
 - `to_map(pairs)` materializes `(key, value)` tuples into the built-in
   `map<K, V>`. Map iteration order is unspecified; the last pair in source
   order supplies the value for duplicate keys.
+- `to_map_projected(data, projection)` materializes projected pairs into the
+  built-in map with the same last-source-value-wins behavior.
 - `swap_ranges(left, right)` returns two copied lists with corresponding
   elements in the common prefix exchanged; an unmatched tail is preserved.
   Both inputs remain unchanged.
+- `swap_ranges_in_place(&mut left, &mut right)` exchanges the common prefix
+  directly in both mutable lists, preserves either unmatched tail, and returns
+  the number of positions swapped.
 - `transform(data, operation)` eagerly maps every element into a new list;
   the output element type is inferred from the closure return type and may
   differ from the input element type.
@@ -506,10 +535,19 @@ fn example() {
   receives the current exclusive bound, allowing a caller-owned random engine
   (for example, `range_i64(0, bound - 1)`); the selection pass is O(N).
   Negative counts return empty and oversized counts clamp to the input length.
+- `sample_to(source, destination, count, choose_index)` writes the sampled
+  prefix into a caller-provided list, clamping to the requested count, source
+  length, and destination capacity. It returns the number written and leaves
+  the destination suffix unchanged.
 - `shuffle(data, choose_index)` returns a randomized copy. The selector receives
   each current exclusive bound; use a uniformly distributed selector for an
   unbiased permutation. Because lists are eagerly rebuilt without indexed
   mutation, this implementation is O(N²) and leaves the input unchanged.
+- `shuffle_in_place(&mut data, choose_index)` uses Fisher-Yates to shuffle a
+  mutable list in O(N) time without allocating a second list. The selector
+  receives the current exclusive bound; invalid indices are clamped. It
+  returns the number of swaps performed and does not call the selector for
+  lists shorter than two elements.
 - `unique_by(data, equivalent)` removes adjacent equivalent elements while
   keeping the first value in each run.
 - `unique_by_projected(data, equivalent, projection)` compares projected keys
@@ -707,6 +745,10 @@ fn example() {
   storage and returns `(left_consumed, right_consumed, written)`. Short output
   receives a sorted prefix. `_projected`, `_by`, and `_by_projected` variants
   preserve this progress contract with projected keys and/or custom ordering.
+- `merge_to_heterogeneous` accepts different left and right element types and
+  a destination type assignable from both. Its `_by` and `_projected` variants
+  support cross-type ordering, independent projections, and bounded output;
+  `_by_projected` combines all three. Equal values from the left remain first.
 - `inplace_merge(data, middle)` stably merges the two sorted halves around
   `middle` into a new list; `inplace_merge_by` accepts a strict comparator.
   Despite the C++ name, these eager-list forms preserve the source and clamp
@@ -737,6 +779,11 @@ fn example() {
   resumed safely. Each operation also has `_projected`, `_by`, and
   `_by_projected` forms, with the same ordering and multiplicity semantics as
   its list-returning counterpart.
+- The `*_sorted_to_heterogeneous` forms accept distinct left and right input
+  element types plus an output element type assignable from either input. Each
+  operation also has independently projected, custom-order, and combined
+  `_by_projected` variants. They preserve the same multiplicity rules and
+  `(left_consumed, right_consumed, written)` progress result.
 - `merged_projected` and the four `*_sorted_projected` set operations compare
   unary projected keys. Inputs must be sorted by the same projection; they
   retain the merge stability and multiset multiplicity rules described above.
@@ -767,6 +814,14 @@ fn example() {
   equality and predicates. Each predicate/projection is called once per input
   element. This mirrors C++20 `std::ranges::remove` / `remove_if`, whose result
   marks the retained prefix rather than erasing the container's tail.
+- `erase(data, value)` and `erase_if(data, predicate)` remove matching values
+  and shrink the mutable list, returning the number erased. These complement
+  the logical-end `remove_in_place` algorithms with C++20
+  `std::erase`/`std::erase_if` container semantics. `erase_if_projected` tests
+  projected keys while preserving retained elements and their order.
+- `erase_by(data, key, equivalent)` and `erase_by_projected` erase values
+  matched by a caller-provided equivalence predicate, optionally after
+  projection. Projection and equivalence are each evaluated once per element.
 - `remove_by` and `remove_copy_by` exclude every element matching a lookup key
   under a caller-supplied equivalence predicate; both preserve source order.
 - `remove_by_projected` and `remove_copy_by_projected` apply that equivalence
