@@ -451,8 +451,13 @@ fn example() {
 - `partition(data, predicate)` returns `(partitioned_copy, boundary_index)`.
   Matching elements precede the rest; this eager-list counterpart preserves
   order within both groups and evaluates the predicate once per element.
+- `partition_in_place(&mut data, predicate)` rearranges a mutable list without
+  allocating a second list, returns the first nonmatching index, and evaluates
+  the predicate exactly once per element. Order within each group is
+  unspecified, matching C++20 [`std::ranges::partition`](Stdlib-Module-API).
 - `copy_if_projected`, `is_partitioned_projected`,
-  `partition_point_projected`, `stable_partition_projected`,
+  `partition_point_projected`, `partition_in_place_projected`,
+  `stable_partition_projected`,
   `partition_projected`, and `partition_copy_projected` apply the predicate to
   each element's projected key. Partition-copy forms retain original elements;
   the partition-point form requires a true prefix followed by false values.

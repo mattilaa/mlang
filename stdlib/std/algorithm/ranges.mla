@@ -2166,6 +2166,55 @@ pub fn partition_projected(data: &list<T>, predicate: Predicate,
     return (output, boundary);
 }
 
+generic<T, Predicate, Projection>
+fn ranges_partition_in_place_core(data: &mut list<T>, predicate: Predicate,
+                                  projection: Projection) -> i64 {
+    var first: i64 = 0;
+    var last: i64 = data.len();
+    var first_known_nonmatching: bool = false;
+    while first < last {
+        if !first_known_nonmatching {
+            if predicate(projection(data[first])) {
+                first = first + 1;
+                continue;
+            }
+            first_known_nonmatching = true;
+        }
+        let opposite: i64 = last - 1;
+        if first == opposite {
+            last = opposite;
+        } else if predicate(projection(data[opposite])) {
+            let temporary: T = data[first];
+            data[first] = data[opposite];
+            data[opposite] = temporary;
+            first = first + 1;
+            last = last - 1;
+            first_known_nonmatching = false;
+        } else {
+            last = opposite;
+        }
+    }
+    return first;
+}
+
+/// @brief Partition a mutable list in place and return the first nonmatch.
+/// Matching values precede nonmatching values; order within either group is
+/// unspecified. Each element is tested at most once.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn partition_in_place(data: &mut list<T>, predicate: Predicate) -> i64 {
+    return ranges_partition_in_place_core(data, predicate, ranges_identity);
+}
+
+/// @brief Partition a mutable list by projected keys in place.
+/// Returns the first nonmatch; order within each group is unspecified.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn partition_in_place_projected(data: &mut list<T>, predicate: Predicate,
+                                    projection: Projection) -> i64 {
+    return ranges_partition_in_place_core(data, predicate, projection);
+}
+
 /// @brief Copy matching and nonmatching elements into separate stable lists.
 /// Each element's predicate is evaluated exactly once; the source is unchanged.
 /// C++20 `std::ranges::partition_copy` equivalent.

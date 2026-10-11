@@ -390,6 +390,8 @@ use std::algorithm::ranges::stable_partition;
 use std::algorithm::ranges::stable_partition_projected;
 use std::algorithm::ranges::partition as ranges_partition;
 use std::algorithm::ranges::partition_projected;
+use std::algorithm::ranges::partition_in_place;
+use std::algorithm::ranges::partition_in_place_projected;
 use std::algorithm::ranges::partition_copy;
 use std::algorithm::ranges::partition_copy_projected;
 use std::algorithm::ranges::find_if_not;
@@ -5413,6 +5415,41 @@ fn test_algorithm_ranges_partition_algorithms() {
     };
     verify(partition_point(large, below_midpoint) == 512);
     verify(calls <= 11);
+}
+
+#[test]
+fn test_algorithm_ranges_partition_in_place() {
+    let is_odd = |value: i32| { return value % 2 != 0; };
+    var values: list<i32> = [1, 2, 3, 4, 5, 6];
+    let boundary: i64 = partition_in_place(values, is_odd);
+    verify(boundary == 3 && is_partitioned(values, is_odd));
+    var total: i32 = 0;
+    for i in 0..values.len() { total = total + values[i]; }
+    verify(total == 21);
+
+    var predicate_calls: i64 = 0;
+    let counted_odd = |value: i32| {
+        predicate_calls = predicate_calls + 1;
+        return value % 2 != 0;
+    };
+    var counted: list<i32> = [1, 2, 3, 4, 5, 6];
+    verify(partition_in_place(counted, counted_odd) == 3);
+    verify(predicate_calls == counted.len());
+
+    let below_three = |key: i32| { return key < 3; };
+    let project_tens = |value: i32| { return value / 10; };
+    var projected: list<i32> = [11, 22, 19, 31, 28, 13];
+    let projected_boundary: i64 = partition_in_place_projected(
+        projected, below_three, project_tens);
+    verify(projected_boundary == 5 &&
+           is_partitioned_projected(projected, below_three, project_tens));
+
+    var empty: list<i32> = [];
+    var all_match: list<i32> = [1, 3, 5];
+    var none_match: list<i32> = [2, 4, 6];
+    verify(partition_in_place(empty, is_odd) == 0);
+    verify(partition_in_place(all_match, is_odd) == 3);
+    verify(partition_in_place(none_match, is_odd) == 0);
 }
 
 #[test]
