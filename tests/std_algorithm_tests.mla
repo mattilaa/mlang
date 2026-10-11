@@ -463,7 +463,9 @@ use std::algorithm::ranges::copy_backward_to;
 use std::algorithm::ranges::copy_backward_to_projected;
 use std::algorithm::ranges::to_list;
 use std::algorithm::ranges::to_flat_set;
+use std::algorithm::ranges::to_flat_set_projected;
 use std::algorithm::ranges::to_flat_multiset;
+use std::algorithm::ranges::to_flat_multiset_projected;
 use std::algorithm::ranges::to_flat_map;
 use std::algorithm::ranges::to_flat_multimap;
 use std::algorithm::ranges::to_map as ranges_to_map;
@@ -4185,6 +4187,25 @@ fn test_algorithm_ranges_to_flat_set_sorts_and_deduplicates() {
 }
 
 #[test]
+fn test_algorithm_ranges_to_flat_set_projected() {
+    let records: list<AlgorithmRangeItem> = [
+        AlgorithmRangeItem { key: 7, payload: 70 },
+        AlgorithmRangeItem { key: 2, payload: 20 },
+        AlgorithmRangeItem { key: 7, payload: 71 },
+        AlgorithmRangeItem { key: 1, payload: 10 }
+    ];
+    var calls: i64 = 0;
+    let project_key = |item: AlgorithmRangeItem| {
+        calls = calls + 1;
+        return item.key;
+    };
+    let keys: FlatSet<i32> = to_flat_set_projected(records, project_key);
+    verify(keys.len() == 3 && keys.key_at(0) == 1 &&
+           keys.key_at(1) == 2 && keys.key_at(2) == 7);
+    verify(calls == records.len() && records[0].payload == 70);
+}
+
+#[test]
 fn test_algorithm_ranges_to_flat_multiset_retains_duplicates() {
     let source: list<i32> = [7, 2, 5, 2, 7, 1];
     let converted: FlatMultiSet<i32> = to_flat_multiset(source);
@@ -4198,6 +4219,28 @@ fn test_algorithm_ranges_to_flat_multiset_retains_duplicates() {
     let empty: list<i32> = [];
     let empty_set: FlatMultiSet<i32> = to_flat_multiset(empty);
     verify(empty_set.is_empty());
+}
+
+#[test]
+fn test_algorithm_ranges_to_flat_multiset_projected() {
+    let records: list<AlgorithmRangeItem> = [
+        AlgorithmRangeItem { key: 7, payload: 70 },
+        AlgorithmRangeItem { key: 2, payload: 20 },
+        AlgorithmRangeItem { key: 7, payload: 71 },
+        AlgorithmRangeItem { key: 1, payload: 10 }
+    ];
+    var calls: i64 = 0;
+    let project_key = |item: AlgorithmRangeItem| {
+        calls = calls + 1;
+        return item.key;
+    };
+    let keys: FlatMultiSet<i32> =
+        to_flat_multiset_projected(records, project_key);
+    verify(keys.len() == 4 && keys.key_at(0) == 1 &&
+           keys.key_at(1) == 2 && keys.key_at(2) == 7 &&
+           keys.key_at(3) == 7);
+    verify(keys.count(7) == 2 && calls == records.len());
+    verify(records[0].payload == 70 && records[2].payload == 71);
 }
 
 #[test]

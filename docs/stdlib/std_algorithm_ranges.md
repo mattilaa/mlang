@@ -451,9 +451,15 @@ fn example() {
   converted while preserving each row's length, including empty rows.
 - `to_flat_set(data)` materializes a sorted `std::flat_set`, deduplicating keys
   according to the set's ordering equivalence. The source range is unchanged.
+- `to_flat_set_projected(data, projection)` materializes projected keys into a
+  sorted `FlatSet`, evaluating the projection once per source value and
+  deduplicating equivalent keys without an intermediate list.
 - `to_flat_multiset(data)` materializes a sorted `std::flat_multiset`, retaining
   duplicate keys in source order within equivalent-key groups. The source
   range is unchanged.
+- `to_flat_multiset_projected(data, projection)` materializes projected keys
+  into a sorted `FlatMultiSet`, retaining duplicates and their source order
+  within equivalent-key groups, again without an intermediate list.
 - `to_flat_map(pairs)` materializes `(key, value)` tuples as a sorted,
   unique-key `std::flat_map`. When equivalent keys repeat, the last pair in
   source order supplies the retained value; the input is unchanged.

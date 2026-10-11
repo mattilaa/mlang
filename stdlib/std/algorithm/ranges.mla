@@ -1605,6 +1605,19 @@ pub fn to_flat_set(data: &list<T>) -> FlatSet<T> {
     return converted;
 }
 
+/// @brief Materialize projected keys as a sorted, unique `FlatSet`.
+/// The projection is evaluated once per source element and the input is
+/// unchanged. This fuses a transform with C++23-style range materialization.
+/// @ingroup algorithm_ranges
+generic<T, Key, Projection>
+pub fn to_flat_set_projected(data: &list<T>, projection: Projection)
+    -> FlatSet<Key> {
+    var converted: FlatSet<Key> = FlatSet<Key>::new();
+    let n: i64 = data.len();
+    for i in 0..n { converted.insert(projection(data[i])); }
+    return converted;
+}
+
 /// @brief Materialize a range as a sorted `FlatMultiSet`, retaining duplicates.
 /// Equivalent values retain their source order within the sorted key group.
 /// C++23 `std::ranges::to` adapted to Mlang's flat multiset container.
@@ -1614,6 +1627,19 @@ pub fn to_flat_multiset(data: &list<T>) -> FlatMultiSet<T> {
     var converted: FlatMultiSet<T> = FlatMultiSet<T>::new();
     let n: i64 = data.len();
     for i in 0..n { converted.insert(data[i]); }
+    return converted;
+}
+
+/// @brief Materialize projected keys as a sorted `FlatMultiSet`.
+/// Duplicate projected keys are retained in source order within each group;
+/// the projection is evaluated once per input element.
+/// @ingroup algorithm_ranges
+generic<T, Key, Projection>
+pub fn to_flat_multiset_projected(data: &list<T>, projection: Projection)
+    -> FlatMultiSet<Key> {
+    var converted: FlatMultiSet<Key> = FlatMultiSet<Key>::new();
+    let n: i64 = data.len();
+    for i in 0..n { converted.insert(projection(data[i])); }
     return converted;
 }
 
