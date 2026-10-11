@@ -9490,6 +9490,84 @@ pub fn merged_by_projected(left: &list<T>, right: &list<T>, less: Less,
     return out;
 }
 
+/// @brief Merge sorted lists into an existing bounded destination.
+/// Equal elements from `left` precede equal elements from `right`. Returns
+/// `(left_consumed, right_consumed, written)`; an output shorter than the
+/// complete merge receives only its prefix, and all input lists are unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+fn ranges_merge_to_core(left: &list<T>, right: &list<T>,
+                        destination: &mut list<T>, less: Less,
+                        projection: Projection) -> tuple<i64, i64, i64> {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let output_len: i64 = destination.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    var written: i64 = 0;
+    while written < output_len && i < left_len && j < right_len {
+        if less(projection(right[j]), projection(left[i])) {
+            destination[written] = right[j];
+            j = j + 1;
+        } else {
+            destination[written] = left[i];
+            i = i + 1;
+        }
+        written = written + 1;
+    }
+    while written < output_len && i < left_len {
+        destination[written] = left[i];
+        i = i + 1;
+        written = written + 1;
+    }
+    while written < output_len && j < right_len {
+        destination[written] = right[j];
+        j = j + 1;
+        written = written + 1;
+    }
+    return (i, j, written);
+}
+
+/// @brief Merge sorted ranges into an existing destination using ascending order.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn merge_to(left: &list<T>, right: &list<T>,
+                destination: &mut list<T>) -> tuple<i64, i64, i64> {
+    return ranges_merge_to_core(left, right, destination,
+                                ranges_default_less, ranges_identity);
+}
+
+/// @brief Merge sorted ranges by projected keys into a bounded destination.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn merge_to_projected(left: &list<T>, right: &list<T>,
+                          destination: &mut list<T>,
+                          projection: Projection)
+    -> tuple<i64, i64, i64> {
+    return ranges_merge_to_core(left, right, destination,
+                                ranges_default_less, projection);
+}
+
+/// @brief Merge ranges into bounded output using a caller-supplied ordering.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn merge_to_by(left: &list<T>, right: &list<T>,
+                   destination: &mut list<T>, less: Less)
+    -> tuple<i64, i64, i64> {
+    return ranges_merge_to_core(left, right, destination, less,
+                                ranges_identity);
+}
+
+/// @brief Merge projected keys into bounded output using a custom ordering.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn merge_to_by_projected(left: &list<T>, right: &list<T>,
+                             destination: &mut list<T>, less: Less,
+                             projection: Projection)
+    -> tuple<i64, i64, i64> {
+    return ranges_merge_to_core(left, right, destination, less, projection);
+}
+
 /// @brief Stably merge two sorted halves of one range into a copied range.
 /// `middle` is clamped to the valid index interval; both halves must already
 /// be sorted in ascending order. C++20 `std::ranges::inplace_merge` analogue.

@@ -692,6 +692,10 @@ fn example() {
   an empty result.
 - `merged(left, right)` stably merges two sorted same-typed ranges into a new
   sorted list; equal elements from the left range come first.
+- `merge_to(left, right, destination)` writes a stable merge into existing
+  storage and returns `(left_consumed, right_consumed, written)`. Short output
+  receives a sorted prefix. `_projected`, `_by`, and `_by_projected` variants
+  preserve this progress contract with projected keys and/or custom ordering.
 - `inplace_merge(data, middle)` stably merges the two sorted halves around
   `middle` into a new list; `inplace_merge_by` accepts a strict comparator.
   Despite the C++ name, these eager-list forms preserve the source and clamp
