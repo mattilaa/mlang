@@ -8547,6 +8547,118 @@ pub fn inplace_merge_by_projected(data: &list<T>, middle: i64, less: Less,
     return out;
 }
 
+/// @brief Stably merge sorted halves into the original mutable list.
+/// Uses O(N) temporary storage and returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn inplace_merge_in_place(data: &mut list<T>, middle: i64) -> i64 {
+    var split: i64 = middle;
+    let n: i64 = data.len();
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    var out: list<T> = [];
+    var left: i64 = 0;
+    var right: i64 = split;
+    while left < split && right < n {
+        if data[right] < data[left] {
+            out.push(data[right]);
+            right = right + 1;
+        } else {
+            out.push(data[left]);
+            left = left + 1;
+        }
+    }
+    while left < split { out.push(data[left]); left = left + 1; }
+    while right < n { out.push(data[right]); right = right + 1; }
+    for i in 0..n { data[i] = out[i]; }
+    return n;
+}
+
+/// @brief Stably merge sorted halves into the original list by comparator.
+/// Uses O(N) temporary storage and returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn inplace_merge_in_place_by(data: &mut list<T>, middle: i64,
+                                 less: Less) -> i64 {
+    var split: i64 = middle;
+    let n: i64 = data.len();
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    var out: list<T> = [];
+    var left: i64 = 0;
+    var right: i64 = split;
+    while left < split && right < n {
+        if less(data[right], data[left]) {
+            out.push(data[right]);
+            right = right + 1;
+        } else {
+            out.push(data[left]);
+            left = left + 1;
+        }
+    }
+    while left < split { out.push(data[left]); left = left + 1; }
+    while right < n { out.push(data[right]); right = right + 1; }
+    for i in 0..n { data[i] = out[i]; }
+    return n;
+}
+
+/// @brief Stably merge sorted halves into the original list by projected key.
+/// Uses O(N) temporary storage and returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn inplace_merge_in_place_projected(
+    data: &mut list<T>, middle: i64, projection: Projection) -> i64 {
+    var split: i64 = middle;
+    let n: i64 = data.len();
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    var out: list<T> = [];
+    var left: i64 = 0;
+    var right: i64 = split;
+    while left < split && right < n {
+        if projection(data[right]) < projection(data[left]) {
+            out.push(data[right]);
+            right = right + 1;
+        } else {
+            out.push(data[left]);
+            left = left + 1;
+        }
+    }
+    while left < split { out.push(data[left]); left = left + 1; }
+    while right < n { out.push(data[right]); right = right + 1; }
+    for i in 0..n { data[i] = out[i]; }
+    return n;
+}
+
+/// @brief Stably merge by comparator over projected keys into the original list.
+/// Uses O(N) temporary storage and returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn inplace_merge_in_place_by_projected(
+    data: &mut list<T>, middle: i64, less: Less,
+    projection: Projection) -> i64 {
+    var split: i64 = middle;
+    let n: i64 = data.len();
+    if split < 0 { split = 0; }
+    if split > n { split = n; }
+    var out: list<T> = [];
+    var left: i64 = 0;
+    var right: i64 = split;
+    while left < split && right < n {
+        if less(projection(data[right]), projection(data[left])) {
+            out.push(data[right]);
+            right = right + 1;
+        } else {
+            out.push(data[left]);
+            left = left + 1;
+        }
+    }
+    while left < split { out.push(data[left]); left = left + 1; }
+    while right < n { out.push(data[right]); right = right + 1; }
+    for i in 0..n { data[i] = out[i]; }
+    return n;
+}
+
 /// @brief Return the sorted multiset union using `less` as the ordering.
 /// Equivalent elements are those for which neither value is less than the
 /// other.

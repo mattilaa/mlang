@@ -625,6 +625,10 @@ fn example() {
 - `inplace_merge_projected` merges halves sorted by the same projected key,
   retaining the original values and taking equivalent keys from the left half
   first.
+- `inplace_merge_in_place(&mut data, middle)` and its comparator/projected
+  variants stably merge two sorted halves back into the mutable list. They
+  return the number of written elements and use O(N) temporary list storage;
+  the source list itself is updated rather than returning a separate result.
 - `merged_by_projected` and `inplace_merge_by_projected` combine a strict
   comparator with a projection for stable ordering. Equal projected keys keep
   left-range precedence, and the split index is clamped for the half-merge.
