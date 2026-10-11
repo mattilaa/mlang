@@ -402,6 +402,12 @@ fn example() {
   return the list's existing element type; use `transform` when the result has
   a different type. `transform_in_place_projected` applies a projection before
   the operation and also writes back to the original list.
+- `transform_to(source, destination, operation)` writes transformed values to
+  a caller-provided mutable destination, stopping at the shorter list and
+  returning the number written. Source and destination element types may
+  differ; `transform_to_projected` also applies a projection before the
+  operation. This is the bounded output-range form of C++20
+  [`std::ranges::transform`](Stdlib-Module-API) and avoids allocating an intermediate list.
 - `transform_with_count` returns `(consumed, output)` with the transformed
   list, exposing the full input progress of the eager unary transform.
 - The binary `transform(left, right, operation)` overload transforms paired

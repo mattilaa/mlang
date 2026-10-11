@@ -505,6 +505,8 @@ use std::algorithm::ranges::take_while_projected;
 use std::algorithm::ranges::drop_while_projected;
 use std::algorithm::ranges::transform;
 use std::algorithm::ranges::transform_in_place;
+use std::algorithm::ranges::transform_to;
+use std::algorithm::ranges::transform_to_projected;
 use std::algorithm::ranges::filter_transform;
 use std::algorithm::ranges::filter_transform_projected;
 use std::algorithm::ranges::transform_with_count;
@@ -3897,6 +3899,33 @@ fn test_algorithm_ranges_transform_in_place() {
     var empty: list<i32> = [];
     verify(transform_in_place(empty, increment) == 0);
     verify(calls == values.len());
+}
+
+#[test]
+fn test_algorithm_ranges_transform_to_output_range() {
+    let source: list<i32> = [2, 4, 6];
+    let as_float = |value: i32| { return f64(value) * 0.5; };
+
+    var destination: list<f64> = [0.0, 0.0, 0.0, 99.0];
+    verify(transform_to(source, destination, as_float) == 3);
+    verify(destination[0] == 1.0 && destination[1] == 2.0 &&
+           destination[2] == 3.0 && destination[3] == 99.0);
+    verify(source[0] == 2 && source[2] == 6);
+
+    var short_destination: list<f64> = [-1.0];
+    verify(transform_to(source, short_destination, as_float) == 1);
+    verify(short_destination[0] == 1.0);
+
+    var longer_destination: list<i32> = [7, 8, 9, 10];
+    let tens = |value: i32| { return value / 2; };
+    let expand = |key: i32| { return key * 10; };
+    verify(transform_to_projected(
+        source, longer_destination, expand, tens) == 3);
+    verify(longer_destination[0] == 10 && longer_destination[1] == 20 &&
+           longer_destination[2] == 30 && longer_destination[3] == 10);
+
+    let empty: list<i32> = [];
+    verify(transform_to(empty, longer_destination, expand) == 0);
 }
 
 #[test]

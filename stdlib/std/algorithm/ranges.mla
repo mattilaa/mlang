@@ -1549,6 +1549,22 @@ pub fn transform_in_place(data: &mut list<T>, operation: Operation) -> i64 {
     return n;
 }
 
+/// @brief Transform into a caller-provided output range.
+/// Stops when either range ends and returns the number of elements written;
+/// source and destination element types may differ.
+/// C++20 bounded `std::ranges::transform` output-range form.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn transform_to(source: &list<T>, destination: &mut list<Output>,
+                    operation: Operation) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count { destination[i] = operation(source[i]); }
+    return count;
+}
+
 /// @brief Transform a range and return the consumed count with the output.
 /// The count equals the input length, including zero for empty input. This
 /// exposes an eager-list analogue of the input/output progress in C++20's
@@ -1609,6 +1625,23 @@ pub fn transform_in_place_projected(data: &mut list<T>, operation: Operation,
         data[i] = operation(projection(data[i]));
     }
     return n;
+}
+
+/// @brief Project and transform into a caller-provided output range.
+/// Stops when either range ends; returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn transform_to_projected(
+    source: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        destination[i] = operation(projection(source[i]));
+    }
+    return count;
 }
 
 /// @brief Project and transform a range, returning its consumed count.
