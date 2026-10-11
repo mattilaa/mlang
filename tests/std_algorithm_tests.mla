@@ -395,6 +395,8 @@ use std::algorithm::ranges::partition as ranges_partition;
 use std::algorithm::ranges::partition_projected;
 use std::algorithm::ranges::partition_in_place;
 use std::algorithm::ranges::partition_in_place_projected;
+use std::algorithm::ranges::stable_partition_in_place;
+use std::algorithm::ranges::stable_partition_in_place_projected;
 use std::algorithm::ranges::partition_copy;
 use std::algorithm::ranges::partition_copy_projected;
 use std::algorithm::ranges::find_if_not;
@@ -5563,6 +5565,33 @@ fn test_algorithm_ranges_partition_in_place() {
     verify(partition_in_place(empty, is_odd) == 0);
     verify(partition_in_place(all_match, is_odd) == 3);
     verify(partition_in_place(none_match, is_odd) == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_stable_partition_in_place() {
+    var values: list<i32> = [4, 1, 6, 3, 8, 5];
+    var calls: i64 = 0;
+    let is_even = |value: i32| {
+        calls = calls + 1;
+        return value % 2 == 0;
+    };
+    verify(stable_partition_in_place(values, is_even) == 3);
+    verify(calls == 6);
+    verify(values[0] == 4 && values[1] == 6 && values[2] == 8 &&
+           values[3] == 1 && values[4] == 3 && values[5] == 5);
+
+    let project_tens = |value: i32| { return value / 10; };
+    let is_key_two = |key: i32| { return key == 2; };
+    var projected: list<i32> = [11, 21, 12, 22, 13];
+    verify(stable_partition_in_place_projected(
+        projected, is_key_two, project_tens) == 2);
+    verify(projected[0] == 21 && projected[1] == 22 &&
+           projected[2] == 11 && projected[3] == 12 &&
+           projected[4] == 13);
+
+    var empty: list<i32> = [];
+    verify(stable_partition_in_place(empty, is_even) == 0);
+    verify(calls == 6);
 }
 
 #[test]

@@ -2200,6 +2200,52 @@ pub fn stable_partition_projected(data: &list<T>, predicate: Predicate,
     return partitioned;
 }
 
+/// @brief Stable-partition a mutable list and return the first nonmatch index.
+/// Matching and nonmatching elements retain their original order.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn stable_partition_in_place(data: &mut list<T>,
+                                 predicate: Predicate) -> i64 {
+    var matches: list<T> = [];
+    var nonmatches: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let value: T = data[i];
+        if predicate(value) { matches.push(value); }
+        else { nonmatches.push(value); }
+    }
+    let boundary: i64 = matches.len();
+    for i in 0..boundary { data[i] = matches[i]; }
+    let nonmatch_count: i64 = nonmatches.len();
+    for i in 0..nonmatch_count {
+        data[boundary + i] = nonmatches[i];
+    }
+    return boundary;
+}
+
+/// @brief Stable-partition a mutable list using projected predicate keys.
+/// Each element is projected and tested once; returns the first nonmatch index.
+/// @ingroup algorithm_ranges
+generic<T, Predicate, Projection>
+pub fn stable_partition_in_place_projected(
+    data: &mut list<T>, predicate: Predicate, projection: Projection) -> i64 {
+    var matches: list<T> = [];
+    var nonmatches: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let value: T = data[i];
+        if predicate(projection(value)) { matches.push(value); }
+        else { nonmatches.push(value); }
+    }
+    let boundary: i64 = matches.len();
+    for i in 0..boundary { data[i] = matches[i]; }
+    let nonmatch_count: i64 = nonmatches.len();
+    for i in 0..nonmatch_count {
+        data[boundary + i] = nonmatches[i];
+    }
+    return boundary;
+}
+
 /// @brief Return a partitioned copy and the boundary between both groups.
 /// Matching elements precede nonmatching elements; the eager list is left
 /// unchanged and each predicate result is evaluated exactly once. The copy

@@ -468,6 +468,11 @@ fn example() {
   returns a copied range with matching elements
   first, preserving order within both groups and evaluating its predicate once
   per element.
+- `stable_partition_in_place(&mut data, predicate)` stably rearranges a mutable
+  list and returns the first nonmatching index. The projected form evaluates
+  each projection and predicate once and preserves original order in both
+  groups, matching the in-place behavior of C++20
+  [`std::ranges::stable_partition`](Stdlib-Module-API).
 - `partition_copy(data, predicate)` returns a tuple of stable matching and
   nonmatching lists, evaluating the predicate once per element and preserving
   the input.
