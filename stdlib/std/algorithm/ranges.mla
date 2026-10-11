@@ -1513,6 +1513,17 @@ pub fn transform(data: &list<T>, operation: Operation) -> list<Output> {
     return transformed;
 }
 
+/// @brief Transform each element of a mutable list in place.
+/// The operation must return the list's element type; returns the number of
+/// elements transformed.
+/// @ingroup algorithm_ranges
+generic<T, Operation>
+pub fn transform_in_place(data: &mut list<T>, operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n { data[i] = operation(data[i]); }
+    return n;
+}
+
 /// @brief Transform a range and return the consumed count with the output.
 /// The count equals the input length, including zero for empty input. This
 /// exposes an eager-list analogue of the input/output progress in C++20's
@@ -1559,6 +1570,20 @@ pub fn transform_projected(data: &list<T>, operation: Operation,
         transformed.push(operation(projection(data[i])));
     }
     return transformed;
+}
+
+/// @brief Project and transform each element of a mutable list in place.
+/// The operation must return the list's element type; each input element is
+/// projected before it is overwritten. Returns the number transformed.
+/// @ingroup algorithm_ranges
+generic<T, Operation, Projection>
+pub fn transform_in_place_projected(data: &mut list<T>, operation: Operation,
+                                    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n {
+        data[i] = operation(projection(data[i]));
+    }
+    return n;
 }
 
 /// @brief Project and transform a range, returning its consumed count.

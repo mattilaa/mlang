@@ -390,6 +390,11 @@ fn example() {
 - `transform(data, operation)` eagerly maps every element into a new list;
   the output element type is inferred from the closure return type and may
   differ from the input element type.
+- `transform_in_place(&mut data, operation)` overwrites each element using its
+  transformed value and returns the number processed. The operation must
+  return the list's existing element type; use `transform` when the result has
+  a different type. `transform_in_place_projected` applies a projection before
+  the operation and also writes back to the original list.
 - `transform_with_count` returns `(consumed, output)` with the transformed
   list, exposing the full input progress of the eager unary transform.
 - The binary `transform(left, right, operation)` overload transforms paired

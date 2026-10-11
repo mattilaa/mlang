@@ -502,10 +502,12 @@ use std::algorithm::ranges::drop_while;
 use std::algorithm::ranges::take_while_projected;
 use std::algorithm::ranges::drop_while_projected;
 use std::algorithm::ranges::transform;
+use std::algorithm::ranges::transform_in_place;
 use std::algorithm::ranges::filter_transform;
 use std::algorithm::ranges::filter_transform_projected;
 use std::algorithm::ranges::transform_with_count;
 use std::algorithm::ranges::transform_projected;
+use std::algorithm::ranges::transform_in_place_projected;
 use std::algorithm::ranges::transform_projected_with_count;
 use std::algorithm::ranges::zip_transform;
 use std::algorithm::ranges::zip_transform_projected;
@@ -3870,6 +3872,29 @@ fn test_algorithm_ranges_transform_projected() {
         values, other, add_keys, project_tens, project_tens);
     verify(sums.len() == 2 && sums[0] == 2 && sums[1] == 4);
     verify(values[0] == 11 && other.len() == 2);
+}
+
+#[test]
+fn test_algorithm_ranges_transform_in_place() {
+    var values: list<i32> = [1, 2, 3, 4];
+    var calls: i64 = 0;
+    let increment = |value: i32| {
+        calls = calls + 1;
+        return value + 1;
+    };
+    verify(transform_in_place(values, increment) == values.len());
+    verify(calls == values.len() && values[0] == 2 && values[3] == 5);
+
+    let tens = |value: i32| { return value / 10; };
+    let expand = |key: i32| { return key * 10; };
+    var projected: list<i32> = [11, 22, 33];
+    verify(transform_in_place_projected(projected, expand, tens) == 3);
+    verify(projected[0] == 10 && projected[1] == 20 &&
+           projected[2] == 30);
+
+    var empty: list<i32> = [];
+    verify(transform_in_place(empty, increment) == 0);
+    verify(calls == values.len());
 }
 
 #[test]
