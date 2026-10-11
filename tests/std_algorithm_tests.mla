@@ -463,11 +463,13 @@ use std::algorithm::ranges::copy_backward_to;
 use std::algorithm::ranges::copy_backward_to_projected;
 use std::algorithm::ranges::to_list;
 use std::algorithm::ranges::to_flat_set;
+use std::algorithm::ranges::to_flat_multiset;
 use std::algorithm::ranges::to_flat_map;
 use std::algorithm::ranges::to_flat_multimap;
 use std::algorithm::ranges::to_map as ranges_to_map;
 use std::flat_map::FlatMap;
 use std::flat_multimap::FlatMultiMap;
+use std::flat_multiset::FlatMultiSet;
 use std::flat_set::FlatSet;
 use std::algorithm::ranges::swap_ranges;
 use std::algorithm::ranges::filter;
@@ -4179,6 +4181,22 @@ fn test_algorithm_ranges_to_flat_set_sorts_and_deduplicates() {
 
     let empty: list<i32> = [];
     let empty_set: FlatSet<i32> = to_flat_set(empty);
+    verify(empty_set.is_empty());
+}
+
+#[test]
+fn test_algorithm_ranges_to_flat_multiset_retains_duplicates() {
+    let source: list<i32> = [7, 2, 5, 2, 7, 1];
+    let converted: FlatMultiSet<i32> = to_flat_multiset(source);
+    verify(converted.len() == 6 && converted.count(2) == 2 &&
+           converted.count(7) == 2 && converted.count(5) == 1);
+    verify(converted.key_at(0) == 1 && converted.key_at(1) == 2 &&
+           converted.key_at(2) == 2 && converted.key_at(3) == 5 &&
+           converted.key_at(4) == 7 && converted.key_at(5) == 7);
+    verify(source.len() == 6 && source[0] == 7 && source[5] == 1);
+
+    let empty: list<i32> = [];
+    let empty_set: FlatMultiSet<i32> = to_flat_multiset(empty);
     verify(empty_set.is_empty());
 }
 
