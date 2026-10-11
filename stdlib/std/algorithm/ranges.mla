@@ -1297,6 +1297,16 @@ pub fn fill(data: &list<T>, value: T) -> list<T> {
     return filled;
 }
 
+/// @brief Fill every existing element of a mutable list with `value`.
+/// Returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn fill_in_place(data: &mut list<T>, value: T) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n { data[i] = value; }
+    return n;
+}
+
 /// @brief Materialize `count` copies of `value` in a new list.
 /// Non-positive counts return an empty list. Eager-list counterpart to C++20
 /// `std::ranges::fill_n`; the input count defines the output length.
@@ -2573,6 +2583,40 @@ pub fn replace_if(data: &list<T>, predicate: Predicate, replacement: T) -> list<
             replaced.push(replacement);
         } else {
             replaced.push(data[i]);
+        }
+    }
+    return replaced;
+}
+
+/// @brief Replace each value equivalent to `old_value` in a mutable list.
+/// Returns the number of elements replaced.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn replace_in_place(data: &mut list<T>, old_value: U,
+                        replacement: T) -> i64 {
+    var replaced: i64 = 0;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if data[i] == old_value {
+            data[i] = replacement;
+            replaced = replaced + 1;
+        }
+    }
+    return replaced;
+}
+
+/// @brief Replace predicate-matching values in a mutable list.
+/// Returns the number of elements replaced.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn replace_if_in_place(data: &mut list<T>, predicate: Predicate,
+                           replacement: T) -> i64 {
+    var replaced: i64 = 0;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            data[i] = replacement;
+            replaced = replaced + 1;
         }
     }
     return replaced;
@@ -6510,6 +6554,22 @@ pub fn reversed(data: &list<T>) -> list<T> {
         out.push(data[n - 1 - i]);
     }
     return out;
+}
+
+/// @brief Reverse the elements of a mutable list in place.
+/// Returns the number of element swaps performed.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn reverse_in_place(data: &mut list<T>) -> i64 {
+    let n: i64 = data.len();
+    let swaps: i64 = n / 2;
+    for i in 0..swaps {
+        let opposite: i64 = n - 1 - i;
+        let temporary: T = data[i];
+        data[i] = data[opposite];
+        data[opposite] = temporary;
+    }
+    return swaps;
 }
 
 /// @brief Copy a range in reverse order.

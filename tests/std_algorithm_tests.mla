@@ -294,6 +294,7 @@ use std::algorithm::ranges::prev_permutation_projected;
 use std::algorithm::ranges::prev_permutation_by_projected;
 use std::algorithm::ranges::reversed;
 use std::algorithm::ranges::reverse_copy;
+use std::algorithm::ranges::reverse_in_place;
 use std::algorithm::ranges::rotate_left;
 use std::algorithm::ranges::rotate;
 use std::algorithm::ranges::rotate_copy;
@@ -339,6 +340,7 @@ use std::algorithm::ranges::adjacent_transform_projected;
 use std::algorithm::ranges::adjacent_transform3_projected;
 use std::algorithm::ranges::adjacent_transform4_projected;
 use std::algorithm::ranges::replace;
+use std::algorithm::ranges::replace_in_place;
 use std::algorithm::ranges::replace_projected;
 use std::algorithm::ranges::replace_by;
 use std::algorithm::ranges::replace_by_projected;
@@ -367,6 +369,7 @@ use std::algorithm::ranges::for_each_n_projected_count;
 use std::algorithm::ranges::generate_n;
 use std::algorithm::ranges::generate;
 use std::algorithm::ranges::fill;
+use std::algorithm::ranges::fill_in_place;
 use std::algorithm::ranges::fill_n;
 use std::algorithm::ranges::copy_n;
 use std::algorithm::ranges::copy_n_with_count;
@@ -407,6 +410,7 @@ use std::algorithm::ranges::replace_copy_by_projected;
 use std::algorithm::ranges::replace_copy_if;
 use std::algorithm::ranges::replace_copy_if_projected;
 use std::algorithm::ranges::replace_if;
+use std::algorithm::ranges::replace_if_in_place;
 use std::algorithm::ranges::replace_if_projected;
 use std::algorithm::ranges::unique_by;
 use std::algorithm::ranges::unique_copy_by;
@@ -3212,6 +3216,28 @@ fn test_algorithm_ranges_replace_if() {
     let empty: list<i32> = [];
     let empty_replaced: list<i32> = replace_if(empty, is_even, replacement);
     verify(empty_replaced.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_mutating_algorithms() {
+    var filled: list<i32> = [2, 4, 6];
+    verify(fill_in_place(filled, 9) == 3);
+    verify(filled.len() == 3 && filled[0] == 9 &&
+           filled[1] == 9 && filled[2] == 9);
+
+    var values: list<i32> = [1, 2, 2, 3, 4];
+    verify(replace_in_place(values, 2, 8) == 2);
+    let is_even = |value: i32| { return value % 2 == 0; };
+    verify(replace_if_in_place(values, is_even, 0) == 3);
+    verify(values[0] == 1 && values[1] == 0 && values[2] == 0 &&
+           values[3] == 3 && values[4] == 0);
+
+    verify(reverse_in_place(values) == 2);
+    verify(values[0] == 0 && values[1] == 3 && values[2] == 0 &&
+           values[3] == 0 && values[4] == 1);
+    var empty: list<i32> = [];
+    verify(fill_in_place(empty, 5) == 0);
+    verify(reverse_in_place(empty) == 0);
 }
 
 #[test]

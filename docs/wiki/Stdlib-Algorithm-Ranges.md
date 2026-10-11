@@ -361,6 +361,11 @@ fn example() {
 - `fill(data, value)` returns a new list of the same length with every item set
   to `value`; the source list is unchanged, matching the result of applying
   C++20 [`std::ranges::fill`](Stdlib-Module-API) to an equal-sized destination range.
+- Mutable counterparts are explicit: `fill_in_place(&mut data, value)` writes
+  every element and returns the number written; `replace_in_place` and
+  `replace_if_in_place` update matching elements and return the replacement
+  count; `reverse_in_place` reverses the list and returns the number of swaps.
+  These operations require a mutable list and preserve its length.
 - `fill_n(count, value)` materializes exactly `count` copies in a new list;
   non-positive counts return an empty list. This eager-list helper adapts C++20
   [`std::ranges::fill_n`](Stdlib-Module-API), whose output length is normally defined by an output
