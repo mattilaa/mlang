@@ -4709,6 +4709,56 @@ pub fn partial_sort_copy_by_projected(data: &list<T>, output_capacity: i64,
     return partial_sort_by_projected(data, output_capacity, less, projection);
 }
 
+/// @brief Select and sort values into an existing destination list.
+/// Writes up to the destination capacity and returns the number written;
+/// the source remains unchanged and any unused destination suffix is kept.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn partial_sort_copy_to(source: &list<T>, destination: &mut list<T>) -> i64 {
+    let selected: list<T> = partial_sort_copy(source, destination.len());
+    let count: i64 = selected.len();
+    for i in 0..count { destination[i] = selected[i]; }
+    return count;
+}
+
+/// @brief Partial-sort into an existing destination by projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn partial_sort_copy_to_projected(
+    source: &list<T>, destination: &mut list<T>,
+    projection: Projection) -> i64 {
+    let selected: list<T> = partial_sort_copy_projected(
+        source, destination.len(), projection);
+    let count: i64 = selected.len();
+    for i in 0..count { destination[i] = selected[i]; }
+    return count;
+}
+
+/// @brief Comparator form of partial-sorting into an existing destination.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn partial_sort_copy_to_by(
+    source: &list<T>, destination: &mut list<T>, less: Less) -> i64 {
+    let selected: list<T> = partial_sort_copy_by(
+        source, destination.len(), less);
+    let count: i64 = selected.len();
+    for i in 0..count { destination[i] = selected[i]; }
+    return count;
+}
+
+/// @brief Comparator-and-projection form of partial-sorting to a destination.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn partial_sort_copy_to_by_projected(
+    source: &list<T>, destination: &mut list<T>, less: Less,
+    projection: Projection) -> i64 {
+    let selected: list<T> = partial_sort_copy_by_projected(
+        source, destination.len(), less, projection);
+    let count: i64 = selected.len();
+    for i in 0..count { destination[i] = selected[i]; }
+    return count;
+}
+
 generic<T, Less>
 fn nth_element_impl_by(data: &list<T>, nth: i64, less: Less) -> list<T> {
     let n: i64 = data.len();

@@ -263,6 +263,10 @@ fn example() {
   according to projected keys while retaining original values.
 - `partial_sort_copy_by_projected` applies both a comparator and a projection
   while returning the selected original values in comparator order.
+- `partial_sort_copy_to(source, destination)` writes the sorted selection into
+  an existing destination list up to its capacity, returns the number written,
+  and preserves any unused destination tail. Comparator and projected forms
+  are available; the source is never modified.
 - `nth_element(data, nth)` returns a copied partitioned list with its selected
   value at `nth`; under ascending order, preceding values are no greater and
   following values are no smaller. The two partitions are not otherwise

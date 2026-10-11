@@ -236,6 +236,10 @@ use std::algorithm::ranges::partial_sort_copy;
 use std::algorithm::ranges::partial_sort_copy_projected;
 use std::algorithm::ranges::partial_sort_copy_by;
 use std::algorithm::ranges::partial_sort_copy_by_projected;
+use std::algorithm::ranges::partial_sort_copy_to;
+use std::algorithm::ranges::partial_sort_copy_to_projected;
+use std::algorithm::ranges::partial_sort_copy_to_by;
+use std::algorithm::ranges::partial_sort_copy_to_by_projected;
 use std::algorithm::ranges::nth_element;
 use std::algorithm::ranges::nth_element_by;
 use std::algorithm::ranges::nth_element_projected;
@@ -1924,6 +1928,43 @@ fn test_algorithm_ranges_partial_sort_copy_projected() {
     let none: list<i32> = partial_sort_copy_projected(
         input, -2, project_tens);
     verify(none.len() == 0 && input[0] == 38);
+}
+
+#[test]
+fn test_algorithm_ranges_partial_sort_copy_to() {
+    let source: list<i32> = [8, 5, 2, 9, 1, 7, 3];
+    var destination: list<i32> = [0, 0, 0, 99, 100];
+    verify(partial_sort_copy_to(source, destination) == 3);
+    verify(destination[0] == 1 && destination[1] == 2 &&
+           destination[2] == 3 && destination[3] == 99 &&
+           destination[4] == 100);
+    verify(source[0] == 8 && source[4] == 1);
+
+    var short_destination: list<i32> = [0, 0];
+    verify(partial_sort_copy_to(source, short_destination) == 2);
+    verify(short_destination[0] == 1 && short_destination[1] == 2);
+
+    let project_tens = |value: i32| { return value / 10; };
+    var projected: list<i32> = [0, 0, 77];
+    verify(partial_sort_copy_to_projected(
+        source, projected, project_tens) == 3);
+    verify(project_tens(projected[0]) <= project_tens(projected[1]) &&
+           project_tens(projected[1]) <= project_tens(projected[2]));
+
+    let greater = |left: i32, right: i32| { return left > right; };
+    var descending: list<i32> = [0, 0, 0];
+    verify(partial_sort_copy_to_by(source, descending, greater) == 3);
+    verify(descending[0] == 9 && descending[1] == 8 && descending[2] == 7);
+    var combined: list<i32> = [0, 0];
+    verify(partial_sort_copy_to_by_projected(
+        source, combined, greater, project_tens) == 2);
+    verify(project_tens(combined[0]) >= project_tens(combined[1]));
+
+    var empty_destination: list<i32> = [];
+    verify(partial_sort_copy_to(source, empty_destination) == 0);
+    let empty_source: list<i32> = [];
+    verify(partial_sort_copy_to(empty_source, destination) == 0);
+    verify(destination[0] == 1 && destination[4] == 100);
 }
 
 #[test]
