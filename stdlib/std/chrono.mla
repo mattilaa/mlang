@@ -75,6 +75,22 @@ alias year_month_day_last = DateYearMonthDayLast;
 alias year_month_weekday = DateYearMonthWeekday;
 alias year_month_weekday_last = DateYearMonthWeekdayLast;
 
+/// @brief Weekday plus 1-based occurrence index in a month, like C++20
+/// `weekday_indexed`.
+pub struct WeekdayIndexed {
+    var weekday: DateWeekday;
+    var index: i32;
+};
+
+/// @brief Selector for the final occurrence of a weekday in a month, like
+/// C++20 `weekday_last`.
+pub struct WeekdayLast {
+    var weekday: DateWeekday;
+};
+
+alias weekday_indexed = WeekdayIndexed;
+alias weekday_last = WeekdayLast;
+
 /// @brief System-clock time point with day precision, like C++20 `sys_days`.
 pub struct SysDays {
     var count: i64;
@@ -265,6 +281,16 @@ pub fn make_year_month_weekday(year_value: i32, month_value: i32,
                                         weekday_value, occurrence);
 }
 
+/// @brief Construct a weekday occurrence from a checked indexed weekday.
+pub fn make_year_month_weekday_from_indexed(year_value: i32,
+    month_value: i32, value: weekday_indexed) -> option<year_month_weekday> {
+    if !weekday_indexed_is_valid(value) {
+        return None<year_month_weekday>();
+    }
+    return date_make_year_month_weekday(year_value, month_value,
+                                        value.weekday, value.index);
+}
+
 /// @brief Resolve a numbered weekday occurrence to a Gregorian date.
 pub fn resolve_year_month_weekday(value: year_month_weekday)
     -> option<year_month_day> {
@@ -279,6 +305,13 @@ pub fn make_year_month_weekday_last(year_value: i32, month_value: i32,
                                              weekday_value);
 }
 
+/// @brief Construct a final weekday occurrence from a weekday-last selector.
+pub fn make_year_month_weekday_from_last(year_value: i32, month_value: i32,
+    value: weekday_last) -> option<year_month_weekday_last> {
+    return date_make_year_month_weekday_last(year_value, month_value,
+                                             value.weekday);
+}
+
 /// @brief Resolve the final weekday occurrence to a Gregorian date.
 pub fn resolve_year_month_weekday_last(value: year_month_weekday_last)
     -> option<year_month_day> {
@@ -288,6 +321,40 @@ pub fn resolve_year_month_weekday_last(value: year_month_weekday_last)
 /// @brief Construct a weekday from its Sunday=0 through Saturday=6 encoding.
 pub fn make_weekday(value: i32) -> option<weekday> {
     return date_weekday_from_c_encoding(value);
+}
+
+/// @brief Construct a checked indexed weekday (index must be 1 through 5).
+pub fn make_weekday_indexed(value: weekday, index: i32)
+    -> option<weekday_indexed> {
+    if index < 1 || index > 5 { return None<weekday_indexed>(); }
+    return Some<weekday_indexed>(WeekdayIndexed {
+        weekday: value, index: index
+    });
+}
+
+/// @brief Construct a final-weekday selector.
+pub fn make_weekday_last(value: weekday) -> weekday_last {
+    return WeekdayLast { weekday: value };
+}
+
+/// @brief Return the weekday stored by an indexed weekday.
+pub fn weekday_indexed_day(value: weekday_indexed) -> weekday {
+    return value.weekday;
+}
+
+/// @brief Return the index stored by an indexed weekday.
+pub fn weekday_index(value: weekday_indexed) -> i32 {
+    return value.index;
+}
+
+/// @brief Check whether an indexed weekday has a valid 1-through-5 index.
+pub fn weekday_indexed_is_valid(value: weekday_indexed) -> bool {
+    return value.index >= 1 && value.index <= 5;
+}
+
+/// @brief Return the weekday stored by a final-weekday selector.
+pub fn weekday_last_day(value: weekday_last) -> weekday {
+    return value.weekday;
 }
 
 /// @brief Return the Sunday-based weekday encoding.

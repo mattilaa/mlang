@@ -33,6 +33,8 @@ use std::chrono::year;
 use std::chrono::month;
 use std::chrono::day;
 use std::chrono::weekday;
+use std::chrono::weekday_indexed;
+use std::chrono::weekday_last;
 use std::chrono::year_month;
 use std::chrono::year_month_day;
 use std::chrono::sys_days;
@@ -61,10 +63,18 @@ use std::chrono::resolve_month_day_last;
 use std::chrono::make_year_month_day_last;
 use std::chrono::resolve_year_month_day_last;
 use std::chrono::make_year_month_weekday;
+use std::chrono::make_year_month_weekday_from_indexed;
 use std::chrono::resolve_year_month_weekday;
 use std::chrono::make_year_month_weekday_last;
+use std::chrono::make_year_month_weekday_from_last;
 use std::chrono::resolve_year_month_weekday_last;
 use std::chrono::make_weekday;
+use std::chrono::make_weekday_indexed;
+use std::chrono::make_weekday_last;
+use std::chrono::weekday_indexed_day;
+use std::chrono::weekday_index;
+use std::chrono::weekday_indexed_is_valid;
+use std::chrono::weekday_last_day;
 use std::chrono::weekday_c_encoding;
 use std::chrono::weekday_iso_encoding;
 use std::chrono::add_weekdays;
@@ -162,6 +172,32 @@ fn test_chrono_calendar_recurrence_and_weekday_helpers() {
 
     let last_day = make_month_day_last(2).unwrap();
     verify(resolve_month_day_last(last_day, 2023).unwrap().day == 28);
+}
+
+#[test]
+fn test_chrono_indexed_and_last_weekday_values() {
+    let monday: weekday = make_weekday(1).unwrap();
+    let second: weekday_indexed = make_weekday_indexed(monday, 2).unwrap();
+    verify(weekday_indexed_day(second) == monday &&
+           weekday_index(second) == 2 && weekday_indexed_is_valid(second));
+    verify(make_weekday_indexed(monday, 0).is_none());
+    verify(make_weekday_indexed(monday, 6).is_none());
+
+    let march_second = make_year_month_weekday_from_indexed(2024, 3, second)
+        .unwrap();
+    let march_second_date = resolve_year_month_weekday(march_second).unwrap();
+    verify(march_second_date.year == 2024 &&
+           march_second_date.month == 3 && march_second_date.day == 11);
+
+    let final_monday: weekday_last = make_weekday_last(monday);
+    verify(weekday_last_day(final_monday) == monday);
+    let september_last = make_year_month_weekday_from_last(
+        2024, 9, final_monday).unwrap();
+    let september_last_date =
+        resolve_year_month_weekday_last(september_last).unwrap();
+    verify(september_last_date.year == 2024 &&
+           september_last_date.month == 9 &&
+           september_last_date.day == 30);
 }
 
 #[test]

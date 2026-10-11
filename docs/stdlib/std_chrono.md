@@ -9,7 +9,8 @@ nanoseconds through weeks.
 
 `std::chrono` also exposes Mlang's checked C++20 civil-calendar types and
 operations (`year`, `month`, `day`, `weekday`, `year_month`,
-`year_month_day`, and the month/day/weekday recurrence types). Their underlying
+`year_month_day`, and the month/day/weekday recurrence types, including
+`weekday_indexed` and `weekday_last`). Their underlying
 implementations remain shared with `std::date`; timezone and wall-clock
 formatting APIs continue to live there.
 
@@ -73,6 +74,13 @@ let tomorrow = sys_days_add_days(epoch_point, 1).unwrap();
   `resolve_month_day_last`, `make_year_month_day_last`, and the numbered or
   final weekday helpers `make_year_month_weekday` and
   `make_year_month_weekday_last` with their corresponding `resolve_` forms.
+- `make_weekday_indexed(weekday, index)` constructs a checked selector for
+  the first through fifth occurrence of a weekday in a month; invalid indices
+  return `None`. `make_weekday_last(weekday)` selects its final occurrence.
+  Use `make_year_month_weekday_from_indexed` or
+  `make_year_month_weekday_from_last` to combine either selector with a
+  year/month, then resolve it with the matching `resolve_` function. The
+  `weekday_indexed_*` and `weekday_last_day` accessors expose selector fields.
 - `make_weekday`, `weekday_c_encoding`, `weekday_iso_encoding`,
   `weekday_from_sys_days`, `weekday_of`, and `add_weekdays` cover typed weekday
   construction, conversion, and modular arithmetic.
