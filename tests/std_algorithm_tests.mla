@@ -282,6 +282,10 @@ use std::algorithm::ranges::equal_range_by;
 use std::algorithm::ranges::binary_search_by;
 use std::algorithm::ranges::sorted;
 use std::algorithm::ranges::sorted_by;
+use std::algorithm::ranges::sort_in_place;
+use std::algorithm::ranges::sort_in_place_by;
+use std::algorithm::ranges::sort_in_place_projected;
+use std::algorithm::ranges::sort_in_place_by_projected;
 use std::algorithm::ranges::sorted_projected;
 use std::algorithm::ranges::sorted_by_projected;
 use std::algorithm::ranges::next_permutation;
@@ -2383,6 +2387,35 @@ fn test_algorithm_ranges_sorted_by_projected_comparator() {
     let empty_sorted: list<i32> = sorted_by_projected(
         empty, greater, project_tens);
     verify(empty_sorted.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_sort_in_place_variants() {
+    var ascending: list<i32> = [5, 1, 3, 1, 9, -2];
+    verify(sort_in_place(ascending) > 0);
+    verify(ascending[0] == -2 && ascending[1] == 1 &&
+           ascending[2] == 1 && ascending[3] == 3 &&
+           ascending[4] == 5 && ascending[5] == 9);
+
+    let greater = |left: i32, right: i32| { return left > right; };
+    var descending: list<i32> = [2, 5, 1, 5, 9];
+    verify(sort_in_place_by(descending, greater) > 0);
+    verify(descending[0] == 9 && descending[1] == 5 &&
+           descending[2] == 5 && descending[3] == 2 &&
+           descending[4] == 1);
+
+    let project_tens = |value: i32| { return value / 10; };
+    var projected: list<i32> = [32, 19, 21, 14, 28, 11];
+    sort_in_place_projected(projected, project_tens);
+    verify(is_sorted_projected(projected, project_tens));
+    var projected_desc: list<i32> = [12, 31, 22, 19, 11, 29];
+    sort_in_place_by_projected(projected_desc, greater, project_tens);
+    verify(is_sorted_by_projected(projected_desc, greater, project_tens));
+
+    var empty: list<i32> = [];
+    var singleton: list<i32> = [7];
+    verify(sort_in_place(empty) == 0 && empty.len() == 0);
+    verify(sort_in_place(singleton) == 0 && singleton[0] == 7);
 }
 
 #[test]

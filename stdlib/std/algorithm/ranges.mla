@@ -6245,6 +6245,94 @@ pub fn sorted_by_projected(data: &list<T>, less: Less,
     return merge_by_projected_runs(left, right, less, projection);
 }
 
+generic<T>
+fn ranges_identity(value: T) -> T { return value; }
+
+generic<T>
+fn ranges_default_less(left: T, right: T) -> bool { return left < right; }
+
+generic<T, Less, Projection>
+fn ranges_sift_down_in_place(data: &mut list<T>, heap_len: i64, root: i64,
+                             less: Less, projection: Projection) -> i64 {
+    var parent: i64 = root;
+    var swaps: i64 = 0;
+    while parent < heap_len / 2 {
+        let left: i64 = parent * 2 + 1;
+        var larger: i64 = left;
+        let right: i64 = left + 1;
+        if right < heap_len &&
+           less(projection(data[left]), projection(data[right])) {
+            larger = right;
+        }
+        if !less(projection(data[parent]), projection(data[larger])) {
+            break;
+        }
+        let temporary: T = data[parent];
+        data[parent] = data[larger];
+        data[larger] = temporary;
+        swaps = swaps + 1;
+        parent = larger;
+    }
+    return swaps;
+}
+
+/// @brief Sort a mutable list in place using a heap-based O(N log N) sort.
+/// Returns the number of element swaps; unlike `sorted`, this operation is
+/// not stable and mutates its input.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn sort_in_place_by_projected(data: &mut list<T>, less: Less,
+                                  projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    var swaps: i64 = 0;
+    var parent: i64 = n / 2;
+    while parent > 0 {
+        parent = parent - 1;
+        swaps = swaps + ranges_sift_down_in_place(
+            data, n, parent, less, projection);
+    }
+    var heap_len: i64 = n;
+    while heap_len > 1 {
+        heap_len = heap_len - 1;
+        let temporary: T = data[0];
+        data[0] = data[heap_len];
+        data[heap_len] = temporary;
+        swaps = swaps + 1;
+        if heap_len > 1 {
+            swaps = swaps + ranges_sift_down_in_place(
+                data, heap_len, 0, less, projection);
+        }
+    }
+    return swaps;
+}
+
+/// @brief Sort a mutable list by a strict comparison function.
+/// Returns the number of swaps; equivalent values are not kept stable.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn sort_in_place_by(data: &mut list<T>, less: Less) -> i64 {
+    return sort_in_place_by_projected(data, less, ranges_identity);
+}
+
+/// @brief Sort a mutable list by its projected keys in place.
+/// Returns the number of swaps.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn sort_in_place_projected(data: &mut list<T>,
+                               projection: Projection) -> i64 {
+    return sort_in_place_by_projected(data, ranges_default_less,
+                                      projection);
+}
+
+/// @brief Sort a mutable list in ascending order in place.
+/// Returns the number of swaps; use `sorted` when a stable copy is required.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn sort_in_place(data: &mut list<T>) -> i64 {
+    return sort_in_place_by_projected(data, ranges_default_less,
+                                      ranges_identity);
+}
+
 /// @brief Return the next lexicographic permutation and whether it exists.
 /// If no next permutation exists, return the ascending first permutation.
 /// The source range is unchanged (C++20 `std::ranges::next_permutation`).

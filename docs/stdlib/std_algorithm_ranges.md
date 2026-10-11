@@ -501,6 +501,11 @@ fn example() {
   projected key, preserving input order among equivalent keys.
 - `sorted_by_projected(data, less, projection)` combines projected keys with a
   custom strict ordering and preserves input order among equivalent keys.
+- `sort_in_place(data)` and its `_by`, `_projected`, and `_by_projected`
+  variants sort a mutable list in O(N log N) time using heap sort. They return
+  the number of swaps and mutate the input; unlike `sorted*`, they are not
+  stable. Use the comparator and projection forms to order records by custom
+  keys without building an intermediate sorted list.
 - `reversed` returns the elements in reverse order; `rotate_left` returns a
   copy rotated by a normalized signed offset. `rotate(data, middle)` places
   the suffix beginning at the split before the prefix (C++20 `ranges::rotate`
