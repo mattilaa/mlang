@@ -465,12 +465,21 @@ fn example() {
 - `to_flat_map(pairs)` materializes `(key, value)` tuples as a sorted,
   unique-key [`std::flat_map`](Stdlib-Flat-Map). When equivalent keys repeat, the last pair in
   source order supplies the retained value; the input is unchanged.
+- `to_flat_map_projected(data, projection)` materializes projected
+  `(key, value)` tuples directly into a sorted `FlatMap`, evaluating the
+  projection once per source element and keeping the last value for duplicate
+  keys.
 - `to_flat_multimap(pairs)` materializes the same pair range as a sorted
   [`std::flat_multimap`](Stdlib-Flat-Multimap), retaining all equivalent keys and preserving their
   relative input order within each key group.
+- `to_flat_multimap_projected(data, projection)` directly materializes
+  projected pairs into a sorted `FlatMultiMap`, retaining duplicate keys and
+  evaluating the projection once per source element.
 - `to_map(pairs)` materializes `(key, value)` tuples into the built-in
   `map<K, V>`. Map iteration order is unspecified; the last pair in source
   order supplies the value for duplicate keys.
+- `to_map_projected(data, projection)` materializes projected pairs into the
+  built-in map with the same last-source-value-wins behavior.
 - `swap_ranges(left, right)` returns two copied lists with corresponding
   elements in the common prefix exchanged; an unmatched tail is preserved.
   Both inputs remain unchanged.
