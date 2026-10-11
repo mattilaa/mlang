@@ -1404,6 +1404,19 @@ pub fn copy(data: &list<T>) -> list<T> {
     return copied;
 }
 
+/// @brief Copy into an existing mutable list, stopping at either range's end.
+/// Returns the number of elements written; the source is unchanged.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn copy_to(source: &list<T>, destination: &mut list<T>) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = source_len;
+    if destination_len < count { count = destination_len; }
+    for i in 0..count { destination[i] = source[i]; }
+    return count;
+}
+
 /// @brief Materialize a range as a new list with the requested element type.
 /// This is the eager-list counterpart of C++23 `std::ranges::to` for list
 /// construction. Each source element is converted to `Output` in order.

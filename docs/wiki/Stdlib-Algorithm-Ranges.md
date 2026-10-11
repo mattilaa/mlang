@@ -384,6 +384,9 @@ fn example() {
   observe the actual bounded progress alongside the copied prefix.
 - `copy(data)` materializes a full list copy, the eager-list counterpart to
   [`std::ranges::copy`](Stdlib-Module-API); the source remains unchanged.
+- `copy_to(source, destination)` copies into an existing mutable list, stopping
+  when either list ends and returning the number written. The source remains
+  unchanged and any unused destination suffix is preserved.
 - `to_list(data)` materializes a new list with an explicitly selected element
   type, converting each source element in order. This is the Mlang eager-list
   counterpart to C++23 [`std::ranges::to`](Stdlib-Module-API); the output type is inferred from the
