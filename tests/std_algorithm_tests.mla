@@ -428,6 +428,7 @@ use std::algorithm::ranges::copy_n;
 use std::algorithm::ranges::copy_n_with_count;
 use std::algorithm::ranges::copy as ranges_copy;
 use std::algorithm::ranges::copy_to;
+use std::algorithm::ranges::copy_n_to;
 use std::algorithm::ranges::copy_backward_to;
 use std::algorithm::ranges::to_list;
 use std::algorithm::ranges::swap_ranges;
@@ -5938,6 +5939,30 @@ fn test_algorithm_ranges_copy_to_output_range() {
     verify(copy_to(empty, destination) == 0 && destination[0] == 4);
     var empty_destination: list<i32> = [];
     verify(copy_to(source, empty_destination) == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_copy_n_to_is_bounded_by_all_ranges() {
+    let source: list<i32> = [4, 8, 15, 16];
+    var destination: list<i32> = [0, 0, 0, 0, 99];
+    verify(copy_n_to(source, destination, 3) == 3);
+    verify(destination[0] == 4 && destination[1] == 8 &&
+           destination[2] == 15 && destination[3] == 0 &&
+           destination[4] == 99);
+
+    var short_destination: list<i32> = [-1, -2];
+    verify(copy_n_to(source, short_destination, 4) == 2);
+    verify(short_destination[0] == 4 && short_destination[1] == 8);
+
+    var unchanged: list<i32> = [71, 72];
+    verify(copy_n_to(source, unchanged, -1) == 0);
+    verify(copy_n_to(source, unchanged, 0) == 0);
+    verify(unchanged[0] == 71 && unchanged[1] == 72);
+
+    let empty: list<i32> = [];
+    verify(copy_n_to(empty, unchanged, 4) == 0);
+    var no_output: list<i32> = [];
+    verify(copy_n_to(source, no_output, 4) == 0);
 }
 
 #[test]

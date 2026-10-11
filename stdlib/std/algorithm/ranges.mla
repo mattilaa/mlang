@@ -1417,6 +1417,24 @@ pub fn copy_to(source: &list<T>, destination: &mut list<T>) -> i64 {
     return count;
 }
 
+/// @brief Copy at most `count` source elements into an existing destination.
+/// Stops when the requested count, source, or destination is exhausted and
+/// returns the number written. Both lists remain at their original lengths.
+/// Bounded-output eager-list counterpart to C++20 `std::ranges::copy_n`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn copy_n_to(source: &list<T>, destination: &mut list<T>,
+                 count: i64) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var copied: i64 = count;
+    if copied < 0 { copied = 0; }
+    if copied > source_len { copied = source_len; }
+    if copied > destination_len { copied = destination_len; }
+    for i in 0..copied { destination[i] = source[i]; }
+    return copied;
+}
+
 /// @brief Copy a range backward into an existing destination list.
 /// Values align at the end of the destination. If the destination is shorter,
 /// the source suffix that fits is copied. Returns `(source_first,

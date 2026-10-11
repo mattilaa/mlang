@@ -411,6 +411,10 @@ fn example() {
 - `copy_to(source, destination)` copies into an existing mutable list, stopping
   when either list ends and returning the number written. The source remains
   unchanged and any unused destination suffix is preserved.
+- `copy_n_to(source, destination, count)` copies at most the requested number
+  of elements into existing output storage, stopping at the source or
+  destination end and returning the count written. Negative counts write
+  nothing; neither list changes length.
 - `copy_backward_to(source, destination)` copies values aligned to the end of
   an existing destination list and returns `(source_first, destination_first)`
   for the copied subranges. If the destination is shorter, the source suffix
