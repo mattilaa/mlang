@@ -428,6 +428,7 @@ use std::algorithm::ranges::copy_n;
 use std::algorithm::ranges::copy_n_with_count;
 use std::algorithm::ranges::copy as ranges_copy;
 use std::algorithm::ranges::copy_to;
+use std::algorithm::ranges::copy_backward_to;
 use std::algorithm::ranges::to_list;
 use std::algorithm::ranges::swap_ranges;
 use std::algorithm::ranges::filter;
@@ -5937,6 +5938,32 @@ fn test_algorithm_ranges_copy_to_output_range() {
     verify(copy_to(empty, destination) == 0 && destination[0] == 4);
     var empty_destination: list<i32> = [];
     verify(copy_to(source, empty_destination) == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_copy_backward_to_aligns_destination_end() {
+    let source: list<i32> = [4, 8, 15, 16];
+    var larger: list<i32> = [91, 92, 0, 0, 0, 0];
+    let positions: tuple<i64, i64> = copy_backward_to(source, larger);
+    verify(positions.0 == 0 && positions.1 == 2);
+    verify(larger[0] == 91 && larger[1] == 92);
+    verify(larger[2] == 4 && larger[3] == 8 &&
+           larger[4] == 15 && larger[5] == 16);
+    verify(source[0] == 4 && source[3] == 16);
+
+    var shorter: list<i32> = [0, 0];
+    let truncated_positions: tuple<i64, i64> =
+        copy_backward_to(source, shorter);
+    verify(truncated_positions.0 == 2 && truncated_positions.1 == 0);
+    verify(shorter[0] == 15 && shorter[1] == 16);
+
+    var empty_destination: list<i32> = [];
+    let empty_positions: tuple<i64, i64> =
+        copy_backward_to(source, empty_destination);
+    verify(empty_positions.0 == 4 && empty_positions.1 == 0);
+    let empty_source: list<i32> = [];
+    let no_copy: tuple<i64, i64> = copy_backward_to(empty_source, larger);
+    verify(no_copy.0 == 0 && no_copy.1 == 6);
 }
 
 #[test]

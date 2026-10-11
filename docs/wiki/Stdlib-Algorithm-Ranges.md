@@ -411,6 +411,12 @@ fn example() {
 - `copy_to(source, destination)` copies into an existing mutable list, stopping
   when either list ends and returning the number written. The source remains
   unchanged and any unused destination suffix is preserved.
+- `copy_backward_to(source, destination)` copies values aligned to the end of
+  an existing destination list and returns `(source_first, destination_first)`
+  for the copied subranges. If the destination is shorter, the source suffix
+  that fits is copied; unused destination prefix elements are preserved. This
+  bounded eager-list adaptation corresponds to C++20
+  [`std::ranges::copy_backward`](Stdlib-Module-API).
 - `copy_if_to(source, destination, predicate)` writes matching source values
   into an existing destination and stops when it fills. It returns
   `(consumed, written)` so callers can resume from the exact source position;

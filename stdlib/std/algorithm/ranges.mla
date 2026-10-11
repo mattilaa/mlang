@@ -1417,6 +1417,29 @@ pub fn copy_to(source: &list<T>, destination: &mut list<T>) -> i64 {
     return count;
 }
 
+/// @brief Copy a range backward into an existing destination list.
+/// Values align at the end of the destination. If the destination is shorter,
+/// the source suffix that fits is copied. Returns `(source_first,
+/// destination_first)` for the copied subranges; empty copies return the
+/// respective end indices. The source and unused destination prefix are kept.
+/// This bounded eager-list form adapts C++20 `std::ranges::copy_backward`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn copy_backward_to(source: &list<T>, destination: &mut list<T>)
+    -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    let source_first: i64 = source_len - count;
+    let destination_first: i64 = destination_len - count;
+    var offset: i64 = count;
+    while offset > 0 {
+        offset = offset - 1;
+        destination[destination_first + offset] = source[source_first + offset];
+    }
+    return (source_first, destination_first);
+}
+
 /// @brief Materialize a range as a new list with the requested element type.
 /// This is the eager-list counterpart of C++23 `std::ranges::to` for list
 /// construction. Each source element is converted to `Output` in order.
