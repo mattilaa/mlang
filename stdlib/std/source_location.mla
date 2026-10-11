@@ -1,0 +1,34 @@
+/// \file source_location.mla
+/// \brief C++20-style call-site source location values.
+
+/// @brief Source position captured at a call to `current()`.
+pub struct SourceLocation {
+    var file: str8;
+    var function: str8;
+    var line: i64;
+    var column: i64;
+};
+
+/// @brief Capture the source location of this call site.
+/// The compiler lowers this declaration as a call-site intrinsic.
+extern pub fn current() -> SourceLocation;
+
+/// @brief Return the source file associated with a location.
+pub fn file_name(location: SourceLocation) -> str8 {
+    return location.file;
+}
+
+/// @brief Return the enclosing Mlang function name associated with a location.
+pub fn function_name(location: SourceLocation) -> str8 {
+    return location.function;
+}
+
+/// @brief Return the one-based source line associated with a location.
+pub fn line(location: SourceLocation) -> i64 {
+    return location.line;
+}
+
+/// @brief Return the one-based source column associated with a location.
+pub fn column(location: SourceLocation) -> i64 {
+    return location.column;
+}

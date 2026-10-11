@@ -68,6 +68,7 @@
 - [[std::jsonrpc|Stdlib-Jsonrpc]]
 - [[std::limits|Stdlib-Limits]]
 - [[std::log|Stdlib-Log]]
+- [[std::source_location|Stdlib-Source-Location]]
 - [[std::multiarray|Stdlib-Multiarray]]
 - [[std::mutmultiarray|Stdlib-Mutmultiarray]]
 - [[std::net|Stdlib-Net]]

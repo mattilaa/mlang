@@ -1,0 +1,21 @@
+mod std::source_location;
+use std::source_location::SourceLocation;
+use std::source_location::current;
+use std::source_location::file_name;
+use std::source_location::function_name;
+use std::source_location::line;
+use std::source_location::column;
+
+fn source_location_nested_call() -> SourceLocation {
+    return current();
+}
+
+fn test_source_location_captures_call_sites() {
+    let direct: SourceLocation = current();
+    let nested: SourceLocation = source_location_nested_call();
+    verify(file_name(direct) != "");
+    verify(function_name(direct) != "");
+    verify(line(direct) > 0 && column(direct) > 0);
+    verify(line(nested) > 0 && column(nested) > 0);
+    verify(line(direct) != line(nested));
+}
