@@ -1812,6 +1812,22 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                dynamic_cast<TupleTypeNode*>(type) != nullptr;
     };
 
+    auto isListToFixedArrayCompatible = [&](TypeNode* expected,
+                                            TypeNode* actual) -> bool
+    {
+        while(auto* refType = dynamic_cast<ReferenceTypeNode*>(expected))
+            expected = refType->elementType;
+        while(auto* refType = dynamic_cast<ReferenceTypeNode*>(actual))
+            actual = refType->elementType;
+        auto* expectedList = dynamic_cast<GenericListTypeNode*>(expected);
+        auto* actualArray = dynamic_cast<ArrayTypeNode*>(actual);
+        if(!expectedList || !actualArray ||
+           dynamic_cast<MultiArrayTypeNode*>(actualArray))
+            return false;
+        return typeMangle(expectedList->elementType) ==
+               typeMangle(actualArray->elementType);
+    };
+
     auto concreteTypeImplementsTrait = [&](TypeNode* type,
                                            const std::string& traitName) -> bool
     {
@@ -2475,10 +2491,14 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     }
                     continue;
                 }
+                const bool fixedArrayAsRange =
+                    isListToFixedArrayCompatible(expectedSemantic,
+                                                 actualSemantic);
                 if((isCompositeSemanticType(expectedSemantic) ||
                     isCompositeSemanticType(actualSemantic)) &&
                    actualSemantic &&
-                   typeMangle(actualSemantic) != typeMangle(expectedSemantic))
+                   typeMangle(actualSemantic) != typeMangle(expectedSemantic) &&
+                   !fixedArrayAsRange)
                 {
                     ok = false;
                     break;

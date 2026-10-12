@@ -8,6 +8,8 @@ mod std::flat_multimap;
 use std::testing::verify;
 use std::algorithm::ranges::find;
 use std::algorithm::ranges::contains;
+use std::algorithm::ranges::count;
+use std::algorithm::ranges::transform;
 use std::algorithm::ranges::to_flat_set;
 use std::algorithm::ranges::to_flat_multiset;
 use std::algorithm::ranges::to_flat_map;
@@ -99,4 +101,14 @@ fn test_ranges_materialize_builtin_map_keys_and_values() {
     verify(keys.len() == 2 && contains(keys, 1) && contains(keys, 2));
     verify(mapped_values.len() == 2 && contains(mapped_values, 10) &&
            contains(mapped_values, 20));
+}
+
+#[test]
+fn test_generic_range_algorithms_accept_fixed_arrays() {
+    let fixed: array<i32, 4> = {4, 2, 6, 2};
+    verify(find(fixed, 6) == 2 && count(fixed, 2) == 2);
+    let doubled = |value: i32| { return value * 2; };
+    let values: list<i32> = transform(fixed, doubled);
+    verify(values.len() == 4 && values[0] == 8 && values[1] == 4 &&
+           values[2] == 12 && values[3] == 4);
 }
