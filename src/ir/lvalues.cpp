@@ -324,18 +324,29 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         }
 
         auto mutability = multiarrayMutability.find(rootIdentifier->name);
-        if(mutability == multiarrayMutability.end() || !mutability->second)
+        const bool isMultiarray = mutability != multiarrayMutability.end();
+        const bool isMutableListLike =
+            !isMultiarray &&
+            listElementTypes.find(rootIdentifier->name) !=
+                listElementTypes.end();
+        if((isMultiarray && !mutability->second) ||
+           (!isMultiarray && !isMutableListLike))
         {
             reportError(node->line,
-                        "indexed assignment requires mutmultiarray; '" +
-                            rootIdentifier->name + "' is immutable");
+                        isMultiarray
+                            ? "indexed assignment requires mutmultiarray; '" +
+                                  rootIdentifier->name + "' is immutable"
+                            : "indexed assignment requires a mutable list or "
+                              "array; '" +
+                                  rootIdentifier->name + "' is not mutable");
             return;
         }
         if(constantVariables.count(rootIdentifier->name) != 0)
         {
             reportError(node->line,
-                        "cannot mutate multiarray '" + rootIdentifier->name +
-                            "' because it was declared with let; use var");
+                        "cannot mutate indexed container '" +
+                            rootIdentifier->name +
+                            "' because it is immutable; use var or &mut");
             return;
         }
         auto sharedBorrowers = activeBorrowers.find(rootIdentifier->name);

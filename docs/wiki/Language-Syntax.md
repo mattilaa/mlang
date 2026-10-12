@@ -1138,6 +1138,19 @@ Indexing is checked too. Constant indexes that are known to be out of bounds are
 compile-time errors, while dynamic indexes keep a runtime bounds guard before
 loading.
 
+Mutable lists and fixed arrays also support indexed writes. The binding must
+be declared with `var`, or the function parameter must be `&mut`; a `let`
+binding and an immutable `&list<T>` parameter remain read-only:
+
+```rust
+var values: list<i32> = [1, 2, 3];
+values[1] = 20;
+
+fn overwrite_first(values: &mut list<i32>) {
+    values[0] = values[1];
+}
+```
+
 Use `multiarray<T, D1, ..., DN>` for one or more fixed dimensions. It expands
 to nested fixed-capacity arrays, so every initializer level is checked against
 its declared extent:

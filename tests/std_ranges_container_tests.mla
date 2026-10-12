@@ -25,6 +25,10 @@ use std::flat_multiset::FlatMultiSet;
 use std::flat_map::FlatMap;
 use std::flat_multimap::FlatMultiMap;
 
+fn overwrite_first(values: &mut list<i32>) {
+    values[0] = values[1];
+}
+
 #[test]
 fn test_ranges_materialize_flat_set_for_list_algorithms() {
     let source: list<i32> = [4, 1, 4, 2];
@@ -111,4 +115,16 @@ fn test_generic_range_algorithms_accept_fixed_arrays() {
     let values: list<i32> = transform(fixed, doubled);
     verify(values.len() == 4 && values[0] == 8 && values[1] == 4 &&
            values[2] == 12 && values[3] == 4);
+
+}
+
+#[test]
+fn test_mutable_list_and_fixed_array_references() {
+    var values: list<i32> = [4, 2];
+    overwrite_first(&mut values);
+    verify(values[0] == 2 && values[1] == 2);
+
+    var fixed: array<i32, 2> = {7, 9};
+    overwrite_first(&mut fixed);
+    verify(fixed[0] == 9 && fixed[1] == 9);
 }

@@ -1008,6 +1008,23 @@ TEST_F(MLATest, ImmutableMultiarrayRejectsIndexedAssignment)
               std::string::npos);
 }
 
+TEST_F(MLATest, ImmutableListRejectsIndexedAssignment)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let values: list<i32> = [1, 2];
+            values[0] = 7;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot mutate indexed container"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, ImmutableMultiarrayRejectsMutatingMethods)
 {
     std::string code = R"(

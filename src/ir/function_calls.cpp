@@ -2455,7 +2455,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             continue;
                         {
                             TypeNode* operandType = semanticArgumentType(unary->operand);
-                            if(operandType && typeMangle(operandType) != typeMangle(expectedSemantic))
+                            if(operandType &&
+                               typeMangle(operandType) !=
+                                   typeMangle(expectedSemantic) &&
+                               !isListToFixedArrayCompatible(expectedSemantic,
+                                                             operandType))
                             {
                                 ok = false;
                                 break;
