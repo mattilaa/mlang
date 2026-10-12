@@ -3611,6 +3611,18 @@ pub fn sample_to_projected(source: &list<T>,
     return written;
 }
 
+/// @brief Sample projected values into a distinct bounded output type.
+/// Selects distinct source elements in original order, projects each selected
+/// value directly into caller-owned storage, and returns the number written.
+/// @ingroup algorithm_ranges
+generic<T, Output, ChooseIndex, Projection>
+pub fn sample_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>, count: i64,
+    choose_index: ChooseIndex, projection: Projection) -> i64 {
+    return sample_to_projected(source, destination, count, choose_index,
+                               projection);
+}
+
 /// @brief Return a shuffled copy using a bounded random-index selector.
 /// `choose_index(upper_bound)` must return an index in
 /// `[0, upper_bound)`. The eager implementation leaves the source unchanged;

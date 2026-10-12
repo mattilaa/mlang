@@ -578,6 +578,9 @@ fn example() {
   converting selected source values to an independently typed destination.
 - `sample_to_projected` applies a projection directly to selected source
   elements while writing bounded output, without an intermediate sample list.
+- `sample_to_heterogeneous_projected` combines direct projection with a
+  distinct output element type; it retains the same bounded capacity, input
+  order, distinct-selection, and unwritten-suffix behavior.
 - `shuffle(data, choose_index)` returns a randomized copy. The selector receives
   each current exclusive bound; use a uniformly distributed selector for an
   unbiased permutation. Because lists are eagerly rebuilt without indexed

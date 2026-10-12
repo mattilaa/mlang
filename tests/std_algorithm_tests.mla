@@ -590,6 +590,7 @@ use std::algorithm::ranges::copy_if_to_projected;
 use std::algorithm::ranges::sample as ranges_sample;
 use std::algorithm::ranges::sample_to as ranges_sample_to;
 use std::algorithm::ranges::sample_to_heterogeneous;
+use std::algorithm::ranges::sample_to_heterogeneous_projected;
 use std::algorithm::ranges::sample_to_projected;
 use std::algorithm::ranges::shuffle as ranges_shuffle;
 use std::algorithm::ranges::shuffle_in_place as ranges_shuffle_in_place;
@@ -7845,6 +7846,15 @@ fn test_algorithm_ranges_sample_to_bounded_output() {
     verify(sample_to_projected(
         source, projected, 2, choose_last, scale) == 2);
     verify(projected[0] == 50 && projected[1] == 60 && projected[2] == -3);
+
+    var projected_heterogeneous: list<f64> = [-9.0, -9.0, 99.0];
+    let to_half = |value: i32| { return f64(value) / 2.0; };
+    verify(sample_to_heterogeneous_projected(
+        source, projected_heterogeneous, 2, choose_last, to_half) == 2);
+    verify(projected_heterogeneous[0] == 2.5 &&
+           projected_heterogeneous[1] == 3.0 &&
+           projected_heterogeneous[2] == 99.0);
+    verify(source[0] == 1 && source[5] == 6);
 }
 
 #[test]
