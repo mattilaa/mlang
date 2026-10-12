@@ -795,6 +795,10 @@ fn example() {
   every value combination in nested-loop order; the rightmost input varies
   fastest (C++23 `views::cartesian_product` style). Any empty input produces
   an empty result.
+- `cartesian_product_to` provides the same two-through-eight-range ordering
+  while writing only into caller-provided tuple storage. It returns the number
+  written, stops immediately at destination capacity, and preserves the unused
+  destination suffix, avoiding allocation of a potentially large product.
 - `merged(left, right)` stably merges two sorted same-typed ranges into a new
   sorted list; equal elements from the left range come first.
 - `merge_to(left, right, destination)` writes a stable merge into existing

@@ -421,6 +421,7 @@ use std::algorithm::ranges::enumerate_from;
 use std::algorithm::ranges::keys;
 use std::algorithm::ranges::values;
 use std::algorithm::ranges::cartesian_product;
+use std::algorithm::ranges::cartesian_product_to;
 use std::algorithm::ranges::pairwise;
 use std::algorithm::ranges::adjacent3;
 use std::algorithm::ranges::adjacent4;
@@ -4107,6 +4108,71 @@ fn test_algorithm_ranges_cartesian_product() {
                           fifth_values, sixth_values, empty_values,
                           eighth_values);
     verify(no_eight_products.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_bounded_cartesian_product() {
+    let left: list<i32> = [2, 4];
+    let right: list<i64> = [7, 9, 11];
+    let mut pairs: list<tuple<i32, i64>> =
+        [(-1, -1), (-2, -2), (-3, -3), (-4, -4)];
+    verify(cartesian_product_to(left, right, pairs) == 4);
+    let first: tuple<i32, i64> = pairs[0];
+    let fourth: tuple<i32, i64> = pairs[3];
+    verify(first.0 == 2 && first.1 == 7);
+    verify(fourth.0 == 4 && fourth.1 == 7);
+
+    let a: list<i32> = [1];
+    let b: list<i64> = [10];
+    let c: list<bool> = [true];
+    let d: list<str8> = ["four"];
+    let e: list<i16> = [5];
+    let f: list<u32> = [6];
+    let g: list<i8> = [7];
+    let h: list<u64> = [8];
+
+    let mut triples: list<tuple<i32, i64, bool>> = [(-1, -1, false)];
+    verify(cartesian_product_to(a, b, c, triples) == 1);
+    let triple: tuple<i32, i64, bool> = triples[0];
+    verify(triple.0 == 1 && triple.1 == 10 && triple.2);
+
+    let mut four_values: list<tuple<i32, i64, bool, str8>> =
+        [(-1, -1, false, "")];
+    verify(cartesian_product_to(a, b, c, d, four_values) == 1);
+    let four: tuple<i32, i64, bool, str8> = four_values[0];
+    verify(four.0 == 1 && four.1 == 10 && four.2 && eq(four.3, "four") == 1);
+
+    let mut five: list<tuple<i32, i64, bool, str8, i16>> =
+        [(-1, -1, false, "", -1)];
+    verify(cartesian_product_to(a, b, c, d, e, five) == 1);
+    let five_row: tuple<i32, i64, bool, str8, i16> = five[0];
+    verify(five_row.4 == 5);
+
+    let mut six: list<tuple<i32, i64, bool, str8, i16, u32>> =
+        [(-1, -1, false, "", -1, 0)];
+    verify(cartesian_product_to(a, b, c, d, e, f, six) == 1);
+    let six_row: tuple<i32, i64, bool, str8, i16, u32> = six[0];
+    verify(six_row.5 == 6);
+
+    let mut seven: list<tuple<i32, i64, bool, str8, i16, u32, i8>> =
+        [(-1, -1, false, "", -1, 0, -1)];
+    verify(cartesian_product_to(a, b, c, d, e, f, g, seven) == 1);
+    let seven_row: tuple<i32, i64, bool, str8, i16, u32, i8> = seven[0];
+    verify(seven_row.6 == 7);
+
+    let mut eight: list<tuple<i32, i64, bool, str8, i16, u32, i8, u64>> =
+        [(-1, -1, false, "", -1, 0, -1, 0),
+         (-2, -2, false, "", -2, 0, -2, 0)];
+    verify(cartesian_product_to(a, b, c, d, e, f, g, h, eight) == 1);
+    let eight_row: tuple<i32, i64, bool, str8, i16, u32, i8, u64> = eight[0];
+    let unused: tuple<i32, i64, bool, str8, i16, u32, i8, u64> = eight[1];
+    verify(eight_row.7 == 8);
+    verify(unused.0 == -2 && unused.7 == 0);
+
+    let empty: list<i32> = [];
+    verify(cartesian_product_to(empty, right, pairs) == 0);
+    let mut no_capacity: list<tuple<i32, i64>> = [];
+    verify(cartesian_product_to(left, right, no_capacity) == 0);
 }
 
 #[test]
