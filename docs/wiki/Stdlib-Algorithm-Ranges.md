@@ -481,13 +481,13 @@ fn example() {
   `remove_copy_if_to_heterogeneous`, and
   `remove_copy_if_to_heterogeneous_projected` preserve the bounded progress
   behavior while converting retained source values to a distinct output type.
-- `to_list(data)` materializes a new list with an explicitly selected element
-  type, converting each source element in order. This is the Mlang eager-list
-  counterpart to C++23 [`std::ranges::to`](Stdlib-Module-API); the output type is inferred from the
-  expected result type, for example `let converted: list<f64> = to_list(values)`.
-  It accepts lists/[`Vec`](Stdlib-Vec), fixed arrays, and multidimensional arrays where their
-  element shape is compatible. Nested inputs are recursively materialized and
-  converted while preserving each row's length, including empty rows.
+- `to_list(data)` materializes a same-typed list copy, the basic eager-list
+  counterpart to C++23 [`std::ranges::to`](Stdlib-Module-API). Use
+  `to_list_projected(data, projection)` to convert each value; the output type
+  is inferred from the projection. `to_list_nested_projected` applies that
+  conversion to nested lists while preserving row lengths, including empty
+  rows. `to_list` accepts lists; `to_list_projected` also accepts compatible
+  flat fixed arrays, and the nested projected overload accepts nested lists.
 - `to_list_from_flat_set`, `to_list_from_flat_multiset`,
   `to_list_from_flat_map`, and `to_list_from_flat_multimap` materialize sorted
   associative-container data into lists. Multiset duplicates and multimap

@@ -5015,32 +5015,25 @@ fn test_algorithm_ranges_heterogeneous_bounded_remove_replace_copy() {
 #[test]
 fn test_algorithm_ranges_to_list_converts_and_materializes() {
     let source: list<i32> = [3, -2, 9];
-    let converted: list<f64> = to_list(source);
+    let as_float = |value: i32| { return f64(value); };
+    let converted: list<f64> = to_list_projected(source, as_float);
     verify(converted.len() == 3);
     verify(converted[0] == 3.0 && converted[1] == -2.0 &&
            converted[2] == 9.0);
     verify(source[0] == 3 && source[1] == -2 && source[2] == 9);
 
     let fixed: array<i32, 3> = {4, 6, 8};
-    let converted_fixed: list<f64> = to_list(fixed);
+    let converted_fixed: list<f64> = to_list_projected(fixed, as_float);
     verify(converted_fixed.len() == 3 && converted_fixed[0] == 4.0 &&
            converted_fixed[2] == 8.0);
-    let fixed_nested: array<array<i32, 2>, 2> = {{1, 2}, {3, 4}};
-    let converted_fixed_nested: list<list<f64>> = to_list(fixed_nested);
-    verify(converted_fixed_nested.len() == 2 &&
-           converted_fixed_nested[0][1] == 2.0 &&
-           converted_fixed_nested[1][0] == 3.0);
-    let matrix: multiarray<i32, 2, 2> = {{5, 7}, {11, 13}};
-    let converted_matrix: list<list<f64>> = to_list(matrix);
-    verify(converted_matrix.len() == 2 && converted_matrix[0].len() == 2 &&
-           converted_matrix[1][0] == 11.0 && converted_matrix[1][1] == 13.0);
-
     let empty_source: list<i32> = [];
-    let empty_converted: list<f64> = to_list(empty_source);
+    let empty_converted: list<f64> =
+        to_list_projected(empty_source, as_float);
     verify(empty_converted.len() == 0);
 
     let nested: list<list<i32>> = [[1, 2], [], [7, -4, 9]];
-    let converted_nested: list<list<f64>> = to_list(nested);
+    let converted_nested: list<list<f64>> =
+        to_list_nested_projected(nested, as_float);
     verify(converted_nested.len() == 3);
     verify(converted_nested[0].len() == 2 &&
            converted_nested[0][0] == 1.0 &&

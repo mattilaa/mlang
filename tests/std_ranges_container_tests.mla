@@ -13,6 +13,9 @@ use std::algorithm::ranges::transform;
 use std::algorithm::ranges::concat_many;
 use std::algorithm::ranges::concat_many_to;
 use std::algorithm::ranges::concat_many_to_projected;
+use std::algorithm::ranges::to_list;
+use std::algorithm::ranges::to_list_projected;
+use std::algorithm::ranges::to_list_nested_projected;
 use std::algorithm::ranges::sort_in_place_by_projected;
 use std::algorithm::ranges::sort_in_place;
 use std::algorithm::ranges::make_heap_in_place_by_projected;
@@ -162,6 +165,31 @@ fn test_ranges_concat_many_to_bounded_output() {
            projected_output[1] == 2.0);
     var empty_output: list<i32> = [];
     verify(concat_many_to(ranges, &mut empty_output) == 0);
+}
+
+#[test]
+fn test_ranges_to_list_converts_elements() {
+    let source: list<i32> = [3, -2, 9];
+    let copied: list<i32> = to_list(source);
+    verify(copied.len() == 3 && copied[0] == 3 && copied[1] == -2 &&
+           copied[2] == 9);
+    let as_float = |value: i32| { return f64(value); };
+    let converted: list<f64> = to_list_projected(source, as_float);
+    verify(converted.len() == 3 && converted[0] == 3.0 &&
+           converted[1] == -2.0 && converted[2] == 9.0);
+    let nested: list<list<i32>> = [[1, 2], [], [3]];
+    let converted_nested: list<list<f64>> =
+        to_list_nested_projected(nested, as_float);
+    let empty_row: list<f64> = converted_nested[1];
+    verify(converted_nested.len() == 3 &&
+           converted_nested[0][1] == 2.0 &&
+           empty_row.len() == 0 &&
+           converted_nested[2][0] == 3.0);
+
+    let fixed: array<i32, 3> = {4, 6, 8};
+    let converted_fixed: list<f64> = to_list_projected(fixed, as_float);
+    verify(converted_fixed.len() == 3 && converted_fixed[0] == 4.0 &&
+           converted_fixed[2] == 8.0);
 }
 
 #[test]

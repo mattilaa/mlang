@@ -1708,29 +1708,57 @@ pub fn copy_backward_to_heterogeneous_projected(
     return (source_first, destination_first);
 }
 
-/// @brief Materialize a range as a new list with the requested element type.
+/// @brief Materialize a range as a new list with the same element type.
 /// This is the eager-list counterpart of C++23 `std::ranges::to` for list
-/// construction. Each source element is converted to `Output` in order.
+/// construction. The input is left unchanged.
 /// @ingroup algorithm_ranges
-generic<T, Output>
-pub fn to_list(data: &list<T>) -> list<Output> {
-    var converted: list<Output> = [];
+generic<T>
+pub fn to_list(data: &list<T>) -> list<T> {
+    var converted: list<T> = [];
     let n: i64 = data.len();
     for i in 0..n {
-        converted.push(Output(data[i]));
+        converted.push(data[i]);
     }
     return converted;
 }
 
-/// @brief Recursively materialize a nested range as nested output lists.
-/// Inner list elements are converted using the same rules as `to_list`.
+/// @brief Materialize a nested range as nested lists with the same element type.
 /// @ingroup algorithm_ranges
-generic<T, Output>
-pub fn to_list(data: &list<list<T>>) -> list<list<Output>> {
+generic<T>
+pub fn to_list(data: &list<list<T>>) -> list<list<T>> {
+    var converted: list<list<T>> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let row: list<T> = to_list(data[i]);
+        converted.push(row);
+    }
+    return converted;
+}
+
+/// @brief Materialize a range after converting each value with `projection`.
+/// The result type is inferred from the projection.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn to_list_projected(data: &list<T>, projection: Projection)
+    -> list<Output> {
+    var converted: list<Output> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        converted.push(projection(data[i]));
+    }
+    return converted;
+}
+
+/// @brief Recursively materialize nested ranges after projecting each value.
+/// Every row retains its length, including empty rows.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn to_list_nested_projected(
+    data: &list<list<T>>, projection: Projection) -> list<list<Output>> {
     var converted: list<list<Output>> = [];
     let n: i64 = data.len();
     for i in 0..n {
-        let row: list<Output> = to_list(data[i]);
+        let row: list<Output> = to_list_projected(data[i], projection);
         converted.push(row);
     }
     return converted;
