@@ -2275,6 +2275,282 @@ pub fn zip_transform_to_projected(
                                   left_projection, right_projection);
 }
 
+/// @brief Bounded three-range zip-transform.
+/// Stops at the shortest input or destination and returns the number written.
+/// @ingroup algorithm_ranges
+generic<T, U, V, Output, Operation>
+pub fn zip_transform3_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, destination: &mut list<Output>,
+    operation: Operation) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first[i], second[i], third[i]);
+    }
+    return count;
+}
+
+/// @brief Bounded four-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, Output, Operation>
+pub fn zip_transform4_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, destination: &mut list<Output>,
+    operation: Operation) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first[i], second[i], third[i], fourth[i]);
+    }
+    return count;
+}
+
+/// @brief Bounded five-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Output, Operation>
+pub fn zip_transform5_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, fifth: &list<X>,
+    destination: &mut list<Output>, operation: Operation) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first[i], second[i], third[i], fourth[i],
+                                   fifth[i]);
+    }
+    return count;
+}
+
+/// @brief Bounded six-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Output, Operation>
+pub fn zip_transform6_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+    destination: &mut list<Output>, operation: Operation) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first[i], second[i], third[i], fourth[i],
+                                   fifth[i], sixth[i]);
+    }
+    return count;
+}
+
+/// @brief Bounded seven-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, Output, Operation>
+pub fn zip_transform7_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+    seventh: &list<Z>, destination: &mut list<Output>,
+    operation: Operation) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if seventh.len() < count { count = seventh.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first[i], second[i], third[i], fourth[i],
+                                   fifth[i], sixth[i], seventh[i]);
+    }
+    return count;
+}
+
+/// @brief Bounded eight-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A, Output, Operation>
+pub fn zip_transform8_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+    seventh: &list<Z>, eighth: &list<A>, destination: &mut list<Output>,
+    operation: Operation) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if seventh.len() < count { count = seventh.len(); }
+    if eighth.len() < count { count = eighth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first[i], second[i], third[i], fourth[i],
+                                   fifth[i], sixth[i], seventh[i], eighth[i]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected three-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, Output, Operation, FirstProjection, SecondProjection,
+        ThirdProjection>
+pub fn zip_transform3_to_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>,
+    destination: &mut list<Output>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first_projection(first[i]),
+            second_projection(second[i]), third_projection(third[i]));
+    }
+    return count;
+}
+
+/// @brief Bounded projected four-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, Output, Operation, FirstProjection, SecondProjection,
+        ThirdProjection, FourthProjection>
+pub fn zip_transform4_to_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    destination: &mut list<Output>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection, fourth_projection: FourthProjection)
+    -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first_projection(first[i]),
+            second_projection(second[i]), third_projection(third[i]),
+            fourth_projection(fourth[i]));
+    }
+    return count;
+}
+
+/// @brief Bounded projected five-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Output, Operation, FirstProjection, SecondProjection,
+        ThirdProjection, FourthProjection, FifthProjection>
+pub fn zip_transform5_to_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, destination: &mut list<Output>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection, fourth_projection: FourthProjection,
+    fifth_projection: FifthProjection) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first_projection(first[i]),
+            second_projection(second[i]), third_projection(third[i]),
+            fourth_projection(fourth[i]), fifth_projection(fifth[i]));
+    }
+    return count;
+}
+
+/// @brief Bounded projected six-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Output, Operation, FirstProjection,
+        SecondProjection, ThirdProjection, FourthProjection, FifthProjection,
+        SixthProjection>
+pub fn zip_transform6_to_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, sixth: &list<Y>, destination: &mut list<Output>,
+    operation: Operation, first_projection: FirstProjection,
+    second_projection: SecondProjection, third_projection: ThirdProjection,
+    fourth_projection: FourthProjection, fifth_projection: FifthProjection,
+    sixth_projection: SixthProjection) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first_projection(first[i]),
+            second_projection(second[i]), third_projection(third[i]),
+            fourth_projection(fourth[i]), fifth_projection(fifth[i]),
+            sixth_projection(sixth[i]));
+    }
+    return count;
+}
+
+/// @brief Bounded projected seven-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, Output, Operation, FirstProjection,
+        SecondProjection, ThirdProjection, FourthProjection, FifthProjection,
+        SixthProjection, SeventhProjection>
+pub fn zip_transform7_to_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, sixth: &list<Y>, seventh: &list<Z>,
+    destination: &mut list<Output>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection, fourth_projection: FourthProjection,
+    fifth_projection: FifthProjection, sixth_projection: SixthProjection,
+    seventh_projection: SeventhProjection) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if seventh.len() < count { count = seventh.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first_projection(first[i]),
+            second_projection(second[i]), third_projection(third[i]),
+            fourth_projection(fourth[i]), fifth_projection(fifth[i]),
+            sixth_projection(sixth[i]), seventh_projection(seventh[i]));
+    }
+    return count;
+}
+
+/// @brief Bounded projected eight-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A, Output, Operation, FirstProjection,
+        SecondProjection, ThirdProjection, FourthProjection, FifthProjection,
+        SixthProjection, SeventhProjection, EighthProjection>
+pub fn zip_transform8_to_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, sixth: &list<Y>, seventh: &list<Z>, eighth: &list<A>,
+    destination: &mut list<Output>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection, fourth_projection: FourthProjection,
+    fifth_projection: FifthProjection, sixth_projection: SixthProjection,
+    seventh_projection: SeventhProjection,
+    eighth_projection: EighthProjection) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if seventh.len() < count { count = seventh.len(); }
+    if eighth.len() < count { count = eighth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first_projection(first[i]),
+            second_projection(second[i]), third_projection(third[i]),
+            fourth_projection(fourth[i]), fifth_projection(fifth[i]),
+            sixth_projection(sixth[i]), seventh_projection(seventh[i]),
+            eighth_projection(eighth[i]));
+    }
+    return count;
+}
+
 /// @brief Transform projected values from three ranges in their common prefix.
 /// Output type is inferred from the ternary operation's return value.
 /// @ingroup algorithm_ranges

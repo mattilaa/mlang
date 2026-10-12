@@ -697,6 +697,18 @@ use std::algorithm::ranges::zip_transform;
 use std::algorithm::ranges::zip_transform_projected;
 use std::algorithm::ranges::zip_transform_to;
 use std::algorithm::ranges::zip_transform_to_projected;
+use std::algorithm::ranges::zip_transform3_to;
+use std::algorithm::ranges::zip_transform4_to;
+use std::algorithm::ranges::zip_transform5_to;
+use std::algorithm::ranges::zip_transform6_to;
+use std::algorithm::ranges::zip_transform7_to;
+use std::algorithm::ranges::zip_transform8_to;
+use std::algorithm::ranges::zip_transform3_to_projected;
+use std::algorithm::ranges::zip_transform4_to_projected;
+use std::algorithm::ranges::zip_transform5_to_projected;
+use std::algorithm::ranges::zip_transform6_to_projected;
+use std::algorithm::ranges::zip_transform7_to_projected;
+use std::algorithm::ranges::zip_transform8_to_projected;
 use std::algorithm::ranges::zip_transform3_projected;
 use std::algorithm::ranges::zip_transform4_projected;
 use std::algorithm::ranges::zip_transform5_projected;
@@ -3793,6 +3805,85 @@ fn test_algorithm_ranges_zip_seven_and_eight_ranges() {
     };
     let transformed8: list<i32> = zip_transform(a, b, c, d, e, f, g, h, sum8);
     verify(transformed8.len() == 1 && transformed8[0] == 11111111);
+}
+
+#[test]
+fn test_algorithm_ranges_bounded_multi_zip_transform() {
+    let a: list<i32> = [1, 2];
+    let b: list<i32> = [10, 20];
+    let c: list<i32> = [100, 200];
+    let d: list<i32> = [1000, 2000];
+    let e: list<i32> = [10000, 20000];
+    let f: list<i32> = [100000, 200000];
+    let g: list<i32> = [1000000, 2000000];
+    let h: list<i32> = [10000000];
+    let sum3 = |x: i32, y: i32, z: i32| { return i64(x + y + z); };
+    let sum4 = |x: i32, y: i32, z: i32, w: i32| {
+        return i64(x + y + z + w);
+    };
+    let sum5 = |x: i32, y: i32, z: i32, w: i32, v: i32| {
+        return i64(x + y + z + w + v);
+    };
+    let sum6 = |x: i32, y: i32, z: i32, w: i32, v: i32, u: i32| {
+        return i64(x + y + z + w + v + u);
+    };
+    let sum7 = |x: i32, y: i32, z: i32, w: i32, v: i32, u: i32, q: i32| {
+        return i64(x + y + z + w + v + u + q);
+    };
+    let sum8 = |x: i32, y: i32, z: i32, w: i32,
+                v: i32, u: i32, q: i32, r: i32| {
+        return i64(x + y + z + w + v + u + q + r);
+    };
+    let identity = |value: i32| { return value; };
+
+    var out3: list<i64> = [0, 99];
+    verify(zip_transform3_to(a, b, c, out3, sum3) == 2);
+    verify(out3[0] == 111 && out3[1] == 222);
+    var out4: list<i64> = [0, 99];
+    verify(zip_transform4_to(a, b, c, d, out4, sum4) == 2);
+    verify(out4[0] == 1111 && out4[1] == 2222);
+    var out5: list<i64> = [0, 99];
+    verify(zip_transform5_to(a, b, c, d, e, out5, sum5) == 2);
+    verify(out5[0] == 11111 && out5[1] == 22222);
+    var out6: list<i64> = [0, 99];
+    verify(zip_transform6_to(a, b, c, d, e, f, out6, sum6) == 2);
+    verify(out6[0] == 111111 && out6[1] == 222222);
+    var out7: list<i64> = [0, 99];
+    verify(zip_transform7_to(a, b, c, d, e, f, g, out7, sum7) == 2);
+    verify(out7[0] == 1111111 && out7[1] == 2222222);
+    var out8: list<i64> = [0, 99];
+    verify(zip_transform8_to(a, b, c, d, e, f, g, h, out8, sum8) == 1);
+    verify(out8[0] == 11111111 && out8[1] == 99);
+
+    var projected3: list<i64> = [0, 99];
+    verify(zip_transform3_to_projected(
+        a, b, c, projected3, sum3, identity, identity, identity) == 2);
+    verify(projected3[0] == 111 && projected3[1] == 222);
+    var projected4: list<i64> = [0, 99];
+    verify(zip_transform4_to_projected(
+        a, b, c, d, projected4, sum4, identity, identity, identity,
+        identity) == 2);
+    verify(projected4[0] == 1111 && projected4[1] == 2222);
+    var projected5: list<i64> = [0, 99];
+    verify(zip_transform5_to_projected(
+        a, b, c, d, e, projected5, sum5, identity, identity, identity,
+        identity, identity) == 2);
+    verify(projected5[0] == 11111 && projected5[1] == 22222);
+    var projected6: list<i64> = [0, 99];
+    verify(zip_transform6_to_projected(
+        a, b, c, d, e, f, projected6, sum6, identity, identity, identity,
+        identity, identity, identity) == 2);
+    verify(projected6[0] == 111111 && projected6[1] == 222222);
+    var projected7: list<i64> = [0, 99];
+    verify(zip_transform7_to_projected(
+        a, b, c, d, e, f, g, projected7, sum7, identity, identity, identity,
+        identity, identity, identity, identity) == 2);
+    verify(projected7[0] == 1111111 && projected7[1] == 2222222);
+    var projected8: list<i64> = [0, 99];
+    verify(zip_transform8_to_projected(
+        a, b, c, d, e, f, g, h, projected8, sum8, identity, identity,
+        identity, identity, identity, identity, identity, identity) == 1);
+    verify(projected8[0] == 11111111 && projected8[1] == 99);
 }
 
 #[test]

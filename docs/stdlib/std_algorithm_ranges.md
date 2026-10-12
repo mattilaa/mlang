@@ -541,6 +541,11 @@ fn example() {
   bounded caller-provided output. They stop at the shortest input or output
   and return the number written; the projected form accepts independent input
   projections.
+- `zip_transform3_to` through `zip_transform8_to` provide the same bounded
+  output behavior for three through eight inputs. Their
+  `_to_projected` counterparts apply a separate projection to every input
+  before invoking the operation. All forms stop at the shortest input or
+  destination and preserve the unused destination suffix.
 - `zip` materializes heterogeneous tuples from two through eight input ranges,
   stopping at the shortest input.
 - `find_if_not` returns the first rejected element's index; `remove_if` returns
