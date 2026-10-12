@@ -583,6 +583,9 @@ fn example() {
   destination and preserve the unused destination suffix.
 - `zip` materializes heterogeneous tuples from two through eight input ranges,
   stopping at the shortest input.
+- `zip_longest(left, right)` preserves both input tails and represents missing
+  elements with `None`; `zip_longest_to` writes the prefix that fits into a
+  caller-provided tuple list.
 - `zip_to` has two-through-eight-range overloads that write heterogeneous
   tuples into a preallocated destination. Each overload stops at the shortest
   input or destination, returns the number written, and preserves any unused
@@ -844,6 +847,9 @@ fn example() {
   a caller-provided projection before each write.
 - `zip` overloads for two through eight ranges materialize heterogeneous
   tuples, stopping at the shortest input (C++23 `views::zip` style).
+- `zip_longest(left, right)` is a Mlang extension for unequal lengths: it
+  returns option-wrapped values through the longer input; `zip_longest_to`
+  provides the bounded-output form.
 - `pairwise(data)` materializes tuples of each adjacent pair (C++23
   `views::pairwise` style); inputs shorter than two elements produce an empty
   list.

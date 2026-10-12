@@ -10676,6 +10676,49 @@ pub fn zip(left: &list<T>, right: &list<U>) -> list<tuple<T, U>> {
     return out;
 }
 
+/// @brief Zip two ranges through the longer input, representing absent values
+/// with `None`. Unlike C++23 `views::zip`, no input tail is discarded.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn zip_longest(left: &list<T>, right: &list<U>)
+    -> list<tuple<option<T>, option<U>>> {
+    var out: list<tuple<option<T>, option<U>>> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var n: i64 = left_len;
+    if right_len > n { n = right_len; }
+    for i in 0..n {
+        var left_value: option<T> = None<T>();
+        var right_value: option<U> = None<U>();
+        if i < left_len { left_value = Some<T>(left[i]); }
+        if i < right_len { right_value = Some<U>(right[i]); }
+        out.push((left_value, right_value));
+    }
+    return out;
+}
+
+/// @brief Write longest-zip rows into caller-provided tuple storage.
+/// Returns the number written and stops at the destination length.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn zip_longest_to(left: &list<T>, right: &list<U>,
+    destination: &mut list<tuple<option<T>, option<U>>>) -> i64 {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let destination_len: i64 = destination.len();
+    var n: i64 = left_len;
+    if right_len > n { n = right_len; }
+    if destination_len < n { n = destination_len; }
+    for i in 0..n {
+        var left_value: option<T> = None<T>();
+        var right_value: option<U> = None<U>();
+        if i < left_len { left_value = Some<T>(left[i]); }
+        if i < right_len { right_value = Some<U>(right[i]); }
+        destination[i] = (left_value, right_value);
+    }
+    return n;
+}
+
 /// @brief Pair corresponding elements from three ranges, stopping at the
 /// shortest input. C++23 `views::zip` counterpart with heterogeneous inputs.
 /// @ingroup algorithm_ranges

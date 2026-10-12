@@ -23,6 +23,8 @@ use std::algorithm::ranges::join_transform_to;
 use std::algorithm::ranges::elements_0;
 use std::algorithm::ranges::elements_1;
 use std::algorithm::ranges::elements_2;
+use std::algorithm::ranges::zip_longest;
+use std::algorithm::ranges::zip_longest_to;
 use std::algorithm::ranges::sort_in_place_by_projected;
 use std::algorithm::ranges::sort_in_place;
 use std::algorithm::ranges::make_heap_in_place_by_projected;
@@ -267,6 +269,35 @@ fn test_ranges_project_tuple_triple_elements() {
     verify(first.len() == 3 && first[0] == 1 && first[2] == 3);
     verify(second.len() == 3 && second[0] == 10 && second[2] == 30);
     verify(third.len() == 3 && third[0] == 100 && third[2] == 300);
+}
+
+#[test]
+fn test_ranges_zip_longest_preserves_uneven_tails() {
+    let left: list<i32> = [10, 20, 30];
+    let right: list<i64> = [1];
+    let zipped: list<tuple<option<i32>, option<i64>>> =
+        zip_longest(left, right);
+    let first: tuple<option<i32>, option<i64>> = zipped[0];
+    let second: tuple<option<i32>, option<i64>> = zipped[1];
+    let third: tuple<option<i32>, option<i64>> = zipped[2];
+    let first_left: option<i32> = first.0;
+    let first_right: option<i64> = first.1;
+    let second_left: option<i32> = second.0;
+    let second_right: option<i64> = second.1;
+    let third_left: option<i32> = third.0;
+    let third_right: option<i64> = third.1;
+    verify(zipped.len() == 3 && first_left.unwrap() == 10 &&
+           first_right.unwrap() == 1);
+    verify(second_left.unwrap() == 20 && second_right.is_none());
+    verify(third_left.unwrap() == 30 && third_right.is_none());
+
+    var bounded: list<tuple<option<i32>, option<i64>>> = [
+        (None<i32>(), None<i64>()), (None<i32>(), None<i64>())];
+    verify(zip_longest_to(left, right, &mut bounded) == 2);
+    let bounded_tail: tuple<option<i32>, option<i64>> = bounded[1];
+    let bounded_left: option<i32> = bounded_tail.0;
+    let bounded_right: option<i64> = bounded_tail.1;
+    verify(bounded_left.unwrap() == 20 && bounded_right.is_none());
 }
 
 #[test]
