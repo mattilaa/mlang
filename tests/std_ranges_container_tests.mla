@@ -7,6 +7,7 @@ mod std::flat_multimap;
 
 use std::testing::verify;
 use std::algorithm::ranges::find;
+use std::algorithm::ranges::contains;
 use std::algorithm::ranges::to_flat_set;
 use std::algorithm::ranges::to_flat_multiset;
 use std::algorithm::ranges::to_flat_map;
@@ -15,6 +16,8 @@ use std::algorithm::ranges::to_list_from_flat_multiset;
 use std::algorithm::ranges::to_list_from_flat_map;
 use std::algorithm::ranges::to_list_from_flat_multimap;
 use std::algorithm::ranges::to_list_from_map;
+use std::algorithm::ranges::to_list_from_map_keys;
+use std::algorithm::ranges::to_list_from_map_values;
 use std::flat_set::FlatSet;
 use std::flat_multiset::FlatMultiSet;
 use std::flat_map::FlatMap;
@@ -86,4 +89,14 @@ fn test_ranges_materialize_builtin_map_entries() {
         if entry.0 == 2 && entry.1 == 20 { found_two = true; }
     }
     verify(entries.len() == 2 && found_one && found_two);
+}
+
+#[test]
+fn test_ranges_materialize_builtin_map_keys_and_values() {
+    let values: map<i32, i32> = {2: 20, 1: 10};
+    let keys: list<i32> = to_list_from_map_keys(values);
+    let mapped_values: list<i32> = to_list_from_map_values(values);
+    verify(keys.len() == 2 && contains(keys, 1) && contains(keys, 2));
+    verify(mapped_values.len() == 2 && contains(mapped_values, 10) &&
+           contains(mapped_values, 20));
 }

@@ -489,6 +489,9 @@ fn example() {
   entries are preserved. The resulting list can be passed to list algorithms.
 - `to_list_from_map(data)` materializes builtin map entries as
   `list<tuple<K, V>>`; entry order remains unspecified just like map iteration.
+- `to_list_from_map_keys` and `to_list_from_map_values` materialize builtin
+  map keys or values separately, retaining the map's unspecified iteration
+  order. The resulting lists can be passed to ordinary range algorithms.
 - `to_list_projected(data, projection)` materializes projected values into a
   new list in source order, without an intermediate transformed list. The
   source remains unchanged and empty inputs produce an empty output.
