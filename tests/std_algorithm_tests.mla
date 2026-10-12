@@ -407,6 +407,8 @@ use std::algorithm::ranges::chunk;
 use std::algorithm::ranges::windows;
 use std::algorithm::ranges::slide;
 use std::algorithm::ranges::strided;
+use std::algorithm::ranges::strided_to;
+use std::algorithm::ranges::strided_to_projected;
 use std::algorithm::ranges::stride;
 use std::algorithm::ranges::joined;
 use std::algorithm::ranges::join;
@@ -3565,6 +3567,24 @@ fn test_algorithm_ranges_generic_strided() {
     let words: list<str8> = ["a", "b", "c"];
     let selected: list<str8> = strided(words, 2);
     verify(selected.len() == 2 && selected[0] == "a" && selected[1] == "c");
+
+    var bounded: list<i32> = [-1, -2, -3, -4];
+    verify(strided_to(data, bounded, 2) == 3);
+    verify(bounded[0] == 10 && bounded[1] == 30 && bounded[2] == 50);
+    verify(bounded[3] == -4);
+
+    let widen = |value: i32| { return i64(value * 10); };
+    var projected: list<i64> = [-1, -2];
+    verify(strided_to_projected(data, projected, 2, widen) == 2);
+    verify(projected[0] == 100 && projected[1] == 300);
+
+    var no_progress: list<i32> = [-1, -2];
+    verify(strided_to(data, no_progress, 0) == 0);
+    verify(strided_to(data, no_progress, -2) == 0);
+    verify(strided_to(data, no_progress, 9223372036854775807) == 1);
+    verify(no_progress[0] == 10 && no_progress[1] == -2);
+    var no_capacity: list<i32> = [];
+    verify(strided_to(data, no_capacity, 1) == 0);
 }
 
 #[test]

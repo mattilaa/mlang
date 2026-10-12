@@ -752,6 +752,11 @@ fn example() {
 - `strided(data, step)` copies every `step`-th element from index zero
   (C++23 `views::stride` style); non-positive steps produce an empty list.
   `stride` is the standard view spelling.
+- `strided_to(source, destination, step)` copies that same sequence into
+  bounded storage and returns the count written; a projected overload maps
+  selected values directly to a different output type. Non-positive steps and
+  empty destinations write nothing, and the unused destination suffix remains
+  unchanged.
 - `joined(data)` flattens one list-of-lists level into a copied list (C++20
   `views::join` style); empty inner lists contribute no elements. `join` is
   the standard view spelling.

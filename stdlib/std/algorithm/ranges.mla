@@ -9781,6 +9781,47 @@ pub fn strided(data: &list<T>, stride: i64) -> list<T> {
     return out;
 }
 
+/// @brief Copy every `stride`-th element into bounded output.
+/// Sampling begins at source index zero. Non-positive strides write nothing;
+/// the return value is the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn strided_to(source: &list<T>, destination: &mut list<T>,
+                  stride: i64) -> i64 {
+    if stride <= 0 { return 0; }
+    let source_len: i64 = source.len();
+    let capacity: i64 = destination.len();
+    var source_index: i64 = 0;
+    var written: i64 = 0;
+    while source_index < source_len && written < capacity {
+        destination[written] = source[source_index];
+        written = written + 1;
+        if stride >= source_len - source_index { break; }
+        source_index = source_index + stride;
+    }
+    return written;
+}
+
+/// @brief Copy every `stride`-th projected element into bounded output.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn strided_to_projected(source: &list<T>,
+    destination: &mut list<Output>, stride: i64,
+    projection: Projection) -> i64 {
+    if stride <= 0 { return 0; }
+    let source_len: i64 = source.len();
+    let capacity: i64 = destination.len();
+    var source_index: i64 = 0;
+    var written: i64 = 0;
+    while source_index < source_len && written < capacity {
+        destination[written] = projection(source[source_index]);
+        written = written + 1;
+        if stride >= source_len - source_index { break; }
+        source_index = source_index + stride;
+    }
+    return written;
+}
+
 /// @brief Flatten a list of lists into one copied list.
 /// Eager-list counterpart to the C++20 `views::join` adaptor.
 /// @ingroup algorithm_ranges
