@@ -28,9 +28,13 @@ static_assert!(!cexpr(is_integral(2.5)));
 - `is_enum(value)` recognizes declared enum types at compile time.
 - `is_scoped_enum(value)` is the C++23 trait; Mlang enums are always scoped,
   so it has the same result as `is_enum`.
+- `is_pointer(value)` recognizes raw `ptr<T>` values at compile time; borrowed
+  references are not raw pointers.
+- `is_array(value)` recognizes fixed `array<T, N>` and `multiarray` types.
+  Dynamic `list<T>` values are not fixed arrays.
 
 The argument supplies a type for generic inference; the trait itself is
 evaluated at compile time and does not inspect the argument's runtime value.
 Enum classification is based on compiler enum declarations, not on the enum's
-integer backing type. Pointer, array, and additional user-defined class traits
-are not yet provided.
+integer backing type. Additional user-defined class traits are not yet
+provided.

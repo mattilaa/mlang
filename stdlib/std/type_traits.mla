@@ -69,3 +69,13 @@ generic<T>
 cexpr pub fn is_scoped_enum(value: T) -> bool {
     return __mlang_is_enum_type(T);
 }
+
+generic<T>
+cexpr pub fn is_pointer(value: T) -> bool {
+    return __mlang_is_pointer_type(T);
+}
+
+generic<T>
+cexpr pub fn is_array(value: T) -> bool {
+    return __mlang_is_array_type(T);
+}

@@ -480,6 +480,70 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
         return true;
     }
 
+    if(call->name == "is_pointer" || call->name == "is_array")
+    {
+        if(call->arguments.size() != 1)
+        {
+            if(errorMessage)
+                *errorMessage = call->name + " expects one value argument";
+            return false;
+        }
+        TypeNode* argumentType =
+            inferExpressionTypeNode(call->arguments.front(), call->line);
+        const bool isMatch = call->name == "is_pointer"
+                                 ? dynamic_cast<PointerTypeNode*>(argumentType) !=
+                                       nullptr
+                                 : dynamic_cast<ArrayTypeNode*>(argumentType) !=
+                                       nullptr;
+        out.kind = ConstexprValue::Kind::Bool;
+        out.boolValue = isMatch;
+        out.intValue = isMatch ? 1 : 0;
+        out.floatValue = isMatch ? 1.0 : 0.0;
+        out.typeKind = TypeNode::TYPE_BOOL;
+        return true;
+    }
+
+    if(call->name == "__mlang_is_pointer_type" ||
+       call->name == "__mlang_is_array_type")
+    {
+        if(call->arguments.size() != 1)
+        {
+            if(errorMessage)
+                *errorMessage = call->name + " expects one type argument";
+            return false;
+        }
+        auto* id = dynamic_cast<IdentifierNode*>(call->arguments.front());
+        if(!id)
+        {
+            if(errorMessage)
+                *errorMessage = call->name + " expects a type name";
+            return false;
+        }
+        std::string typeName;
+        if(env)
+        {
+            auto boundIt = env->find("__type:" + id->name);
+            if(boundIt != env->end() &&
+               boundIt->second.kind == ConstexprValue::Kind::Type)
+                typeName = boundIt->second.typeName;
+        }
+        if(typeName.empty())
+            constexprTypeNameFromIdentifier(id->name, typeName);
+        bool isMatch = false;
+        if(call->name == "__mlang_is_pointer_type")
+            isMatch = typeName.rfind("ptr<", 0) == 0;
+        else
+            isMatch = typeName.rfind("array<", 0) == 0 ||
+                      typeName.rfind("multiarray<", 0) == 0 ||
+                      typeName.rfind("mutmultiarray<", 0) == 0;
+        out.kind = ConstexprValue::Kind::Bool;
+        out.boolValue = isMatch;
+        out.intValue = isMatch ? 1 : 0;
+        out.floatValue = isMatch ? 1.0 : 0.0;
+        out.typeKind = TypeNode::TYPE_BOOL;
+        return true;
+    }
+
     if(call->name == "type_id")
     {
         if(call->arguments.size() != 1)
@@ -563,7 +627,18 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
                             concreteType =
                                 new StructTypeRefNode(envIt->second.typeName);
                         else
-                            concreteType = new TypeNode(envIt->second.typeKind);
+                        {
+                            // Type traits need the source-level shape for
+                            // pointers and fixed arrays; ordinary constexpr
+                            // dispatch keeps using its established broad kind.
+                            if(fn->name == "is_pointer" ||
+                               fn->name == "is_array")
+                                concreteType = inferExpressionTypeNode(
+                                    call->arguments[i], call->line);
+                            if(!concreteType)
+                                concreteType =
+                                    new TypeNode(envIt->second.typeKind);
+                        }
                     }
                 }
             }

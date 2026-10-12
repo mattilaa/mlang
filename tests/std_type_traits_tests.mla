@@ -7,6 +7,10 @@ use std::type_traits::is_unsigned;
 use std::type_traits::is_arithmetic;
 use std::type_traits::is_enum;
 use std::type_traits::is_scoped_enum;
+use std::type_traits::is_pointer;
+use std::type_traits::is_array;
+use std::type_traits::is_pointer as is_pointer_trait;
+use std::type_traits::is_array as is_array_trait;
 
 enum TypeTraitsCode : u8 { Ready = 1, Failed = 2 };
 struct TypeTraitsRecord { var value: i32; };
@@ -55,4 +59,19 @@ fn test_type_traits_enum_classification() {
     static_assert!(!cexpr(is_scoped_enum(true)));
     let record: TypeTraitsRecord = TypeTraitsRecord { value: 4 };
     static_assert!(!cexpr(is_enum(record)));
+}
+
+fn test_type_traits_pointer_and_array_classification() {
+    var value: i32 = 5;
+    let pointer: ptr<i32> = &value;
+    let fixed: array<i32, 3> = [2, 4, 6];
+    let matrix: multiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
+    let values: list<i32> = [7, 8];
+    static_assert!(cexpr(is_pointer(pointer)));
+    static_assert!(cexpr(is_pointer_trait(pointer)));
+    static_assert!(!cexpr(is_pointer(value)));
+    static_assert!(cexpr(is_array(fixed)));
+    static_assert!(cexpr(is_array_trait(fixed)));
+    static_assert!(cexpr(is_array(matrix)));
+    static_assert!(!cexpr(is_array(values)));
 }
