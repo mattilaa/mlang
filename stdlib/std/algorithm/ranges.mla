@@ -1758,6 +1758,20 @@ pub fn to_list_from_flat_multiset(data: &FlatMultiSet<T>) -> list<T> {
     return converted;
 }
 
+generic<K, V>
+pub fn to_list_from_flat_map(data: &FlatMap<K, V>) -> list<tuple<K, V>> {
+    return data.entries;
+}
+
+/// @brief Materialize flat multimap entries as a list of key/value tuples.
+/// Repeated keys and their value order are preserved.
+/// @ingroup algorithm_ranges
+generic<K, V>
+pub fn to_list_from_flat_multimap(data: &FlatMultiMap<K, V>)
+    -> list<tuple<K, V>> {
+    return data.entries;
+}
+
 /// @brief Materialize a range after projecting each element to the output type.
 /// The projection runs once per source element, in order, and the source is
 /// left unchanged. This fuses a transform with C++23-style range materialization.

@@ -481,9 +481,10 @@ fn example() {
   It accepts lists/`Vec`, fixed arrays, and multidimensional arrays where their
   element shape is compatible. Nested inputs are recursively materialized and
   converted while preserving each row's length, including empty rows.
-- `to_list_from_flat_set` and `to_list_from_flat_multiset` materialize sorted
-  set keys into a list, preserving multiset duplicates. The resulting list can
-  be passed to the list-based range algorithms.
+- `to_list_from_flat_set`, `to_list_from_flat_multiset`,
+  `to_list_from_flat_map`, and `to_list_from_flat_multimap` materialize sorted
+  associative-container data into lists. Multiset duplicates and multimap
+  entries are preserved. The resulting list can be passed to list algorithms.
 - `to_list_projected(data, projection)` materializes projected values into a
   new list in source order, without an intermediate transformed list. The
   source remains unchanged and empty inputs produce an empty output.
