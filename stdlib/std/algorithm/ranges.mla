@@ -8944,8 +8944,9 @@ pub fn sort_in_place_projected(data: &mut list<T>,
 /// @ingroup algorithm_ranges
 generic<T>
 pub fn sort_in_place(data: &mut list<T>) -> i64 {
-    return sort_in_place_by_projected(data, ranges_default_less,
-                                      ranges_identity);
+    let less = |left: T, right: T| { return left < right; };
+    let identity = |value: T| { return value; };
+    return sort_in_place_by_projected(&mut data, less, identity);
 }
 
 /// @brief Build a mutable max-heap using comparator and projection.
