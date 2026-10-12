@@ -13,6 +13,7 @@ use std::algorithm::ranges::transform;
 use std::algorithm::ranges::sort_in_place_by_projected;
 use std::algorithm::ranges::sort_in_place;
 use std::algorithm::ranges::make_heap_in_place_by_projected;
+use std::algorithm::ranges::make_heap_in_place;
 use std::algorithm::ranges::pop_heap_in_place_by_projected;
 use std::algorithm::ranges::partial_sort_in_place_by_projected;
 use std::algorithm::ranges::to_flat_set;
@@ -161,6 +162,13 @@ fn test_ranges_in_place_heap_algorithms() {
     verify(values[0] == 4);
     pop_heap_in_place_by_projected(&mut values, less, identity);
     verify(values[3] == 4);
+}
+
+#[test]
+fn test_ranges_in_place_heap_with_default_comparator() {
+    var values: list<i32> = [1, 4, 2, 3];
+    make_heap_in_place(&mut values);
+    verify(values[0] == 4);
 }
 
 #[test]

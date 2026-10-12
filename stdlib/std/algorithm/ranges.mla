@@ -8986,8 +8986,9 @@ pub fn make_heap_in_place_projected(
 /// @ingroup algorithm_ranges
 generic<T>
 pub fn make_heap_in_place(data: &mut list<T>) -> i64 {
-    return make_heap_in_place_by_projected(
-        data, ranges_default_less, ranges_identity);
+    let less = |left: T, right: T| { return left < right; };
+    let identity = |value: T| { return value; };
+    return make_heap_in_place_by_projected(&mut data, less, identity);
 }
 
 /// @brief Restore heap order after appending an element to a mutable heap.
