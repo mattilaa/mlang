@@ -10,6 +10,10 @@ use std::algorithm::ranges::find;
 use std::algorithm::ranges::contains;
 use std::algorithm::ranges::count;
 use std::algorithm::ranges::transform;
+use std::algorithm::ranges::sort_in_place_by_projected;
+use std::algorithm::ranges::make_heap_in_place_by_projected;
+use std::algorithm::ranges::pop_heap_in_place_by_projected;
+use std::algorithm::ranges::partial_sort_in_place_by_projected;
 use std::algorithm::ranges::to_flat_set;
 use std::algorithm::ranges::to_flat_multiset;
 use std::algorithm::ranges::to_flat_map;
@@ -127,4 +131,34 @@ fn test_mutable_list_and_fixed_array_references() {
     var fixed: array<i32, 2> = {7, 9};
     overwrite_first(&mut fixed);
     verify(fixed[0] == 9 && fixed[1] == 9);
+}
+
+#[test]
+fn test_ranges_in_place_sort_on_mutable_list() {
+    var values: list<i32> = [4, 1, 3, 2];
+    let less = |left: i32, right: i32| { return left < right; };
+    let identity = |value: i32| { return value; };
+    sort_in_place_by_projected(&mut values, less, identity);
+    verify(values[0] == 1 && values[1] == 2 &&
+           values[2] == 3 && values[3] == 4);
+}
+
+#[test]
+fn test_ranges_in_place_heap_algorithms() {
+    var values: list<i32> = [1, 4, 2, 3];
+    let less = |left: i32, right: i32| { return left < right; };
+    let identity = |value: i32| { return value; };
+    make_heap_in_place_by_projected(&mut values, less, identity);
+    verify(values[0] == 4);
+    pop_heap_in_place_by_projected(&mut values, less, identity);
+    verify(values[3] == 4);
+}
+
+#[test]
+fn test_ranges_partial_sort_in_place_on_mutable_list() {
+    var values: list<i32> = [6, 1, 5, 2, 4, 3];
+    let less = |left: i32, right: i32| { return left < right; };
+    let identity = |value: i32| { return value; };
+    partial_sort_in_place_by_projected(&mut values, 3, less, identity);
+    verify(values[0] == 1 && values[1] == 2 && values[2] == 3);
 }

@@ -8870,14 +8870,14 @@ fn ranges_partial_sort_in_place_by_projected(
     var parent: i64 = limit / 2;
     while parent > 0 {
         parent = parent - 1;
-        ranges_sift_down_in_place(data, limit, parent, less, projection);
+        ranges_sift_down_in_place(&mut data, limit, parent, less, projection);
     }
     for i in limit..n {
         if less(projection(data[i]), projection(data[0])) {
             let temporary: T = data[0];
             data[0] = data[i];
             data[i] = temporary;
-            ranges_sift_down_in_place(data, limit, 0, less, projection);
+            ranges_sift_down_in_place(&mut data, limit, 0, less, projection);
         }
     }
     var heap_len: i64 = limit;
@@ -8886,7 +8886,7 @@ fn ranges_partial_sort_in_place_by_projected(
         let temporary: T = data[0];
         data[0] = data[heap_len];
         data[heap_len] = temporary;
-        ranges_sift_down_in_place(data, heap_len, 0, less, projection);
+        ranges_sift_down_in_place(&mut data, heap_len, 0, less, projection);
     }
     return limit;
 }
@@ -8904,7 +8904,7 @@ pub fn sort_in_place_by_projected(data: &mut list<T>, less: Less,
     while parent > 0 {
         parent = parent - 1;
         swaps = swaps + ranges_sift_down_in_place(
-            data, n, parent, less, projection);
+            &mut data, n, parent, less, projection);
     }
     var heap_len: i64 = n;
     while heap_len > 1 {
@@ -8915,7 +8915,7 @@ pub fn sort_in_place_by_projected(data: &mut list<T>, less: Less,
         swaps = swaps + 1;
         if heap_len > 1 {
             swaps = swaps + ranges_sift_down_in_place(
-                data, heap_len, 0, less, projection);
+                &mut data, heap_len, 0, less, projection);
         }
     }
     return swaps;
@@ -8960,7 +8960,7 @@ pub fn make_heap_in_place_by_projected(
     while parent > 0 {
         parent = parent - 1;
         swaps = swaps + ranges_sift_down_in_place(
-            data, n, parent, less, projection);
+            &mut data, n, parent, less, projection);
     }
     return swaps;
 }
@@ -9051,7 +9051,7 @@ pub fn pop_heap_in_place_by_projected(
     data[0] = data[last];
     data[last] = temporary;
     return 1 + ranges_sift_down_in_place(
-        data, last, 0, less, projection);
+        &mut data, last, 0, less, projection);
 }
 
 /// @brief Pop the top of a comparator-defined heap into its final slot.
@@ -9093,7 +9093,7 @@ pub fn sort_heap_in_place_by_projected(
         data[0] = data[heap_len];
         data[heap_len] = temporary;
         swaps = swaps + 1 + ranges_sift_down_in_place(
-            data, heap_len, 0, less, projection);
+            &mut data, heap_len, 0, less, projection);
     }
     return swaps;
 }
@@ -9173,7 +9173,7 @@ pub fn stable_sort_in_place(data: &mut list<T>) -> i64 {
 generic<T>
 pub fn partial_sort_in_place(data: &mut list<T>, count: i64) -> i64 {
     return ranges_partial_sort_in_place_by_projected(
-        data, count, ranges_default_less, ranges_identity);
+        &mut data, count, ranges_default_less, ranges_identity);
 }
 
 /// @brief Partially sort a mutable list using the strict ordering `less`.
@@ -9182,7 +9182,7 @@ generic<T, Less>
 pub fn partial_sort_in_place_by(data: &mut list<T>, count: i64,
                                 less: Less) -> i64 {
     return ranges_partial_sort_in_place_by_projected(
-        data, count, less, ranges_identity);
+        &mut data, count, less, ranges_identity);
 }
 
 /// @brief Partially sort a mutable list by projected keys.
@@ -9191,7 +9191,7 @@ generic<T, Projection>
 pub fn partial_sort_in_place_projected(
     data: &mut list<T>, count: i64, projection: Projection) -> i64 {
     return ranges_partial_sort_in_place_by_projected(
-        data, count, ranges_default_less, projection);
+        &mut data, count, ranges_default_less, projection);
 }
 
 /// @brief Partially sort a mutable list by comparator over projected keys.
@@ -9201,7 +9201,7 @@ pub fn partial_sort_in_place_by_projected(
     data: &mut list<T>, count: i64, less: Less,
     projection: Projection) -> i64 {
     return ranges_partial_sort_in_place_by_projected(
-        data, count, less, projection);
+        &mut data, count, less, projection);
 }
 
 /// @brief Return the next lexicographic permutation and whether it exists.
