@@ -162,6 +162,21 @@ fn test_ranges_in_place_sort_with_default_comparator() {
 }
 
 #[test]
+fn test_ranges_in_place_sort_accepts_fixed_array() {
+    var values: array<i32, 4> = {4, 1, 3, 2};
+    sort_in_place(&mut values);
+    verify(values[0] == 1 && values[1] == 2 &&
+           values[2] == 3 && values[3] == 4);
+}
+
+#[test]
+fn test_ranges_mutable_heap_algorithms_accept_fixed_arrays() {
+    var values: array<i32, 4> = {1, 4, 2, 3};
+    make_heap_in_place(&mut values);
+    verify(values[0] == 4);
+}
+
+#[test]
 fn test_ranges_in_place_heap_algorithms() {
     var values: list<i32> = [1, 4, 2, 3];
     let less = |left: i32, right: i32| { return left < right; };

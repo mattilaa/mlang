@@ -8,6 +8,11 @@ algorithms are monomorphized for the element type; searching supports a
 separate key type when Mlang can compare the values. Container transforms
 return a new list and leave the input unchanged.
 
+Mutable in-place algorithms also accept mutable fixed arrays through the same
+list-compatible sequence interface. For example, `sort_in_place(&mut values)`
+and `make_heap_in_place(&mut values)` update an `array<T, N>` directly; they do
+not sort a detached list copy.
+
 ```mla
 mod std::algorithm::ranges;
 use std::algorithm::ranges::find;
