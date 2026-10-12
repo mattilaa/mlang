@@ -1772,6 +1772,16 @@ pub fn to_list_from_flat_multimap(data: &FlatMultiMap<K, V>)
     return data.entries;
 }
 
+/// @brief Materialize builtin map entries as a list of key/value tuples.
+/// Builtin map iteration order is unspecified, matching the source container.
+/// @ingroup algorithm_ranges
+generic<K, V>
+pub fn to_list_from_map(data: &map<K, V>) -> list<tuple<K, V>> {
+    var converted: list<tuple<K, V>> = [];
+    for entry in data.entries() { converted.push(entry); }
+    return converted;
+}
+
 /// @brief Materialize a range after projecting each element to the output type.
 /// The projection runs once per source element, in order, and the source is
 /// left unchanged. This fuses a transform with C++23-style range materialization.

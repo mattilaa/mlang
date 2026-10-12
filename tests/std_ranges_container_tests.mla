@@ -14,6 +14,7 @@ use std::algorithm::ranges::to_list_from_flat_set;
 use std::algorithm::ranges::to_list_from_flat_multiset;
 use std::algorithm::ranges::to_list_from_flat_map;
 use std::algorithm::ranges::to_list_from_flat_multimap;
+use std::algorithm::ranges::to_list_from_map;
 use std::flat_set::FlatSet;
 use std::flat_multiset::FlatMultiSet;
 use std::flat_map::FlatMap;
@@ -72,4 +73,17 @@ fn test_generic_to_flat_map_resolves_nested_receiver_types() {
     verify(values.len() == 2 && values.key_at(0) == 1 &&
            values.value_at(0) == 10 && values.key_at(1) == 2 &&
            values.value_at(1) == 21);
+}
+
+#[test]
+fn test_ranges_materialize_builtin_map_entries() {
+    let values: map<i32, i32> = {2: 20, 1: 10};
+    let entries: list<tuple<i32, i32>> = to_list_from_map(values);
+    var found_one: bool = false;
+    var found_two: bool = false;
+    for entry in entries {
+        if entry.0 == 1 && entry.1 == 10 { found_one = true; }
+        if entry.0 == 2 && entry.1 == 20 { found_two = true; }
+    }
+    verify(entries.len() == 2 && found_one && found_two);
 }
