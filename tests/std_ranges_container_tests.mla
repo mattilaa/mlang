@@ -187,9 +187,18 @@ fn test_ranges_to_list_converts_elements() {
            converted_nested[2][0] == 3.0);
 
     let fixed: array<i32, 3> = {4, 6, 8};
+    let copied_fixed: list<i32> = to_list(fixed);
+    verify(copied_fixed.len() == 3 && copied_fixed[0] == 4 &&
+           copied_fixed[2] == 8);
     let converted_fixed: list<f64> = to_list_projected(fixed, as_float);
     verify(converted_fixed.len() == 3 && converted_fixed[0] == 4.0 &&
            converted_fixed[2] == 8.0);
+
+    let fixed_nested: array<array<i32, 2>, 2> = {{1, 2}, {3, 4}};
+    let copied_fixed_nested: list<list<i32>> = to_list(fixed_nested);
+    verify(copied_fixed_nested.len() == 2 &&
+           copied_fixed_nested[0][1] == 2 &&
+           copied_fixed_nested[1][0] == 3);
 }
 
 #[test]

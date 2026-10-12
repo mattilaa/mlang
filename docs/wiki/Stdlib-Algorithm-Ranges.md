@@ -486,8 +486,9 @@ fn example() {
   `to_list_projected(data, projection)` to convert each value; the output type
   is inferred from the projection. `to_list_nested_projected` applies that
   conversion to nested lists while preserving row lengths, including empty
-  rows. `to_list` accepts lists; `to_list_projected` also accepts compatible
-  flat fixed arrays, and the nested projected overload accepts nested lists.
+  rows. `to_list` accepts lists and compatible flat or nested fixed arrays;
+  `to_list_projected` also accepts compatible flat fixed arrays, while the
+  nested projected overload accepts nested lists.
 - `to_list_from_flat_set`, `to_list_from_flat_multiset`,
   `to_list_from_flat_map`, and `to_list_from_flat_multimap` materialize sorted
   associative-container data into lists. Multiset duplicates and multimap
