@@ -13,8 +13,8 @@ pub enum PartialOrdering : i32 {
 
 /// @brief Compare values using their equality and ordering operators.
 /// Incomparable values (for example, a NaN) produce `Unordered`.
-generic<T>
-pub fn compare(left: T, right: T) -> PartialOrdering {
+generic<Left, Right>
+pub fn compare(left: Left, right: Right) -> PartialOrdering {
     if left == right { return PartialOrdering::Equivalent; }
     if left < right { return PartialOrdering::Less; }
     if left > right { return PartialOrdering::Greater; }
@@ -23,8 +23,8 @@ pub fn compare(left: T, right: T) -> PartialOrdering {
 
 /// @brief Compare values using a strict ordering predicate.
 /// Neither value preceding the other produces `Equivalent`.
-generic<T, Less>
-pub fn compare_by(left: T, right: T, less: Less) -> PartialOrdering {
+generic<Left, Right, Less>
+pub fn compare_by(left: Left, right: Right, less: Less) -> PartialOrdering {
     if less(left, right) { return PartialOrdering::Less; }
     if less(right, left) { return PartialOrdering::Greater; }
     return PartialOrdering::Equivalent;

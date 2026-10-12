@@ -34,3 +34,18 @@ fn test_compare_custom_order_and_unordered_float() {
     verify(!is_eq(unordered) && !is_lt(unordered) && !is_lteq(unordered));
     verify(!is_gt(unordered) && !is_gteq(unordered));
 }
+
+fn test_compare_heterogeneous_operands() {
+    let small: i32 = 7;
+    let wide: i64 = 9;
+    let equal_wide: i64 = 7;
+    verify(compare(small, wide) == PartialOrdering::Less);
+    verify(compare(wide, small) == PartialOrdering::Greater);
+    verify(compare(small, equal_wide) == PartialOrdering::Equivalent);
+
+    let less = |left: i32, right: i64| { return i64(left) < right; };
+    verify(compare_by(small, wide, less) == PartialOrdering::Less);
+    verify(compare_by(wide, small, less) == PartialOrdering::Greater);
+    verify(compare_by(small, equal_wide, less) ==
+           PartialOrdering::Equivalent);
+}
