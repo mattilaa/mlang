@@ -2843,6 +2843,21 @@ TEST_F(MLATest, F32F64Casts)
     EXPECT_TRUE(output.find("7.000000 7.000000") != std::string::npos);
 }
 
+TEST_F(MLATest, IntegerWidthCasts)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let wide: i64 = i64(42);
+            let unsigned: u32 = u32(wide);
+            let small: i8 = i8(unsigned);
+            let tiny_unsigned: u8 = u8(small);
+            let restored: i32 = i32(tiny_unsigned);
+            return restored - 42;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, LegacyBuiltinTypeAliasesAreRejected)
 {
     for(const char* typeName :
