@@ -57,3 +57,15 @@ generic<T>
 cexpr pub fn is_arithmetic(value: T) -> bool {
     return is_integral(value) || is_floating_point(value);
 }
+
+generic<T>
+cexpr pub fn is_enum(value: T) -> bool {
+    return __mlang_is_enum_type(T);
+}
+
+/// C++23 `std::is_scoped_enum`: Mlang enum declarations are always scoped
+/// (`EnumName::Variant`), so this has the same result as `is_enum`.
+generic<T>
+cexpr pub fn is_scoped_enum(value: T) -> bool {
+    return __mlang_is_enum_type(T);
+}

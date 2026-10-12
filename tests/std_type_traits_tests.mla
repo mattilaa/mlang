@@ -5,6 +5,11 @@ use std::type_traits::is_floating_point;
 use std::type_traits::is_signed;
 use std::type_traits::is_unsigned;
 use std::type_traits::is_arithmetic;
+use std::type_traits::is_enum;
+use std::type_traits::is_scoped_enum;
+
+enum TypeTraitsCode : u8 { Ready = 1, Failed = 2 };
+struct TypeTraitsRecord { var value: i32; };
 
 fn test_type_traits_same_type_and_integral() {
     static_assert!(cexpr(is_same(1i32, 2i32)));
@@ -41,4 +46,13 @@ fn test_type_traits_floating_signedness_and_arithmetic() {
     static_assert!(cexpr(is_arithmetic(1i64)));
     static_assert!(cexpr(is_arithmetic(1.0)));
     static_assert!(!cexpr(is_arithmetic("text")));
+}
+
+fn test_type_traits_enum_classification() {
+    static_assert!(cexpr(is_enum(TypeTraitsCode::Ready)));
+    static_assert!(cexpr(is_scoped_enum(TypeTraitsCode::Failed)));
+    static_assert!(!cexpr(is_enum(1i32)));
+    static_assert!(!cexpr(is_scoped_enum(true)));
+    let record: TypeTraitsRecord = TypeTraitsRecord { value: 4 };
+    static_assert!(!cexpr(is_enum(record)));
 }

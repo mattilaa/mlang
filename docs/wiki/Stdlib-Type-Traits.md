@@ -27,8 +27,12 @@ static_assert!(!cexpr(is_integral(2.5)));
 - `is_signed(value)` recognizes signed integer and floating-point types.
 - `is_unsigned(value)` recognizes unsigned integer types and [`bool`](Quick-Guide#types).
 - `is_arithmetic(value)` combines integral and floating-point classification.
+- `is_enum(value)` recognizes declared enum types at compile time.
+- `is_scoped_enum(value)` is the C++23 trait; Mlang enums are always scoped,
+  so it has the same result as `is_enum`.
 
 The argument supplies a type for generic inference; the trait itself is
 evaluated at compile time and does not inspect the argument's runtime value.
-This first set intentionally covers primitive types; enum, pointer, array,
-and user-defined class traits are not yet provided.
+Enum classification is based on compiler enum declarations, not on the enum's
+integer backing type. Pointer, array, and additional user-defined class traits
+are not yet provided.

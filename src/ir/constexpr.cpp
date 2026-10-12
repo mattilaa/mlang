@@ -216,6 +216,17 @@ bool CodeGenerator::constexprTypeNameFromIdentifier(const std::string& name,
         out = name;
         return true;
     }
+    if(enumBaseTypes.find(name) != enumBaseTypes.end())
+    {
+        out = name;
+        return true;
+    }
+    std::string visibleEnumName = resolveVisibleEnumName(name);
+    if(!visibleEnumName.empty())
+    {
+        out = visibleEnumName;
+        return true;
+    }
     return false;
 }
 
@@ -431,6 +442,42 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
                 return true;
             }
         }
+    }
+
+    if(call->name == "__mlang_is_enum_type")
+    {
+        if(call->arguments.size() != 1)
+        {
+            if(errorMessage)
+                *errorMessage = "__mlang_is_enum_type expects one type argument";
+            return false;
+        }
+        auto* id = dynamic_cast<IdentifierNode*>(call->arguments[0]);
+        if(!id)
+        {
+            if(errorMessage)
+                *errorMessage =
+                    "__mlang_is_enum_type expects a type name";
+            return false;
+        }
+        std::string typeName;
+        if(env)
+        {
+            auto boundIt = env->find("__type:" + id->name);
+            if(boundIt != env->end() &&
+               boundIt->second.kind == ConstexprValue::Kind::Type)
+                typeName = boundIt->second.typeName;
+        }
+        if(typeName.empty())
+            constexprTypeNameFromIdentifier(id->name, typeName);
+        const bool isEnum = !resolveVisibleEnumName(typeName).empty() ||
+                            enumBaseTypes.find(typeName) != enumBaseTypes.end();
+        out.kind = ConstexprValue::Kind::Bool;
+        out.boolValue = isEnum;
+        out.intValue = isEnum ? 1 : 0;
+        out.floatValue = isEnum ? 1.0 : 0.0;
+        out.typeKind = TypeNode::TYPE_BOOL;
+        return true;
     }
 
     if(call->name == "type_id")
