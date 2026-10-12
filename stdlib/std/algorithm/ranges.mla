@@ -10430,6 +10430,49 @@ pub fn join_with(data: &list<list<T>>, separator: &list<T>) -> list<T> {
     return joined_with(data, separator);
 }
 
+/// @brief Flatten a nested range while transforming each value.
+/// This fuses `views::join` followed by `views::transform` without building
+/// the intermediate flattened list.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn join_transform(data: &list<list<T>>, projection: Projection)
+    -> list<Output> {
+    var out: list<Output> = [];
+    let outer_len: i64 = data.len();
+    for outer_index in 0..outer_len {
+        let inner: list<T> = data[outer_index];
+        let inner_len: i64 = inner.len();
+        for inner_index in 0..inner_len {
+            out.push(projection(inner[inner_index]));
+        }
+    }
+    return out;
+}
+
+/// @brief Flatten projected ranges into a bounded existing destination.
+/// Returns the number of values written; later projected ranges are not
+/// visited once the destination is full.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn join_transform_to(data: &list<list<T>>,
+                         destination: &mut list<Output>,
+                         projection: Projection) -> i64 {
+    let outer_len: i64 = data.len();
+    let destination_len: i64 = destination.len();
+    var written: i64 = 0;
+    for outer_index in 0..outer_len {
+        if written >= destination_len { break; }
+        let inner: list<T> = data[outer_index];
+        let inner_len: i64 = inner.len();
+        for inner_index in 0..inner_len {
+            if written >= destination_len { break; }
+            destination[written] = projection(inner[inner_index]);
+            written = written + 1;
+        }
+    }
+    return written;
+}
+
 /// @brief Split a range at each non-overlapping occurrence of `delimiter`.
 /// Empty fields are retained between leading, adjacent, and trailing matches.
 /// An empty input produces no fields; an empty delimiter returns the whole

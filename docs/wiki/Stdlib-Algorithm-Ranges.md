@@ -820,6 +820,11 @@ fn example() {
   separator between each pair of inner lists (C++23 `views::join_with` style).
   Separators are inserted between empty inner lists too; an empty outer list
   produces an empty result. `join_with` is the standard view spelling.
+- `join_transform(data, projection)` fuses flattening with a transformation of
+  each nested value, matching `views::join` followed by `views::transform`
+  without materializing the intermediate flattened list.
+  `join_transform_to` writes that flattened stream into a bounded destination
+  and stops when it fills.
 - `split(data, delimiter)` eagerly splits at non-overlapping delimiter matches
   and preserves empty fields around leading, repeated, and trailing matches.
   Empty input yields no fields; an empty delimiter yields the whole nonempty

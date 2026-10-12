@@ -18,6 +18,8 @@ use std::algorithm::ranges::to_list_projected;
 use std::algorithm::ranges::to_list_nested_projected;
 use std::algorithm::ranges::split_by;
 use std::algorithm::ranges::split_by_projected;
+use std::algorithm::ranges::join_transform;
+use std::algorithm::ranges::join_transform_to;
 use std::algorithm::ranges::sort_in_place_by_projected;
 use std::algorithm::ranges::sort_in_place;
 use std::algorithm::ranges::make_heap_in_place_by_projected;
@@ -232,6 +234,24 @@ fn test_ranges_split_by_equivalence_and_projection() {
     let projected_second: list<i32> = projected_parts[1];
     verify(projected_parts.len() == 2 && projected_first[0] == 11 &&
            projected_second[0] == 4);
+}
+
+#[test]
+fn test_ranges_join_transform_fuses_flatten_and_projection() {
+    let values: list<list<i32>> = [[1, 2], [], [3, 4]];
+    let widen = |value: i32| { return i64(value * 10); };
+    let flattened: list<i64> = join_transform(values, widen);
+    verify(flattened.len() == 4 && flattened[0] == 10 &&
+           flattened[1] == 20 && flattened[2] == 30 &&
+           flattened[3] == 40);
+
+    var bounded: list<i64> = [0, 0, 0];
+    verify(join_transform_to(values, &mut bounded, widen) == 3);
+    verify(bounded[0] == 10 && bounded[1] == 20 && bounded[2] == 30);
+
+    let empty: list<list<i32>> = [];
+    let empty_result: list<i64> = join_transform(empty, widen);
+    verify(empty_result.len() == 0);
 }
 
 #[test]
