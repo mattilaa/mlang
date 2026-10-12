@@ -9,6 +9,7 @@ use std::testing::verify;
 use std::algorithm::ranges::find;
 use std::algorithm::ranges::to_flat_set;
 use std::algorithm::ranges::to_flat_multiset;
+use std::algorithm::ranges::to_flat_map;
 use std::algorithm::ranges::to_list_from_flat_set;
 use std::algorithm::ranges::to_list_from_flat_multiset;
 use std::algorithm::ranges::to_list_from_flat_map;
@@ -62,4 +63,13 @@ fn test_ranges_materialize_flat_multimap_entries_in_key_order() {
     verify(entries.len() == 3 && first.0 == 1 && first.1 == 10 &&
            second.0 == 2 && second.1 == 20 &&
            third.0 == 2 && third.1 == 21);
+}
+
+#[test]
+fn test_generic_to_flat_map_resolves_nested_receiver_types() {
+    let pairs: list<tuple<i32, i32>> = [(2, 20), (1, 10), (2, 21)];
+    let values: FlatMap<i32, i32> = to_flat_map(pairs);
+    verify(values.len() == 2 && values.key_at(0) == 1 &&
+           values.value_at(0) == 10 && values.key_at(1) == 2 &&
+           values.value_at(1) == 21);
 }

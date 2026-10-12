@@ -2056,6 +2056,30 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 std::vector<std::string> aliasStack;
                 parsedType = resolveTypeAliasNode(parsedType, emptyTypeParams,
                                                   aliasStack);
+                // Static generic method calls nested inside a generic
+                // function can spell their receiver using the caller's type
+                // parameters (for example FlatMap<K, V>::new()). Resolve
+                // those names before asking for a monomorphization; otherwise
+                // the generic struct is instantiated with self-referential
+                // K/V type refs and type lowering recurses indefinitely.
+                std::map<std::string, TypeNode*> callTypeBindings =
+                    activeFunctionTypeBindings;
+                for(const auto& binding : activeTypeParamBindings)
+                    callTypeBindings[binding.first] = binding.second;
+                if(!callTypeBindings.empty())
+                {
+                    std::vector<std::string> typeParamNames;
+                    std::vector<TypeNode*> typeArgs;
+                    typeParamNames.reserve(callTypeBindings.size());
+                    typeArgs.reserve(callTypeBindings.size());
+                    for(const auto& binding : callTypeBindings)
+                    {
+                        typeParamNames.push_back(binding.first);
+                        typeArgs.push_back(binding.second);
+                    }
+                    parsedType = substituteTypeParams(
+                        parsedType, typeParamNames, typeArgs);
+                }
                 if(auto* genericStructType =
                        dynamic_cast<GenericStructTypeRefNode*>(parsedType))
                 {
