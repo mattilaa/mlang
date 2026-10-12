@@ -427,6 +427,9 @@ fn example() {
   of elements into existing output storage, stopping at the source or
   destination end and returning the count written. Negative counts write
   nothing; neither list changes length.
+- `copy_to_heterogeneous` and `copy_n_to_heterogeneous` preserve the same
+  bounded behavior while allowing the destination element type to differ from
+  the source type; source values are converted to the destination type.
 - `copy_to_projected` and `copy_n_to_projected` apply a projection before
   writing into an existing destination list. They retain the same bounded
   output and progress semantics as their non-projected counterparts.
@@ -438,16 +441,28 @@ fn example() {
   [`std::ranges::copy_backward`](Stdlib-Module-API).
 - `copy_backward_to_projected` applies a projection while aligning the source
   suffix to the destination end, and returns the copied subrange start indices.
+- `copy_backward_to_heterogeneous` aligns a source suffix to the destination
+  end while converting into a different destination element type.
 - `copy_if_to(source, destination, predicate)` writes matching source values
   into an existing destination and stops when it fills. It returns
   `(consumed, written)` so callers can resume from the exact source position;
   the projected variant evaluates a projection before its predicate.
+- `copy_if_to_heterogeneous` and
+  `copy_if_to_heterogeneous_projected` provide the same bounded progress
+  behavior while converting the original selected values to a distinct output
+  type; the projected form applies its projection only for predicate testing.
 - `remove_copy_to(source, destination, value)` writes nonmatching values into
   an existing destination and reports `(consumed, written)`. Its comparator
   and projected variants have the same bounded-progress behavior.
 - `remove_copy_if_to(source, destination, predicate)` writes values rejected
   by the predicate into bounded output and reports `(consumed, written)`; the
   projected variant tests projected keys but copies the original elements.
+- `remove_copy_to_heterogeneous`, `remove_copy_to_heterogeneous_projected`,
+  `remove_copy_to_heterogeneous_by`,
+  `remove_copy_to_heterogeneous_by_projected`,
+  `remove_copy_if_to_heterogeneous`, and
+  `remove_copy_if_to_heterogeneous_projected` preserve the bounded progress
+  behavior while converting retained source values to a distinct output type.
 - `to_list(data)` materializes a new list with an explicitly selected element
   type, converting each source element in order. This is the Mlang eager-list
   counterpart to C++23 [`std::ranges::to`](Stdlib-Module-API); the output type is inferred from the
@@ -509,6 +524,10 @@ fn example() {
 - The binary `transform(left, right, operation)` overload transforms paired
   elements into a new list and stops at the shorter input, matching the bounded
   two-range form of C++20 [`std::ranges::transform`](Stdlib-Module-API).
+- The binary `transform_to(left, right, destination, operation)` overload
+  writes paired transform results into existing bounded storage. It stops at
+  the shortest of the two inputs and destination; the projected overload
+  accepts independent projections for each input.
 - `transform_projected` applies a projection before its unary operation;
   `zip_transform_projected` applies independent projections to paired inputs
   before the binary operation, stopping at the shorter range.
@@ -520,6 +539,15 @@ fn example() {
 - `zip_transform` applies operations to corresponding values from two through
   eight inputs, stopping at the shortest input and inferring the output type.
   This eager-list API mirrors the C++23 [`std::ranges::zip_transform`](Stdlib-Module-API) shape.
+- `zip_transform_to` and `zip_transform_to_projected` write paired results to
+  bounded caller-provided output. They stop at the shortest input or output
+  and return the number written; the projected form accepts independent input
+  projections.
+- `zip_transform3_to` through `zip_transform8_to` provide the same bounded
+  output behavior for three through eight inputs. Their
+  `_to_projected` counterparts apply a separate projection to every input
+  before invoking the operation. All forms stop at the shortest input or
+  destination and preserve the unused destination suffix.
 - `zip` materializes heterogeneous tuples from two through eight input ranges,
   stopping at the shortest input.
 - `find_if_not` returns the first rejected element's index; `remove_if` returns
@@ -541,6 +569,8 @@ fn example() {
   prefix into a caller-provided list, clamping to the requested count, source
   length, and destination capacity. It returns the number written and leaves
   the destination suffix unchanged.
+- `sample_to_heterogeneous` provides the same bounded behavior while
+  converting selected source values to an independently typed destination.
 - `shuffle(data, choose_index)` returns a randomized copy. The selector receives
   each current exclusive bound; use a uniformly distributed selector for an
   unbiased permutation. Because lists are eagerly rebuilt without indexed
@@ -563,6 +593,10 @@ fn example() {
   one original value per adjacent equivalence run into bounded storage and
   return `(consumed, written)` progress. A short destination stops the copy at
   the last complete output run.
+- `unique_copy_to_heterogeneous` and its `_by`, `_projected`, and
+  `_by_projected` variants provide the same bounded progress behavior when
+  output elements have a different type. Equivalence and projection operate on
+  source values; the first original value in each run is converted when written.
 - `unique_in_place(&mut data)` and the `unique_by_in_place`,
   `unique_in_place_projected`, and `unique_by_in_place_projected` variants
   compact adjacent duplicate runs while preserving the first element of each
@@ -589,6 +623,11 @@ fn example() {
   existing output lists and stops when either destination fills. It returns
   `(consumed, matching_written, nonmatching_written)`; the projected variant
   applies its projection before testing while retaining the original elements.
+- `partition_copy_to_heterogeneous` and
+  `partition_copy_to_heterogeneous_projected` allow the matching and
+  nonmatching destinations to have independent element types. Original source
+  values are converted to each selected output type; both forms preserve the
+  same bounded progress tuple and stop behavior.
 - `partition(data, predicate)` returns `(partitioned_copy, boundary_index)`.
   Matching elements precede the rest; this eager-list counterpart preserves
   order within both groups and evaluates the predicate once per element.
@@ -609,6 +648,11 @@ fn example() {
   transform in one pass, without allocating an intermediate selected list.
   The output type may differ from the input type. The projected form tests a
   projected key while transforming the original selected element.
+- `filter_transform_to` and `filter_transform_to_projected` perform the same
+  fused pipeline into existing bounded output storage. They return
+  `(consumed, written)` progress, run the transform only for matches, and leave
+  the unused destination suffix unchanged; projected filtering still
+  transforms the original selected element.
 - `remove`, `take`, `drop`, `unique`, `unique_stable`, and `clamp` return a
   transformed copy. `unique` removes only adjacent duplicates;
   `unique_stable` keeps the first occurrence of each value.
@@ -618,6 +662,11 @@ fn example() {
 - `take_while_projected` and `drop_while_projected` apply a predicate to
   projected keys while returning the original elements, preserving data shape
   for record-like lists.
+- `take_while_to` and `drop_while_to`, with projected forms, write prefix or
+  suffix selections into bounded output storage that may have a different
+  element type. They return `(consumed, written)`; `take_while_to` leaves the
+  first rejected value unconsumed, while `drop_while_to` counts both the
+  skipped prefix and copied suffix. Empty output performs no predicate work.
 - `take_last(data, count)` copies a suffix and `drop_last(data, count)` copies
   the prefix before it (C++23 `views::take_last`/`drop_last` counterparts).
   Counts are clamped to the range; non-positive counts yield empty/all values,
@@ -670,6 +719,9 @@ fn example() {
   destination)` write the corresponding copy sequence into existing storage,
   stopping at the destination capacity and returning the number written.
   `rotate_copy_to` clamps its split index exactly like `rotate_copy`.
+- `reverse_copy_to_heterogeneous` and `rotate_copy_to_heterogeneous` preserve
+  those bounded sequence semantics while converting source values to an
+  independently typed destination.
 - `rotate_in_place(&mut data, middle)` moves the suffix beginning at `middle`
   before the prefix using at most O(N) swaps and no output allocation. It
   returns the index of the original first element after rotation (the Mlang
@@ -835,9 +887,18 @@ fn example() {
   write replaced values into a caller-provided destination, bounded by the
   shorter list. They return the number written and preserve the source and any
   unused destination suffix.
+- `replace_copy_to_heterogeneous` and its `_projected` form provide the same
+  bounded behavior with a distinct destination element type. Both retained
+  values and replacement values use that output type.
+- `replace_copy_to_heterogeneous_by` and
+  `replace_copy_to_heterogeneous_by_projected` add custom equivalence matching
+  to heterogeneous bounded replacement.
 - `replace_copy_if_to` and `replace_copy_if_to_projected` provide the same
   bounded behavior for predicate-based replacement, with the projected form
   testing each element's key while copying the original nonmatches.
+- `replace_copy_if_to_heterogeneous` and
+  `replace_copy_if_to_heterogeneous_projected` extend predicate replacement
+  to distinct output types while preserving bounded prefix semantics.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 - `iota_range(start, end)` materializes a typed half-open range, preserving

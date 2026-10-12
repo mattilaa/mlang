@@ -390,11 +390,13 @@ use std::algorithm::ranges::prev_permutation_in_place_by_projected;
 use std::algorithm::ranges::reversed;
 use std::algorithm::ranges::reverse_copy;
 use std::algorithm::ranges::reverse_copy_to;
+use std::algorithm::ranges::reverse_copy_to_heterogeneous;
 use std::algorithm::ranges::reverse_in_place;
 use std::algorithm::ranges::rotate_left;
 use std::algorithm::ranges::rotate;
 use std::algorithm::ranges::rotate_copy;
 use std::algorithm::ranges::rotate_copy_to;
+use std::algorithm::ranges::rotate_copy_to_heterogeneous;
 use std::algorithm::ranges::rotate_in_place;
 use std::algorithm::ranges::shift_left;
 use std::algorithm::ranges::shift_right;
@@ -480,10 +482,13 @@ use std::algorithm::ranges::copy_n_projected;
 use std::algorithm::ranges::copy_n_with_count;
 use std::algorithm::ranges::copy as ranges_copy;
 use std::algorithm::ranges::copy_to;
+use std::algorithm::ranges::copy_to_heterogeneous;
 use std::algorithm::ranges::copy_to_projected;
 use std::algorithm::ranges::copy_n_to;
+use std::algorithm::ranges::copy_n_to_heterogeneous;
 use std::algorithm::ranges::copy_n_to_projected;
 use std::algorithm::ranges::copy_backward_to;
+use std::algorithm::ranges::copy_backward_to_heterogeneous;
 use std::algorithm::ranges::copy_backward_to_projected;
 use std::algorithm::ranges::to_list;
 use std::algorithm::ranges::to_flat_set;
@@ -520,6 +525,8 @@ use std::algorithm::ranges::partition_copy;
 use std::algorithm::ranges::partition_copy_projected;
 use std::algorithm::ranges::partition_copy_to;
 use std::algorithm::ranges::partition_copy_to_projected;
+use std::algorithm::ranges::partition_copy_to_heterogeneous;
+use std::algorithm::ranges::partition_copy_to_heterogeneous_projected;
 use std::algorithm::ranges::find_if_not;
 use std::algorithm::ranges::find_if_not_projected;
 use std::algorithm::ranges::find_last_if_not;
@@ -537,9 +544,12 @@ use std::algorithm::ranges::erase_if;
 use std::algorithm::ranges::erase_if_projected;
 use std::algorithm::ranges::copy_if;
 use std::algorithm::ranges::copy_if_to;
+use std::algorithm::ranges::copy_if_to_heterogeneous;
+use std::algorithm::ranges::copy_if_to_heterogeneous_projected;
 use std::algorithm::ranges::copy_if_to_projected;
 use std::algorithm::ranges::sample as ranges_sample;
 use std::algorithm::ranges::sample_to as ranges_sample_to;
+use std::algorithm::ranges::sample_to_heterogeneous;
 use std::algorithm::ranges::shuffle as ranges_shuffle;
 use std::algorithm::ranges::shuffle_in_place as ranges_shuffle_in_place;
 use std::algorithm::ranges::remove_copy;
@@ -547,23 +557,35 @@ use std::algorithm::ranges::remove_copy_by;
 use std::algorithm::ranges::remove_copy_by_projected;
 use std::algorithm::ranges::remove_copy_projected;
 use std::algorithm::ranges::remove_copy_to;
+use std::algorithm::ranges::remove_copy_to_heterogeneous;
+use std::algorithm::ranges::remove_copy_to_heterogeneous_by;
 use std::algorithm::ranges::remove_copy_to_by;
 use std::algorithm::ranges::remove_copy_to_projected;
+use std::algorithm::ranges::remove_copy_to_heterogeneous_projected;
+use std::algorithm::ranges::remove_copy_to_heterogeneous_by_projected;
 use std::algorithm::ranges::remove_copy_to_by_projected;
 use std::algorithm::ranges::remove_copy_if;
 use std::algorithm::ranges::remove_copy_if_to;
 use std::algorithm::ranges::remove_copy_if_to_projected;
+use std::algorithm::ranges::remove_copy_if_to_heterogeneous;
+use std::algorithm::ranges::remove_copy_if_to_heterogeneous_projected;
 use std::algorithm::ranges::remove_copy_if_projected;
 use std::algorithm::ranges::replace_copy;
 use std::algorithm::ranges::replace_copy_projected;
 use std::algorithm::ranges::replace_copy_by;
 use std::algorithm::ranges::replace_copy_by_projected;
 use std::algorithm::ranges::replace_copy_to;
+use std::algorithm::ranges::replace_copy_to_heterogeneous;
+use std::algorithm::ranges::replace_copy_to_heterogeneous_by;
 use std::algorithm::ranges::replace_copy_to_by;
 use std::algorithm::ranges::replace_copy_to_projected;
+use std::algorithm::ranges::replace_copy_to_heterogeneous_projected;
+use std::algorithm::ranges::replace_copy_to_heterogeneous_by_projected;
 use std::algorithm::ranges::replace_copy_to_by_projected;
 use std::algorithm::ranges::replace_copy_if_to;
 use std::algorithm::ranges::replace_copy_if_to_projected;
+use std::algorithm::ranges::replace_copy_if_to_heterogeneous;
+use std::algorithm::ranges::replace_copy_if_to_heterogeneous_projected;
 use std::algorithm::ranges::replace_copy_if;
 use std::algorithm::ranges::replace_copy_if_projected;
 use std::algorithm::ranges::replace_if;
@@ -580,9 +602,13 @@ use std::algorithm::ranges::unique_copy_projected;
 use std::algorithm::ranges::unique_by_projected;
 use std::algorithm::ranges::unique_copy_by_projected;
 use std::algorithm::ranges::unique_copy_to;
+use std::algorithm::ranges::unique_copy_to_heterogeneous;
 use std::algorithm::ranges::unique_copy_to_by;
+use std::algorithm::ranges::unique_copy_to_heterogeneous_by;
 use std::algorithm::ranges::unique_copy_to_projected;
+use std::algorithm::ranges::unique_copy_to_heterogeneous_projected;
 use std::algorithm::ranges::unique_copy_to_by_projected;
+use std::algorithm::ranges::unique_copy_to_heterogeneous_by_projected;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
@@ -651,18 +677,38 @@ use std::algorithm::ranges::take_while;
 use std::algorithm::ranges::drop_while;
 use std::algorithm::ranges::take_while_projected;
 use std::algorithm::ranges::drop_while_projected;
+use std::algorithm::ranges::take_while_to;
+use std::algorithm::ranges::take_while_to_projected;
+use std::algorithm::ranges::drop_while_to;
+use std::algorithm::ranges::drop_while_to_projected;
 use std::algorithm::ranges::transform;
 use std::algorithm::ranges::transform_in_place;
 use std::algorithm::ranges::transform_to;
 use std::algorithm::ranges::transform_to_projected;
 use std::algorithm::ranges::filter_transform;
 use std::algorithm::ranges::filter_transform_projected;
+use std::algorithm::ranges::filter_transform_to;
+use std::algorithm::ranges::filter_transform_to_projected;
 use std::algorithm::ranges::transform_with_count;
 use std::algorithm::ranges::transform_projected;
 use std::algorithm::ranges::transform_in_place_projected;
 use std::algorithm::ranges::transform_projected_with_count;
 use std::algorithm::ranges::zip_transform;
 use std::algorithm::ranges::zip_transform_projected;
+use std::algorithm::ranges::zip_transform_to;
+use std::algorithm::ranges::zip_transform_to_projected;
+use std::algorithm::ranges::zip_transform3_to;
+use std::algorithm::ranges::zip_transform4_to;
+use std::algorithm::ranges::zip_transform5_to;
+use std::algorithm::ranges::zip_transform6_to;
+use std::algorithm::ranges::zip_transform7_to;
+use std::algorithm::ranges::zip_transform8_to;
+use std::algorithm::ranges::zip_transform3_to_projected;
+use std::algorithm::ranges::zip_transform4_to_projected;
+use std::algorithm::ranges::zip_transform5_to_projected;
+use std::algorithm::ranges::zip_transform6_to_projected;
+use std::algorithm::ranges::zip_transform7_to_projected;
+use std::algorithm::ranges::zip_transform8_to_projected;
 use std::algorithm::ranges::zip_transform3_projected;
 use std::algorithm::ranges::zip_transform4_projected;
 use std::algorithm::ranges::zip_transform5_projected;
@@ -837,6 +883,14 @@ fn test_algorithm_ranges_rotate_at_middle() {
     var no_output: list<i32> = [];
     verify(rotate_copy_to(values, 2, no_output) == 0);
     verify(values[0] == 1 && values[4] == 5);
+
+    var heterogeneous_rotate: list<f64> = [0.0, 0.0, 0.0, 0.0];
+    verify(rotate_copy_to_heterogeneous(
+        values, 2, heterogeneous_rotate) == 4);
+    verify(heterogeneous_rotate[0] == 3.0 &&
+           heterogeneous_rotate[1] == 4.0 &&
+           heterogeneous_rotate[2] == 5.0 &&
+           heterogeneous_rotate[3] == 1.0);
 
     var mutable: list<i32> = [1, 2, 3, 4, 5];
     verify(rotate_in_place(mutable, 2) == 3);
@@ -3415,6 +3469,12 @@ fn test_algorithm_ranges_generic_reversed_copy() {
     verify(reverse_copy_to(values, no_output) == 0);
     verify(values[0] == 1 && values[3] == 4);
 
+    var heterogeneous_output: list<f64> = [0.0, 0.0, 99.0];
+    verify(reverse_copy_to_heterogeneous(values, heterogeneous_output) == 2);
+    verify(heterogeneous_output[0] == 4.0 &&
+           heterogeneous_output[1] == 3.0 &&
+           heterogeneous_output[2] == 99.0);
+
     let empty: list<str8> = [];
     let empty_reversed: list<str8> = reversed(empty);
     verify(empty_reversed.len() == 0);
@@ -3745,6 +3805,85 @@ fn test_algorithm_ranges_zip_seven_and_eight_ranges() {
     };
     let transformed8: list<i32> = zip_transform(a, b, c, d, e, f, g, h, sum8);
     verify(transformed8.len() == 1 && transformed8[0] == 11111111);
+}
+
+#[test]
+fn test_algorithm_ranges_bounded_multi_zip_transform() {
+    let a: list<i32> = [1, 2];
+    let b: list<i32> = [10, 20];
+    let c: list<i32> = [100, 200];
+    let d: list<i32> = [1000, 2000];
+    let e: list<i32> = [10000, 20000];
+    let f: list<i32> = [100000, 200000];
+    let g: list<i32> = [1000000, 2000000];
+    let h: list<i32> = [10000000];
+    let sum3 = |x: i32, y: i32, z: i32| { return i64(x + y + z); };
+    let sum4 = |x: i32, y: i32, z: i32, w: i32| {
+        return i64(x + y + z + w);
+    };
+    let sum5 = |x: i32, y: i32, z: i32, w: i32, v: i32| {
+        return i64(x + y + z + w + v);
+    };
+    let sum6 = |x: i32, y: i32, z: i32, w: i32, v: i32, u: i32| {
+        return i64(x + y + z + w + v + u);
+    };
+    let sum7 = |x: i32, y: i32, z: i32, w: i32, v: i32, u: i32, q: i32| {
+        return i64(x + y + z + w + v + u + q);
+    };
+    let sum8 = |x: i32, y: i32, z: i32, w: i32,
+                v: i32, u: i32, q: i32, r: i32| {
+        return i64(x + y + z + w + v + u + q + r);
+    };
+    let identity = |value: i32| { return value; };
+
+    var out3: list<i64> = [0, 99];
+    verify(zip_transform3_to(a, b, c, out3, sum3) == 2);
+    verify(out3[0] == 111 && out3[1] == 222);
+    var out4: list<i64> = [0, 99];
+    verify(zip_transform4_to(a, b, c, d, out4, sum4) == 2);
+    verify(out4[0] == 1111 && out4[1] == 2222);
+    var out5: list<i64> = [0, 99];
+    verify(zip_transform5_to(a, b, c, d, e, out5, sum5) == 2);
+    verify(out5[0] == 11111 && out5[1] == 22222);
+    var out6: list<i64> = [0, 99];
+    verify(zip_transform6_to(a, b, c, d, e, f, out6, sum6) == 2);
+    verify(out6[0] == 111111 && out6[1] == 222222);
+    var out7: list<i64> = [0, 99];
+    verify(zip_transform7_to(a, b, c, d, e, f, g, out7, sum7) == 2);
+    verify(out7[0] == 1111111 && out7[1] == 2222222);
+    var out8: list<i64> = [0, 99];
+    verify(zip_transform8_to(a, b, c, d, e, f, g, h, out8, sum8) == 1);
+    verify(out8[0] == 11111111 && out8[1] == 99);
+
+    var projected3: list<i64> = [0, 99];
+    verify(zip_transform3_to_projected(
+        a, b, c, projected3, sum3, identity, identity, identity) == 2);
+    verify(projected3[0] == 111 && projected3[1] == 222);
+    var projected4: list<i64> = [0, 99];
+    verify(zip_transform4_to_projected(
+        a, b, c, d, projected4, sum4, identity, identity, identity,
+        identity) == 2);
+    verify(projected4[0] == 1111 && projected4[1] == 2222);
+    var projected5: list<i64> = [0, 99];
+    verify(zip_transform5_to_projected(
+        a, b, c, d, e, projected5, sum5, identity, identity, identity,
+        identity, identity) == 2);
+    verify(projected5[0] == 11111 && projected5[1] == 22222);
+    var projected6: list<i64> = [0, 99];
+    verify(zip_transform6_to_projected(
+        a, b, c, d, e, f, projected6, sum6, identity, identity, identity,
+        identity, identity, identity) == 2);
+    verify(projected6[0] == 111111 && projected6[1] == 222222);
+    var projected7: list<i64> = [0, 99];
+    verify(zip_transform7_to_projected(
+        a, b, c, d, e, f, g, projected7, sum7, identity, identity, identity,
+        identity, identity, identity, identity) == 2);
+    verify(projected7[0] == 1111111 && projected7[1] == 2222222);
+    var projected8: list<i64> = [0, 99];
+    verify(zip_transform8_to_projected(
+        a, b, c, d, e, f, g, h, projected8, sum8, identity, identity,
+        identity, identity, identity, identity, identity, identity) == 1);
+    verify(projected8[0] == 11111111 && projected8[1] == 99);
 }
 
 #[test]
@@ -4327,6 +4466,111 @@ fn test_algorithm_ranges_copy_if_to_bounded_output() {
     let empty_progress: tuple<i64, i64> = copy_if_to(
         source, empty_destination, is_even);
     verify(empty_progress.0 == 0 && empty_progress.1 == 0 && calls == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_heterogeneous_bounded_remove_replace_copy() {
+    let source: list<i32> = [11, 22, 29, 31, 42];
+    var removed: list<f64> = [-1.0, -1.0, -1.0];
+    let remove_progress: tuple<i64, i64> =
+        remove_copy_to_heterogeneous(source, removed, 22);
+    verify(remove_progress.0 == 4 && remove_progress.1 == 3);
+    verify(removed[0] == 11.0 && removed[1] == 29.0 &&
+           removed[2] == 31.0);
+
+    let same_decade = |item: i32, key: i32| {
+        return item / 10 == key / 10;
+    };
+    var removed_by: list<f64> = [0.0, 0.0, 0.0];
+    let removed_by_progress: tuple<i64, i64> =
+        remove_copy_to_heterogeneous_by(
+            source, removed_by, 20, same_decade);
+    verify(removed_by_progress.0 == 5 && removed_by_progress.1 == 3);
+    verify(removed_by[0] == 11.0 && removed_by[1] == 31.0 &&
+           removed_by[2] == 42.0);
+
+    let tens = |value: i32| { return value / 10; };
+    var removed_projected: list<f64> = [0.0, 0.0, 0.0];
+    let removed_projected_progress: tuple<i64, i64> =
+        remove_copy_to_heterogeneous_projected(
+            source, removed_projected, 2, tens);
+    verify(removed_projected_progress.0 == 5 &&
+           removed_projected_progress.1 == 3);
+    verify(removed_projected[0] == 11.0 &&
+           removed_projected[1] == 31.0 &&
+           removed_projected[2] == 42.0);
+
+    let same_parity = |left: i32, right: i32| {
+        return left % 2 == right % 2;
+    };
+    var removed_combined: list<f64> = [0.0, 0.0];
+    let removed_combined_progress: tuple<i64, i64> =
+        remove_copy_to_heterogeneous_by_projected(
+            source, removed_combined, 2, same_parity, tens);
+    verify(removed_combined_progress.0 == 4 &&
+           removed_combined_progress.1 == 2);
+    verify(removed_combined[0] == 11.0 && removed_combined[1] == 31.0);
+
+    let is_even = |value: i32| { return value % 2 == 0; };
+    var rejected: list<i64> = [0, 0, 0];
+    let rejected_progress: tuple<i64, i64> =
+        remove_copy_if_to_heterogeneous(source, rejected, is_even);
+    verify(rejected_progress.0 == 5 && rejected_progress.1 == 3);
+    verify(rejected[0] == 11 && rejected[1] == 29 && rejected[2] == 31);
+
+    let below_three = |key: i32| { return key < 3; };
+    var projected_rejected: list<f64> = [0.0, 0.0];
+    let projected_rejected_progress: tuple<i64, i64> =
+        remove_copy_if_to_heterogeneous_projected(
+            source, projected_rejected, below_three, tens);
+    verify(projected_rejected_progress.0 == 5 &&
+           projected_rejected_progress.1 == 2);
+    verify(projected_rejected[0] == 31.0 && projected_rejected[1] == 42.0);
+
+    var replaced: list<f64> = [0.0, 0.0, 0.0, 0.0, 77.0];
+    verify(replace_copy_to_heterogeneous(
+        source, replaced, 22, 99.5) == 5);
+    verify(replaced[0] == 11.0 && replaced[1] == 99.5 &&
+           replaced[2] == 29.0 && replaced[4] == 42.0);
+
+    var replaced_by: list<f64> = [0.0, 0.0, 0.0, 0.0, 0.0];
+    verify(replace_copy_to_heterogeneous_by(
+        source, replaced_by, 20, 98.5, same_decade) == 5);
+    verify(replaced_by[0] == 11.0 && replaced_by[1] == 98.5 &&
+           replaced_by[2] == 98.5 && replaced_by[4] == 42.0);
+
+    var replaced_projected: list<f64> = [0.0, 0.0, 0.0, 0.0, 0.0];
+    verify(replace_copy_to_heterogeneous_projected(
+        source, replaced_projected, 2, 88.5, tens) == 5);
+    verify(replaced_projected[0] == 11.0 &&
+           replaced_projected[1] == 88.5 &&
+           replaced_projected[2] == 88.5 &&
+           replaced_projected[4] == 42.0);
+
+    var replaced_combined: list<f64> = [0.0, 0.0, 0.0, 0.0, 0.0];
+    verify(replace_copy_to_heterogeneous_by_projected(
+        source, replaced_combined, 2, 87.5, same_parity, tens) == 5);
+    verify(replaced_combined[0] == 11.0 &&
+           replaced_combined[1] == 87.5 &&
+           replaced_combined[2] == 87.5 &&
+           replaced_combined[3] == 31.0 &&
+           replaced_combined[4] == 87.5);
+
+    let is_odd = |value: i32| { return value % 2 != 0; };
+    var replaced_if: list<f64> = [0.0, 0.0, 0.0, 0.0, 0.0];
+    verify(replace_copy_if_to_heterogeneous(
+        source, replaced_if, is_odd, -1.5) == 5);
+    verify(replaced_if[0] == -1.5 && replaced_if[1] == 22.0 &&
+           replaced_if[4] == 42.0);
+
+    let key_at_least_three = |key: i32| { return key >= 3; };
+    var replaced_if_projected: list<f64> = [0.0, 0.0, 0.0, 0.0];
+    verify(replace_copy_if_to_heterogeneous_projected(
+        source, replaced_if_projected, key_at_least_three, -2.5, tens) == 4);
+    verify(replaced_if_projected[0] == 11.0 &&
+           replaced_if_projected[1] == 22.0 &&
+           replaced_if_projected[2] == -2.5 &&
+           replaced_if_projected[3] == -2.5);
 }
 
 #[test]
@@ -4981,6 +5225,70 @@ fn test_algorithm_ranges_take_drop_while() {
 }
 
 #[test]
+fn test_algorithm_ranges_bounded_take_drop_while() {
+    let values: list<i32> = [1, 2, 3, 4];
+    var take_calls: i32 = 0;
+    let below_three = |value: i32| {
+        take_calls = take_calls + 1;
+        return value < 3;
+    };
+    var prefix: list<f64> = [-1.0, -1.0, 99.0];
+    let take_progress: tuple<i64, i64> =
+        take_while_to(values, prefix, below_three);
+    verify(take_progress.0 == 2 && take_progress.1 == 2 && take_calls == 3);
+    verify(prefix[0] == 1.0 && prefix[1] == 2.0 && prefix[2] == 99.0);
+
+    var suffix: list<f64> = [-1.0];
+    var drop_calls: i32 = 0;
+    let drop_below_three = |value: i32| {
+        drop_calls = drop_calls + 1;
+        return value < 3;
+    };
+    let drop_progress: tuple<i64, i64> =
+        drop_while_to(values, suffix, drop_below_three);
+    verify(drop_progress.0 == 3 && drop_progress.1 == 1 && drop_calls == 3);
+    verify(suffix[0] == 3.0);
+
+    let projected_values: list<i32> = [11, 21, 30, 41];
+    var projection_calls: i32 = 0;
+    var predicate_calls: i32 = 0;
+    let tens = |value: i32| {
+        projection_calls = projection_calls + 1;
+        return value / 10;
+    };
+    let below_three_key = |key: i32| {
+        predicate_calls = predicate_calls + 1;
+        return key < 3;
+    };
+    var projected_prefix: list<f64> = [0.0, 0.0, 99.0];
+    let projected_take_progress: tuple<i64, i64> =
+        take_while_to_projected(projected_values, projected_prefix,
+                                below_three_key, tens);
+    verify(projected_take_progress.0 == 2 &&
+           projected_take_progress.1 == 2 &&
+           projection_calls == 3 && predicate_calls == 3);
+    verify(projected_prefix[0] == 11.0 && projected_prefix[1] == 21.0 &&
+           projected_prefix[2] == 99.0);
+
+    projection_calls = 0;
+    predicate_calls = 0;
+    var projected_suffix: list<i64> = [0, 0];
+    let projected_drop_progress: tuple<i64, i64> =
+        drop_while_to_projected(projected_values, projected_suffix,
+                                below_three_key, tens);
+    verify(projected_drop_progress.0 == 4 &&
+           projected_drop_progress.1 == 2 &&
+           projection_calls == 3 && predicate_calls == 3);
+    verify(projected_suffix[0] == 30 && projected_suffix[1] == 41);
+
+    var no_output: list<i32> = [];
+    let no_output_progress: tuple<i64, i64> =
+        drop_while_to(values, no_output, drop_below_three);
+    verify(no_output_progress.0 == 0 && no_output_progress.1 == 0 &&
+           drop_calls == 3);
+}
+
+#[test]
 fn test_algorithm_ranges_projected_take_drop_while() {
     let values: list<i32> = [11, 12, 19, 21, 25, 30];
     let below_two = |key: i32| { return key < 2; };
@@ -5069,6 +5377,58 @@ fn test_algorithm_ranges_filter_transform_composition() {
 }
 
 #[test]
+fn test_algorithm_ranges_bounded_filter_transform() {
+    let values: list<i32> = [1, 2, 3, 4, 5, 6];
+    var predicate_calls: i32 = 0;
+    var operation_calls: i32 = 0;
+    let is_even = |value: i32| {
+        predicate_calls = predicate_calls + 1;
+        return value % 2 == 0;
+    };
+    let to_double = |value: i32| {
+        operation_calls = operation_calls + 1;
+        return f64(value * 2);
+    };
+    var output: list<f64> = [-1.0, -1.0, 77.0];
+    let progress: tuple<i64, i64> =
+        filter_transform_to(values, output, is_even, to_double);
+    verify(progress.0 == 4 && progress.1 == 2);
+    verify(predicate_calls == 4 && operation_calls == 2);
+    verify(output[0] == 4.0 && output[1] == 8.0 && output[2] == 77.0);
+
+    let records: list<i32> = [11, 22, 33, 14, 25];
+    var projection_calls: i32 = 0;
+    var projected_predicate_calls: i32 = 0;
+    var projected_operation_calls: i32 = 0;
+    let tens = |value: i32| {
+        projection_calls = projection_calls + 1;
+        return value / 10;
+    };
+    let at_least_two = |key: i32| {
+        projected_predicate_calls = projected_predicate_calls + 1;
+        return key >= 2;
+    };
+    let add_hundred = |value: i32| {
+        projected_operation_calls = projected_operation_calls + 1;
+        return i64(value + 100);
+    };
+    var projected_output: list<i64> = [-1, -1];
+    let projected_progress: tuple<i64, i64> =
+        filter_transform_to_projected(
+            records, projected_output, at_least_two, add_hundred, tens);
+    verify(projected_progress.0 == 3 && projected_progress.1 == 2);
+    verify(projection_calls == 3 && projected_predicate_calls == 3 &&
+           projected_operation_calls == 2);
+    verify(projected_output[0] == 122 && projected_output[1] == 133);
+
+    var no_output: list<f64> = [];
+    let empty_progress: tuple<i64, i64> =
+        filter_transform_to(values, no_output, is_even, to_double);
+    verify(empty_progress.0 == 0 && empty_progress.1 == 0);
+    verify(predicate_calls == 4 && operation_calls == 2);
+}
+
+#[test]
 fn test_algorithm_ranges_binary_transform() {
     let left: list<i32> = [1, 2, 3, 4];
     let right: list<i32> = [10, 20, 30];
@@ -5153,6 +5513,37 @@ fn test_algorithm_ranges_transform_to_output_range() {
 
     let empty: list<i32> = [];
     verify(transform_to(empty, longer_destination, expand) == 0);
+
+    let left: list<i32> = [1, 2, 3];
+    let right: list<f64> = [10.5, 20.5];
+    let add_mixed = |a: i32, b: f64| { return f64(a) + b; };
+    var binary_output: list<f64> = [-1.0, -1.0, 99.0];
+    verify(transform_to(left, right, binary_output, add_mixed) == 2);
+    verify(binary_output[0] == 11.5 && binary_output[1] == 22.5 &&
+           binary_output[2] == 99.0);
+
+    let record_left: list<i32> = [11, 22, 33];
+    let record_right: list<i32> = [101, 202, 303];
+    let left_tens = |value: i32| { return value / 10; };
+    let right_last_digit = |value: i32| { return value % 100; };
+    let sum_projected = |a: i32, b: i32| { return i64(a + b); };
+    var projected_binary_output: list<i64> = [0, 0, 77];
+    verify(transform_to_projected(
+        record_left, record_right, projected_binary_output, sum_projected,
+        left_tens, right_last_digit) == 2);
+    verify(projected_binary_output[0] == 2 &&
+           projected_binary_output[1] == 4 &&
+           projected_binary_output[2] == 77);
+
+    var zip_output: list<f64> = [0.0, 0.0];
+    verify(zip_transform_to(left, right, zip_output, add_mixed) == 2);
+    verify(zip_output[0] == 11.5 && zip_output[1] == 22.5);
+    var projected_zip_output: list<i64> = [0, 0, 77];
+    verify(zip_transform_to_projected(
+        record_left, record_right, projected_zip_output, sum_projected,
+        left_tens, right_last_digit) == 2);
+    verify(projected_zip_output[0] == 2 && projected_zip_output[1] == 4 &&
+           projected_zip_output[2] == 77);
 }
 
 #[test]
@@ -5459,6 +5850,48 @@ fn test_algorithm_ranges_unique_copy_to_bounded_output() {
         unique_copy_to(values, no_output);
     verify(empty_progress.0 == 0 && empty_progress.1 == 0 &&
            no_capacity_progress.0 == 0 && no_capacity_progress.1 == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_unique_copy_to_heterogeneous_outputs() {
+    let runs: list<i32> = [11, 21, 12, 22, 32, 13];
+    var output: list<f64> = [0.0, 0.0, 0.0];
+    let progress: tuple<i64, i64> =
+        unique_copy_to_heterogeneous(runs, output);
+    verify(progress.0 == 4 && progress.1 == 3);
+    verify(output[0] == 11.0 && output[1] == 21.0 && output[2] == 12.0);
+
+    let same_last_digit = |left: i32, right: i32| {
+        return left % 10 == right % 10;
+    };
+    var equivalent_output: list<i64> = [0, 0, 0];
+    let equivalent_progress: tuple<i64, i64> =
+        unique_copy_to_heterogeneous_by(
+            runs, equivalent_output, same_last_digit);
+    verify(equivalent_progress.0 == 6 && equivalent_progress.1 == 3);
+    verify(equivalent_output[0] == 11 && equivalent_output[1] == 12 &&
+           equivalent_output[2] == 13);
+
+    let projected_runs: list<i32> = [11, 12, 21, 22, 31];
+    let tens = |value: i32| { return value / 10; };
+    var projected_output: list<f64> = [0.0, 0.0];
+    let projected_progress: tuple<i64, i64> =
+        unique_copy_to_heterogeneous_projected(
+            projected_runs, projected_output, tens);
+    verify(projected_progress.0 == 4 && projected_progress.1 == 2);
+    verify(projected_output[0] == 11.0 && projected_output[1] == 21.0);
+
+    let same_parity = |left: i32, right: i32| {
+        return left % 2 == right % 2;
+    };
+    var combined_output: list<i64> = [0, 0, 0, 0, 0, 0];
+    let combined_progress: tuple<i64, i64> =
+        unique_copy_to_heterogeneous_by_projected(
+            runs, combined_output, same_parity, tens);
+    verify(combined_progress.0 == 6 && combined_progress.1 == 6);
+    verify(combined_output[0] == 11 && combined_output[1] == 21 &&
+           combined_output[2] == 12 && combined_output[3] == 22 &&
+           combined_output[4] == 32 && combined_output[5] == 13);
 }
 
 #[test]
@@ -6709,6 +7142,11 @@ fn test_algorithm_ranges_copy_to_output_range() {
     verify(copy_to(empty, destination) == 0 && destination[0] == 4);
     var empty_destination: list<i32> = [];
     verify(copy_to(source, empty_destination) == 0);
+
+    var wide_destination: list<i64> = [0, 0, 0, 99];
+    verify(copy_to_heterogeneous(source, wide_destination) == 3);
+    verify(wide_destination[0] == 4 && wide_destination[2] == 15 &&
+           wide_destination[3] == 99);
 }
 
 #[test]
@@ -6733,6 +7171,11 @@ fn test_algorithm_ranges_copy_n_to_is_bounded_by_all_ranges() {
     verify(copy_n_to(empty, unchanged, 4) == 0);
     var no_output: list<i32> = [];
     verify(copy_n_to(source, no_output, 4) == 0);
+
+    var wide_prefix: list<i64> = [-1, -1, -1, 99];
+    verify(copy_n_to_heterogeneous(source, wide_prefix, 2) == 2);
+    verify(wide_prefix[0] == 4 && wide_prefix[1] == 8 &&
+           wide_prefix[2] == -1 && wide_prefix[3] == 99);
 }
 
 #[test]
@@ -6789,6 +7232,42 @@ fn test_algorithm_ranges_copy_backward_to_aligns_destination_end() {
     let empty_source: list<i32> = [];
     let no_copy: tuple<i64, i64> = copy_backward_to(empty_source, larger);
     verify(no_copy.0 == 0 && no_copy.1 == 6);
+}
+
+#[test]
+fn test_algorithm_ranges_heterogeneous_bounded_copy_family() {
+    let source: list<i32> = [10, 20, 30, 40, 50, 60];
+    var output: list<f64> = [0.0, 0.0, 0.0, 91.0];
+    verify(copy_to_heterogeneous(source, output) == 4);
+    verify(output[0] == 10.0 && output[2] == 30.0 && output[3] == 40.0);
+
+    var prefix: list<i64> = [-1, -1, -1, 99];
+    verify(copy_n_to_heterogeneous(source, prefix, 2) == 2);
+    verify(prefix[0] == 10 && prefix[1] == 20 &&
+           prefix[2] == -1 && prefix[3] == 99);
+
+    var backward: list<f64> = [90.0, 0.0, 0.0];
+    let backward_positions: tuple<i64, i64> =
+        copy_backward_to_heterogeneous(source, backward);
+    verify(backward_positions.0 == 3 && backward_positions.1 == 0);
+    verify(backward[0] == 40.0 && backward[1] == 50.0 &&
+           backward[2] == 60.0);
+
+    let above_three = |key: i32| { return key > 3; };
+    let tens = |value: i32| { return value / 10; };
+    var filtered: list<f64> = [-1.0, -1.0];
+    let filtered_progress: tuple<i64, i64> =
+        copy_if_to_heterogeneous_projected(
+            source, filtered, above_three, tens);
+    verify(filtered_progress.0 == 5 && filtered_progress.1 == 2);
+    verify(filtered[0] == 40.0 && filtered[1] == 50.0);
+
+    var unprojected: list<i64> = [0, 0, 0];
+    let positive = |value: i32| { return value > 0; };
+    let unprojected_progress: tuple<i64, i64> =
+        copy_if_to_heterogeneous(source, unprojected, positive);
+    verify(unprojected_progress.0 == 3 && unprojected_progress.1 == 3);
+    verify(unprojected[0] == 10 && unprojected[2] == 30);
 }
 
 #[test]
@@ -6886,6 +7365,12 @@ fn test_algorithm_ranges_sample_to_bounded_output() {
            destination[2] == 6 && destination[3] == -1);
     var empty_destination: list<i32> = [];
     verify(ranges_sample_to(source, empty_destination, 2, choose_last) == 0);
+
+    var heterogeneous: list<f64> = [-1.0, -1.0, 99.0];
+    verify(sample_to_heterogeneous(
+        source, heterogeneous, 2, choose_last) == 2);
+    verify(heterogeneous[0] == 5.0 && heterogeneous[1] == 6.0 &&
+           heterogeneous[2] == 99.0);
 }
 
 #[test]
@@ -7112,6 +7597,31 @@ fn test_algorithm_ranges_projected_partition_algorithms() {
     verify(projected_matches[0] == 11 && projected_matches[2] == 29 &&
            projected_nonmatches[0] == 31 &&
            projected_nonmatches[2] == 42);
+
+    var wide_matches: list<i64> = [0, 0, 0];
+    var float_nonmatches: list<f64> = [0.0, 0.0, 0.0];
+    let heterogeneous_progress: tuple<i64, i64, i64> =
+        partition_copy_to_heterogeneous(
+            values, wide_matches, float_nonmatches, below_three);
+    verify(heterogeneous_progress.0 == 6 &&
+           heterogeneous_progress.1 == 3 &&
+           heterogeneous_progress.2 == 3);
+    verify(wide_matches[0] == 11 && wide_matches[2] == 29 &&
+           float_nonmatches[0] == 31.0 && float_nonmatches[2] == 42.0);
+
+    var projected_wide_matches: list<i64> = [0, 0, 0];
+    var projected_float_nonmatches: list<f64> = [0.0, 0.0, 0.0];
+    let heterogeneous_projected_progress: tuple<i64, i64, i64> =
+        partition_copy_to_heterogeneous_projected(
+            values, projected_wide_matches, projected_float_nonmatches,
+            below_three, project_tens);
+    verify(heterogeneous_projected_progress.0 == 6 &&
+           heterogeneous_projected_progress.1 == 3 &&
+           heterogeneous_projected_progress.2 == 3);
+    verify(projected_wide_matches[0] == 11 &&
+           projected_wide_matches[2] == 29 &&
+           projected_float_nonmatches[0] == 31.0 &&
+           projected_float_nonmatches[2] == 42.0);
 
     let invalid: list<i32> = [11, 31, 21];
     verify(!is_partitioned_projected(invalid, below_three, project_tens));

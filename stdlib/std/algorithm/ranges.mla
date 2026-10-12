@@ -1487,6 +1487,39 @@ pub fn copy_n_to(source: &list<T>, destination: &mut list<T>,
     return copied;
 }
 
+/// @brief Copy into a bounded destination with a distinct element type.
+/// Source values are converted to the destination type; returns the number
+/// written without changing either list's length.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn copy_to_heterogeneous(source: &list<T>,
+                             destination: &mut list<Output>) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var copied: i64 = source_len;
+    if destination_len < copied { copied = destination_len; }
+    for i in 0..copied { destination[i] = source[i]; }
+    return copied;
+}
+
+/// @brief Copy a bounded prefix into a distinct destination element type.
+/// Returns the number written, limited by `count`, source length, and
+/// destination length. Negative counts write nothing.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn copy_n_to_heterogeneous(source: &list<T>,
+                               destination: &mut list<Output>,
+                               count: i64) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var copied: i64 = count;
+    if copied < 0 { copied = 0; }
+    if copied > source_len { copied = source_len; }
+    if copied > destination_len { copied = destination_len; }
+    for i in 0..copied { destination[i] = source[i]; }
+    return copied;
+}
+
 /// @brief Project and copy the common source/destination prefix.
 /// Returns the number of elements written; neither list changes length.
 /// @ingroup algorithm_ranges
@@ -1529,6 +1562,27 @@ pub fn copy_n_to_projected(source: &list<T>,
 generic<T>
 pub fn copy_backward_to(source: &list<T>, destination: &mut list<T>)
     -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    let source_first: i64 = source_len - count;
+    let destination_first: i64 = destination_len - count;
+    var offset: i64 = count;
+    while offset > 0 {
+        offset = offset - 1;
+        destination[destination_first + offset] = source[source_first + offset];
+    }
+    return (source_first, destination_first);
+}
+
+/// @brief Copy a source suffix backward into a distinct destination type.
+/// Values align at the destination end; returns the first source and
+/// destination indices copied. If the destination is shorter, the source
+/// suffix that fits is used.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn copy_backward_to_heterogeneous(
+    source: &list<T>, destination: &mut list<Output>) -> tuple<i64, i64> {
     let source_len: i64 = source.len();
     let destination_len: i64 = destination.len();
     let count: i64 = source_len < destination_len ? source_len : destination_len;
@@ -1831,6 +1885,30 @@ pub fn copy_if_to(source: &list<T>, destination: &mut list<T>,
     return (consumed, written);
 }
 
+/// @brief Copy predicate-matching values into a bounded distinct-type output.
+/// Stops when the source ends or the destination fills; returns
+/// `(consumed, written)`. Original source values are converted to the output
+/// element type.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate>
+pub fn copy_if_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>, predicate: Predicate)
+    -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if predicate(value) {
+            destination[written] = value;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Copy matching elements using a projected predicate into a bounded destination.
 /// Returns `(consumed, written)`; the predicate and projection are each run
 /// once for each consumed source item.
@@ -1838,6 +1916,30 @@ pub fn copy_if_to(source: &list<T>, destination: &mut list<T>,
 generic<T, Predicate, Projection>
 pub fn copy_if_to_projected(
     source: &list<T>, destination: &mut list<T>, predicate: Predicate,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if predicate(projection(value)) {
+            destination[written] = value;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Project for filtering while converting original values to output.
+/// Returns `(consumed, written)` and stops when the source ends or the bounded
+/// destination fills. The projection and predicate run once per consumed
+/// source element.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Projection>
+pub fn copy_if_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>, predicate: Predicate,
     projection: Projection) -> tuple<i64, i64> {
     let source_len: i64 = source.len();
     let destination_len: i64 = destination.len();
@@ -1890,6 +1992,52 @@ pub fn filter_transform_projected(data: &list<T>, predicate: Predicate,
     return transformed;
 }
 
+/// @brief Filter and transform into a bounded, caller-provided output range.
+/// Stops when the source ends or the destination fills; returns
+/// `(consumed, written)` so callers can resume at the exact source position.
+/// Predicate runs once per consumed input and operation only for matches.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Operation>
+pub fn filter_transform_to(source: &list<T>, destination: &mut list<Output>,
+    predicate: Predicate, operation: Operation) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if predicate(value) {
+            destination[written] = operation(value);
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Projected filter-transform into bounded output storage.
+/// Projection and predicate run once per consumed input; operation transforms
+/// each selected original value. Returns `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Operation, Projection>
+pub fn filter_transform_to_projected(
+    source: &list<T>, destination: &mut list<Output>, predicate: Predicate,
+    operation: Operation, projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if predicate(projection(value)) {
+            destination[written] = operation(value);
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Transform every element into a new list using `operation`.
 /// The output element type is inferred from the operation's return type,
 /// so input and output ranges may have different element types.
@@ -1929,6 +2077,27 @@ pub fn transform_to(source: &list<T>, destination: &mut list<Output>,
     var count: i64 = source_len;
     if destination_len < count { count = destination_len; }
     for i in 0..count { destination[i] = operation(source[i]); }
+    return count;
+}
+
+/// @brief Binary transform into a caller-provided output range.
+/// Processes paired positions until either input or the destination ends and
+/// returns the number written. The two input element types and output type may
+/// all differ. C++20 `std::ranges::transform` binary output-range form.
+/// @ingroup algorithm_ranges
+generic<T, U, Output, Operation>
+pub fn transform_to(left: &list<T>, right: &list<U>,
+                    destination: &mut list<Output>,
+                    operation: Operation) -> i64 {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = left_len;
+    if right_len < count { count = right_len; }
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        destination[i] = operation(left[i], right[i]);
+    }
     return count;
 }
 
@@ -2011,6 +2180,27 @@ pub fn transform_to_projected(
     return count;
 }
 
+/// @brief Binary transform after independent input projections.
+/// Stops when either input or the destination ends; returns the number written.
+/// @ingroup algorithm_ranges
+generic<T, U, Output, Operation, LeftProjection, RightProjection>
+pub fn transform_to_projected(
+    left: &list<T>, right: &list<U>, destination: &mut list<Output>,
+    operation: Operation, left_projection: LeftProjection,
+    right_projection: RightProjection) -> i64 {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let destination_len: i64 = destination.len();
+    var count: i64 = left_len;
+    if right_len < count { count = right_len; }
+    if destination_len < count { count = destination_len; }
+    for i in 0..count {
+        destination[i] = operation(left_projection(left[i]),
+                                  right_projection(right[i]));
+    }
+    return count;
+}
+
 /// @brief Project and transform a range, returning its consumed count.
 /// @ingroup algorithm_ranges
 generic<T, Output, Operation, Projection>
@@ -2063,6 +2253,302 @@ pub fn zip_transform_projected(
                                    right_projection(right[i])));
     }
     return transformed;
+}
+
+/// @brief Write binary zip-transform results to bounded output storage.
+/// Stops at either input or destination end and returns the number written.
+/// @ingroup algorithm_ranges
+generic<T, U, Output, Operation>
+pub fn zip_transform_to(left: &list<T>, right: &list<U>,
+    destination: &mut list<Output>, operation: Operation) -> i64 {
+    return transform_to(left, right, destination, operation);
+}
+
+/// @brief Bounded zip-transform with independent input projections.
+/// @ingroup algorithm_ranges
+generic<T, U, Output, Operation, LeftProjection, RightProjection>
+pub fn zip_transform_to_projected(
+    left: &list<T>, right: &list<U>, destination: &mut list<Output>,
+    operation: Operation, left_projection: LeftProjection,
+    right_projection: RightProjection) -> i64 {
+    return transform_to_projected(left, right, destination, operation,
+                                  left_projection, right_projection);
+}
+
+/// @brief Bounded three-range zip-transform.
+/// Stops at the shortest input or destination and returns the number written.
+/// @ingroup algorithm_ranges
+generic<T, U, V, Output, Operation>
+pub fn zip_transform3_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, destination: &mut list<Output>,
+    operation: Operation) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first[i], second[i], third[i]);
+    }
+    return count;
+}
+
+/// @brief Bounded four-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, Output, Operation>
+pub fn zip_transform4_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, destination: &mut list<Output>,
+    operation: Operation) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first[i], second[i], third[i], fourth[i]);
+    }
+    return count;
+}
+
+/// @brief Bounded five-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Output, Operation>
+pub fn zip_transform5_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, fifth: &list<X>,
+    destination: &mut list<Output>, operation: Operation) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first[i], second[i], third[i], fourth[i],
+                                   fifth[i]);
+    }
+    return count;
+}
+
+/// @brief Bounded six-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Output, Operation>
+pub fn zip_transform6_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+    destination: &mut list<Output>, operation: Operation) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first[i], second[i], third[i], fourth[i],
+                                   fifth[i], sixth[i]);
+    }
+    return count;
+}
+
+/// @brief Bounded seven-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, Output, Operation>
+pub fn zip_transform7_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+    seventh: &list<Z>, destination: &mut list<Output>,
+    operation: Operation) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if seventh.len() < count { count = seventh.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first[i], second[i], third[i], fourth[i],
+                                   fifth[i], sixth[i], seventh[i]);
+    }
+    return count;
+}
+
+/// @brief Bounded eight-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A, Output, Operation>
+pub fn zip_transform8_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+    seventh: &list<Z>, eighth: &list<A>, destination: &mut list<Output>,
+    operation: Operation) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if seventh.len() < count { count = seventh.len(); }
+    if eighth.len() < count { count = eighth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first[i], second[i], third[i], fourth[i],
+                                   fifth[i], sixth[i], seventh[i], eighth[i]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected three-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, Output, Operation, FirstProjection, SecondProjection,
+        ThirdProjection>
+pub fn zip_transform3_to_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>,
+    destination: &mut list<Output>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first_projection(first[i]),
+            second_projection(second[i]), third_projection(third[i]));
+    }
+    return count;
+}
+
+/// @brief Bounded projected four-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, Output, Operation, FirstProjection, SecondProjection,
+        ThirdProjection, FourthProjection>
+pub fn zip_transform4_to_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    destination: &mut list<Output>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection, fourth_projection: FourthProjection)
+    -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first_projection(first[i]),
+            second_projection(second[i]), third_projection(third[i]),
+            fourth_projection(fourth[i]));
+    }
+    return count;
+}
+
+/// @brief Bounded projected five-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Output, Operation, FirstProjection, SecondProjection,
+        ThirdProjection, FourthProjection, FifthProjection>
+pub fn zip_transform5_to_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, destination: &mut list<Output>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection, fourth_projection: FourthProjection,
+    fifth_projection: FifthProjection) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first_projection(first[i]),
+            second_projection(second[i]), third_projection(third[i]),
+            fourth_projection(fourth[i]), fifth_projection(fifth[i]));
+    }
+    return count;
+}
+
+/// @brief Bounded projected six-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Output, Operation, FirstProjection,
+        SecondProjection, ThirdProjection, FourthProjection, FifthProjection,
+        SixthProjection>
+pub fn zip_transform6_to_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, sixth: &list<Y>, destination: &mut list<Output>,
+    operation: Operation, first_projection: FirstProjection,
+    second_projection: SecondProjection, third_projection: ThirdProjection,
+    fourth_projection: FourthProjection, fifth_projection: FifthProjection,
+    sixth_projection: SixthProjection) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first_projection(first[i]),
+            second_projection(second[i]), third_projection(third[i]),
+            fourth_projection(fourth[i]), fifth_projection(fifth[i]),
+            sixth_projection(sixth[i]));
+    }
+    return count;
+}
+
+/// @brief Bounded projected seven-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, Output, Operation, FirstProjection,
+        SecondProjection, ThirdProjection, FourthProjection, FifthProjection,
+        SixthProjection, SeventhProjection>
+pub fn zip_transform7_to_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, sixth: &list<Y>, seventh: &list<Z>,
+    destination: &mut list<Output>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection, fourth_projection: FourthProjection,
+    fifth_projection: FifthProjection, sixth_projection: SixthProjection,
+    seventh_projection: SeventhProjection) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if seventh.len() < count { count = seventh.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first_projection(first[i]),
+            second_projection(second[i]), third_projection(third[i]),
+            fourth_projection(fourth[i]), fifth_projection(fifth[i]),
+            sixth_projection(sixth[i]), seventh_projection(seventh[i]));
+    }
+    return count;
+}
+
+/// @brief Bounded projected eight-range zip-transform.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A, Output, Operation, FirstProjection,
+        SecondProjection, ThirdProjection, FourthProjection, FifthProjection,
+        SixthProjection, SeventhProjection, EighthProjection>
+pub fn zip_transform8_to_projected(
+    first: &list<T>, second: &list<U>, third: &list<V>, fourth: &list<W>,
+    fifth: &list<X>, sixth: &list<Y>, seventh: &list<Z>, eighth: &list<A>,
+    destination: &mut list<Output>, operation: Operation,
+    first_projection: FirstProjection, second_projection: SecondProjection,
+    third_projection: ThirdProjection, fourth_projection: FourthProjection,
+    fifth_projection: FifthProjection, sixth_projection: SixthProjection,
+    seventh_projection: SeventhProjection,
+    eighth_projection: EighthProjection) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if seventh.len() < count { count = seventh.len(); }
+    if eighth.len() < count { count = eighth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = operation(first_projection(first[i]),
+            second_projection(second[i]), third_projection(third[i]),
+            fourth_projection(fourth[i]), fifth_projection(fifth[i]),
+            sixth_projection(sixth[i]), seventh_projection(seventh[i]),
+            eighth_projection(eighth[i]));
+    }
+    return count;
 }
 
 /// @brief Transform projected values from three ranges in their common prefix.
@@ -2810,6 +3296,69 @@ pub fn partition_copy_to_projected(
     return (consumed, matching_written, nonmatching_written);
 }
 
+/// @brief Partition into bounded destinations with independent element types.
+/// Matching and nonmatching source values are converted to their respective
+/// destination element types. Stops when either destination fills and returns
+/// `(consumed, matching_written, nonmatching_written)`.
+/// @ingroup algorithm_ranges
+generic<T, Matching, Nonmatching, Predicate>
+pub fn partition_copy_to_heterogeneous(
+    source: &list<T>, matching: &mut list<Matching>,
+    nonmatching: &mut list<Nonmatching>, predicate: Predicate)
+    -> tuple<i64, i64, i64> {
+    let source_len: i64 = source.len();
+    let matching_capacity: i64 = matching.len();
+    let nonmatching_capacity: i64 = nonmatching.len();
+    var consumed: i64 = 0;
+    var matching_written: i64 = 0;
+    var nonmatching_written: i64 = 0;
+    while consumed < source_len && matching_written < matching_capacity &&
+          nonmatching_written < nonmatching_capacity {
+        let value: T = source[consumed];
+        if predicate(value) {
+            matching[matching_written] = value;
+            matching_written = matching_written + 1;
+        } else {
+            nonmatching[nonmatching_written] = value;
+            nonmatching_written = nonmatching_written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, matching_written, nonmatching_written);
+}
+
+/// @brief Projected bounded partition-copy with independently typed outputs.
+/// The predicate receives the projected key; original source values are
+/// converted to the corresponding destination element type. Stops when either
+/// destination fills and returns `(consumed, matching_written,
+/// nonmatching_written)`.
+/// @ingroup algorithm_ranges
+generic<T, Matching, Nonmatching, Predicate, Projection>
+pub fn partition_copy_to_heterogeneous_projected(
+    source: &list<T>, matching: &mut list<Matching>,
+    nonmatching: &mut list<Nonmatching>, predicate: Predicate,
+    projection: Projection) -> tuple<i64, i64, i64> {
+    let source_len: i64 = source.len();
+    let matching_capacity: i64 = matching.len();
+    let nonmatching_capacity: i64 = nonmatching.len();
+    var consumed: i64 = 0;
+    var matching_written: i64 = 0;
+    var nonmatching_written: i64 = 0;
+    while consumed < source_len && matching_written < matching_capacity &&
+          nonmatching_written < nonmatching_capacity {
+        let value: T = source[consumed];
+        if predicate(projection(value)) {
+            matching[matching_written] = value;
+            matching_written = matching_written + 1;
+        } else {
+            nonmatching[nonmatching_written] = value;
+            nonmatching_written = nonmatching_written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, matching_written, nonmatching_written);
+}
+
 /// @brief Return the first index rejected by `predicate`, or -1 if all match.
 /// C++20 `std::ranges::find_if_not` semantics.
 /// @ingroup algorithm_ranges
@@ -2996,6 +3545,23 @@ pub fn sample_to(source: &list<T>, destination: &mut list<T>, count: i64,
     return written;
 }
 
+/// @brief Sample into a bounded destination with a distinct element type.
+/// Selects at most `count`, destination capacity, and source length; original
+/// values are converted when written. Returns the number written and preserves
+/// both source and unwritten destination elements.
+/// @ingroup algorithm_ranges
+generic<T, Output, ChooseIndex>
+pub fn sample_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>, count: i64,
+    choose_index: ChooseIndex) -> i64 {
+    let capacity: i64 = destination.len();
+    let sample_count: i64 = if count < capacity { count } else { capacity };
+    let sampled: list<T> = sample(source, sample_count, choose_index);
+    let written: i64 = sampled.len();
+    for i in 0..written { destination[i] = sampled[i]; }
+    return written;
+}
+
 /// @brief Return a shuffled copy using a bounded random-index selector.
 /// `choose_index(upper_bound)` must return an index in
 /// `[0, upper_bound)`. The eager implementation leaves the source unchanged;
@@ -3128,6 +3694,51 @@ pub fn remove_copy_to(source: &list<T>, destination: &mut list<T>,
     return (consumed, written);
 }
 
+/// @brief Copy nonmatching values to a bounded, distinct-type destination.
+/// Source values are converted to the destination element type. Returns
+/// `(consumed, written)` and stops when the source ends or output fills.
+/// @ingroup algorithm_ranges
+generic<T, Output, U>
+pub fn remove_copy_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>, value: U) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if item != value {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Copy values not equivalent to `value` into distinct-type output.
+/// The equivalence predicate operates on source values; retained values are
+/// converted to the output type. Returns `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output, U, Equivalent>
+pub fn remove_copy_to_heterogeneous_by(source: &list<T>,
+    destination: &mut list<Output>, value: U, equivalent: Equivalent)
+    -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !equivalent(item, value) {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Copy nonmatching elements using a custom equivalence predicate.
 /// Returns `(consumed, written)` and stops when the destination fills.
 /// @ingroup algorithm_ranges
@@ -3164,6 +3775,52 @@ pub fn remove_copy_to_projected(
     while consumed < source_len && written < destination_len {
         let item: T = source[consumed];
         if projection(item) != value {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Filter by a projected key into a distinct-type bounded output.
+/// Original nonmatching source values are converted to the output type.
+/// Returns `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output, U, Projection>
+pub fn remove_copy_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>, value: U,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if projection(item) != value {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Remove-copy with custom equivalence over projected keys.
+/// Nonmatching original source values are converted to the distinct output
+/// type; returns `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output, U, Equivalent, Projection>
+pub fn remove_copy_to_heterogeneous_by_projected(
+    source: &list<T>, destination: &mut list<Output>, value: U,
+    equivalent: Equivalent, projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !equivalent(projection(item), value) {
             destination[written] = item;
             written = written + 1;
         }
@@ -3231,6 +3888,29 @@ pub fn remove_copy_if_to(source: &list<T>, destination: &mut list<T>,
     return (consumed, written);
 }
 
+/// @brief Copy predicate-rejected values to a distinct-type bounded output.
+/// Original source values are converted to the output type. Returns
+/// `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate>
+pub fn remove_copy_if_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>, predicate: Predicate)
+    -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !predicate(item) {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Copy predicate-rejected elements using projected keys to bounded output.
 /// Returns `(consumed, written)` and evaluates predicate/projection once per
 /// consumed element.
@@ -3238,6 +3918,28 @@ pub fn remove_copy_if_to(source: &list<T>, destination: &mut list<T>,
 generic<T, Predicate, Projection>
 pub fn remove_copy_if_to_projected(
     source: &list<T>, destination: &mut list<T>, predicate: Predicate,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let item: T = source[consumed];
+        if !predicate(projection(item)) {
+            destination[written] = item;
+            written = written + 1;
+        }
+        consumed = consumed + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Project a predicate key, then copy original rejected values to a
+/// distinct-type bounded output. Returns `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Projection>
+pub fn remove_copy_if_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>, predicate: Predicate,
     projection: Projection) -> tuple<i64, i64> {
     let source_len: i64 = source.len();
     let destination_len: i64 = destination.len();
@@ -3338,6 +4040,39 @@ pub fn replace_copy_to(source: &list<T>, destination: &mut list<T>,
     return count;
 }
 
+/// @brief Replace-copy to bounded storage with a different output type.
+/// Both original values and `new_value` are converted to the destination type.
+/// Returns the source/destination prefix length written.
+/// @ingroup algorithm_ranges
+generic<T, Output, U>
+pub fn replace_copy_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>, old_value: U, new_value: Output) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    for i in 0..count {
+        if source[i] == old_value { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Comparator form of heterogeneous bounded replace-copy.
+/// @ingroup algorithm_ranges
+generic<T, Output, U, Equivalent>
+pub fn replace_copy_to_heterogeneous_by(source: &list<T>,
+    destination: &mut list<Output>, old_value: U, new_value: Output,
+    equivalent: Equivalent) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    for i in 0..count {
+        if equivalent(source[i], old_value) { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
 /// @brief Comparator form of bounded replacement-copy.
 /// @ingroup algorithm_ranges
 generic<T, U, Equivalent>
@@ -3368,6 +4103,43 @@ pub fn replace_copy_to_projected(
     for i in 0..count {
         if projection(source[i]) == old_value { destination[i] = new_value; }
         else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Projected replace-copy to bounded storage with a distinct output.
+/// The projection tests original source elements; selected replacement and
+/// retained values are converted to the destination type.
+/// @ingroup algorithm_ranges
+generic<T, Output, U, Projection>
+pub fn replace_copy_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>, old_value: U,
+    new_value: Output, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    for i in 0..count {
+        if projection(source[i]) == old_value { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Comparator and projection form of heterogeneous bounded replacement.
+/// @ingroup algorithm_ranges
+generic<T, Output, U, Equivalent, Projection>
+pub fn replace_copy_to_heterogeneous_by_projected(
+    source: &list<T>, destination: &mut list<Output>, old_key: U,
+    new_value: Output, equivalent: Equivalent, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    for i in 0..count {
+        if equivalent(projection(source[i]), old_key) {
+            destination[i] = new_value;
+        } else {
+            destination[i] = source[i];
+        }
     }
     return count;
 }
@@ -3443,6 +4215,24 @@ pub fn replace_copy_if_to(source: &list<T>, destination: &mut list<T>,
     return count;
 }
 
+/// @brief Replace predicate matches in a bounded distinct-type destination.
+/// Replacement and retained source elements are converted to its output type.
+/// Returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate>
+pub fn replace_copy_if_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>, predicate: Predicate,
+    new_value: Output) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    for i in 0..count {
+        if predicate(source[i]) { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
 /// @brief Replace projected predicate matches in bounded output storage.
 /// Returns the number written and copies original source values for all
 /// nonmatching elements.
@@ -3451,6 +4241,24 @@ generic<T, Predicate, Projection>
 pub fn replace_copy_if_to_projected(
     source: &list<T>, destination: &mut list<T>, predicate: Predicate,
     new_value: T, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    for i in 0..count {
+        if predicate(projection(source[i])) { destination[i] = new_value; }
+        else { destination[i] = source[i]; }
+    }
+    return count;
+}
+
+/// @brief Projected predicate replacement into distinct-type bounded output.
+/// Projection and predicate test original values; both selected replacements
+/// and retained elements are converted to the destination type.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Projection>
+pub fn replace_copy_if_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>, predicate: Predicate,
+    new_value: Output, projection: Projection) -> i64 {
     let source_len: i64 = source.len();
     let destination_len: i64 = destination.len();
     let count: i64 = source_len < destination_len ? source_len : destination_len;
@@ -3707,8 +4515,9 @@ fn ranges_default_equal(left: T, right: T) -> bool {
     return left == right;
 }
 
-generic<T, Equivalent, Projection>
-fn ranges_unique_copy_to_core(source: &list<T>, destination: &mut list<T>,
+generic<T, Output, Equivalent, Projection>
+fn ranges_unique_copy_to_core(source: &list<T>,
+                              destination: &mut list<Output>,
                               equivalent: Equivalent,
                               projection: Projection)
     -> tuple<i64, i64> {
@@ -3772,6 +4581,52 @@ pub fn unique_copy_to_by_projected(source: &list<T>,
                                    equivalent: Equivalent,
                                    projection: Projection)
     -> tuple<i64, i64> {
+    return ranges_unique_copy_to_core(source, destination,
+                                      equivalent, projection);
+}
+
+/// @brief Copy unique adjacent values into a distinct-type bounded output.
+/// Original source values are converted to the destination element type.
+/// Returns `(consumed, written)`.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn unique_copy_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>) -> tuple<i64, i64> {
+    return ranges_unique_copy_to_core(source, destination,
+                                      ranges_default_equal,
+                                      ranges_identity);
+}
+
+/// @brief Copy adjacent equivalence-class representatives to distinct output.
+/// The caller comparator is evaluated on source values; retained representatives
+/// are converted to the bounded destination type.
+/// @ingroup algorithm_ranges
+generic<T, Output, Equivalent>
+pub fn unique_copy_to_heterogeneous_by(source: &list<T>,
+    destination: &mut list<Output>, equivalent: Equivalent)
+    -> tuple<i64, i64> {
+    return ranges_unique_copy_to_core(source, destination, equivalent,
+                                      ranges_identity);
+}
+
+/// @brief Copy first values from projected-key runs to distinct output type.
+/// Projection compares source values, while selected original values are
+/// converted to the destination element type.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn unique_copy_to_heterogeneous_projected(source: &list<T>,
+    destination: &mut list<Output>, projection: Projection)
+    -> tuple<i64, i64> {
+    return ranges_unique_copy_to_core(source, destination,
+                                      ranges_default_equal, projection);
+}
+
+/// @brief Copy projected equivalence-class representatives to distinct output.
+/// @ingroup algorithm_ranges
+generic<T, Output, Equivalent, Projection>
+pub fn unique_copy_to_heterogeneous_by_projected(source: &list<T>,
+    destination: &mut list<Output>, equivalent: Equivalent,
+    projection: Projection) -> tuple<i64, i64> {
     return ranges_unique_copy_to_core(source, destination,
                                       equivalent, projection);
 }
@@ -7242,6 +8097,51 @@ pub fn take_while_projected(data: &list<T>, predicate: Predicate,
     return out;
 }
 
+/// @brief Copy an accepted prefix into bounded output storage.
+/// Stops at the first rejected value, source end, or destination capacity and
+/// returns `(consumed, written)`. The rejected value is tested but not counted
+/// as consumed, allowing a caller to resume at that index.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate>
+pub fn take_while_to(source: &list<T>, destination: &mut list<Output>,
+    predicate: Predicate) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if !predicate(value) { break; }
+        destination[written] = value;
+        consumed = consumed + 1;
+        written = written + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Project keys while copying an accepted prefix into bounded output.
+/// The projected predicate tests each candidate; original values are
+/// converted to the destination type. Returns `(consumed, written)` and leaves
+/// the first rejected source value available for resumption.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Projection>
+pub fn take_while_to_projected(source: &list<T>,
+    destination: &mut list<Output>, predicate: Predicate,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && written < destination_len {
+        let value: T = source[consumed];
+        if !predicate(projection(value)) { break; }
+        destination[written] = value;
+        consumed = consumed + 1;
+        written = written + 1;
+    }
+    return (consumed, written);
+}
+
 /// @brief Materialize the integers in the half-open interval `[start, end)`.
 /// This is an eager list counterpart to C++20 `std::views::iota`.
 /// If `start >= end`, the result is empty.
@@ -7462,6 +8362,54 @@ pub fn drop_while_projected(data: &list<T>, predicate: Predicate,
         out.push(data[i]);
     }
     return out;
+}
+
+/// @brief Skip a matching prefix and copy the remainder to bounded output.
+/// Returns `(consumed, written)`; consumed includes both skipped elements and
+/// copied values. No source values are inspected when the destination is empty.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate>
+pub fn drop_while_to(source: &list<T>, destination: &mut list<Output>,
+    predicate: Predicate) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    if destination_len == 0 { return (0, 0); }
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len && predicate(source[consumed]) {
+        consumed = consumed + 1;
+    }
+    while consumed < source_len && written < destination_len {
+        destination[written] = source[consumed];
+        consumed = consumed + 1;
+        written = written + 1;
+    }
+    return (consumed, written);
+}
+
+/// @brief Project while skipping a prefix, then copy original values to output.
+/// Returns `(consumed, written)`; consumed includes the dropped prefix and the
+/// copied suffix. An empty destination causes no predicate/projection calls.
+/// @ingroup algorithm_ranges
+generic<T, Output, Predicate, Projection>
+pub fn drop_while_to_projected(source: &list<T>,
+    destination: &mut list<Output>, predicate: Predicate,
+    projection: Projection) -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    if destination_len == 0 { return (0, 0); }
+    var consumed: i64 = 0;
+    var written: i64 = 0;
+    while consumed < source_len &&
+          predicate(projection(source[consumed])) {
+        consumed = consumed + 1;
+    }
+    while consumed < source_len && written < destination_len {
+        destination[written] = source[consumed];
+        consumed = consumed + 1;
+        written = written + 1;
+    }
+    return (consumed, written);
 }
 
 generic<T>
@@ -8526,6 +9474,22 @@ pub fn reverse_copy_to(source: &list<T>, destination: &mut list<T>) -> i64 {
     return written;
 }
 
+/// @brief Copy reversed values into bounded output of another element type.
+/// Source values are converted as written; returns the number written.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn reverse_copy_to_heterogeneous(source: &list<T>,
+    destination: &mut list<Output>) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var written: i64 = 0;
+    while written < destination_len && written < source_len {
+        destination[written] = source[source_len - written - 1];
+        written = written + 1;
+    }
+    return written;
+}
+
 /// @brief Return a copy rotated left by `amount` positions.
 /// Negative amounts rotate right; amounts are normalized modulo list length.
 /// @ingroup algorithm_ranges
@@ -8586,6 +9550,33 @@ pub fn rotate_copy(data: &list<T>, middle: i64) -> list<T> {
 generic<T>
 pub fn rotate_copy_to(source: &list<T>, middle: i64,
                       destination: &mut list<T>) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var split: i64 = middle;
+    if split < 0 { split = 0; }
+    if split > source_len { split = source_len; }
+    var written: i64 = 0;
+    var source_index: i64 = split;
+    while written < destination_len && source_index < source_len {
+        destination[written] = source[source_index];
+        written = written + 1;
+        source_index = source_index + 1;
+    }
+    source_index = 0;
+    while written < destination_len && source_index < split {
+        destination[written] = source[source_index];
+        written = written + 1;
+        source_index = source_index + 1;
+    }
+    return written;
+}
+
+/// @brief Write a bounded rotated copy to a distinct destination element type.
+/// Clamps `middle`, converts source values, and returns the number written.
+/// @ingroup algorithm_ranges
+generic<T, Output>
+pub fn rotate_copy_to_heterogeneous(source: &list<T>, middle: i64,
+    destination: &mut list<Output>) -> i64 {
     let source_len: i64 = source.len();
     let destination_len: i64 = destination.len();
     var split: i64 = middle;
