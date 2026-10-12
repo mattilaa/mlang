@@ -391,22 +391,34 @@ use std::algorithm::ranges::reversed;
 use std::algorithm::ranges::reverse_copy;
 use std::algorithm::ranges::reverse_copy_to;
 use std::algorithm::ranges::reverse_copy_to_heterogeneous;
+use std::algorithm::ranges::reverse_copy_to_projected;
 use std::algorithm::ranges::reverse_in_place;
 use std::algorithm::ranges::rotate_left;
 use std::algorithm::ranges::rotate;
 use std::algorithm::ranges::rotate_copy;
 use std::algorithm::ranges::rotate_copy_to;
 use std::algorithm::ranges::rotate_copy_to_heterogeneous;
+use std::algorithm::ranges::rotate_copy_to_projected;
 use std::algorithm::ranges::rotate_in_place;
 use std::algorithm::ranges::shift_left;
 use std::algorithm::ranges::shift_right;
 use std::algorithm::ranges::shift_left_in_place;
 use std::algorithm::ranges::shift_right_in_place;
 use std::algorithm::ranges::chunked;
+use std::algorithm::ranges::chunked_to;
+use std::algorithm::ranges::chunked_to_projected;
 use std::algorithm::ranges::chunk;
+use std::algorithm::ranges::chunk_to;
+use std::algorithm::ranges::chunk_to_projected;
 use std::algorithm::ranges::windows;
+use std::algorithm::ranges::windows_to;
+use std::algorithm::ranges::windows_to_projected;
 use std::algorithm::ranges::slide;
+use std::algorithm::ranges::slide_to;
+use std::algorithm::ranges::slide_to_projected;
 use std::algorithm::ranges::strided;
+use std::algorithm::ranges::strided_to;
+use std::algorithm::ranges::strided_to_projected;
 use std::algorithm::ranges::stride;
 use std::algorithm::ranges::joined;
 use std::algorithm::ranges::join;
@@ -415,11 +427,17 @@ use std::algorithm::ranges::join_with;
 use std::algorithm::ranges::split;
 use std::algorithm::ranges::concat;
 use std::algorithm::ranges::zip;
+use std::algorithm::ranges::zip_to;
 use std::algorithm::ranges::enumerate;
 use std::algorithm::ranges::enumerate_from;
+use std::algorithm::ranges::enumerate_to;
+use std::algorithm::ranges::enumerate_from_to;
+use std::algorithm::ranges::enumerate_to_projected;
+use std::algorithm::ranges::enumerate_from_to_projected;
 use std::algorithm::ranges::keys;
 use std::algorithm::ranges::values;
 use std::algorithm::ranges::cartesian_product;
+use std::algorithm::ranges::cartesian_product_to;
 use std::algorithm::ranges::pairwise;
 use std::algorithm::ranges::adjacent3;
 use std::algorithm::ranges::adjacent4;
@@ -430,6 +448,13 @@ use std::algorithm::ranges::adjacent5;
 use std::algorithm::ranges::adjacent6;
 use std::algorithm::ranges::adjacent7;
 use std::algorithm::ranges::adjacent8;
+use std::algorithm::ranges::pairwise_to;
+use std::algorithm::ranges::adjacent3_to;
+use std::algorithm::ranges::adjacent4_to;
+use std::algorithm::ranges::adjacent5_to;
+use std::algorithm::ranges::adjacent6_to;
+use std::algorithm::ranges::adjacent7_to;
+use std::algorithm::ranges::adjacent8_to;
 use std::algorithm::ranges::adjacent_transform5;
 use std::algorithm::ranges::adjacent_transform6;
 use std::algorithm::ranges::adjacent_transform7;
@@ -441,6 +466,20 @@ use std::algorithm::ranges::adjacent_transform8_projected;
 use std::algorithm::ranges::adjacent_transform_projected;
 use std::algorithm::ranges::adjacent_transform3_projected;
 use std::algorithm::ranges::adjacent_transform4_projected;
+use std::algorithm::ranges::adjacent_transform_to;
+use std::algorithm::ranges::adjacent_transform3_to;
+use std::algorithm::ranges::adjacent_transform4_to;
+use std::algorithm::ranges::adjacent_transform5_to;
+use std::algorithm::ranges::adjacent_transform6_to;
+use std::algorithm::ranges::adjacent_transform7_to;
+use std::algorithm::ranges::adjacent_transform8_to;
+use std::algorithm::ranges::adjacent_transform_to_projected;
+use std::algorithm::ranges::adjacent_transform3_to_projected;
+use std::algorithm::ranges::adjacent_transform4_to_projected;
+use std::algorithm::ranges::adjacent_transform5_to_projected;
+use std::algorithm::ranges::adjacent_transform6_to_projected;
+use std::algorithm::ranges::adjacent_transform7_to_projected;
+use std::algorithm::ranges::adjacent_transform8_to_projected;
 use std::algorithm::ranges::replace;
 use std::algorithm::ranges::replace_in_place;
 use std::algorithm::ranges::replace_projected;
@@ -550,6 +589,7 @@ use std::algorithm::ranges::copy_if_to_projected;
 use std::algorithm::ranges::sample as ranges_sample;
 use std::algorithm::ranges::sample_to as ranges_sample_to;
 use std::algorithm::ranges::sample_to_heterogeneous;
+use std::algorithm::ranges::sample_to_projected;
 use std::algorithm::ranges::shuffle as ranges_shuffle;
 use std::algorithm::ranges::shuffle_in_place as ranges_shuffle_in_place;
 use std::algorithm::ranges::remove_copy;
@@ -717,6 +757,8 @@ use std::algorithm::ranges::zip_transform7_projected;
 use std::algorithm::ranges::zip_transform8_projected;
 use std::algorithm::ranges::chunk_by;
 use std::algorithm::ranges::chunk_by_projected;
+use std::algorithm::ranges::chunk_by_to;
+use std::algorithm::ranges::chunk_by_to_projected;
 use std::algorithm::ranges::unique;
 use std::algorithm::ranges::unique_copy;
 use std::algorithm::ranges::unique_stable;
@@ -891,6 +933,12 @@ fn test_algorithm_ranges_rotate_at_middle() {
            heterogeneous_rotate[1] == 4.0 &&
            heterogeneous_rotate[2] == 5.0 &&
            heterogeneous_rotate[3] == 1.0);
+    let scale = |value: i32| { return i64(value * 10); };
+    var projected_rotate: list<i64> = [-1, -2, -3];
+    verify(rotate_copy_to_projected(
+        values, 2, projected_rotate, scale) == 3);
+    verify(projected_rotate[0] == 30 && projected_rotate[1] == 40 &&
+           projected_rotate[2] == 50);
 
     var mutable: list<i32> = [1, 2, 3, 4, 5];
     verify(rotate_in_place(mutable, 2) == 3);
@@ -3474,6 +3522,11 @@ fn test_algorithm_ranges_generic_reversed_copy() {
     verify(heterogeneous_output[0] == 4.0 &&
            heterogeneous_output[1] == 3.0 &&
            heterogeneous_output[2] == 99.0);
+    let scale = |value: i32| { return i64(value * 10); };
+    var projected_output: list<i64> = [-1, -2, -3];
+    verify(reverse_copy_to_projected(values, projected_output, scale) == 3);
+    verify(projected_output[0] == 40 && projected_output[1] == 30 &&
+           projected_output[2] == 20);
 
     let empty: list<str8> = [];
     let empty_reversed: list<str8> = reversed(empty);
@@ -3511,6 +3564,48 @@ fn test_algorithm_ranges_generic_chunked() {
     let large_size: list<list<i32>> = chunked(data, 9);
     verify(invalid_size.len() == 0);
     verify(large_size.len() == 1);
+
+    var bounded: list<list<i32>> =
+        [[-1], [-2], [-3], [-4]];
+    verify(chunked_to(data, bounded, 2) == 3);
+    let bounded_first: list<i32> = bounded[0];
+    let bounded_second: list<i32> = bounded[1];
+    let bounded_last: list<i32> = bounded[2];
+    let untouched: list<i32> = bounded[3];
+    verify(bounded_first.len() == 2 && bounded_first[0] == 1 &&
+           bounded_first[1] == 2);
+    verify(bounded_second.len() == 2 && bounded_second[0] == 3 &&
+           bounded_second[1] == 4);
+    verify(bounded_last.len() == 1 && bounded_last[0] == 5);
+    verify(untouched[0] == -4);
+
+    let widen = |value: i32| { return i64(value * 10); };
+    var projected: list<list<i64>> = [[-1], [-2]];
+    verify(chunked_to_projected(data, projected, 3, widen) == 2);
+    let projected_first: list<i64> = projected[0];
+    let projected_second: list<i64> = projected[1];
+    verify(projected_first.len() == 3 && projected_first[2] == 30);
+    verify(projected_second.len() == 2 && projected_second[0] == 40 &&
+           projected_second[1] == 50);
+
+    var alias_output: list<list<i32>> = [[-1], [-2]];
+    verify(chunk_to(data, alias_output, 4) == 2);
+    let alias_final: list<i32> = alias_output[1];
+    verify(alias_final.len() == 1 && alias_final[0] == 5);
+    var projected_alias: list<list<i64>> = [[-1]];
+    verify(chunk_to_projected(data, projected_alias, 4, widen) == 1);
+    let projected_alias_chunk: list<i64> = projected_alias[0];
+    verify(projected_alias_chunk.len() == 4 &&
+           projected_alias_chunk[0] == 10 &&
+           projected_alias_chunk[3] == 40);
+    var no_output: list<list<i32>> = [];
+    verify(chunked_to(data, no_output, 1) == 0);
+    verify(chunked_to(data, bounded, 0) == 0);
+
+    let huge_chunk: list<list<i32>> = chunked(data, 9223372036854775807);
+    verify(huge_chunk.len() == 1);
+    let one_huge_chunk: list<i32> = huge_chunk[0];
+    verify(one_huge_chunk.len() == 5 && one_huge_chunk[4] == 5);
 }
 
 #[test]
@@ -3525,6 +3620,33 @@ fn test_algorithm_ranges_generic_windows() {
     let zero: list<list<i32>> = windows(data, 0);
     let too_wide: list<list<i32>> = windows(data, 5);
     verify(zero.len() == 0 && too_wide.len() == 0);
+
+    var bounded: list<list<i32>> =
+        [[-1, -1, -1], [-2, -2, -2], [-3, -3, -3]];
+    verify(windows_to(data, bounded, 3) == 2);
+    let bounded_first: list<i32> = bounded[0];
+    let bounded_second: list<i32> = bounded[1];
+    let untouched: list<i32> = bounded[2];
+    verify(bounded_first[0] == 2 && bounded_first[2] == 6);
+    verify(bounded_second[0] == 4 && bounded_second[2] == 8);
+    verify(untouched[0] == -3 && untouched[2] == -3);
+
+    let double = |value: i32| { return i64(value * 2); };
+    var projected: list<list<i64>> = [[-1, -1], [-2, -2]];
+    verify(windows_to_projected(data, projected, 2, double) == 2);
+    let projected_first: list<i64> = projected[0];
+    let projected_second: list<i64> = projected[1];
+    verify(projected_first[0] == 4 && projected_first[1] == 8);
+    verify(projected_second[0] == 8 && projected_second[1] == 12);
+
+    var slide_output: list<list<i32>> = [[-1, -1]];
+    verify(slide_to(data, slide_output, 2) == 1);
+    let slide_first: list<i32> = slide_output[0];
+    verify(slide_first[0] == 2 && slide_first[1] == 4);
+    var projected_slide: list<list<i64>> = [[-1, -1]];
+    verify(slide_to_projected(data, projected_slide, 2, double) == 1);
+    let projected_slide_first: list<i64> = projected_slide[0];
+    verify(projected_slide_first[0] == 4 && projected_slide_first[1] == 8);
 }
 
 #[test]
@@ -3538,6 +3660,24 @@ fn test_algorithm_ranges_generic_strided() {
     let words: list<str8> = ["a", "b", "c"];
     let selected: list<str8> = strided(words, 2);
     verify(selected.len() == 2 && selected[0] == "a" && selected[1] == "c");
+
+    var bounded: list<i32> = [-1, -2, -3, -4];
+    verify(strided_to(data, bounded, 2) == 3);
+    verify(bounded[0] == 10 && bounded[1] == 30 && bounded[2] == 50);
+    verify(bounded[3] == -4);
+
+    let widen = |value: i32| { return i64(value * 10); };
+    var projected: list<i64> = [-1, -2];
+    verify(strided_to_projected(data, projected, 2, widen) == 2);
+    verify(projected[0] == 100 && projected[1] == 300);
+
+    var no_progress: list<i32> = [-1, -2];
+    verify(strided_to(data, no_progress, 0) == 0);
+    verify(strided_to(data, no_progress, -2) == 0);
+    verify(strided_to(data, no_progress, 9223372036854775807) == 1);
+    verify(no_progress[0] == 10 && no_progress[1] == -2);
+    var no_capacity: list<i32> = [];
+    verify(strided_to(data, no_capacity, 1) == 0);
 }
 
 #[test]
@@ -3808,6 +3948,63 @@ fn test_algorithm_ranges_zip_seven_and_eight_ranges() {
 }
 
 #[test]
+fn test_algorithm_ranges_bounded_zip_outputs() {
+    let a: list<i32> = [1, 2];
+    let b: list<i32> = [10, 20];
+    let c: list<i32> = [100, 200];
+    let d: list<i32> = [1000, 2000];
+    let e: list<i32> = [10000, 20000];
+    let f: list<i32> = [100000, 200000];
+    let g: list<i32> = [1000000, 2000000];
+    let h: list<i32> = [10000000];
+
+    let mut pairs: list<tuple<i32, i32>> = [(-1, -1)];
+    verify(zip_to(a, b, pairs) == 1);
+    let pair: tuple<i32, i32> = pairs[0];
+    verify(pair.0 == 1 && pair.1 == 10);
+
+    let mut triples: list<tuple<i32, i32, i32>> = [(-1, -1, -1)];
+    verify(zip_to(a, b, c, triples) == 1);
+    let triple: tuple<i32, i32, i32> = triples[0];
+    verify(triple.0 == 1 && triple.1 == 10 && triple.2 == 100);
+
+    let mut four: list<tuple<i32, i32, i32, i32>> = [(-1, -1, -1, -1)];
+    verify(zip_to(a, b, c, d, four) == 1);
+    let four_values: tuple<i32, i32, i32, i32> = four[0];
+    verify(four_values.0 == 1 && four_values.3 == 1000);
+
+    let mut five: list<tuple<i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1)];
+    verify(zip_to(a, b, c, d, e, five) == 1);
+    let five_values: tuple<i32, i32, i32, i32, i32> = five[0];
+    verify(five_values.0 == 1 && five_values.4 == 10000);
+
+    let mut six: list<tuple<i32, i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1, -1)];
+    verify(zip_to(a, b, c, d, e, f, six) == 1);
+    let six_values: tuple<i32, i32, i32, i32, i32, i32> = six[0];
+    verify(six_values.0 == 1 && six_values.5 == 100000);
+
+    let mut seven: list<tuple<i32, i32, i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1, -1, -1)];
+    verify(zip_to(a, b, c, d, e, f, g, seven) == 1);
+    let seven_values: tuple<i32, i32, i32, i32, i32, i32, i32> = seven[0];
+    verify(seven_values.0 == 1 && seven_values.6 == 1000000);
+
+    let mut eight: list<tuple<i32, i32, i32, i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1, -1, -1, -1),
+         (-2, -2, -2, -2, -2, -2, -2, -2)];
+    verify(zip_to(a, b, c, d, e, f, g, h, eight) == 1);
+    let first: tuple<i32, i32, i32, i32, i32, i32, i32, i32> = eight[0];
+    let unused: tuple<i32, i32, i32, i32, i32, i32, i32, i32> = eight[1];
+    verify(first.0 == 1 && first.7 == 10000000);
+    verify(unused.0 == -2 && unused.7 == -2);
+
+    let empty: list<i32> = [];
+    verify(zip_to(empty, b, pairs) == 0);
+}
+
+#[test]
 fn test_algorithm_ranges_bounded_multi_zip_transform() {
     let a: list<i32> = [1, 2];
     let b: list<i32> = [10, 20];
@@ -3915,6 +4112,46 @@ fn test_algorithm_ranges_enumerate() {
     verify(negative_first.0 == -2 && negative_last.0 == 0);
     let empty_from: list<tuple<i64, i32>> = enumerate_from(empty, 5);
     verify(empty_from.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_bounded_enumerate() {
+    let values: list<i32> = [4, 8, 15];
+    var output: list<tuple<i64, i32>> =
+        [(-1, -1), (-2, -2), (-3, -3), (-4, -4)];
+    verify(enumerate_to(values, output) == 3);
+    let first: tuple<i64, i32> = output[0];
+    let last: tuple<i64, i32> = output[2];
+    let untouched: tuple<i64, i32> = output[3];
+    verify(first.0 == 0 && first.1 == 4);
+    verify(last.0 == 2 && last.1 == 15);
+    verify(untouched.0 == -4 && untouched.1 == -4);
+
+    var offset_output: list<tuple<i64, i32>> = [(-1, -1), (-2, -2)];
+    verify(enumerate_from_to(values, offset_output, -5) == 2);
+    let offset_first: tuple<i64, i32> = offset_output[0];
+    let offset_last: tuple<i64, i32> = offset_output[1];
+    verify(offset_first.0 == -5 && offset_first.1 == 4);
+    verify(offset_last.0 == -4 && offset_last.1 == 8);
+
+    let times_ten = |value: i32| { return value * 10; };
+    var projected: list<tuple<i64, i32>> = [(-1, -1), (-2, -2)];
+    verify(enumerate_to_projected(values, projected, times_ten) == 2);
+    let projected_first: tuple<i64, i32> = projected[0];
+    let projected_second: tuple<i64, i32> = projected[1];
+    verify(projected_first.0 == 0 && projected_first.1 == 40);
+    verify(projected_second.0 == 1 && projected_second.1 == 80);
+
+    var projected_offset: list<tuple<i64, i32>> = [(-1, -1)];
+    verify(enumerate_from_to_projected(
+        values, projected_offset, 20, times_ten) == 1);
+    let projected_offset_first: tuple<i64, i32> = projected_offset[0];
+    verify(projected_offset_first.0 == 20 && projected_offset_first.1 == 40);
+
+    let empty: list<i32> = [];
+    verify(enumerate_to(empty, output) == 0);
+    var no_output: list<tuple<i64, i32>> = [];
+    verify(enumerate_to(values, no_output) == 0);
 }
 
 #[test]
@@ -4052,6 +4289,71 @@ fn test_algorithm_ranges_cartesian_product() {
 }
 
 #[test]
+fn test_algorithm_ranges_bounded_cartesian_product() {
+    let left: list<i32> = [2, 4];
+    let right: list<i64> = [7, 9, 11];
+    let mut pairs: list<tuple<i32, i64>> =
+        [(-1, -1), (-2, -2), (-3, -3), (-4, -4)];
+    verify(cartesian_product_to(left, right, pairs) == 4);
+    let first: tuple<i32, i64> = pairs[0];
+    let fourth: tuple<i32, i64> = pairs[3];
+    verify(first.0 == 2 && first.1 == 7);
+    verify(fourth.0 == 4 && fourth.1 == 7);
+
+    let a: list<i32> = [1];
+    let b: list<i64> = [10];
+    let c: list<bool> = [true];
+    let d: list<str8> = ["four"];
+    let e: list<i16> = [5];
+    let f: list<u32> = [6];
+    let g: list<i8> = [7];
+    let h: list<u64> = [8];
+
+    let mut triples: list<tuple<i32, i64, bool>> = [(-1, -1, false)];
+    verify(cartesian_product_to(a, b, c, triples) == 1);
+    let triple: tuple<i32, i64, bool> = triples[0];
+    verify(triple.0 == 1 && triple.1 == 10 && triple.2);
+
+    let mut four_values: list<tuple<i32, i64, bool, str8>> =
+        [(-1, -1, false, "")];
+    verify(cartesian_product_to(a, b, c, d, four_values) == 1);
+    let four: tuple<i32, i64, bool, str8> = four_values[0];
+    verify(four.0 == 1 && four.1 == 10 && four.2 && eq(four.3, "four") == 1);
+
+    let mut five: list<tuple<i32, i64, bool, str8, i16>> =
+        [(-1, -1, false, "", -1)];
+    verify(cartesian_product_to(a, b, c, d, e, five) == 1);
+    let five_row: tuple<i32, i64, bool, str8, i16> = five[0];
+    verify(five_row.4 == 5);
+
+    let mut six: list<tuple<i32, i64, bool, str8, i16, u32>> =
+        [(-1, -1, false, "", -1, 0)];
+    verify(cartesian_product_to(a, b, c, d, e, f, six) == 1);
+    let six_row: tuple<i32, i64, bool, str8, i16, u32> = six[0];
+    verify(six_row.5 == 6);
+
+    let mut seven: list<tuple<i32, i64, bool, str8, i16, u32, i8>> =
+        [(-1, -1, false, "", -1, 0, -1)];
+    verify(cartesian_product_to(a, b, c, d, e, f, g, seven) == 1);
+    let seven_row: tuple<i32, i64, bool, str8, i16, u32, i8> = seven[0];
+    verify(seven_row.6 == 7);
+
+    let mut eight: list<tuple<i32, i64, bool, str8, i16, u32, i8, u64>> =
+        [(-1, -1, false, "", -1, 0, -1, 0),
+         (-2, -2, false, "", -2, 0, -2, 0)];
+    verify(cartesian_product_to(a, b, c, d, e, f, g, h, eight) == 1);
+    let eight_row: tuple<i32, i64, bool, str8, i16, u32, i8, u64> = eight[0];
+    let unused: tuple<i32, i64, bool, str8, i16, u32, i8, u64> = eight[1];
+    verify(eight_row.7 == 8);
+    verify(unused.0 == -2 && unused.7 == 0);
+
+    let empty: list<i32> = [];
+    verify(cartesian_product_to(empty, right, pairs) == 0);
+    let mut no_capacity: list<tuple<i32, i64>> = [];
+    verify(cartesian_product_to(left, right, no_capacity) == 0);
+}
+
+#[test]
 fn test_algorithm_ranges_tuple_keys_and_values() {
     let numbers: list<i32> = [4, 8, 15];
     let offsets: list<i64> = [40, 80, 150];
@@ -4114,6 +4416,60 @@ fn test_algorithm_ranges_pairwise() {
     let no_triples: list<tuple<i32, i32, i32>> = adjacent3(singleton);
     let no_quadruples: list<tuple<i32, i32, i32, i32>> = adjacent4(values);
     verify(no_triples.len() == 0 && no_quadruples.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_bounded_adjacent_tuples() {
+    let values: list<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let mut pairs: list<tuple<i32, i32>> =
+        [(-1, -1), (-2, -2), (-3, -3)];
+    verify(pairwise_to(values, pairs) == 3);
+    let pair0: tuple<i32, i32> = pairs[0];
+    let pair2: tuple<i32, i32> = pairs[2];
+    verify(pair0.0 == 1 && pair0.1 == 2);
+    verify(pair2.0 == 3 && pair2.1 == 4);
+
+    let mut triples: list<tuple<i32, i32, i32>> = [(-1, -1, -1)];
+    verify(adjacent3_to(values, triples) == 1);
+    let triple: tuple<i32, i32, i32> = triples[0];
+    verify(triple.0 == 1 && triple.1 == 2 && triple.2 == 3);
+
+    let mut four: list<tuple<i32, i32, i32, i32>> = [(-1, -1, -1, -1)];
+    verify(adjacent4_to(values, four) == 1);
+    let four_row: tuple<i32, i32, i32, i32> = four[0];
+    verify(four_row.0 == 1 && four_row.3 == 4);
+
+    let mut five: list<tuple<i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1)];
+    verify(adjacent5_to(values, five) == 1);
+    let five_row: tuple<i32, i32, i32, i32, i32> = five[0];
+    verify(five_row.0 == 1 && five_row.4 == 5);
+
+    let mut six: list<tuple<i32, i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1, -1)];
+    verify(adjacent6_to(values, six) == 1);
+    let six_row: tuple<i32, i32, i32, i32, i32, i32> = six[0];
+    verify(six_row.0 == 1 && six_row.5 == 6);
+
+    let mut seven: list<tuple<i32, i32, i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1, -1, -1)];
+    verify(adjacent7_to(values, seven) == 1);
+    let seven_row: tuple<i32, i32, i32, i32, i32, i32, i32> = seven[0];
+    verify(seven_row.0 == 1 && seven_row.6 == 7);
+
+    let mut eight: list<tuple<i32, i32, i32, i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1, -1, -1, -1),
+         (-2, -2, -2, -2, -2, -2, -2, -2)];
+    verify(adjacent8_to(values, eight) == 2);
+    let eight0: tuple<i32, i32, i32, i32, i32, i32, i32, i32> = eight[0];
+    let eight1: tuple<i32, i32, i32, i32, i32, i32, i32, i32> = eight[1];
+    verify(eight0.0 == 1 && eight0.7 == 8);
+    verify(eight1.0 == 2 && eight1.7 == 9);
+
+    let short: list<i32> = [9];
+    verify(adjacent3_to(short, triples) == 0);
+    let no_capacity: list<tuple<i32, i32>> = [];
+    verify(pairwise_to(values, no_capacity) == 0);
 }
 
 #[test]
@@ -4253,6 +4609,82 @@ fn test_algorithm_ranges_projected_adjacent_transform4() {
     let short: list<i32> = [11, 21];
     let no_quadruples: list<i32> = adjacent_transform4_projected(short, sum_four, tens);
     verify(no_quadruples.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_bounded_adjacent_transforms() {
+    let values: list<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let double = |value: i32| { return value * 2; };
+    let sum2 = |a: i32, b: i32| { return a + b; };
+    let sum3 = |a: i32, b: i32, c: i32| { return a + b + c; };
+    let sum4 = |a: i32, b: i32, c: i32, d: i32| { return a + b + c + d; };
+    let sum5 = |a: i32, b: i32, c: i32, d: i32, e: i32| {
+        return a + b + c + d + e;
+    };
+    let sum6 = |a: i32, b: i32, c: i32, d: i32, e: i32, f: i32| {
+        return a + b + c + d + e + f;
+    };
+    let sum7 = |a: i32, b: i32, c: i32, d: i32, e: i32, f: i32, g: i32| {
+        return a + b + c + d + e + f + g;
+    };
+    let sum8 = |a: i32, b: i32, c: i32, d: i32,
+                e: i32, f: i32, g: i32, h: i32| {
+        return a + b + c + d + e + f + g + h;
+    };
+
+    let mut output: list<i32> = [-1, -1, -1];
+    verify(adjacent_transform_to(values, output, sum2) == 3);
+    verify(output[0] == 3 && output[2] == 7);
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform_to_projected(values, output, sum2, double) == 3);
+    verify(output[0] == 6 && output[2] == 14);
+
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform3_to(values, output, sum3) == 3);
+    verify(output[0] == 6 && output[2] == 12);
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform3_to_projected(values, output, sum3, double) == 3);
+    verify(output[0] == 12 && output[2] == 24);
+
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform4_to(values, output, sum4) == 3);
+    verify(output[0] == 10 && output[2] == 18);
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform4_to_projected(values, output, sum4, double) == 3);
+    verify(output[0] == 20 && output[2] == 36);
+
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform5_to(values, output, sum5) == 3);
+    verify(output[0] == 15 && output[2] == 25);
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform5_to_projected(values, output, sum5, double) == 3);
+    verify(output[0] == 30 && output[2] == 50);
+
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform6_to(values, output, sum6) == 3);
+    verify(output[0] == 21 && output[2] == 33);
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform6_to_projected(values, output, sum6, double) == 3);
+    verify(output[0] == 42 && output[2] == 66);
+
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform7_to(values, output, sum7) == 3);
+    verify(output[0] == 28 && output[2] == 42);
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform7_to_projected(values, output, sum7, double) == 3);
+    verify(output[0] == 56 && output[2] == 84);
+
+    let mut short_output: list<i32> = [-1, -1];
+    verify(adjacent_transform8_to(values, short_output, sum8) == 2);
+    verify(short_output[0] == 36 && short_output[1] == 44);
+    short_output[0] = -1; short_output[1] = -1;
+    verify(adjacent_transform8_to_projected(values, short_output, sum8, double) == 2);
+    verify(short_output[0] == 72 && short_output[1] == 88);
+
+    let too_short: list<i32> = [9, 10];
+    verify(adjacent_transform3_to(too_short, output, sum3) == 0);
+    let no_output: list<i32> = [];
+    verify(adjacent_transform_to(values, no_output, sum2) == 0);
 }
 
 #[test]
@@ -5684,6 +6116,19 @@ fn test_algorithm_ranges_chunk_by() {
     let empty: list<i32> = [];
     let no_groups: list<list<i32>> = chunk_by(empty, consecutive);
     verify(no_groups.len() == 0);
+
+    var bounded: list<list<i32>> = [[-1], [-2], [-3], [-4]];
+    verify(chunk_by_to(values, bounded, consecutive) == 3);
+    let bounded_first: list<i32> = bounded[0];
+    let bounded_middle: list<i32> = bounded[1];
+    let bounded_last: list<i32> = bounded[2];
+    let untouched: list<i32> = bounded[3];
+    verify(bounded_first.len() == 2 && bounded_first[0] == 1 &&
+           bounded_first[1] == 2);
+    verify(bounded_middle.len() == 3 && bounded_middle[0] == 5 &&
+           bounded_middle[2] == 7);
+    verify(bounded_last.len() == 1 && bounded_last[0] == 10);
+    verify(untouched[0] == -4);
 }
 
 #[test]
@@ -5702,6 +6147,15 @@ fn test_algorithm_ranges_chunk_by_projected() {
     let empty: list<i32> = [];
     let no_groups: list<list<i32>> = chunk_by_projected(empty, equal_key, tens);
     verify(no_groups.len() == 0);
+
+    var bounded: list<list<i32>> = [[-1], [-2]];
+    verify(chunk_by_to_projected(values, bounded, equal_key, tens) == 2);
+    let projected_first: list<i32> = bounded[0];
+    let projected_second: list<i32> = bounded[1];
+    verify(projected_first.len() == 3 && projected_first[0] == 11 &&
+           projected_first[2] == 19);
+    verify(projected_second.len() == 2 && projected_second[0] == 21 &&
+           projected_second[1] == 25);
 }
 
 #[test]
@@ -7371,6 +7825,11 @@ fn test_algorithm_ranges_sample_to_bounded_output() {
         source, heterogeneous, 2, choose_last) == 2);
     verify(heterogeneous[0] == 5.0 && heterogeneous[1] == 6.0 &&
            heterogeneous[2] == 99.0);
+    let scale = |value: i32| { return i64(value * 10); };
+    var projected: list<i64> = [-1, -2, -3];
+    verify(sample_to_projected(
+        source, projected, 2, choose_last, scale) == 2);
+    verify(projected[0] == 50 && projected[1] == 60 && projected[2] == -3);
 }
 
 #[test]

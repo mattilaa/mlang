@@ -550,6 +550,10 @@ fn example() {
   destination and preserve the unused destination suffix.
 - `zip` materializes heterogeneous tuples from two through eight input ranges,
   stopping at the shortest input.
+- `zip_to` has two-through-eight-range overloads that write heterogeneous
+  tuples into a preallocated destination. Each overload stops at the shortest
+  input or destination, returns the number written, and preserves any unused
+  destination suffix. This is the bounded-output counterpart to eager `zip`.
 - `find_if_not` returns the first rejected element's index; `remove_if` returns
   a copy without accepted elements, and `replace_if` substitutes a value for
   every accepted element. These transforms leave their input unchanged.
@@ -571,6 +575,8 @@ fn example() {
   the destination suffix unchanged.
 - `sample_to_heterogeneous` provides the same bounded behavior while
   converting selected source values to an independently typed destination.
+- `sample_to_projected` applies a projection directly to selected source
+  elements while writing bounded output, without an intermediate sample list.
 - `shuffle(data, choose_index)` returns a randomized copy. The selector receives
   each current exclusive bound; use a uniformly distributed selector for an
   unbiased permutation. Because lists are eagerly rebuilt without indexed
@@ -722,6 +728,9 @@ fn example() {
 - `reverse_copy_to_heterogeneous` and `rotate_copy_to_heterogeneous` preserve
   those bounded sequence semantics while converting source values to an
   independently typed destination.
+- `reverse_copy_to_projected` and `rotate_copy_to_projected` apply a projection
+  while writing those sequences, so transformed values can be emitted without
+  a separate mapped-list allocation.
 - `rotate_in_place(&mut data, middle)` moves the suffix beginning at `middle`
   before the prefix using at most O(N) swaps and no output allocation. It
   returns the index of the original first element after rotation (the Mlang
@@ -739,17 +748,35 @@ fn example() {
 - `chunked(data, size)` materializes consecutive sublists (C++23
   `views::chunk` style); the final chunk can be shorter, and non-positive sizes
   produce an empty list. `chunk(data, size)` is the standard view spelling.
+- `chunked_to`/`chunk_to` write those chunks into bounded list-of-lists output,
+  including the final partial chunk, and return the number written. Projected
+  variants convert elements while constructing each chunk. Invalid sizes and
+  empty destinations write nothing; the remaining destination suffix is
+  unchanged.
 - `chunk_by(data, equivalent)` groups adjacent elements while the binary
   predicate accepts each neighboring pair (C++23 `views::chunk_by` style).
 - `chunk_by_projected(data, equivalent, projection)` groups adjacent values
   when their projected keys are equivalent, preserving the original elements
   in each eager output chunk.
+- `chunk_by_to` writes predicate-defined maximal groups into bounded output;
+  its projected form compares projected keys while retaining original values.
+  Both return the group count and preserve unused destination entries.
 - `windows(data, size)` materializes every overlapping fixed-size sublist
   (C++23 `views::slide` style); invalid sizes produce an empty list. `slide`
   is the standard view spelling.
+- `windows_to`/`slide_to` write complete overlapping windows into a bounded
+  list-of-lists destination and return the number written; projected variants
+  map each element while building each window. Invalid window sizes and empty
+  destinations produce zero writes, and unused destination entries are left
+  unchanged.
 - `strided(data, step)` copies every `step`-th element from index zero
   (C++23 `views::stride` style); non-positive steps produce an empty list.
   `stride` is the standard view spelling.
+- `strided_to(source, destination, step)` copies that same sequence into
+  bounded storage and returns the count written; a projected overload maps
+  selected values directly to a different output type. Non-positive steps and
+  empty destinations write nothing, and the unused destination suffix remains
+  unchanged.
 - `joined(data)` flattens one list-of-lists level into a copied list (C++20
   `views::join` style); empty inner lists contribute no elements. `join` is
   the standard view spelling.
@@ -771,6 +798,10 @@ fn example() {
 - `adjacent3(data)` through `adjacent8(data)` materialize typed
   tuples for each overlapping fixed-width window, analogous to C++23
   `views::adjacent<N>`; short inputs produce empty lists.
+- `pairwise_to` and `adjacent3_to` through `adjacent8_to` write those same
+  tuples into preallocated output. They return the number of windows written,
+  stop at destination capacity or when the input has no complete window, and
+  preserve any unused destination suffix.
 - `adjacent_transform(data, operation)` applies a binary operation to each
   neighboring pair, returning up to one fewer result than input elements and
   inferring the output element type from the operation (C++23
@@ -783,16 +814,31 @@ fn example() {
   type and returns an empty list when the input is too short. The `_projected`
   adjacent-transform forms currently cover widths two through eight and apply
   operations to projected keys while preserving the original source values.
+- `adjacent_transform_to` and `adjacent_transform3_to` through
+  `adjacent_transform8_to` write window-operation results into a bounded
+  destination and return the number written. Their `_to_projected` forms apply
+  one projection to every source element before calling the operation. Each
+  form stops at the destination capacity or when the input has no complete
+  window, and leaves any unused destination suffix unchanged.
 - `enumerate(data)` materializes `(index, value)` tuples with zero-based indices
   (C++23 `views::enumerate` style).
 - `enumerate_from(data, first_index)` provides the same eager pairing with a
   caller-selected starting index, including negative offsets.
+- `enumerate_to` and `enumerate_from_to` write indexed tuples into bounded
+  output, returning the number written and preserving any destination suffix.
+  Their `_projected` counterparts enumerate projected values; the offset form
+  accepts negative indices and clamps the output count before signed index
+  overflow.
 - `keys(data)` and `values(data)` project the first or second member of each
   `tuple<K, V>` (eager counterparts to C++20 `views::keys` and `views::values`).
 - `cartesian_product` overloads for two through eight ranges materialize
   every value combination in nested-loop order; the rightmost input varies
   fastest (C++23 `views::cartesian_product` style). Any empty input produces
   an empty result.
+- `cartesian_product_to` provides the same two-through-eight-range ordering
+  while writing only into caller-provided tuple storage. It returns the number
+  written, stops immediately at destination capacity, and preserves the unused
+  destination suffix, avoiding allocation of a potentially large product.
 - `merged(left, right)` stably merges two sorted same-typed ranges into a new
   sorted list; equal elements from the left range come first.
 - `merge_to(left, right, destination)` writes a stable merge into existing

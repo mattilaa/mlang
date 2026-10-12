@@ -70,6 +70,7 @@
 - [[std::limits|Stdlib-Limits]]
 - [[std::log|Stdlib-Log]]
 - [[std::source_location|Stdlib-Source-Location]]
+- [[std::stacktrace|Stdlib-Stacktrace]]
 - [[std::scope_exit|Stdlib-Scope-Exit]]
 - [[std::type_traits|Stdlib-Type-Traits]]
 - [[std::multiarray|Stdlib-Multiarray]]

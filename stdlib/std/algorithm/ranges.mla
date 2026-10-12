@@ -3562,6 +3562,42 @@ pub fn sample_to_heterogeneous(source: &list<T>,
     return written;
 }
 
+/// @brief Sample projected values directly into bounded output storage.
+/// Selects distinct source elements in original order without materializing a
+/// sampled or projected intermediate list.
+/// @ingroup algorithm_ranges
+generic<T, Output, ChooseIndex, Projection>
+pub fn sample_to_projected(source: &list<T>,
+    destination: &mut list<Output>, count: i64,
+    choose_index: ChooseIndex, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let capacity: i64 = destination.len();
+    var target: i64 = count;
+    if target < 0 { target = 0; }
+    if target > capacity { target = capacity; }
+    if target > source_len { target = source_len; }
+
+    var written: i64 = 0;
+    for i in 0..source_len {
+        let needed: i64 = target - written;
+        let remaining_items: i64 = source_len - i;
+        if needed >= remaining_items {
+            destination[written] = projection(source[i]);
+            written = written + 1;
+        } else if needed > 0 {
+            let requested_index: i64 = choose_index(remaining_items);
+            let selected_index: i64 = requested_index < 0 ? 0 :
+                (requested_index >= remaining_items ?
+                    remaining_items - 1 : requested_index);
+            if selected_index < needed {
+                destination[written] = projection(source[i]);
+                written = written + 1;
+            }
+        }
+    }
+    return written;
+}
+
 /// @brief Return a shuffled copy using a bounded random-index selector.
 /// `choose_index(upper_bound)` must return an index in
 /// `[0, upper_bound)`. The eager implementation leaves the source unchanged;
@@ -4515,7 +4551,7 @@ fn ranges_default_equal(left: T, right: T) -> bool {
     return left == right;
 }
 
-generic<T, Output, Equivalent, Projection>
+generic<T, Equivalent, Projection>
 fn ranges_unique_copy_to_core(source: &list<T>,
                               destination: &mut list<Output>,
                               equivalent: Equivalent,
@@ -9490,6 +9526,21 @@ pub fn reverse_copy_to_heterogeneous(source: &list<T>,
     return written;
 }
 
+/// @brief Write projected reversed source values to bounded output.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn reverse_copy_to_projected(source: &list<T>,
+    destination: &mut list<Output>, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var written: i64 = 0;
+    while written < destination_len && written < source_len {
+        destination[written] = projection(source[source_len - written - 1]);
+        written = written + 1;
+    }
+    return written;
+}
+
 /// @brief Return a copy rotated left by `amount` positions.
 /// Negative amounts rotate right; amounts are normalized modulo list length.
 /// @ingroup algorithm_ranges
@@ -9598,6 +9649,33 @@ pub fn rotate_copy_to_heterogeneous(source: &list<T>, middle: i64,
     return written;
 }
 
+/// @brief Write projected rotated source values to bounded output.
+/// The split point is clamped just like `rotate_copy_to`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn rotate_copy_to_projected(source: &list<T>, middle: i64,
+    destination: &mut list<Output>, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var split: i64 = middle;
+    if split < 0 { split = 0; }
+    if split > source_len { split = source_len; }
+    var written: i64 = 0;
+    var source_index: i64 = split;
+    while written < destination_len && source_index < source_len {
+        destination[written] = projection(source[source_index]);
+        written = written + 1;
+        source_index = source_index + 1;
+    }
+    source_index = 0;
+    while written < destination_len && source_index < split {
+        destination[written] = projection(source[source_index]);
+        written = written + 1;
+        source_index = source_index + 1;
+    }
+    return written;
+}
+
 /// @brief Return the retained range after a left shift by `count` positions.
 /// The suffix `[count, end)` is copied to the front; non-positive counts are
 /// no-ops, and counts at least the input length produce an empty list.
@@ -9681,7 +9759,10 @@ pub fn chunked(data: &list<T>, chunk_size: i64) -> list<list<T>> {
     var start: i64 = 0;
     while start < n {
         var chunk: list<T> = [];
-        let end: i64 = start + chunk_size < n ? start + chunk_size : n;
+        let remaining: i64 = n - start;
+        let actual_size: i64 = if chunk_size < remaining
+            { chunk_size } else { remaining };
+        let end: i64 = start + actual_size;
         for i in start..end {
             chunk.push(data[i]);
         }
@@ -9689,6 +9770,57 @@ pub fn chunked(data: &list<T>, chunk_size: i64) -> list<list<T>> {
         start = end;
     }
     return out;
+}
+
+/// @brief Write consecutive chunks into caller-provided bounded storage.
+/// The final chunk may be shorter than `chunk_size`; returns the number of
+/// chunks written and leaves unused destination entries unchanged.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn chunked_to(data: &list<T>, destination: &mut list<list<T>>,
+                  chunk_size: i64) -> i64 {
+    let n: i64 = data.len();
+    if chunk_size <= 0 || n == 0 { return 0; }
+    let capacity: i64 = destination.len();
+    var start: i64 = 0;
+    var written: i64 = 0;
+    while start < n && written < capacity {
+        let remaining: i64 = n - start;
+        let actual_size: i64 = if chunk_size < remaining
+            { chunk_size } else { remaining };
+        let end: i64 = start + actual_size;
+        var chunk: list<T> = [];
+        for i in start..end { chunk.push(data[i]); }
+        destination[written] = chunk;
+        written = written + 1;
+        start = end;
+    }
+    return written;
+}
+
+/// @brief Write projected consecutive chunks into bounded output.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn chunked_to_projected(data: &list<T>,
+    destination: &mut list<list<Output>>, chunk_size: i64,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if chunk_size <= 0 || n == 0 { return 0; }
+    let capacity: i64 = destination.len();
+    var start: i64 = 0;
+    var written: i64 = 0;
+    while start < n && written < capacity {
+        let remaining: i64 = n - start;
+        let actual_size: i64 = if chunk_size < remaining
+            { chunk_size } else { remaining };
+        let end: i64 = start + actual_size;
+        var chunk: list<Output> = [];
+        for i in start..end { chunk.push(projection(data[i])); }
+        destination[written] = chunk;
+        written = written + 1;
+        start = end;
+    }
+    return written;
 }
 
 /// @brief Group adjacent elements while `equivalent` accepts each pair.
@@ -9742,6 +9874,57 @@ pub fn chunk_by_projected(data: &list<T>, equivalent: Equivalent,
     return out;
 }
 
+/// @brief Write predicate-defined adjacent groups into bounded storage.
+/// Each group is stable and maximal under `equivalent`; returns the number of
+/// groups written and preserves unused destination entries.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent>
+pub fn chunk_by_to(data: &list<T>, destination: &mut list<list<T>>,
+                   equivalent: Equivalent) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var start: i64 = 0;
+    var written: i64 = 0;
+    while start < n && written < capacity {
+        var end: i64 = start + 1;
+        while end < n && equivalent(data[end - 1], data[end]) {
+            end = end + 1;
+        }
+        var group: list<T> = [];
+        for i in start..end { group.push(data[i]); }
+        destination[written] = group;
+        written = written + 1;
+        start = end;
+    }
+    return written;
+}
+
+/// @brief Write projected predicate-defined groups into bounded storage.
+/// Original values are preserved in each output group.
+/// @ingroup algorithm_ranges
+generic<T, Output, Equivalent, Projection>
+pub fn chunk_by_to_projected(data: &list<T>,
+    destination: &mut list<list<T>>, equivalent: Equivalent,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var start: i64 = 0;
+    var written: i64 = 0;
+    while start < n && written < capacity {
+        var end: i64 = start + 1;
+        while end < n && equivalent(projection(data[end - 1]),
+                                    projection(data[end])) {
+            end = end + 1;
+        }
+        var group: list<T> = [];
+        for i in start..end { group.push(data[i]); }
+        destination[written] = group;
+        written = written + 1;
+        start = end;
+    }
+    return written;
+}
+
 /// @brief Materialize every overlapping window of `window_size` elements.
 /// Eager-list counterpart to C++23 `views::slide`; invalid sizes return empty.
 /// @ingroup algorithm_ranges
@@ -9763,6 +9946,51 @@ pub fn windows(data: &list<T>, window_size: i64) -> list<list<T>> {
     return out;
 }
 
+/// @brief Write overlapping sliding windows into caller-provided storage.
+/// Only complete windows are emitted. Returns the number written and leaves
+/// the unused destination suffix unchanged.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn windows_to(data: &list<T>, destination: &mut list<list<T>>,
+                  window_size: i64) -> i64 {
+    let n: i64 = data.len();
+    if window_size <= 0 || window_size > n { return 0; }
+    let capacity: i64 = destination.len();
+    let possible: i64 = n - window_size + 1;
+    var count: i64 = possible;
+    if capacity < count { count = capacity; }
+    for start in 0..count {
+        var window: list<T> = [];
+        for offset in 0..window_size {
+            window.push(data[start + offset]);
+        }
+        destination[start] = window;
+    }
+    return count;
+}
+
+/// @brief Write projected overlapping windows into caller-provided storage.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn windows_to_projected(data: &list<T>,
+    destination: &mut list<list<Output>>, window_size: i64,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if window_size <= 0 || window_size > n { return 0; }
+    let capacity: i64 = destination.len();
+    let possible: i64 = n - window_size + 1;
+    var count: i64 = possible;
+    if capacity < count { count = capacity; }
+    for start in 0..count {
+        var window: list<Output> = [];
+        for offset in 0..window_size {
+            window.push(projection(data[start + offset]));
+        }
+        destination[start] = window;
+    }
+    return count;
+}
+
 /// @brief Copy every `stride`-th element, starting at index zero.
 /// Eager-list counterpart to C++23 `views::stride`; non-positive strides are empty.
 /// @ingroup algorithm_ranges
@@ -9779,6 +10007,47 @@ pub fn strided(data: &list<T>, stride: i64) -> list<T> {
         index = index + stride;
     }
     return out;
+}
+
+/// @brief Copy every `stride`-th element into bounded output.
+/// Sampling begins at source index zero. Non-positive strides write nothing;
+/// the return value is the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn strided_to(source: &list<T>, destination: &mut list<T>,
+                  stride: i64) -> i64 {
+    if stride <= 0 { return 0; }
+    let source_len: i64 = source.len();
+    let capacity: i64 = destination.len();
+    var source_index: i64 = 0;
+    var written: i64 = 0;
+    while source_index < source_len && written < capacity {
+        destination[written] = source[source_index];
+        written = written + 1;
+        if stride >= source_len - source_index { break; }
+        source_index = source_index + stride;
+    }
+    return written;
+}
+
+/// @brief Copy every `stride`-th projected element into bounded output.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn strided_to_projected(source: &list<T>,
+    destination: &mut list<Output>, stride: i64,
+    projection: Projection) -> i64 {
+    if stride <= 0 { return 0; }
+    let source_len: i64 = source.len();
+    let capacity: i64 = destination.len();
+    var source_index: i64 = 0;
+    var written: i64 = 0;
+    while source_index < source_len && written < capacity {
+        destination[written] = projection(source[source_index]);
+        written = written + 1;
+        if stride >= source_len - source_index { break; }
+        source_index = source_index + stride;
+    }
+    return written;
 }
 
 /// @brief Flatten a list of lists into one copied list.
@@ -9830,12 +10099,46 @@ pub fn chunk(data: &list<T>, chunk_size: i64) -> list<list<T>> {
     return chunked(data, chunk_size);
 }
 
+/// @brief Bounded spelling of the C++23 `views::chunk` operation.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn chunk_to(data: &list<T>, destination: &mut list<list<T>>,
+                chunk_size: i64) -> i64 {
+    return chunked_to(data, destination, chunk_size);
+}
+
+/// @brief Projected bounded spelling of `views::chunk`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn chunk_to_projected(data: &list<T>,
+    destination: &mut list<list<Output>>, chunk_size: i64,
+    projection: Projection) -> i64 {
+    return chunked_to_projected(data, destination, chunk_size, projection);
+}
+
 /// @brief C++23 `views::slide` spelling for `windows`.
 /// Materializes every overlapping fixed-size sublist.
 /// @ingroup algorithm_ranges
 generic<T>
 pub fn slide(data: &list<T>, window_size: i64) -> list<list<T>> {
     return windows(data, window_size);
+}
+
+/// @brief Bounded spelling of the C++23 `views::slide` operation.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn slide_to(data: &list<T>, destination: &mut list<list<T>>,
+                window_size: i64) -> i64 {
+    return windows_to(data, destination, window_size);
+}
+
+/// @brief Projected bounded spelling of `views::slide`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn slide_to_projected(data: &list<T>,
+    destination: &mut list<list<Output>>, window_size: i64,
+    projection: Projection) -> i64 {
+    return windows_to_projected(data, destination, window_size, projection);
 }
 
 /// @brief C++23 `views::stride` spelling for `strided`.
@@ -10064,6 +10367,136 @@ pub fn zip(first: &list<T>, second: &list<U>, third: &list<V>,
     return out;
 }
 
+/// @brief Zip two ranges into a caller-provided tuple output range.
+/// Stops at either input or the destination end and returns the number of
+/// tuples written; unused destination elements are preserved.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn zip_to(first: &list<T>, second: &list<U>,
+              destination: &mut list<tuple<T, U>>) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count { destination[i] = (first[i], second[i]); }
+    return count;
+}
+
+/// @brief Zip three heterogeneous ranges into a bounded tuple output.
+/// @ingroup algorithm_ranges
+generic<T, U, V>
+pub fn zip_to(first: &list<T>, second: &list<U>, third: &list<V>,
+              destination: &mut list<tuple<T, U, V>>) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = (first[i], second[i], third[i]);
+    }
+    return count;
+}
+
+/// @brief Zip four heterogeneous ranges into a bounded tuple output.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W>
+pub fn zip_to(first: &list<T>, second: &list<U>, third: &list<V>,
+              fourth: &list<W>,
+              destination: &mut list<tuple<T, U, V, W>>) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = (first[i], second[i], third[i], fourth[i]);
+    }
+    return count;
+}
+
+/// @brief Zip five heterogeneous ranges into a bounded tuple output.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X>
+pub fn zip_to(first: &list<T>, second: &list<U>, third: &list<V>,
+              fourth: &list<W>, fifth: &list<X>,
+              destination: &mut list<tuple<T, U, V, W, X>>) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = (first[i], second[i], third[i], fourth[i],
+                          fifth[i]);
+    }
+    return count;
+}
+
+/// @brief Zip six heterogeneous ranges into a bounded tuple output.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y>
+pub fn zip_to(first: &list<T>, second: &list<U>, third: &list<V>,
+              fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+              destination: &mut list<tuple<T, U, V, W, X, Y>>) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = (first[i], second[i], third[i], fourth[i],
+                          fifth[i], sixth[i]);
+    }
+    return count;
+}
+
+/// @brief Zip seven heterogeneous ranges into a bounded tuple output.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z>
+pub fn zip_to(first: &list<T>, second: &list<U>, third: &list<V>,
+              fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+              seventh: &list<Z>,
+              destination: &mut list<tuple<T, U, V, W, X, Y, Z>>) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if seventh.len() < count { count = seventh.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = (first[i], second[i], third[i], fourth[i],
+                          fifth[i], sixth[i], seventh[i]);
+    }
+    return count;
+}
+
+/// @brief Zip eight heterogeneous ranges into a bounded tuple output.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A>
+pub fn zip_to(first: &list<T>, second: &list<U>, third: &list<V>,
+              fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+              seventh: &list<Z>, eighth: &list<A>,
+              destination: &mut list<tuple<T, U, V, W, X, Y, Z, A>>) -> i64 {
+    var count: i64 = first.len();
+    if second.len() < count { count = second.len(); }
+    if third.len() < count { count = third.len(); }
+    if fourth.len() < count { count = fourth.len(); }
+    if fifth.len() < count { count = fifth.len(); }
+    if sixth.len() < count { count = sixth.len(); }
+    if seventh.len() < count { count = seventh.len(); }
+    if eighth.len() < count { count = eighth.len(); }
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = (first[i], second[i], third[i], fourth[i],
+                          fifth[i], sixth[i], seventh[i], eighth[i]);
+    }
+    return count;
+}
+
 /// @brief Materialize tuples for each pair of adjacent elements.
 /// Eager C++23 `views::pairwise` equivalent; fewer than two elements yield
 /// an empty list and the input is unchanged.
@@ -10167,6 +10600,115 @@ pub fn adjacent8(data: &list<T>) -> list<tuple<T, T, T, T, T, T, T, T>> {
                   data[i + 4], data[i + 5], data[i + 6], data[i + 7]));
     }
     return out;
+}
+
+/// @brief Write adjacent pairs into preallocated tuple output.
+/// Returns the number of complete windows written and preserves the unused
+/// destination suffix.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn pairwise_to(data: &list<T>,
+                   destination: &mut list<tuple<T, T>>) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 2 { n - 1 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count { destination[i] = (data[i], data[i + 1]); }
+    return count;
+}
+
+/// @brief Write adjacent triples into preallocated tuple output.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent3_to(data: &list<T>,
+                    destination: &mut list<tuple<T, T, T>>) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 3 { n - 2 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = (data[i], data[i + 1], data[i + 2]);
+    }
+    return count;
+}
+
+/// @brief Write adjacent groups of four into preallocated tuple output.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent4_to(data: &list<T>,
+                    destination: &mut list<tuple<T, T, T, T>>) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 4 { n - 3 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = (data[i], data[i + 1], data[i + 2], data[i + 3]);
+    }
+    return count;
+}
+
+/// @brief Write adjacent groups of five into preallocated tuple output.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent5_to(data: &list<T>,
+                    destination: &mut list<tuple<T, T, T, T, T>>) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 5 { n - 4 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = (data[i], data[i + 1], data[i + 2], data[i + 3],
+                          data[i + 4]);
+    }
+    return count;
+}
+
+/// @brief Write adjacent groups of six into preallocated tuple output.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent6_to(data: &list<T>,
+                    destination: &mut list<tuple<T, T, T, T, T, T>>) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 6 { n - 5 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = (data[i], data[i + 1], data[i + 2], data[i + 3],
+                          data[i + 4], data[i + 5]);
+    }
+    return count;
+}
+
+/// @brief Write adjacent groups of seven into preallocated tuple output.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent7_to(data: &list<T>,
+                    destination: &mut list<tuple<T, T, T, T, T, T, T>>) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 7 { n - 6 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = (data[i], data[i + 1], data[i + 2], data[i + 3],
+                          data[i + 4], data[i + 5], data[i + 6]);
+    }
+    return count;
+}
+
+/// @brief Write adjacent groups of eight into preallocated tuple output.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent8_to(data: &list<T>,
+                    destination: &mut list<tuple<T, T, T, T, T, T, T, T>>) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 8 { n - 7 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = (data[i], data[i + 1], data[i + 2], data[i + 3],
+                          data[i + 4], data[i + 5], data[i + 6], data[i + 7]);
+    }
+    return count;
 }
 
 /// @brief Apply a binary operation to every adjacent pair of elements.
@@ -10393,6 +10935,246 @@ pub fn adjacent_transform8_projected(data: &list<T>, operation: Operation,
     return out;
 }
 
+/// @brief Transform adjacent pairs into caller-provided bounded output.
+/// Returns the number written; short inputs and unused destination slots are
+/// handled without allocation.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform_to(data: &list<T>, destination: &mut list<Output>,
+                             operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n > 0 { n - 1 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count { destination[i] = operation(data[i], data[i + 1]); }
+    return count;
+}
+
+/// @brief Transform projected adjacent pairs into bounded output.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n > 0 { n - 1 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+                                  projection(data[i + 1]));
+    }
+    return count;
+}
+
+/// @brief Bounded ternary adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform3_to(data: &list<T>, destination: &mut list<Output>,
+                              operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 3 { n - 2 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(data[i], data[i + 1], data[i + 2]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected ternary adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform3_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 3 { n - 2 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+            projection(data[i + 1]), projection(data[i + 2]));
+    }
+    return count;
+}
+
+/// @brief Bounded four-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform4_to(data: &list<T>, destination: &mut list<Output>,
+                              operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 4 { n - 3 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(data[i], data[i + 1], data[i + 2],
+                                   data[i + 3]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected four-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform4_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 4 { n - 3 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+            projection(data[i + 1]), projection(data[i + 2]),
+            projection(data[i + 3]));
+    }
+    return count;
+}
+
+/// @brief Bounded five-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform5_to(data: &list<T>, destination: &mut list<Output>,
+                              operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 5 { n - 4 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(data[i], data[i + 1], data[i + 2],
+                                   data[i + 3], data[i + 4]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected five-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform5_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 5 { n - 4 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+            projection(data[i + 1]), projection(data[i + 2]),
+            projection(data[i + 3]), projection(data[i + 4]));
+    }
+    return count;
+}
+
+/// @brief Bounded six-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform6_to(data: &list<T>, destination: &mut list<Output>,
+                              operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 6 { n - 5 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(data[i], data[i + 1], data[i + 2],
+                                   data[i + 3], data[i + 4], data[i + 5]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected six-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform6_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 6 { n - 5 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+            projection(data[i + 1]), projection(data[i + 2]),
+            projection(data[i + 3]), projection(data[i + 4]),
+            projection(data[i + 5]));
+    }
+    return count;
+}
+
+/// @brief Bounded seven-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform7_to(data: &list<T>, destination: &mut list<Output>,
+                              operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 7 { n - 6 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(data[i], data[i + 1], data[i + 2],
+                                   data[i + 3], data[i + 4], data[i + 5],
+                                   data[i + 6]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected seven-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform7_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 7 { n - 6 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+            projection(data[i + 1]), projection(data[i + 2]),
+            projection(data[i + 3]), projection(data[i + 4]),
+            projection(data[i + 5]), projection(data[i + 6]));
+    }
+    return count;
+}
+
+/// @brief Bounded eight-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform8_to(data: &list<T>, destination: &mut list<Output>,
+                              operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 8 { n - 7 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(data[i], data[i + 1], data[i + 2],
+                                   data[i + 3], data[i + 4], data[i + 5],
+                                   data[i + 6], data[i + 7]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected eight-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform8_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 8 { n - 7 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+            projection(data[i + 1]), projection(data[i + 2]),
+            projection(data[i + 3]), projection(data[i + 4]),
+            projection(data[i + 5]), projection(data[i + 6]),
+            projection(data[i + 7]));
+    }
+    return count;
+}
+
 /// @brief Materialize every pair from two ranges in nested-loop order.
 /// The right range varies fastest; equivalent to C++23 `views::cartesian_product`.
 /// @ingroup algorithm_ranges
@@ -10559,6 +11341,191 @@ pub fn cartesian_product(first: &list<T>, second: &list<U>, third: &list<V>,
     return out;
 }
 
+/// @brief Write Cartesian-product tuples into a bounded destination.
+/// The rightmost input varies fastest. Returns the number written, stops
+/// immediately at destination capacity, and preserves the unused suffix.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn cartesian_product_to(left: &list<T>, right: &list<U>,
+                            destination: &mut list<tuple<T, U>>) -> i64 {
+    let capacity: i64 = destination.len();
+    if capacity <= 0 { return 0; }
+    var written: i64 = 0;
+    for i in 0..left.len() {
+        for j in 0..right.len() {
+            destination[written] = (left[i], right[j]);
+            written = written + 1;
+            if written >= capacity { return written; }
+        }
+    }
+    return written;
+}
+
+/// @brief Write three-range Cartesian-product tuples into bounded output.
+/// @ingroup algorithm_ranges
+generic<T, U, V>
+pub fn cartesian_product_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, destination: &mut list<tuple<T, U, V>>) -> i64 {
+    let capacity: i64 = destination.len();
+    if capacity <= 0 { return 0; }
+    var written: i64 = 0;
+    for i in 0..first.len() {
+        for j in 0..second.len() {
+            for k in 0..third.len() {
+                destination[written] = (first[i], second[j], third[k]);
+                written = written + 1;
+                if written >= capacity { return written; }
+            }
+        }
+    }
+    return written;
+}
+
+/// @brief Write four-range Cartesian-product tuples into bounded output.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W>
+pub fn cartesian_product_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>,
+    destination: &mut list<tuple<T, U, V, W>>) -> i64 {
+    let capacity: i64 = destination.len();
+    if capacity <= 0 { return 0; }
+    var written: i64 = 0;
+    for i in 0..first.len() {
+        for j in 0..second.len() {
+            for k in 0..third.len() {
+                for m in 0..fourth.len() {
+                    destination[written] = (first[i], second[j], third[k],
+                                            fourth[m]);
+                    written = written + 1;
+                    if written >= capacity { return written; }
+                }
+            }
+        }
+    }
+    return written;
+}
+
+/// @brief Write five-range Cartesian-product tuples into bounded output.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X>
+pub fn cartesian_product_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, fifth: &list<X>,
+    destination: &mut list<tuple<T, U, V, W, X>>) -> i64 {
+    let capacity: i64 = destination.len();
+    if capacity <= 0 { return 0; }
+    var written: i64 = 0;
+    for i in 0..first.len() {
+        for j in 0..second.len() {
+            for k in 0..third.len() {
+                for m in 0..fourth.len() {
+                    for n in 0..fifth.len() {
+                        destination[written] = (first[i], second[j], third[k],
+                                                fourth[m], fifth[n]);
+                        written = written + 1;
+                        if written >= capacity { return written; }
+                    }
+                }
+            }
+        }
+    }
+    return written;
+}
+
+/// @brief Write six-range Cartesian-product tuples into bounded output.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y>
+pub fn cartesian_product_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+    destination: &mut list<tuple<T, U, V, W, X, Y>>) -> i64 {
+    let capacity: i64 = destination.len();
+    if capacity <= 0 { return 0; }
+    var written: i64 = 0;
+    for i in 0..first.len() {
+        for j in 0..second.len() {
+            for k in 0..third.len() {
+                for m in 0..fourth.len() {
+                    for n in 0..fifth.len() {
+                        for p in 0..sixth.len() {
+                            destination[written] = (first[i], second[j],
+                                third[k], fourth[m], fifth[n], sixth[p]);
+                            written = written + 1;
+                            if written >= capacity { return written; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return written;
+}
+
+/// @brief Write seven-range Cartesian-product tuples into bounded output.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z>
+pub fn cartesian_product_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+    seventh: &list<Z>,
+    destination: &mut list<tuple<T, U, V, W, X, Y, Z>>) -> i64 {
+    let capacity: i64 = destination.len();
+    if capacity <= 0 { return 0; }
+    var written: i64 = 0;
+    for i in 0..first.len() {
+        for j in 0..second.len() {
+            for k in 0..third.len() {
+                for m in 0..fourth.len() {
+                    for n in 0..fifth.len() {
+                        for p in 0..sixth.len() {
+                            for q in 0..seventh.len() {
+                                destination[written] = (first[i], second[j],
+                                    third[k], fourth[m], fifth[n], sixth[p],
+                                    seventh[q]);
+                                written = written + 1;
+                                if written >= capacity { return written; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return written;
+}
+
+/// @brief Write eight-range Cartesian-product tuples into bounded output.
+/// @ingroup algorithm_ranges
+generic<T, U, V, W, X, Y, Z, A>
+pub fn cartesian_product_to(first: &list<T>, second: &list<U>,
+    third: &list<V>, fourth: &list<W>, fifth: &list<X>, sixth: &list<Y>,
+    seventh: &list<Z>, eighth: &list<A>,
+    destination: &mut list<tuple<T, U, V, W, X, Y, Z, A>>) -> i64 {
+    let capacity: i64 = destination.len();
+    if capacity <= 0 { return 0; }
+    var written: i64 = 0;
+    for i in 0..first.len() {
+        for j in 0..second.len() {
+            for k in 0..third.len() {
+                for m in 0..fourth.len() {
+                    for n in 0..fifth.len() {
+                        for p in 0..sixth.len() {
+                            for q in 0..seventh.len() {
+                                for r in 0..eighth.len() {
+                                    destination[written] = (first[i],
+                                        second[j], third[k], fourth[m],
+                                        fifth[n], sixth[p], seventh[q],
+                                        eighth[r]);
+                                    written = written + 1;
+                                    if written >= capacity { return written; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return written;
+}
+
 /// @brief Pair each element with its zero-based position.
 /// Eager C++23 `views::enumerate` equivalent; the input remains unchanged.
 /// @ingroup algorithm_ranges
@@ -10584,6 +11551,66 @@ pub fn enumerate_from(data: &list<T>, first_index: i64)
         out.push((first_index + i, data[i]));
     }
     return out;
+}
+
+/// @brief Enumerate into caller-provided tuple storage.
+/// Writes the prefix that fits, pairs values with zero-based indices, and
+/// returns the number written without changing the destination suffix.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn enumerate_to(data: &list<T>,
+                    destination: &mut list<tuple<i64, T>>) -> i64 {
+    var count: i64 = data.len();
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count { destination[i] = (i, data[i]); }
+    return count;
+}
+
+/// @brief Enumerate into bounded storage beginning at a caller-selected index.
+/// Negative starting indices are permitted.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn enumerate_from_to(data: &list<T>,
+                         destination: &mut list<tuple<i64, T>>,
+                         first_index: i64) -> i64 {
+    var count: i64 = data.len();
+    if destination.len() < count { count = destination.len(); }
+    if first_index > 0 && count > 9223372036854775807 - first_index {
+        count = 9223372036854775807 - first_index;
+    }
+    for i in 0..count { destination[i] = (first_index + i, data[i]); }
+    return count;
+}
+
+/// @brief Enumerate projected values into bounded tuple storage.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn enumerate_to_projected(
+    data: &list<T>, destination: &mut list<tuple<i64, Output>>,
+    projection: Projection) -> i64 {
+    var count: i64 = data.len();
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = (i, projection(data[i]));
+    }
+    return count;
+}
+
+/// @brief Enumerate projected values into bounded storage with an offset.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn enumerate_from_to_projected(
+    data: &list<T>, destination: &mut list<tuple<i64, Output>>,
+    first_index: i64, projection: Projection) -> i64 {
+    var count: i64 = data.len();
+    if destination.len() < count { count = destination.len(); }
+    if first_index > 0 && count > 9223372036854775807 - first_index {
+        count = 9223372036854775807 - first_index;
+    }
+    for i in 0..count {
+        destination[i] = (first_index + i, projection(data[i]));
+    }
+    return count;
 }
 
 /// @brief Project the first element from every pair-like tuple.

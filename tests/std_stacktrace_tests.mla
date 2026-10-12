@@ -1,0 +1,36 @@
+mod std::stacktrace;
+mod std::testing;
+
+use std::stacktrace::StackTrace;
+use std::stacktrace::capture;
+use std::stacktrace::capture_skipping;
+use std::testing::verify;
+
+#[test]
+fn test_stacktrace_capture_has_bounded_frames_and_descriptions() {
+    var trace: StackTrace = capture(8);
+    verify(trace.len() > 0 && trace.len() <= 8);
+    verify(!trace.is_empty());
+    let first_address: option<u64> = trace.address(0);
+    let first_description: option<str8> = trace.description(0);
+    verify(first_address.is_some() && first_address.unwrap() != 0);
+    verify(first_description.is_some() && first_description.unwrap() != "");
+    verify(trace.address(-1).is_none());
+    verify(trace.address(trace.len()).is_none());
+    verify(trace.description(-1).is_none());
+    verify(trace.description(trace.len()).is_none());
+    trace.close();
+    verify(trace.is_empty());
+    trace.close();
+}
+
+#[test]
+fn test_stacktrace_capture_limits_and_skip() {
+    var none: StackTrace = capture(0);
+    verify(none.is_empty());
+    none.close();
+
+    var skipped: StackTrace = capture_skipping(1, 2);
+    verify(skipped.len() <= 2);
+    skipped.close();
+}
