@@ -428,6 +428,8 @@ fn example() {
 - `copy_to_heterogeneous` and `copy_n_to_heterogeneous` preserve the same
   bounded behavior while allowing the destination element type to differ from
   the source type; source values are converted to the destination type.
+- `copy_n_to_heterogeneous_projected` combines bounded prefix copying,
+  projection, and a distinct output element type in one pass.
 - `copy_to_projected` and `copy_n_to_projected` apply a projection before
   writing into an existing destination list. They retain the same bounded
   output and progress semantics as their non-projected counterparts.

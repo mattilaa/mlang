@@ -1552,6 +1552,24 @@ pub fn copy_n_to_projected(source: &list<T>,
     return copied;
 }
 
+/// @brief Project a bounded source prefix into a distinct output element type.
+/// Stops at the requested count or either range's end; negative counts write
+/// nothing. Returns the number written and preserves the destination suffix.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn copy_n_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>, count: i64,
+    projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var copied: i64 = count;
+    if copied < 0 { copied = 0; }
+    if copied > source_len { copied = source_len; }
+    if copied > destination_len { copied = destination_len; }
+    for i in 0..copied { destination[i] = projection(source[i]); }
+    return copied;
+}
+
 /// @brief Copy a range backward into an existing destination list.
 /// Values align at the end of the destination. If the destination is shorter,
 /// the source suffix that fits is copied. Returns `(source_first,

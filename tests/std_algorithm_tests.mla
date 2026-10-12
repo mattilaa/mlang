@@ -526,6 +526,7 @@ use std::algorithm::ranges::copy_to_projected;
 use std::algorithm::ranges::copy_n_to;
 use std::algorithm::ranges::copy_n_to_heterogeneous;
 use std::algorithm::ranges::copy_n_to_projected;
+use std::algorithm::ranges::copy_n_to_heterogeneous_projected;
 use std::algorithm::ranges::copy_backward_to;
 use std::algorithm::ranges::copy_backward_to_heterogeneous;
 use std::algorithm::ranges::copy_backward_to_projected;
@@ -7646,6 +7647,17 @@ fn test_algorithm_ranges_copy_n_to_is_bounded_by_all_ranges() {
     verify(copy_n_to_heterogeneous(source, wide_prefix, 2) == 2);
     verify(wide_prefix[0] == 4 && wide_prefix[1] == 8 &&
            wide_prefix[2] == -1 && wide_prefix[3] == 99);
+
+    let scale = |value: i32| { return f64(value) * 0.5; };
+    var projected_wide: list<f64> = [-1.0, -1.0, 99.0];
+    verify(copy_n_to_heterogeneous_projected(
+        source, projected_wide, 10, scale) == 3);
+    verify(projected_wide[0] == 2.0 && projected_wide[1] == 4.0 &&
+           projected_wide[2] == 7.5);
+    var untouched_wide: list<f64> = [71.0, 72.0];
+    verify(copy_n_to_heterogeneous_projected(
+        source, untouched_wide, -1, scale) == 0);
+    verify(untouched_wide[0] == 71.0 && untouched_wide[1] == 72.0);
 }
 
 #[test]
