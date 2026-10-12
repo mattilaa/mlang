@@ -443,6 +443,20 @@ use std::algorithm::ranges::adjacent_transform8_projected;
 use std::algorithm::ranges::adjacent_transform_projected;
 use std::algorithm::ranges::adjacent_transform3_projected;
 use std::algorithm::ranges::adjacent_transform4_projected;
+use std::algorithm::ranges::adjacent_transform_to;
+use std::algorithm::ranges::adjacent_transform3_to;
+use std::algorithm::ranges::adjacent_transform4_to;
+use std::algorithm::ranges::adjacent_transform5_to;
+use std::algorithm::ranges::adjacent_transform6_to;
+use std::algorithm::ranges::adjacent_transform7_to;
+use std::algorithm::ranges::adjacent_transform8_to;
+use std::algorithm::ranges::adjacent_transform_to_projected;
+use std::algorithm::ranges::adjacent_transform3_to_projected;
+use std::algorithm::ranges::adjacent_transform4_to_projected;
+use std::algorithm::ranges::adjacent_transform5_to_projected;
+use std::algorithm::ranges::adjacent_transform6_to_projected;
+use std::algorithm::ranges::adjacent_transform7_to_projected;
+use std::algorithm::ranges::adjacent_transform8_to_projected;
 use std::algorithm::ranges::replace;
 use std::algorithm::ranges::replace_in_place;
 use std::algorithm::ranges::replace_projected;
@@ -4377,6 +4391,82 @@ fn test_algorithm_ranges_projected_adjacent_transform4() {
     let short: list<i32> = [11, 21];
     let no_quadruples: list<i32> = adjacent_transform4_projected(short, sum_four, tens);
     verify(no_quadruples.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_bounded_adjacent_transforms() {
+    let values: list<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let double = |value: i32| { return value * 2; };
+    let sum2 = |a: i32, b: i32| { return a + b; };
+    let sum3 = |a: i32, b: i32, c: i32| { return a + b + c; };
+    let sum4 = |a: i32, b: i32, c: i32, d: i32| { return a + b + c + d; };
+    let sum5 = |a: i32, b: i32, c: i32, d: i32, e: i32| {
+        return a + b + c + d + e;
+    };
+    let sum6 = |a: i32, b: i32, c: i32, d: i32, e: i32, f: i32| {
+        return a + b + c + d + e + f;
+    };
+    let sum7 = |a: i32, b: i32, c: i32, d: i32, e: i32, f: i32, g: i32| {
+        return a + b + c + d + e + f + g;
+    };
+    let sum8 = |a: i32, b: i32, c: i32, d: i32,
+                e: i32, f: i32, g: i32, h: i32| {
+        return a + b + c + d + e + f + g + h;
+    };
+
+    let mut output: list<i32> = [-1, -1, -1];
+    verify(adjacent_transform_to(values, output, sum2) == 3);
+    verify(output[0] == 3 && output[2] == 7);
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform_to_projected(values, output, sum2, double) == 3);
+    verify(output[0] == 6 && output[2] == 14);
+
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform3_to(values, output, sum3) == 3);
+    verify(output[0] == 6 && output[2] == 12);
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform3_to_projected(values, output, sum3, double) == 3);
+    verify(output[0] == 12 && output[2] == 24);
+
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform4_to(values, output, sum4) == 3);
+    verify(output[0] == 10 && output[2] == 18);
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform4_to_projected(values, output, sum4, double) == 3);
+    verify(output[0] == 20 && output[2] == 36);
+
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform5_to(values, output, sum5) == 3);
+    verify(output[0] == 15 && output[2] == 25);
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform5_to_projected(values, output, sum5, double) == 3);
+    verify(output[0] == 30 && output[2] == 50);
+
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform6_to(values, output, sum6) == 3);
+    verify(output[0] == 21 && output[2] == 33);
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform6_to_projected(values, output, sum6, double) == 3);
+    verify(output[0] == 42 && output[2] == 66);
+
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform7_to(values, output, sum7) == 3);
+    verify(output[0] == 28 && output[2] == 42);
+    output[0] = -1; output[1] = -1; output[2] = -1;
+    verify(adjacent_transform7_to_projected(values, output, sum7, double) == 3);
+    verify(output[0] == 56 && output[2] == 84);
+
+    let mut short_output: list<i32> = [-1, -1];
+    verify(adjacent_transform8_to(values, short_output, sum8) == 2);
+    verify(short_output[0] == 36 && short_output[1] == 44);
+    short_output[0] = -1; short_output[1] = -1;
+    verify(adjacent_transform8_to_projected(values, short_output, sum8, double) == 2);
+    verify(short_output[0] == 72 && short_output[1] == 88);
+
+    let too_short: list<i32> = [9, 10];
+    verify(adjacent_transform3_to(too_short, output, sum3) == 0);
+    let no_output: list<i32> = [];
+    verify(adjacent_transform_to(values, no_output, sum2) == 0);
 }
 
 #[test]

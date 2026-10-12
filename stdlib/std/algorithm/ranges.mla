@@ -10523,6 +10523,246 @@ pub fn adjacent_transform8_projected(data: &list<T>, operation: Operation,
     return out;
 }
 
+/// @brief Transform adjacent pairs into caller-provided bounded output.
+/// Returns the number written; short inputs and unused destination slots are
+/// handled without allocation.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform_to(data: &list<T>, destination: &mut list<Output>,
+                             operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n > 0 { n - 1 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count { destination[i] = operation(data[i], data[i + 1]); }
+    return count;
+}
+
+/// @brief Transform projected adjacent pairs into bounded output.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n > 0 { n - 1 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+                                  projection(data[i + 1]));
+    }
+    return count;
+}
+
+/// @brief Bounded ternary adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform3_to(data: &list<T>, destination: &mut list<Output>,
+                              operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 3 { n - 2 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(data[i], data[i + 1], data[i + 2]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected ternary adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform3_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 3 { n - 2 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+            projection(data[i + 1]), projection(data[i + 2]));
+    }
+    return count;
+}
+
+/// @brief Bounded four-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform4_to(data: &list<T>, destination: &mut list<Output>,
+                              operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 4 { n - 3 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(data[i], data[i + 1], data[i + 2],
+                                   data[i + 3]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected four-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform4_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 4 { n - 3 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+            projection(data[i + 1]), projection(data[i + 2]),
+            projection(data[i + 3]));
+    }
+    return count;
+}
+
+/// @brief Bounded five-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform5_to(data: &list<T>, destination: &mut list<Output>,
+                              operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 5 { n - 4 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(data[i], data[i + 1], data[i + 2],
+                                   data[i + 3], data[i + 4]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected five-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform5_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 5 { n - 4 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+            projection(data[i + 1]), projection(data[i + 2]),
+            projection(data[i + 3]), projection(data[i + 4]));
+    }
+    return count;
+}
+
+/// @brief Bounded six-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform6_to(data: &list<T>, destination: &mut list<Output>,
+                              operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 6 { n - 5 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(data[i], data[i + 1], data[i + 2],
+                                   data[i + 3], data[i + 4], data[i + 5]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected six-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform6_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 6 { n - 5 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+            projection(data[i + 1]), projection(data[i + 2]),
+            projection(data[i + 3]), projection(data[i + 4]),
+            projection(data[i + 5]));
+    }
+    return count;
+}
+
+/// @brief Bounded seven-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform7_to(data: &list<T>, destination: &mut list<Output>,
+                              operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 7 { n - 6 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(data[i], data[i + 1], data[i + 2],
+                                   data[i + 3], data[i + 4], data[i + 5],
+                                   data[i + 6]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected seven-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform7_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 7 { n - 6 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+            projection(data[i + 1]), projection(data[i + 2]),
+            projection(data[i + 3]), projection(data[i + 4]),
+            projection(data[i + 5]), projection(data[i + 6]));
+    }
+    return count;
+}
+
+/// @brief Bounded eight-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform8_to(data: &list<T>, destination: &mut list<Output>,
+                              operation: Operation) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 8 { n - 7 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(data[i], data[i + 1], data[i + 2],
+                                   data[i + 3], data[i + 4], data[i + 5],
+                                   data[i + 6], data[i + 7]);
+    }
+    return count;
+}
+
+/// @brief Bounded projected eight-element adjacent transform.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn adjacent_transform8_to_projected(
+    data: &list<T>, destination: &mut list<Output>, operation: Operation,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var count: i64 = if n >= 8 { n - 7 } else { 0 };
+    if capacity < count { count = capacity; }
+    for i in 0..count {
+        destination[i] = operation(projection(data[i]),
+            projection(data[i + 1]), projection(data[i + 2]),
+            projection(data[i + 3]), projection(data[i + 4]),
+            projection(data[i + 5]), projection(data[i + 6]),
+            projection(data[i + 7]));
+    }
+    return count;
+}
+
 /// @brief Materialize every pair from two ranges in nested-loop order.
 /// The right range varies fastest; equivalent to C++23 `views::cartesian_product`.
 /// @ingroup algorithm_ranges

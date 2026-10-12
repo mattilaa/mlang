@@ -785,6 +785,12 @@ fn example() {
   type and returns an empty list when the input is too short. The `_projected`
   adjacent-transform forms currently cover widths two through eight and apply
   operations to projected keys while preserving the original source values.
+- `adjacent_transform_to` and `adjacent_transform3_to` through
+  `adjacent_transform8_to` write window-operation results into a bounded
+  destination and return the number written. Their `_to_projected` forms apply
+  one projection to every source element before calling the operation. Each
+  form stops at the destination capacity or when the input has no complete
+  window, and leaves any unused destination suffix unchanged.
 - `enumerate(data)` materializes `(index, value)` tuples with zero-based indices
   (C++23 `views::enumerate` style).
 - `enumerate_from(data, first_index)` provides the same eager pairing with a
