@@ -773,6 +773,10 @@ fn example() {
 - `adjacent3(data)` through `adjacent8(data)` materialize typed
   tuples for each overlapping fixed-width window, analogous to C++23
   `views::adjacent<N>`; short inputs produce empty lists.
+- `pairwise_to` and `adjacent3_to` through `adjacent8_to` write those same
+  tuples into preallocated output. They return the number of windows written,
+  stop at destination capacity or when the input has no complete window, and
+  preserve any unused destination suffix.
 - `adjacent_transform(data, operation)` applies a binary operation to each
   neighboring pair, returning up to one fewer result than input elements and
   inferring the output element type from the operation (C++23

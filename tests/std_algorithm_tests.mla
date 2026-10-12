@@ -432,6 +432,13 @@ use std::algorithm::ranges::adjacent5;
 use std::algorithm::ranges::adjacent6;
 use std::algorithm::ranges::adjacent7;
 use std::algorithm::ranges::adjacent8;
+use std::algorithm::ranges::pairwise_to;
+use std::algorithm::ranges::adjacent3_to;
+use std::algorithm::ranges::adjacent4_to;
+use std::algorithm::ranges::adjacent5_to;
+use std::algorithm::ranges::adjacent6_to;
+use std::algorithm::ranges::adjacent7_to;
+use std::algorithm::ranges::adjacent8_to;
 use std::algorithm::ranges::adjacent_transform5;
 use std::algorithm::ranges::adjacent_transform6;
 use std::algorithm::ranges::adjacent_transform7;
@@ -4252,6 +4259,60 @@ fn test_algorithm_ranges_pairwise() {
     let no_triples: list<tuple<i32, i32, i32>> = adjacent3(singleton);
     let no_quadruples: list<tuple<i32, i32, i32, i32>> = adjacent4(values);
     verify(no_triples.len() == 0 && no_quadruples.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_bounded_adjacent_tuples() {
+    let values: list<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let mut pairs: list<tuple<i32, i32>> =
+        [(-1, -1), (-2, -2), (-3, -3)];
+    verify(pairwise_to(values, pairs) == 3);
+    let pair0: tuple<i32, i32> = pairs[0];
+    let pair2: tuple<i32, i32> = pairs[2];
+    verify(pair0.0 == 1 && pair0.1 == 2);
+    verify(pair2.0 == 3 && pair2.1 == 4);
+
+    let mut triples: list<tuple<i32, i32, i32>> = [(-1, -1, -1)];
+    verify(adjacent3_to(values, triples) == 1);
+    let triple: tuple<i32, i32, i32> = triples[0];
+    verify(triple.0 == 1 && triple.1 == 2 && triple.2 == 3);
+
+    let mut four: list<tuple<i32, i32, i32, i32>> = [(-1, -1, -1, -1)];
+    verify(adjacent4_to(values, four) == 1);
+    let four_row: tuple<i32, i32, i32, i32> = four[0];
+    verify(four_row.0 == 1 && four_row.3 == 4);
+
+    let mut five: list<tuple<i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1)];
+    verify(adjacent5_to(values, five) == 1);
+    let five_row: tuple<i32, i32, i32, i32, i32> = five[0];
+    verify(five_row.0 == 1 && five_row.4 == 5);
+
+    let mut six: list<tuple<i32, i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1, -1)];
+    verify(adjacent6_to(values, six) == 1);
+    let six_row: tuple<i32, i32, i32, i32, i32, i32> = six[0];
+    verify(six_row.0 == 1 && six_row.5 == 6);
+
+    let mut seven: list<tuple<i32, i32, i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1, -1, -1)];
+    verify(adjacent7_to(values, seven) == 1);
+    let seven_row: tuple<i32, i32, i32, i32, i32, i32, i32> = seven[0];
+    verify(seven_row.0 == 1 && seven_row.6 == 7);
+
+    let mut eight: list<tuple<i32, i32, i32, i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1, -1, -1, -1),
+         (-2, -2, -2, -2, -2, -2, -2, -2)];
+    verify(adjacent8_to(values, eight) == 2);
+    let eight0: tuple<i32, i32, i32, i32, i32, i32, i32, i32> = eight[0];
+    let eight1: tuple<i32, i32, i32, i32, i32, i32, i32, i32> = eight[1];
+    verify(eight0.0 == 1 && eight0.7 == 8);
+    verify(eight1.0 == 2 && eight1.7 == 9);
+
+    let short: list<i32> = [9];
+    verify(adjacent3_to(short, triples) == 0);
+    let no_capacity: list<tuple<i32, i32>> = [];
+    verify(pairwise_to(values, no_capacity) == 0);
 }
 
 #[test]
