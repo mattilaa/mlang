@@ -799,6 +799,11 @@ fn example() {
   (C++23 `views::enumerate` style).
 - `enumerate_from(data, first_index)` provides the same eager pairing with a
   caller-selected starting index, including negative offsets.
+- `enumerate_to` and `enumerate_from_to` write indexed tuples into bounded
+  output, returning the number written and preserving any destination suffix.
+  Their `_projected` counterparts enumerate projected values; the offset form
+  accepts negative indices and clamps the output count before signed index
+  overflow.
 - `keys(data)` and `values(data)` project the first or second member of each
   `tuple<K, V>` (eager counterparts to C++20 `views::keys` and `views::values`).
 - `cartesian_product` overloads for two through eight ranges materialize

@@ -11250,6 +11250,66 @@ pub fn enumerate_from(data: &list<T>, first_index: i64)
     return out;
 }
 
+/// @brief Enumerate into caller-provided tuple storage.
+/// Writes the prefix that fits, pairs values with zero-based indices, and
+/// returns the number written without changing the destination suffix.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn enumerate_to(data: &list<T>,
+                    destination: &mut list<tuple<i64, T>>) -> i64 {
+    var count: i64 = data.len();
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count { destination[i] = (i, data[i]); }
+    return count;
+}
+
+/// @brief Enumerate into bounded storage beginning at a caller-selected index.
+/// Negative starting indices are permitted.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn enumerate_from_to(data: &list<T>,
+                         destination: &mut list<tuple<i64, T>>,
+                         first_index: i64) -> i64 {
+    var count: i64 = data.len();
+    if destination.len() < count { count = destination.len(); }
+    if first_index > 0 && count > 9223372036854775807 - first_index {
+        count = 9223372036854775807 - first_index;
+    }
+    for i in 0..count { destination[i] = (first_index + i, data[i]); }
+    return count;
+}
+
+/// @brief Enumerate projected values into bounded tuple storage.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn enumerate_to_projected(
+    data: &list<T>, destination: &mut list<tuple<i64, Output>>,
+    projection: Projection) -> i64 {
+    var count: i64 = data.len();
+    if destination.len() < count { count = destination.len(); }
+    for i in 0..count {
+        destination[i] = (i, projection(data[i]));
+    }
+    return count;
+}
+
+/// @brief Enumerate projected values into bounded storage with an offset.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn enumerate_from_to_projected(
+    data: &list<T>, destination: &mut list<tuple<i64, Output>>,
+    first_index: i64, projection: Projection) -> i64 {
+    var count: i64 = data.len();
+    if destination.len() < count { count = destination.len(); }
+    if first_index > 0 && count > 9223372036854775807 - first_index {
+        count = 9223372036854775807 - first_index;
+    }
+    for i in 0..count {
+        destination[i] = (first_index + i, projection(data[i]));
+    }
+    return count;
+}
+
 /// @brief Project the first element from every pair-like tuple.
 /// Eager C++20 `views::keys` counterpart for `list<tuple<K, V>>`.
 /// @ingroup algorithm_ranges

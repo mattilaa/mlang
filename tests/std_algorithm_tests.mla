@@ -418,6 +418,10 @@ use std::algorithm::ranges::zip;
 use std::algorithm::ranges::zip_to;
 use std::algorithm::ranges::enumerate;
 use std::algorithm::ranges::enumerate_from;
+use std::algorithm::ranges::enumerate_to;
+use std::algorithm::ranges::enumerate_from_to;
+use std::algorithm::ranges::enumerate_to_projected;
+use std::algorithm::ranges::enumerate_from_to_projected;
 use std::algorithm::ranges::keys;
 use std::algorithm::ranges::values;
 use std::algorithm::ranges::cartesian_product;
@@ -3995,6 +3999,46 @@ fn test_algorithm_ranges_enumerate() {
     verify(negative_first.0 == -2 && negative_last.0 == 0);
     let empty_from: list<tuple<i64, i32>> = enumerate_from(empty, 5);
     verify(empty_from.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_bounded_enumerate() {
+    let values: list<i32> = [4, 8, 15];
+    var output: list<tuple<i64, i32>> =
+        [(-1, -1), (-2, -2), (-3, -3), (-4, -4)];
+    verify(enumerate_to(values, output) == 3);
+    let first: tuple<i64, i32> = output[0];
+    let last: tuple<i64, i32> = output[2];
+    let untouched: tuple<i64, i32> = output[3];
+    verify(first.0 == 0 && first.1 == 4);
+    verify(last.0 == 2 && last.1 == 15);
+    verify(untouched.0 == -4 && untouched.1 == -4);
+
+    var offset_output: list<tuple<i64, i32>> = [(-1, -1), (-2, -2)];
+    verify(enumerate_from_to(values, offset_output, -5) == 2);
+    let offset_first: tuple<i64, i32> = offset_output[0];
+    let offset_last: tuple<i64, i32> = offset_output[1];
+    verify(offset_first.0 == -5 && offset_first.1 == 4);
+    verify(offset_last.0 == -4 && offset_last.1 == 8);
+
+    let times_ten = |value: i32| { return value * 10; };
+    var projected: list<tuple<i64, i32>> = [(-1, -1), (-2, -2)];
+    verify(enumerate_to_projected(values, projected, times_ten) == 2);
+    let projected_first: tuple<i64, i32> = projected[0];
+    let projected_second: tuple<i64, i32> = projected[1];
+    verify(projected_first.0 == 0 && projected_first.1 == 40);
+    verify(projected_second.0 == 1 && projected_second.1 == 80);
+
+    var projected_offset: list<tuple<i64, i32>> = [(-1, -1)];
+    verify(enumerate_from_to_projected(
+        values, projected_offset, 20, times_ten) == 1);
+    let projected_offset_first: tuple<i64, i32> = projected_offset[0];
+    verify(projected_offset_first.0 == 20 && projected_offset_first.1 == 40);
+
+    let empty: list<i32> = [];
+    verify(enumerate_to(empty, output) == 0);
+    var no_output: list<tuple<i64, i32>> = [];
+    verify(enumerate_to(values, no_output) == 0);
 }
 
 #[test]
