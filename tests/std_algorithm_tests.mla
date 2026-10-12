@@ -405,7 +405,11 @@ use std::algorithm::ranges::shift_right_in_place;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::chunk;
 use std::algorithm::ranges::windows;
+use std::algorithm::ranges::windows_to;
+use std::algorithm::ranges::windows_to_projected;
 use std::algorithm::ranges::slide;
+use std::algorithm::ranges::slide_to;
+use std::algorithm::ranges::slide_to_projected;
 use std::algorithm::ranges::strided;
 use std::algorithm::ranges::strided_to;
 use std::algorithm::ranges::strided_to_projected;
@@ -3554,6 +3558,33 @@ fn test_algorithm_ranges_generic_windows() {
     let zero: list<list<i32>> = windows(data, 0);
     let too_wide: list<list<i32>> = windows(data, 5);
     verify(zero.len() == 0 && too_wide.len() == 0);
+
+    var bounded: list<list<i32>> =
+        [[-1, -1, -1], [-2, -2, -2], [-3, -3, -3]];
+    verify(windows_to(data, bounded, 3) == 2);
+    let bounded_first: list<i32> = bounded[0];
+    let bounded_second: list<i32> = bounded[1];
+    let untouched: list<i32> = bounded[2];
+    verify(bounded_first[0] == 2 && bounded_first[2] == 6);
+    verify(bounded_second[0] == 4 && bounded_second[2] == 8);
+    verify(untouched[0] == -3 && untouched[2] == -3);
+
+    let double = |value: i32| { return i64(value * 2); };
+    var projected: list<list<i64>> = [[-1, -1], [-2, -2]];
+    verify(windows_to_projected(data, projected, 2, double) == 2);
+    let projected_first: list<i64> = projected[0];
+    let projected_second: list<i64> = projected[1];
+    verify(projected_first[0] == 4 && projected_first[1] == 8);
+    verify(projected_second[0] == 8 && projected_second[1] == 12);
+
+    var slide_output: list<list<i32>> = [[-1, -1]];
+    verify(slide_to(data, slide_output, 2) == 1);
+    let slide_first: list<i32> = slide_output[0];
+    verify(slide_first[0] == 2 && slide_first[1] == 4);
+    var projected_slide: list<list<i64>> = [[-1, -1]];
+    verify(slide_to_projected(data, projected_slide, 2, double) == 1);
+    let projected_slide_first: list<i64> = projected_slide[0];
+    verify(projected_slide_first[0] == 4 && projected_slide_first[1] == 8);
 }
 
 #[test]

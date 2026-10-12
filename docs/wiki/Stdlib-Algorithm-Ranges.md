@@ -751,6 +751,11 @@ fn example() {
 - `windows(data, size)` materializes every overlapping fixed-size sublist
   (C++23 `views::slide` style); invalid sizes produce an empty list. `slide`
   is the standard view spelling.
+- `windows_to`/`slide_to` write complete overlapping windows into a bounded
+  list-of-lists destination and return the number written; projected variants
+  map each element while building each window. Invalid window sizes and empty
+  destinations produce zero writes, and unused destination entries are left
+  unchanged.
 - `strided(data, step)` copies every `step`-th element from index zero
   (C++23 `views::stride` style); non-positive steps produce an empty list.
   `stride` is the standard view spelling.

@@ -9763,6 +9763,51 @@ pub fn windows(data: &list<T>, window_size: i64) -> list<list<T>> {
     return out;
 }
 
+/// @brief Write overlapping sliding windows into caller-provided storage.
+/// Only complete windows are emitted. Returns the number written and leaves
+/// the unused destination suffix unchanged.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn windows_to(data: &list<T>, destination: &mut list<list<T>>,
+                  window_size: i64) -> i64 {
+    let n: i64 = data.len();
+    if window_size <= 0 || window_size > n { return 0; }
+    let capacity: i64 = destination.len();
+    let possible: i64 = n - window_size + 1;
+    var count: i64 = possible;
+    if capacity < count { count = capacity; }
+    for start in 0..count {
+        var window: list<T> = [];
+        for offset in 0..window_size {
+            window.push(data[start + offset]);
+        }
+        destination[start] = window;
+    }
+    return count;
+}
+
+/// @brief Write projected overlapping windows into caller-provided storage.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn windows_to_projected(data: &list<T>,
+    destination: &mut list<list<Output>>, window_size: i64,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if window_size <= 0 || window_size > n { return 0; }
+    let capacity: i64 = destination.len();
+    let possible: i64 = n - window_size + 1;
+    var count: i64 = possible;
+    if capacity < count { count = capacity; }
+    for start in 0..count {
+        var window: list<Output> = [];
+        for offset in 0..window_size {
+            window.push(projection(data[start + offset]));
+        }
+        destination[start] = window;
+    }
+    return count;
+}
+
 /// @brief Copy every `stride`-th element, starting at index zero.
 /// Eager-list counterpart to C++23 `views::stride`; non-positive strides are empty.
 /// @ingroup algorithm_ranges
@@ -9877,6 +9922,23 @@ pub fn chunk(data: &list<T>, chunk_size: i64) -> list<list<T>> {
 generic<T>
 pub fn slide(data: &list<T>, window_size: i64) -> list<list<T>> {
     return windows(data, window_size);
+}
+
+/// @brief Bounded spelling of the C++23 `views::slide` operation.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn slide_to(data: &list<T>, destination: &mut list<list<T>>,
+                window_size: i64) -> i64 {
+    return windows_to(data, destination, window_size);
+}
+
+/// @brief Projected bounded spelling of `views::slide`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn slide_to_projected(data: &list<T>,
+    destination: &mut list<list<Output>>, window_size: i64,
+    projection: Projection) -> i64 {
+    return windows_to_projected(data, destination, window_size, projection);
 }
 
 /// @brief C++23 `views::stride` spelling for `strided`.
