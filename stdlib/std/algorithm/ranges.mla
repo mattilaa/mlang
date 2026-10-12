@@ -12071,6 +12071,48 @@ pub fn values(data: &list<tuple<K, V>>) -> list<V> {
     return projected;
 }
 
+/// @brief Project field zero from every triple in a range.
+/// Eager Mlang counterpart to `views::elements<0>` for triples.
+/// @ingroup algorithm_ranges
+generic<A, B, C>
+pub fn elements_0(data: &list<tuple<A, B, C>>) -> list<A> {
+    var projected: list<A> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C> = data[i];
+        projected.push(entry.0);
+    }
+    return projected;
+}
+
+/// @brief Project field one from every triple in a range.
+/// Eager Mlang counterpart to `views::elements<1>` for triples.
+/// @ingroup algorithm_ranges
+generic<A, B, C>
+pub fn elements_1(data: &list<tuple<A, B, C>>) -> list<B> {
+    var projected: list<B> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C> = data[i];
+        projected.push(entry.1);
+    }
+    return projected;
+}
+
+/// @brief Project field two from every triple in a range.
+/// Eager Mlang counterpart to `views::elements<2>` for triples.
+/// @ingroup algorithm_ranges
+generic<A, B, C>
+pub fn elements_2(data: &list<tuple<A, B, C>>) -> list<C> {
+    var projected: list<C> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C> = data[i];
+        projected.push(entry.2);
+    }
+    return projected;
+}
+
 /// @brief Merge two nondecreasing ranges into one stable sorted copy.
 /// Both inputs must already be sorted; equal elements from `left` come first.
 /// C++20 `std::ranges::merge` equivalent for same-typed lists.

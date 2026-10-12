@@ -20,6 +20,9 @@ use std::algorithm::ranges::split_by;
 use std::algorithm::ranges::split_by_projected;
 use std::algorithm::ranges::join_transform;
 use std::algorithm::ranges::join_transform_to;
+use std::algorithm::ranges::elements_0;
+use std::algorithm::ranges::elements_1;
+use std::algorithm::ranges::elements_2;
 use std::algorithm::ranges::sort_in_place_by_projected;
 use std::algorithm::ranges::sort_in_place;
 use std::algorithm::ranges::make_heap_in_place_by_projected;
@@ -252,6 +255,18 @@ fn test_ranges_join_transform_fuses_flatten_and_projection() {
     let empty: list<list<i32>> = [];
     let empty_result: list<i64> = join_transform(empty, widen);
     verify(empty_result.len() == 0);
+}
+
+#[test]
+fn test_ranges_project_tuple_triple_elements() {
+    let records: list<tuple<i32, i64, i32>> = [
+        (1, 10, 100), (2, 20, 200), (3, 30, 300)];
+    let first: list<i32> = elements_0(records);
+    let second: list<i64> = elements_1(records);
+    let third: list<i32> = elements_2(records);
+    verify(first.len() == 3 && first[0] == 1 && first[2] == 3);
+    verify(second.len() == 3 && second[0] == 10 && second[2] == 30);
+    verify(third.len() == 3 && third[0] == 100 && third[2] == 300);
 }
 
 #[test]
