@@ -403,7 +403,11 @@ use std::algorithm::ranges::shift_right;
 use std::algorithm::ranges::shift_left_in_place;
 use std::algorithm::ranges::shift_right_in_place;
 use std::algorithm::ranges::chunked;
+use std::algorithm::ranges::chunked_to;
+use std::algorithm::ranges::chunked_to_projected;
 use std::algorithm::ranges::chunk;
+use std::algorithm::ranges::chunk_to;
+use std::algorithm::ranges::chunk_to_projected;
 use std::algorithm::ranges::windows;
 use std::algorithm::ranges::windows_to;
 use std::algorithm::ranges::windows_to_projected;
@@ -3544,6 +3548,48 @@ fn test_algorithm_ranges_generic_chunked() {
     let large_size: list<list<i32>> = chunked(data, 9);
     verify(invalid_size.len() == 0);
     verify(large_size.len() == 1);
+
+    var bounded: list<list<i32>> =
+        [[-1], [-2], [-3], [-4]];
+    verify(chunked_to(data, bounded, 2) == 3);
+    let bounded_first: list<i32> = bounded[0];
+    let bounded_second: list<i32> = bounded[1];
+    let bounded_last: list<i32> = bounded[2];
+    let untouched: list<i32> = bounded[3];
+    verify(bounded_first.len() == 2 && bounded_first[0] == 1 &&
+           bounded_first[1] == 2);
+    verify(bounded_second.len() == 2 && bounded_second[0] == 3 &&
+           bounded_second[1] == 4);
+    verify(bounded_last.len() == 1 && bounded_last[0] == 5);
+    verify(untouched[0] == -4);
+
+    let widen = |value: i32| { return i64(value * 10); };
+    var projected: list<list<i64>> = [[-1], [-2]];
+    verify(chunked_to_projected(data, projected, 3, widen) == 2);
+    let projected_first: list<i64> = projected[0];
+    let projected_second: list<i64> = projected[1];
+    verify(projected_first.len() == 3 && projected_first[2] == 30);
+    verify(projected_second.len() == 2 && projected_second[0] == 40 &&
+           projected_second[1] == 50);
+
+    var alias_output: list<list<i32>> = [[-1], [-2]];
+    verify(chunk_to(data, alias_output, 4) == 2);
+    let alias_final: list<i32> = alias_output[1];
+    verify(alias_final.len() == 1 && alias_final[0] == 5);
+    var projected_alias: list<list<i64>> = [[-1]];
+    verify(chunk_to_projected(data, projected_alias, 4, widen) == 1);
+    let projected_alias_chunk: list<i64> = projected_alias[0];
+    verify(projected_alias_chunk.len() == 4 &&
+           projected_alias_chunk[0] == 10 &&
+           projected_alias_chunk[3] == 40);
+    var no_output: list<list<i32>> = [];
+    verify(chunked_to(data, no_output, 1) == 0);
+    verify(chunked_to(data, bounded, 0) == 0);
+
+    let huge_chunk: list<list<i32>> = chunked(data, 9223372036854775807);
+    verify(huge_chunk.len() == 1);
+    let one_huge_chunk: list<i32> = huge_chunk[0];
+    verify(one_huge_chunk.len() == 5 && one_huge_chunk[4] == 5);
 }
 
 #[test]

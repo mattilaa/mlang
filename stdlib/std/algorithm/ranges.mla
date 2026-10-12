@@ -9681,7 +9681,10 @@ pub fn chunked(data: &list<T>, chunk_size: i64) -> list<list<T>> {
     var start: i64 = 0;
     while start < n {
         var chunk: list<T> = [];
-        let end: i64 = start + chunk_size < n ? start + chunk_size : n;
+        let remaining: i64 = n - start;
+        let actual_size: i64 = if chunk_size < remaining
+            { chunk_size } else { remaining };
+        let end: i64 = start + actual_size;
         for i in start..end {
             chunk.push(data[i]);
         }
@@ -9689,6 +9692,57 @@ pub fn chunked(data: &list<T>, chunk_size: i64) -> list<list<T>> {
         start = end;
     }
     return out;
+}
+
+/// @brief Write consecutive chunks into caller-provided bounded storage.
+/// The final chunk may be shorter than `chunk_size`; returns the number of
+/// chunks written and leaves unused destination entries unchanged.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn chunked_to(data: &list<T>, destination: &mut list<list<T>>,
+                  chunk_size: i64) -> i64 {
+    let n: i64 = data.len();
+    if chunk_size <= 0 || n == 0 { return 0; }
+    let capacity: i64 = destination.len();
+    var start: i64 = 0;
+    var written: i64 = 0;
+    while start < n && written < capacity {
+        let remaining: i64 = n - start;
+        let actual_size: i64 = if chunk_size < remaining
+            { chunk_size } else { remaining };
+        let end: i64 = start + actual_size;
+        var chunk: list<T> = [];
+        for i in start..end { chunk.push(data[i]); }
+        destination[written] = chunk;
+        written = written + 1;
+        start = end;
+    }
+    return written;
+}
+
+/// @brief Write projected consecutive chunks into bounded output.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn chunked_to_projected(data: &list<T>,
+    destination: &mut list<list<Output>>, chunk_size: i64,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    if chunk_size <= 0 || n == 0 { return 0; }
+    let capacity: i64 = destination.len();
+    var start: i64 = 0;
+    var written: i64 = 0;
+    while start < n && written < capacity {
+        let remaining: i64 = n - start;
+        let actual_size: i64 = if chunk_size < remaining
+            { chunk_size } else { remaining };
+        let end: i64 = start + actual_size;
+        var chunk: list<Output> = [];
+        for i in start..end { chunk.push(projection(data[i])); }
+        destination[written] = chunk;
+        written = written + 1;
+        start = end;
+    }
+    return written;
 }
 
 /// @brief Group adjacent elements while `equivalent` accepts each pair.
@@ -9914,6 +9968,23 @@ pub fn joined_with(data: &list<list<T>>, separator: &list<T>) -> list<T> {
 generic<T>
 pub fn chunk(data: &list<T>, chunk_size: i64) -> list<list<T>> {
     return chunked(data, chunk_size);
+}
+
+/// @brief Bounded spelling of the C++23 `views::chunk` operation.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn chunk_to(data: &list<T>, destination: &mut list<list<T>>,
+                chunk_size: i64) -> i64 {
+    return chunked_to(data, destination, chunk_size);
+}
+
+/// @brief Projected bounded spelling of `views::chunk`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn chunk_to_projected(data: &list<T>,
+    destination: &mut list<list<Output>>, chunk_size: i64,
+    projection: Projection) -> i64 {
+    return chunked_to_projected(data, destination, chunk_size, projection);
 }
 
 /// @brief C++23 `views::slide` spelling for `windows`.

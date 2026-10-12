@@ -743,6 +743,11 @@ fn example() {
 - `chunked(data, size)` materializes consecutive sublists (C++23
   `views::chunk` style); the final chunk can be shorter, and non-positive sizes
   produce an empty list. `chunk(data, size)` is the standard view spelling.
+- `chunked_to`/`chunk_to` write those chunks into bounded list-of-lists output,
+  including the final partial chunk, and return the number written. Projected
+  variants convert elements while constructing each chunk. Invalid sizes and
+  empty destinations write nothing; the remaining destination suffix is
+  unchanged.
 - `chunk_by(data, equivalent)` groups adjacent elements while the binary
   predicate accepts each neighboring pair (C++23 `views::chunk_by` style).
 - `chunk_by_projected(data, equivalent, projection)` groups adjacent values
