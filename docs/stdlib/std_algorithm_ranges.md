@@ -365,6 +365,11 @@ fn example() {
 - `fold_right_with_iter(data, init, operation)` provides the corresponding
   reverse-order eager-list fold and returns `(consumed, accumulator)`. Since
   lists do not expose iterators, `consumed` is the number of elements visited.
+- `fold_left_with_iter_projected` and `fold_right_with_iter_projected` fuse a
+  projection with the corresponding initialized fold and return the consumed
+  count and accumulator without materializing an intermediate list. The
+  projection is evaluated once per element; empty ranges return a zero count
+  and the unchanged initial value.
 - `fold_left_first(data, operation)` and `fold_right_last(data, operation)`
   seed the reduction from the first or last element. They return
   `option<Output>`—`None` for empty input and `Some(result)` otherwise. The
@@ -374,6 +379,10 @@ fn example() {
   `Some((consumed, accumulator))` for nonempty input and `None` for empty
   input. The output accumulator can differ from the input element type, which
   is useful for widening reductions.
+- `fold_left_first_with_iter_projected(data, operation, projection)` seeds
+  the accumulator from the first projected element and returns the same
+  optional count/result pair; the projection is evaluated once per element
+  and empty input returns `None`.
 - `transform_reduce(data, init, reduce, project)` applies a projection to each
   element and folds each projected term into an accumulator in one pass. Its
   paired-range overload takes two lists and stops at the shorter one. Both

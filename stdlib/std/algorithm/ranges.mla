@@ -1158,6 +1158,22 @@ pub fn fold_left_with_iter(data: &list<T>, init: U, operation: Operation) -> tup
     return (n, acc);
 }
 
+/// @brief Fold projected elements left-to-right and return the consumed count.
+/// The projection runs once per input element and no intermediate list is
+/// allocated. The count is zero for empty input.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation, Projection>
+pub fn fold_left_with_iter_projected(data: &list<T>, init: U,
+                                     operation: Operation,
+                                     projection: Projection) -> tuple<i64, U> {
+    var acc: U = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = operation(acc, projection(data[i]));
+    }
+    return (n, acc);
+}
+
 /// @brief Fold right and return the number of consumed elements with result.
 /// The consumed count is zero for empty input and the full list length
 /// otherwise. This complements the C++23-inspired fold_left_with_iter API for
@@ -1171,6 +1187,23 @@ pub fn fold_right_with_iter(data: &list<T>, init: U,
     while i > 0 {
         i = i - 1;
         acc = operation(data[i], acc);
+    }
+    return (data.len(), acc);
+}
+
+/// @brief Fold projected elements right-to-left and return the consumed count.
+/// The projection runs once per input element and no intermediate list is
+/// allocated.
+/// @ingroup algorithm_ranges
+generic<T, U, Operation, Projection>
+pub fn fold_right_with_iter_projected(data: &list<T>, init: U,
+                                      operation: Operation,
+                                      projection: Projection) -> tuple<i64, U> {
+    var acc: U = init;
+    var i: i64 = data.len();
+    while i > 0 {
+        i = i - 1;
+        acc = operation(projection(data[i]), acc);
     }
     return (data.len(), acc);
 }
@@ -1223,6 +1256,22 @@ pub fn fold_left_first_with_iter(data: &list<T>, operation: Operation)
     var acc: Output = data[0];
     for i in 1..n {
         acc = operation(acc, data[i]);
+    }
+    return Some<tuple<i64, Output>>((n, acc));
+}
+
+/// @brief Fold a non-empty range of projected values left-to-right and return
+/// the consumed count with the result. Empty input returns None.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation, Projection>
+pub fn fold_left_first_with_iter_projected(
+    data: &list<T>, operation: Operation, projection: Projection)
+    -> option<tuple<i64, Output>> {
+    let n: i64 = data.len();
+    if n == 0 { return None<tuple<i64, Output>>(); }
+    var acc: Output = projection(data[0]);
+    for i in 1..n {
+        acc = operation(acc, projection(data[i]));
     }
     return Some<tuple<i64, Output>>((n, acc));
 }
@@ -1855,7 +1904,7 @@ pub fn swap_ranges(left: &list<T>, right: &list<T>)
     var swapped_right: list<T> = [];
     let left_len: i64 = left.len();
     let right_len: i64 = right.len();
-    let common_len: i64 = left_len < right_len ? left_len : right_len;
+    let common_len: i64 = if left_len < right_len { left_len } else { right_len };
     for i in 0..common_len {
         swapped_left.push(right[i]);
         swapped_right.push(left[i]);
@@ -1878,7 +1927,7 @@ generic<T>
 pub fn swap_ranges_in_place(left: &mut list<T>, right: &mut list<T>) -> i64 {
     let left_len: i64 = left.len();
     let right_len: i64 = right.len();
-    let common_len: i64 = if left_len < right_len { left_len } else { right_len };
+    let common_len: i64 = left_len < right_len ? left_len : right_len;
     for i in 0..common_len {
         let temporary: T = left[i];
         left[i] = right[i];

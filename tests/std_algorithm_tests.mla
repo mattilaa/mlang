@@ -44,9 +44,12 @@ use std::algorithm::ranges::fold_right as ranges_fold_right;
 use std::algorithm::ranges::fold_left_projected;
 use std::algorithm::ranges::fold_right_projected;
 use std::algorithm::ranges::fold_left_with_iter as ranges_fold_left_with_iter;
+use std::algorithm::ranges::fold_left_with_iter_projected;
 use std::algorithm::ranges::fold_right_with_iter as ranges_fold_right_with_iter;
+use std::algorithm::ranges::fold_right_with_iter_projected;
 use std::algorithm::ranges::fold_left_first as ranges_fold_left_first;
 use std::algorithm::ranges::fold_left_first_with_iter as ranges_fold_left_first_with_iter;
+use std::algorithm::ranges::fold_left_first_with_iter_projected;
 use std::algorithm::ranges::fold_right_last as ranges_fold_right_last;
 use std::algorithm::ranges::fold_left_first_projected;
 use std::algorithm::ranges::fold_right_last_projected;
@@ -6859,18 +6862,38 @@ fn test_algorithm_ranges_projected_folds() {
     verify(fold_left_projected(values, 1, append_left, widen) == 1258);
     verify(fold_right_projected(values, 4, append_right, widen) == 4852);
 
+    let left_with_iter: tuple<i64, i64> =
+        fold_left_with_iter_projected(values, 1, append_left, widen);
+    let right_with_iter: tuple<i64, i64> =
+        fold_right_with_iter_projected(values, 4, append_right, widen);
+    verify(left_with_iter.0 == 3 && left_with_iter.1 == 1258);
+    verify(right_with_iter.0 == 3 && right_with_iter.1 == 4852);
+
     let left: option<i64> =
         fold_left_first_projected(values, append_left, widen);
     let right: option<i64> =
         fold_right_last_projected(values, append_right, widen);
     verify(left.is_some() && left.unwrap() == 258);
     verify(right.is_some() && right.unwrap() == 852);
+    let left_first_with_iter: option<tuple<i64, i64>> =
+        fold_left_first_with_iter_projected(values, append_left, widen);
+    verify(left_first_with_iter.is_some());
+    let left_first_result: tuple<i64, i64> = left_first_with_iter.unwrap();
+    verify(left_first_result.0 == 3 && left_first_result.1 == 258);
 
     let empty: list<i32> = [];
     verify(fold_left_projected(empty, 37, append_left, widen) == 37);
     verify(fold_right_projected(empty, 41, append_right, widen) == 41);
     verify(fold_left_first_projected(empty, append_left, widen).is_none());
     verify(fold_right_last_projected(empty, append_right, widen).is_none());
+    let empty_left_with_iter: tuple<i64, i64> =
+        fold_left_with_iter_projected(empty, 37, append_left, widen);
+    let empty_right_with_iter: tuple<i64, i64> =
+        fold_right_with_iter_projected(empty, 41, append_right, widen);
+    verify(empty_left_with_iter.0 == 0 && empty_left_with_iter.1 == 37);
+    verify(empty_right_with_iter.0 == 0 && empty_right_with_iter.1 == 41);
+    verify(fold_left_first_with_iter_projected(
+        empty, append_left, widen).is_none());
 }
 
 #[test]
