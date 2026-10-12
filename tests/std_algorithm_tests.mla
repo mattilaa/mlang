@@ -415,6 +415,7 @@ use std::algorithm::ranges::join_with;
 use std::algorithm::ranges::split;
 use std::algorithm::ranges::concat;
 use std::algorithm::ranges::zip;
+use std::algorithm::ranges::zip_to;
 use std::algorithm::ranges::enumerate;
 use std::algorithm::ranges::enumerate_from;
 use std::algorithm::ranges::keys;
@@ -3805,6 +3806,63 @@ fn test_algorithm_ranges_zip_seven_and_eight_ranges() {
     };
     let transformed8: list<i32> = zip_transform(a, b, c, d, e, f, g, h, sum8);
     verify(transformed8.len() == 1 && transformed8[0] == 11111111);
+}
+
+#[test]
+fn test_algorithm_ranges_bounded_zip_outputs() {
+    let a: list<i32> = [1, 2];
+    let b: list<i32> = [10, 20];
+    let c: list<i32> = [100, 200];
+    let d: list<i32> = [1000, 2000];
+    let e: list<i32> = [10000, 20000];
+    let f: list<i32> = [100000, 200000];
+    let g: list<i32> = [1000000, 2000000];
+    let h: list<i32> = [10000000];
+
+    let mut pairs: list<tuple<i32, i32>> = [(-1, -1)];
+    verify(zip_to(a, b, pairs) == 1);
+    let pair: tuple<i32, i32> = pairs[0];
+    verify(pair.0 == 1 && pair.1 == 10);
+
+    let mut triples: list<tuple<i32, i32, i32>> = [(-1, -1, -1)];
+    verify(zip_to(a, b, c, triples) == 1);
+    let triple: tuple<i32, i32, i32> = triples[0];
+    verify(triple.0 == 1 && triple.1 == 10 && triple.2 == 100);
+
+    let mut four: list<tuple<i32, i32, i32, i32>> = [(-1, -1, -1, -1)];
+    verify(zip_to(a, b, c, d, four) == 1);
+    let four_values: tuple<i32, i32, i32, i32> = four[0];
+    verify(four_values.0 == 1 && four_values.3 == 1000);
+
+    let mut five: list<tuple<i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1)];
+    verify(zip_to(a, b, c, d, e, five) == 1);
+    let five_values: tuple<i32, i32, i32, i32, i32> = five[0];
+    verify(five_values.0 == 1 && five_values.4 == 10000);
+
+    let mut six: list<tuple<i32, i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1, -1)];
+    verify(zip_to(a, b, c, d, e, f, six) == 1);
+    let six_values: tuple<i32, i32, i32, i32, i32, i32> = six[0];
+    verify(six_values.0 == 1 && six_values.5 == 100000);
+
+    let mut seven: list<tuple<i32, i32, i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1, -1, -1)];
+    verify(zip_to(a, b, c, d, e, f, g, seven) == 1);
+    let seven_values: tuple<i32, i32, i32, i32, i32, i32, i32> = seven[0];
+    verify(seven_values.0 == 1 && seven_values.6 == 1000000);
+
+    let mut eight: list<tuple<i32, i32, i32, i32, i32, i32, i32, i32>> =
+        [(-1, -1, -1, -1, -1, -1, -1, -1),
+         (-2, -2, -2, -2, -2, -2, -2, -2)];
+    verify(zip_to(a, b, c, d, e, f, g, h, eight) == 1);
+    let first: tuple<i32, i32, i32, i32, i32, i32, i32, i32> = eight[0];
+    let unused: tuple<i32, i32, i32, i32, i32, i32, i32, i32> = eight[1];
+    verify(first.0 == 1 && first.7 == 10000000);
+    verify(unused.0 == -2 && unused.7 == -2);
+
+    let empty: list<i32> = [];
+    verify(zip_to(empty, b, pairs) == 0);
 }
 
 #[test]

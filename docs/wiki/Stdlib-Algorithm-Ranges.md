@@ -550,6 +550,10 @@ fn example() {
   destination and preserve the unused destination suffix.
 - `zip` materializes heterogeneous tuples from two through eight input ranges,
   stopping at the shortest input.
+- `zip_to` has two-through-eight-range overloads that write heterogeneous
+  tuples into a preallocated destination. Each overload stops at the shortest
+  input or destination, returns the number written, and preserves any unused
+  destination suffix. This is the bounded-output counterpart to eager `zip`.
 - `find_if_not` returns the first rejected element's index; `remove_if` returns
   a copy without accepted elements, and `replace_if` substitutes a value for
   every accepted element. These transforms leave their input unchanged.
