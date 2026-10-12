@@ -470,6 +470,9 @@ fn example() {
   It accepts lists/[`Vec`](Stdlib-Vec), fixed arrays, and multidimensional arrays where their
   element shape is compatible. Nested inputs are recursively materialized and
   converted while preserving each row's length, including empty rows.
+- `to_list_projected(data, projection)` materializes projected values into a
+  new list in source order, without an intermediate transformed list. The
+  source remains unchanged and empty inputs produce an empty output.
 - `to_flat_set(data)` materializes a sorted [`std::flat_set`](Stdlib-Flat-Set), deduplicating keys
   according to the set's ordering equivalence. The source range is unchanged.
 - `to_flat_set_projected(data, projection)` materializes projected keys into a

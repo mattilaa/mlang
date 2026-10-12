@@ -1647,6 +1647,19 @@ pub fn to_list(data: &list<list<T>>) -> list<list<Output>> {
     return converted;
 }
 
+/// @brief Materialize a range after projecting each element to the output type.
+/// The projection runs once per source element, in order, and the source is
+/// left unchanged. This fuses a transform with C++23-style range materialization.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn to_list_projected(data: &list<T>, projection: Projection)
+    -> list<Output> {
+    var converted: list<Output> = [];
+    let n: i64 = data.len();
+    for i in 0..n { converted.push(projection(data[i])); }
+    return converted;
+}
+
 /// @brief Materialize a range as a sorted, unique `FlatSet`.
 /// Duplicate values collapse according to `FlatSet` ordering equivalence.
 /// C++23 `std::ranges::to` adapted to Mlang's `std::flat_set` container.

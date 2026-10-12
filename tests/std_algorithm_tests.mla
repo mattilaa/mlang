@@ -530,6 +530,7 @@ use std::algorithm::ranges::copy_backward_to;
 use std::algorithm::ranges::copy_backward_to_heterogeneous;
 use std::algorithm::ranges::copy_backward_to_projected;
 use std::algorithm::ranges::to_list;
+use std::algorithm::ranges::to_list_projected;
 use std::algorithm::ranges::to_flat_set;
 use std::algorithm::ranges::to_flat_set_projected;
 use std::algorithm::ranges::to_flat_multiset;
@@ -5044,6 +5045,20 @@ fn test_algorithm_ranges_to_list_converts_and_materializes() {
            converted_nested[2][1] == -4.0 &&
            converted_nested[2][2] == 9.0);
     verify(nested[0][0] == 1 && nested[2][1] == -4);
+}
+
+#[test]
+fn test_algorithm_ranges_to_list_projected() {
+    let source: list<i32> = [13, 27, -4, 39];
+    let to_tens = |value: i32| { return i64(value / 10); };
+    let projected: list<i64> = to_list_projected(source, to_tens);
+    verify(projected.len() == 4 && projected[0] == 1 &&
+           projected[1] == 2 && projected[2] == 0 && projected[3] == 3);
+    verify(source[0] == 13 && source[2] == -4);
+
+    let empty: list<i32> = [];
+    let empty_projected: list<i64> = to_list_projected(empty, to_tens);
+    verify(empty_projected.len() == 0);
 }
 
 #[test]
