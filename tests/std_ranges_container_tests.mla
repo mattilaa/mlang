@@ -11,6 +11,8 @@ use std::algorithm::ranges::contains;
 use std::algorithm::ranges::count;
 use std::algorithm::ranges::transform;
 use std::algorithm::ranges::concat_many;
+use std::algorithm::ranges::concat_many_to;
+use std::algorithm::ranges::concat_many_to_projected;
 use std::algorithm::ranges::sort_in_place_by_projected;
 use std::algorithm::ranges::sort_in_place;
 use std::algorithm::ranges::make_heap_in_place_by_projected;
@@ -143,6 +145,23 @@ fn test_ranges_concat_many() {
     let empty: list<list<i32>> = [];
     let empty_flattened: list<i32> = concat_many(empty);
     verify(empty_flattened.len() == 0);
+}
+
+#[test]
+fn test_ranges_concat_many_to_bounded_output() {
+    let ranges: list<list<i32>> = [[1, 2], [], [3, 4]];
+    var output: list<i32> = [-1, -1, -1];
+    let written: i64 = concat_many_to(ranges, &mut output);
+    verify(written == 3 && output[0] == 1 &&
+           output[1] == 2 && output[2] == 3);
+    let as_float = |value: i32| { return f64(value); };
+    var projected_output: list<f64> = [-1.0, -1.0];
+    let projected_written: i64 = concat_many_to_projected(
+        ranges, &mut projected_output, as_float);
+    verify(projected_written == 2 && projected_output[0] == 1.0 &&
+           projected_output[1] == 2.0);
+    var empty_output: list<i32> = [];
+    verify(concat_many_to(ranges, &mut empty_output) == 0);
 }
 
 #[test]

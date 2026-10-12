@@ -10486,6 +10486,55 @@ pub fn concat_many(ranges: &list<list<T>>) -> list<T> {
     return out;
 }
 
+/// @brief Concatenate ranges into a bounded caller-provided output list.
+/// Values are converted to `Output` as they are written. Stops when the
+/// destination fills and returns the number of elements written.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn concat_many_to(ranges: &list<list<T>>,
+                      destination: &mut list<T>) -> i64 {
+    let range_count: i64 = ranges.len();
+    let destination_len: i64 = destination.len();
+    var written: i64 = 0;
+    for range_index in 0..range_count {
+        let range: list<T> = ranges[range_index];
+        let element_count: i64 = range.len();
+        for element_index in 0..element_count {
+            if written >= destination_len {
+                return written;
+            }
+            destination[written] = range[element_index];
+            written = written + 1;
+        }
+    }
+    return written;
+}
+
+/// @brief Concatenate ranges into bounded output after projecting each value.
+/// Stops when the destination fills and returns the number of elements
+/// written; the input values remain unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn concat_many_to_projected(
+    ranges: &list<list<T>>, destination: &mut list<Output>,
+    projection: Projection) -> i64 {
+    let range_count: i64 = ranges.len();
+    let destination_len: i64 = destination.len();
+    var written: i64 = 0;
+    for range_index in 0..range_count {
+        let range: list<T> = ranges[range_index];
+        let element_count: i64 = range.len();
+        for element_index in 0..element_count {
+            if written >= destination_len {
+                return written;
+            }
+            destination[written] = projection(range[element_index]);
+            written = written + 1;
+        }
+    }
+    return written;
+}
+
 /// @brief Pair corresponding elements into tuples, stopping at the shorter list.
 /// Eager C++23 `views::zip` equivalent; both inputs remain unchanged.
 /// @ingroup algorithm_ranges
