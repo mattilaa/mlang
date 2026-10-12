@@ -1,0 +1,32 @@
+mod std::testing;
+mod std::algorithm::ranges;
+mod std::flat_set;
+mod std::flat_multiset;
+
+use std::testing::verify;
+use std::algorithm::ranges::find;
+use std::algorithm::ranges::to_flat_set;
+use std::algorithm::ranges::to_flat_multiset;
+use std::algorithm::ranges::to_list_from_flat_set;
+use std::algorithm::ranges::to_list_from_flat_multiset;
+use std::flat_set::FlatSet;
+use std::flat_multiset::FlatMultiSet;
+
+#[test]
+fn test_ranges_materialize_flat_set_for_list_algorithms() {
+    let source: list<i32> = [4, 1, 4, 2];
+    let set: FlatSet<i32> = to_flat_set(source);
+    let values: list<i32> = to_list_from_flat_set(set);
+    verify(values.len() == 3 && values[0] == 1 &&
+           values[1] == 2 && values[2] == 4);
+    verify(find(values, 2) == 1);
+}
+
+#[test]
+fn test_ranges_materialize_flat_multiset_preserving_duplicates() {
+    let source: list<i32> = [4, 1, 4, 2];
+    let multiset: FlatMultiSet<i32> = to_flat_multiset(source);
+    let values: list<i32> = to_list_from_flat_multiset(multiset);
+    verify(values.len() == 4 && values[0] == 1 && values[1] == 2 &&
+           values[2] == 4 && values[3] == 4);
+}

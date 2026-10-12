@@ -1736,6 +1736,28 @@ pub fn to_list(data: &list<list<T>>) -> list<list<Output>> {
     return converted;
 }
 
+/// @brief Materialize an ordered flat set as a list.
+/// The result follows ascending iteration order and can be passed to the
+/// list-based range algorithms.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn to_list_from_flat_set(data: &FlatSet<T>) -> list<T> {
+    var converted: list<T> = [];
+    let n: i64 = data.keys.len();
+    for i in 0..n { converted.push(data.keys[i]); }
+    return converted;
+}
+
+/// @brief Materialize an ordered flat multiset as a list, preserving repeats.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn to_list_from_flat_multiset(data: &FlatMultiSet<T>) -> list<T> {
+    var converted: list<T> = [];
+    let n: i64 = data.keys.len();
+    for i in 0..n { converted.push(data.keys[i]); }
+    return converted;
+}
+
 /// @brief Materialize a range after projecting each element to the output type.
 /// The projection runs once per source element, in order, and the source is
 /// left unchanged. This fuses a transform with C++23-style range materialization.
