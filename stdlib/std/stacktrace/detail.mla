@@ -1,0 +1,10 @@
+/// \file detail.mla
+/// \brief Native bindings for std::stacktrace.
+
+extern pub fn __mlang_std_stacktrace_new(skip_frames: i64,
+                                         max_frames: i64) -> i64;
+extern pub fn __mlang_std_stacktrace_count(handle: i64) -> i64;
+extern pub fn __mlang_std_stacktrace_address(handle: i64, index: i64) -> u64;
+extern pub fn __mlang_std_stacktrace_description(handle: i64,
+                                                 index: i64) -> str8;
+extern pub fn __mlang_std_stacktrace_free(handle: i64) -> void;

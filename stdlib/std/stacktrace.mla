@@ -1,0 +1,57 @@
+/// \file stacktrace.mla
+/// \brief C++23-style process stack snapshots.
+
+mod std::stacktrace::detail;
+
+/// @brief A captured stack snapshot owned by the calling Mlang value.
+/// The native snapshot must be released with `close()` when no longer needed.
+pub struct StackTrace {
+    var handle: i64;
+};
+
+/// @brief Capture up to `max_frames` frames, omitting `skip_frames` user frames.
+/// Non-positive limits produce an empty snapshot; native capture is capped to
+/// a bounded number of frames.
+pub fn capture(max_frames: i64) -> StackTrace {
+    return capture_skipping(0, max_frames);
+}
+
+/// @brief Capture a stack while omitting an additional number of caller frames.
+pub fn capture_skipping(skip_frames: i64, max_frames: i64) -> StackTrace {
+    return StackTrace {
+        handle: __mlang_std_stacktrace_new(skip_frames, max_frames)
+    };
+}
+
+impl StackTrace {
+    /// @brief Return the number of captured frames.
+    pub fn len(self: StackTrace) -> i64 {
+        return __mlang_std_stacktrace_count(self.handle);
+    }
+
+    /// @brief Return whether the snapshot contains no frames.
+    pub fn is_empty(self: StackTrace) -> bool {
+        return self.len() == 0;
+    }
+
+    /// @brief Return a frame's instruction address, or `None` if out of range.
+    pub fn address(self: StackTrace, index: i64) -> option<u64> {
+        if index < 0 || index >= self.len() { return None<u64>(); }
+        return Some<u64>(__mlang_std_stacktrace_address(self.handle, index));
+    }
+
+    /// @brief Return the platform's description for a frame, or `None`.
+    pub fn description(self: StackTrace, index: i64) -> option<str8> {
+        if index < 0 || index >= self.len() { return None<str8>(); }
+        return Some<str8>(__mlang_std_stacktrace_description(
+            self.handle, index));
+    }
+
+    /// @brief Release the native snapshot. Repeated calls are harmless.
+    pub fn close(self: &mut StackTrace) -> void {
+        if self.handle != 0 {
+            __mlang_std_stacktrace_free(self.handle);
+            self.handle = 0;
+        }
+    }
+}
