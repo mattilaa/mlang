@@ -822,6 +822,10 @@ fn example() {
   and preserves empty fields around leading, repeated, and trailing matches.
   Empty input yields no fields; an empty delimiter yields the whole nonempty
   input as one field.
+- `split_by(data, delimiter, equivalent)` and
+  `split_by_projected(data, delimiter, equivalent, projection)` provide the
+  same eager split behavior for custom equivalence and heterogeneous delimiter
+  keys.
 - `concat(left, right)` copies two same-typed ranges into one list (C++23
   `views::concat` style).
 - `concat_many(ranges)` concatenates a list of same-typed ranges into one list,

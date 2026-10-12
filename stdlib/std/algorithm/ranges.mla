@@ -10479,6 +10479,61 @@ pub fn split(data: &list<T>, delimiter: &list<U>) -> list<list<T>> {
     return parts;
 }
 
+/// @brief Split a range at delimiter matches defined by an equivalence test.
+/// The delimiter may use a different element type from the source.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent>
+pub fn split_by(data: &list<T>, delimiter: &list<U>,
+                equivalent: Equivalent) -> list<list<T>> {
+    let identity = |value: T| { return value; };
+    return split_by_projected(data, delimiter, equivalent, identity);
+}
+
+/// @brief Split a range by matching projected source keys to delimiter keys.
+/// Empty fields and non-overlapping delimiter behavior match `split`.
+/// @ingroup algorithm_ranges
+generic<T, U, Equivalent, Projection>
+pub fn split_by_projected(data: &list<T>, delimiter: &list<U>,
+                          equivalent: Equivalent, projection: Projection)
+    -> list<list<T>> {
+    var parts: list<list<T>> = [];
+    let data_len: i64 = data.len();
+    let delimiter_len: i64 = delimiter.len();
+    if data_len == 0 { return parts; }
+    if delimiter_len == 0 {
+        var whole: list<T> = [];
+        for i in 0..data_len { whole.push(data[i]); }
+        parts.push(whole);
+        return parts;
+    }
+
+    var segment: list<T> = [];
+    var index: i64 = 0;
+    while index < data_len {
+        var matches: bool = false;
+        if delimiter_len <= data_len - index {
+            matches = true;
+            for offset in 0..delimiter_len {
+                if equivalent(projection(data[index + offset]),
+                              delimiter[offset]) == false {
+                    matches = false;
+                    break;
+                }
+            }
+        }
+        if matches {
+            parts.push(segment);
+            segment = [];
+            index = index + delimiter_len;
+        } else {
+            segment.push(data[index]);
+            index = index + 1;
+        }
+    }
+    parts.push(segment);
+    return parts;
+}
+
 /// @brief Concatenate two ranges into a copied list.
 /// Eager-list counterpart to C++23 `views::concat` for two same-typed inputs.
 /// @ingroup algorithm_ranges

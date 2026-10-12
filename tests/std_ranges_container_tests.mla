@@ -16,6 +16,8 @@ use std::algorithm::ranges::concat_many_to_projected;
 use std::algorithm::ranges::to_list;
 use std::algorithm::ranges::to_list_projected;
 use std::algorithm::ranges::to_list_nested_projected;
+use std::algorithm::ranges::split_by;
+use std::algorithm::ranges::split_by_projected;
 use std::algorithm::ranges::sort_in_place_by_projected;
 use std::algorithm::ranges::sort_in_place;
 use std::algorithm::ranges::make_heap_in_place_by_projected;
@@ -199,6 +201,37 @@ fn test_ranges_to_list_converts_elements() {
     verify(copied_fixed_nested.len() == 2 &&
            copied_fixed_nested[0][1] == 2 &&
            copied_fixed_nested[1][0] == 3);
+}
+
+#[test]
+fn test_ranges_split_by_equivalence_and_projection() {
+    let values: list<i32> = [11, 2, 13, 4, 15];
+    let delimiter: list<i64> = [3];
+    let same_last_digit = |value: i32, key: i64| {
+        return i64(value % 10) == key;
+    };
+    let parts: list<list<i32>> = split_by(values, delimiter, same_last_digit);
+    let first: list<i32> = parts[0];
+    let second: list<i32> = parts[1];
+    verify(parts.len() == 2 && first.len() == 2 &&
+           first[0] == 11 && first[1] == 2 &&
+           second.len() == 2 && second[0] == 4 &&
+           second[1] == 15);
+
+    let trailing_match: list<i32> = [11, 2, 13];
+    let trailing_parts: list<list<i32>> =
+        split_by(trailing_match, delimiter, same_last_digit);
+    let trailing_field: list<i32> = trailing_parts[1];
+    verify(trailing_parts.len() == 2 && trailing_field.len() == 0);
+
+    let project_tens = |value: i32| { return i64(value % 10); };
+    let same_key = |value: i64, key: i64| { return value == key; };
+    let projected_parts: list<list<i32>> = split_by_projected(
+        values, delimiter, same_key, project_tens);
+    let projected_first: list<i32> = projected_parts[0];
+    let projected_second: list<i32> = projected_parts[1];
+    verify(projected_parts.len() == 2 && projected_first[0] == 11 &&
+           projected_second[0] == 4);
 }
 
 #[test]
