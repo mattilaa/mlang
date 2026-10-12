@@ -16,6 +16,14 @@ use std::algorithm::ranges::make_heap_in_place_by_projected;
 use std::algorithm::ranges::make_heap_in_place;
 use std::algorithm::ranges::pop_heap_in_place_by_projected;
 use std::algorithm::ranges::partial_sort_in_place_by_projected;
+use std::algorithm::ranges::stable_sort_in_place;
+use std::algorithm::ranges::partial_sort_in_place;
+use std::algorithm::ranges::push_heap_in_place;
+use std::algorithm::ranges::pop_heap_in_place;
+use std::algorithm::ranges::sort_heap_in_place;
+use std::algorithm::ranges::nth_element_in_place;
+use std::algorithm::ranges::next_permutation_in_place;
+use std::algorithm::ranges::prev_permutation_in_place;
 use std::algorithm::ranges::to_flat_set;
 use std::algorithm::ranges::to_flat_multiset;
 use std::algorithm::ranges::to_flat_map;
@@ -178,4 +186,52 @@ fn test_ranges_partial_sort_in_place_on_mutable_list() {
     let identity = |value: i32| { return value; };
     partial_sort_in_place_by_projected(&mut values, 3, less, identity);
     verify(values[0] == 1 && values[1] == 2 && values[2] == 3);
+}
+
+#[test]
+fn test_ranges_default_mutable_stable_and_partial_sort() {
+    var values: list<i32> = [4, 1, 3, 2];
+    stable_sort_in_place(&mut values);
+    verify(values[0] == 1 && values[3] == 4);
+
+    var prefix: list<i32> = [6, 1, 5, 2, 4, 3];
+    partial_sort_in_place(&mut prefix, 3);
+    verify(prefix[0] == 1 && prefix[1] == 2 && prefix[2] == 3);
+}
+
+#[test]
+fn test_ranges_default_mutable_push_heap() {
+    var heap: list<i32> = [4, 3, 2, 1];
+    push_heap_in_place(&mut heap);
+    verify(heap[0] == 4);
+}
+
+#[test]
+fn test_ranges_default_mutable_pop_heap() {
+    var heap: list<i32> = [4, 3, 2, 1];
+    pop_heap_in_place(&mut heap);
+    verify(heap[3] == 4);
+}
+
+#[test]
+fn test_ranges_default_mutable_sort_heap() {
+    var heap: list<i32> = [4, 3, 2, 1];
+    sort_heap_in_place(&mut heap);
+    verify(heap[0] == 1 && heap[3] == 4);
+}
+
+#[test]
+fn test_ranges_default_mutable_nth_element() {
+    var selected: list<i32> = [4, 1, 3, 2];
+    verify(nth_element_in_place(&mut selected, 2) == 2);
+    verify(selected[2] == 3);
+}
+
+#[test]
+fn test_ranges_default_mutable_permutation_overloads() {
+    var forward: list<i32> = [1, 2, 3];
+    verify(next_permutation_in_place(&mut forward));
+    verify(forward[0] == 1 && forward[1] == 3 && forward[2] == 2);
+    verify(prev_permutation_in_place(&mut forward));
+    verify(forward[0] == 1 && forward[1] == 2 && forward[2] == 3);
 }

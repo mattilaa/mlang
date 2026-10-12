@@ -6878,7 +6878,7 @@ pub fn nth_element(data: &list<T>, nth: i64) -> list<T> {
 /// Returns `nth` when it is valid and -1 otherwise. Values on either side are
 /// partitioned but not sorted; average work is linear in the input length.
 /// @ingroup algorithm_ranges
-generic<T, Key, Less, Projection>
+generic<T, Less, Projection>
 fn nth_element_in_place_impl(data: &mut list<T>, nth: i64, less: Less,
                              projection: Projection) -> i64 {
     let n: i64 = data.len();
@@ -6887,7 +6887,7 @@ fn nth_element_in_place_impl(data: &mut list<T>, nth: i64, less: Less,
     var last: i64 = n - 1;
     while first <= last {
         let middle: i64 = first + (last - first) / 2;
-        let pivot: Key = projection(data[middle]);
+        let pivot = projection(data[middle]);
         var less_end: i64 = first;
         var current: i64 = first;
         var greater_start: i64 = last;
@@ -6923,8 +6923,9 @@ fn nth_element_in_place_impl(data: &mut list<T>, nth: i64, less: Less,
 /// @ingroup algorithm_ranges
 generic<T>
 pub fn nth_element_in_place(data: &mut list<T>, nth: i64) -> i64 {
-    return nth_element_in_place_impl(data, nth, ranges_default_less,
-                                     ranges_identity);
+    let less = |left: T, right: T| { return left < right; };
+    let identity = |value: T| { return value; };
+    return nth_element_in_place_impl(&mut data, nth, less, identity);
 }
 
 /// @brief Select by a caller-provided ordering in a mutable list in place.
@@ -6932,7 +6933,8 @@ pub fn nth_element_in_place(data: &mut list<T>, nth: i64) -> i64 {
 generic<T, Less>
 pub fn nth_element_in_place_by(data: &mut list<T>, nth: i64,
                                less: Less) -> i64 {
-    return nth_element_in_place_impl(data, nth, less, ranges_identity);
+    let identity = |value: T| { return value; };
+    return nth_element_in_place_impl(&mut data, nth, less, identity);
 }
 
 /// @brief Select by projected key in a mutable list in place.
@@ -6940,8 +6942,8 @@ pub fn nth_element_in_place_by(data: &mut list<T>, nth: i64,
 generic<T, Projection>
 pub fn nth_element_in_place_projected(
     data: &mut list<T>, nth: i64, projection: Projection) -> i64 {
-    return nth_element_in_place_impl(data, nth, ranges_default_less,
-                                     projection);
+    let less = |left: T, right: T| { return left < right; };
+    return nth_element_in_place_impl(&mut data, nth, less, projection);
 }
 
 /// @brief Select by comparator and projection in a mutable list in place.
@@ -6949,7 +6951,7 @@ pub fn nth_element_in_place_projected(
 generic<T, Less, Projection>
 pub fn nth_element_in_place_by_projected(
     data: &mut list<T>, nth: i64, less: Less, projection: Projection) -> i64 {
-    return nth_element_in_place_impl(data, nth, less, projection);
+    return nth_element_in_place_impl(&mut data, nth, less, projection);
 }
 
 /// @brief Comparator-based `nth_element`; invalid indices return an empty list.
@@ -8926,7 +8928,8 @@ pub fn sort_in_place_by_projected(data: &mut list<T>, less: Less,
 /// @ingroup algorithm_ranges
 generic<T, Less>
 pub fn sort_in_place_by(data: &mut list<T>, less: Less) -> i64 {
-    return sort_in_place_by_projected(data, less, ranges_identity);
+    let identity = |value: T| { return value; };
+    return sort_in_place_by_projected(&mut data, less, identity);
 }
 
 /// @brief Sort a mutable list by its projected keys in place.
@@ -8935,8 +8938,8 @@ pub fn sort_in_place_by(data: &mut list<T>, less: Less) -> i64 {
 generic<T, Projection>
 pub fn sort_in_place_projected(data: &mut list<T>,
                                projection: Projection) -> i64 {
-    return sort_in_place_by_projected(data, ranges_default_less,
-                                      projection);
+    let less = |left: T, right: T| { return left < right; };
+    return sort_in_place_by_projected(&mut data, less, projection);
 }
 
 /// @brief Sort a mutable list in ascending order in place.
@@ -8970,7 +8973,8 @@ pub fn make_heap_in_place_by_projected(
 /// @ingroup algorithm_ranges
 generic<T, Less>
 pub fn make_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
-    return make_heap_in_place_by_projected(data, less, ranges_identity);
+    let identity = |value: T| { return value; };
+    return make_heap_in_place_by_projected(&mut data, less, identity);
 }
 
 /// @brief Build a mutable max-heap according to projected keys.
@@ -8978,8 +8982,8 @@ pub fn make_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
 generic<T, Projection>
 pub fn make_heap_in_place_projected(
     data: &mut list<T>, projection: Projection) -> i64 {
-    return make_heap_in_place_by_projected(
-        data, ranges_default_less, projection);
+    let less = |left: T, right: T| { return left < right; };
+    return make_heap_in_place_by_projected(&mut data, less, projection);
 }
 
 /// @brief Build a mutable max-heap in place.
@@ -9020,7 +9024,8 @@ pub fn push_heap_in_place_by_projected(
 /// @ingroup algorithm_ranges
 generic<T, Less>
 pub fn push_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
-    return push_heap_in_place_by_projected(data, less, ranges_identity);
+    let identity = |value: T| { return value; };
+    return push_heap_in_place_by_projected(&mut data, less, identity);
 }
 
 /// @brief Restore projected max-heap order after appending an element.
@@ -9028,16 +9033,17 @@ pub fn push_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
 generic<T, Projection>
 pub fn push_heap_in_place_projected(
     data: &mut list<T>, projection: Projection) -> i64 {
-    return push_heap_in_place_by_projected(
-        data, ranges_default_less, projection);
+    let less = |left: T, right: T| { return left < right; };
+    return push_heap_in_place_by_projected(&mut data, less, projection);
 }
 
 /// @brief Restore max-heap order after appending an element to a mutable heap.
 /// @ingroup algorithm_ranges
 generic<T>
 pub fn push_heap_in_place(data: &mut list<T>) -> i64 {
-    return push_heap_in_place_by_projected(
-        data, ranges_default_less, ranges_identity);
+    let less = |left: T, right: T| { return left < right; };
+    let identity = |value: T| { return value; };
+    return push_heap_in_place_by_projected(&mut data, less, identity);
 }
 
 /// @brief Move a mutable heap's top value to the final slot and restore its prefix.
@@ -9060,7 +9066,8 @@ pub fn pop_heap_in_place_by_projected(
 /// @ingroup algorithm_ranges
 generic<T, Less>
 pub fn pop_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
-    return pop_heap_in_place_by_projected(data, less, ranges_identity);
+    let identity = |value: T| { return value; };
+    return pop_heap_in_place_by_projected(&mut data, less, identity);
 }
 
 /// @brief Pop the top of a projected max-heap into its final slot.
@@ -9068,16 +9075,17 @@ pub fn pop_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
 generic<T, Projection>
 pub fn pop_heap_in_place_projected(
     data: &mut list<T>, projection: Projection) -> i64 {
-    return pop_heap_in_place_by_projected(
-        data, ranges_default_less, projection);
+    let less = |left: T, right: T| { return left < right; };
+    return pop_heap_in_place_by_projected(&mut data, less, projection);
 }
 
 /// @brief Pop the top of a mutable max-heap into its final slot.
 /// @ingroup algorithm_ranges
 generic<T>
 pub fn pop_heap_in_place(data: &mut list<T>) -> i64 {
-    return pop_heap_in_place_by_projected(
-        data, ranges_default_less, ranges_identity);
+    let less = |left: T, right: T| { return left < right; };
+    let identity = |value: T| { return value; };
+    return pop_heap_in_place_by_projected(&mut data, less, identity);
 }
 
 /// @brief Sort a mutable heap in ascending comparator/projection order.
@@ -9104,7 +9112,8 @@ pub fn sort_heap_in_place_by_projected(
 /// @ingroup algorithm_ranges
 generic<T, Less>
 pub fn sort_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
-    return sort_heap_in_place_by_projected(data, less, ranges_identity);
+    let identity = |value: T| { return value; };
+    return sort_heap_in_place_by_projected(&mut data, less, identity);
 }
 
 /// @brief Sort a mutable projected max-heap.
@@ -9112,16 +9121,17 @@ pub fn sort_heap_in_place_by(data: &mut list<T>, less: Less) -> i64 {
 generic<T, Projection>
 pub fn sort_heap_in_place_projected(
     data: &mut list<T>, projection: Projection) -> i64 {
-    return sort_heap_in_place_by_projected(
-        data, ranges_default_less, projection);
+    let less = |left: T, right: T| { return left < right; };
+    return sort_heap_in_place_by_projected(&mut data, less, projection);
 }
 
 /// @brief Sort a mutable max-heap in ascending order in place.
 /// @ingroup algorithm_ranges
 generic<T>
 pub fn sort_heap_in_place(data: &mut list<T>) -> i64 {
-    return sort_heap_in_place_by_projected(
-        data, ranges_default_less, ranges_identity);
+    let less = |left: T, right: T| { return left < right; };
+    let identity = |value: T| { return value; };
+    return sort_heap_in_place_by_projected(&mut data, less, identity);
 }
 
 generic<T, Less, Projection>
@@ -9140,15 +9150,17 @@ fn ranges_stable_sort_in_place_by_projected(
 generic<T, Less, Projection>
 pub fn stable_sort_in_place_by_projected(
     data: &mut list<T>, less: Less, projection: Projection) -> i64 {
-    return ranges_stable_sort_in_place_by_projected(data, less, projection);
+    return ranges_stable_sort_in_place_by_projected(
+        &mut data, less, projection);
 }
 
 /// @brief Stably sort a mutable list by a caller-provided strict comparator.
 /// @ingroup algorithm_ranges
 generic<T, Less>
 pub fn stable_sort_in_place_by(data: &mut list<T>, less: Less) -> i64 {
+    let identity = |value: T| { return value; };
     return ranges_stable_sort_in_place_by_projected(
-        data, less, ranges_identity);
+        &mut data, less, identity);
 }
 
 /// @brief Stably sort a mutable list by projected keys.
@@ -9156,16 +9168,19 @@ pub fn stable_sort_in_place_by(data: &mut list<T>, less: Less) -> i64 {
 generic<T, Projection>
 pub fn stable_sort_in_place_projected(
     data: &mut list<T>, projection: Projection) -> i64 {
+    let less = |left: T, right: T| { return left < right; };
     return ranges_stable_sort_in_place_by_projected(
-        data, ranges_default_less, projection);
+        &mut data, less, projection);
 }
 
 /// @brief Stably sort a mutable list in ascending order.
 /// @ingroup algorithm_ranges
 generic<T>
 pub fn stable_sort_in_place(data: &mut list<T>) -> i64 {
+    let less = |left: T, right: T| { return left < right; };
+    let identity = |value: T| { return value; };
     return ranges_stable_sort_in_place_by_projected(
-        data, ranges_default_less, ranges_identity);
+        &mut data, less, identity);
 }
 
 /// @brief Sort only the smallest requested prefix of a mutable list.
@@ -9174,8 +9189,10 @@ pub fn stable_sort_in_place(data: &mut list<T>) -> i64 {
 /// @ingroup algorithm_ranges
 generic<T>
 pub fn partial_sort_in_place(data: &mut list<T>, count: i64) -> i64 {
+    let less = |left: T, right: T| { return left < right; };
+    let identity = |value: T| { return value; };
     return ranges_partial_sort_in_place_by_projected(
-        &mut data, count, ranges_default_less, ranges_identity);
+        &mut data, count, less, identity);
 }
 
 /// @brief Partially sort a mutable list using the strict ordering `less`.
@@ -9183,8 +9200,9 @@ pub fn partial_sort_in_place(data: &mut list<T>, count: i64) -> i64 {
 generic<T, Less>
 pub fn partial_sort_in_place_by(data: &mut list<T>, count: i64,
                                 less: Less) -> i64 {
+    let identity = |value: T| { return value; };
     return ranges_partial_sort_in_place_by_projected(
-        &mut data, count, less, ranges_identity);
+        &mut data, count, less, identity);
 }
 
 /// @brief Partially sort a mutable list by projected keys.
@@ -9192,8 +9210,9 @@ pub fn partial_sort_in_place_by(data: &mut list<T>, count: i64,
 generic<T, Projection>
 pub fn partial_sort_in_place_projected(
     data: &mut list<T>, count: i64, projection: Projection) -> i64 {
+    let less = |left: T, right: T| { return left < right; };
     return ranges_partial_sort_in_place_by_projected(
-        &mut data, count, ranges_default_less, projection);
+        &mut data, count, less, projection);
 }
 
 /// @brief Partially sort a mutable list by comparator over projected keys.
@@ -9529,7 +9548,7 @@ fn ranges_next_permutation_in_place_impl(
         pivot = pivot - 1;
     }
     if pivot < 0 {
-        ranges_reverse_subrange_in_place(data, 0, n);
+        ranges_reverse_subrange_in_place(&mut data, 0, n);
         return false;
     }
     var successor: i64 = n - 1;
@@ -9539,7 +9558,7 @@ fn ranges_next_permutation_in_place_impl(
     let temporary: T = data[pivot];
     data[pivot] = data[successor];
     data[successor] = temporary;
-    ranges_reverse_subrange_in_place(data, pivot + 1, n);
+    ranges_reverse_subrange_in_place(&mut data, pivot + 1, n);
     return true;
 }
 
@@ -9553,7 +9572,7 @@ fn ranges_prev_permutation_in_place_impl(
         pivot = pivot - 1;
     }
     if pivot < 0 {
-        ranges_reverse_subrange_in_place(data, 0, n);
+        ranges_reverse_subrange_in_place(&mut data, 0, n);
         return false;
     }
     var predecessor: i64 = n - 1;
@@ -9563,7 +9582,7 @@ fn ranges_prev_permutation_in_place_impl(
     let temporary: T = data[pivot];
     data[pivot] = data[predecessor];
     data[predecessor] = temporary;
-    ranges_reverse_subrange_in_place(data, pivot + 1, n);
+    ranges_reverse_subrange_in_place(&mut data, pivot + 1, n);
     return true;
 }
 
@@ -9572,16 +9591,19 @@ fn ranges_prev_permutation_in_place_impl(
 /// @ingroup algorithm_ranges
 generic<T>
 pub fn next_permutation_in_place(data: &mut list<T>) -> bool {
+    let less = |left: T, right: T| { return left < right; };
+    let identity = |value: T| { return value; };
     return ranges_next_permutation_in_place_impl(
-        data, ranges_default_less, ranges_identity);
+        &mut data, less, identity);
 }
 
 /// @brief Advance a mutable permutation under comparator `less`.
 /// @ingroup algorithm_ranges
 generic<T, Less>
 pub fn next_permutation_in_place_by(data: &mut list<T>, less: Less) -> bool {
+    let identity = |value: T| { return value; };
     return ranges_next_permutation_in_place_impl(
-        data, less, ranges_identity);
+        &mut data, less, identity);
 }
 
 /// @brief Advance a mutable permutation by projected keys.
@@ -9589,8 +9611,9 @@ pub fn next_permutation_in_place_by(data: &mut list<T>, less: Less) -> bool {
 generic<T, Projection>
 pub fn next_permutation_in_place_projected(
     data: &mut list<T>, projection: Projection) -> bool {
+    let less = |left: T, right: T| { return left < right; };
     return ranges_next_permutation_in_place_impl(
-        data, ranges_default_less, projection);
+        &mut data, less, projection);
 }
 
 /// @brief Advance by comparator ordering over projected keys.
@@ -9598,7 +9621,7 @@ pub fn next_permutation_in_place_projected(
 generic<T, Less, Projection>
 pub fn next_permutation_in_place_by_projected(
     data: &mut list<T>, less: Less, projection: Projection) -> bool {
-    return ranges_next_permutation_in_place_impl(data, less, projection);
+    return ranges_next_permutation_in_place_impl(&mut data, less, projection);
 }
 
 /// @brief Retreat a mutable list to its previous lexicographic permutation.
@@ -9606,16 +9629,19 @@ pub fn next_permutation_in_place_by_projected(
 /// @ingroup algorithm_ranges
 generic<T>
 pub fn prev_permutation_in_place(data: &mut list<T>) -> bool {
+    let less = |left: T, right: T| { return left < right; };
+    let identity = |value: T| { return value; };
     return ranges_prev_permutation_in_place_impl(
-        data, ranges_default_less, ranges_identity);
+        &mut data, less, identity);
 }
 
 /// @brief Retreat a mutable permutation under comparator `less`.
 /// @ingroup algorithm_ranges
 generic<T, Less>
 pub fn prev_permutation_in_place_by(data: &mut list<T>, less: Less) -> bool {
+    let identity = |value: T| { return value; };
     return ranges_prev_permutation_in_place_impl(
-        data, less, ranges_identity);
+        &mut data, less, identity);
 }
 
 /// @brief Retreat a mutable permutation by projected keys.
@@ -9623,8 +9649,9 @@ pub fn prev_permutation_in_place_by(data: &mut list<T>, less: Less) -> bool {
 generic<T, Projection>
 pub fn prev_permutation_in_place_projected(
     data: &mut list<T>, projection: Projection) -> bool {
+    let less = |left: T, right: T| { return left < right; };
     return ranges_prev_permutation_in_place_impl(
-        data, ranges_default_less, projection);
+        &mut data, less, projection);
 }
 
 /// @brief Retreat by comparator ordering over projected keys.
@@ -9632,7 +9659,7 @@ pub fn prev_permutation_in_place_projected(
 generic<T, Less, Projection>
 pub fn prev_permutation_in_place_by_projected(
     data: &mut list<T>, less: Less, projection: Projection) -> bool {
-    return ranges_prev_permutation_in_place_impl(data, less, projection);
+    return ranges_prev_permutation_in_place_impl(&mut data, less, projection);
 }
 
 /// @brief Return a reversed copy of a list.
