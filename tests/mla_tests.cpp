@@ -3162,6 +3162,30 @@ TEST_F(MLATest, TernaryTypeMismatch)
               std::string::npos);
 }
 
+TEST_F(MLATest, ListOfTuplesUsesDeclaredFieldTypes)
+{
+    std::string code = R"(
+        generic<K, V>
+        fn second_value(values: &list<tuple<K, V>>) -> V {
+            let entry: tuple<K, V> = values[1];
+            return entry.1;
+        }
+
+        fn main() -> i32 {
+            let pairs: list<tuple<i32, i32>> = [(1, 10), (2, 20)];
+            let first: tuple<i32, i32> = pairs[0];
+            if first.0 != 1 || first.1 != 10 { return 1; }
+            if second_value(pairs) != 20 { return 2; }
+
+            let mixed: list<tuple<i32, f64>> = [(3, 2.5), (4, 7.5)];
+            let last: tuple<i32, f64> = mixed[1];
+            if last.0 != 4 || last.1 != 7.5 { return 3; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, TernaryListLiteralsUseDeclaredElementType)
 {
     std::string code = R"(

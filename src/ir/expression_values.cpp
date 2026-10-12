@@ -408,7 +408,74 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
         // i32)
         if(val->getType() != elementType)
         {
-            if(val->getType()->isIntegerTy() && elementType->isIntegerTy())
+            auto* declaredTuple =
+                dynamic_cast<TupleTypeNode*>(declaredElemTypeNode);
+            auto* sourceTuple = llvm::dyn_cast<llvm::StructType>(val->getType());
+            auto* targetTuple = llvm::dyn_cast<llvm::StructType>(elementType);
+            if(declaredTuple && sourceTuple && targetTuple &&
+               sourceTuple->getNumElements() == targetTuple->getNumElements() &&
+               declaredTuple->elementTypes &&
+               declaredTuple->elementTypes->types.size() ==
+                   targetTuple->getNumElements())
+            {
+                llvm::Value* convertedTuple =
+                    llvm::UndefValue::get(targetTuple);
+                for(unsigned field = 0;
+                    field < targetTuple->getNumElements(); ++field)
+                {
+                    llvm::Value* fieldValue = builder.CreateExtractValue(
+                        val, {field}, "list.tuple.field");
+                    llvm::Type* targetFieldType =
+                        targetTuple->getElementType(field);
+                    if(fieldValue->getType() != targetFieldType)
+                    {
+                        llvm::Type* sourceFieldType = fieldValue->getType();
+                        if(sourceFieldType->isIntegerTy() &&
+                           targetFieldType->isIntegerTy())
+                        {
+                            unsigned sourceBits =
+                                sourceFieldType->getIntegerBitWidth();
+                            unsigned targetBits =
+                                targetFieldType->getIntegerBitWidth();
+                            if(sourceBits > targetBits)
+                                fieldValue = builder.CreateTrunc(
+                                    fieldValue, targetFieldType,
+                                    "list.tuple.trunc");
+                            else
+                                fieldValue = builder.CreateSExt(
+                                    fieldValue, targetFieldType,
+                                    "list.tuple.ext");
+                        }
+                        else if(sourceFieldType->isFloatingPointTy() &&
+                                targetFieldType->isFloatingPointTy())
+                            fieldValue = builder.CreateFPCast(
+                                fieldValue, targetFieldType,
+                                "list.tuple.fpcast");
+                        else if(sourceFieldType->isIntegerTy() &&
+                                targetFieldType->isFloatingPointTy())
+                            fieldValue = builder.CreateSIToFP(
+                                fieldValue, targetFieldType,
+                                "list.tuple.sitofp");
+                        else if(sourceFieldType->isFloatingPointTy() &&
+                                targetFieldType->isIntegerTy())
+                            fieldValue = builder.CreateFPToSI(
+                                fieldValue, targetFieldType,
+                                "list.tuple.fptosi");
+                        else
+                        {
+                            reportError(node->line,
+                                        "list tuple element field type does "
+                                        "not match its declared type");
+                            return nullptr;
+                        }
+                    }
+                    convertedTuple = builder.CreateInsertValue(
+                        convertedTuple, fieldValue, {field},
+                        "list.tuple.converted");
+                }
+                val = convertedTuple;
+            }
+            else if(val->getType()->isIntegerTy() && elementType->isIntegerTy())
             {
                 unsigned valBits = val->getType()->getIntegerBitWidth();
                 unsigned tgtBits = elementType->getIntegerBitWidth();
