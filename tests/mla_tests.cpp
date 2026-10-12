@@ -3201,6 +3201,48 @@ TEST_F(MLATest, ListOfTuplesUsesDeclaredFieldTypes)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, RangesMaterializeBuiltinMapsFromGenericPairs)
+{
+    std::string code = R"(
+        mod std::algorithm::ranges;
+        use std::algorithm::ranges::to_map;
+        use std::algorithm::ranges::to_map_projected;
+
+        struct RangeMapEntry {
+            var key: i32;
+            var value: i32;
+        };
+
+        fn main() -> i32 {
+            let pairs: list<tuple<i32, i32>> =
+                [(3, 30), (1, 10), (3, 33), (2, 20)];
+            let converted: map<i32, i32> = to_map(pairs);
+            if converted.len() != 3 || converted[1] != 10 ||
+               converted[2] != 20 || converted[3] != 33 { return 1; }
+
+            let records: list<RangeMapEntry> = [
+                RangeMapEntry { key: 3, value: 30 },
+                RangeMapEntry { key: 1, value: 10 },
+                RangeMapEntry { key: 3, value: 33 },
+                RangeMapEntry { key: 2, value: 20 }
+            ];
+            let project = |item: RangeMapEntry| {
+                return (item.key, item.value);
+            };
+            let projected: map<i32, i32> =
+                to_map_projected(records, project);
+            if projected.len() != 3 || projected[1] != 10 ||
+               projected[2] != 20 || projected[3] != 33 { return 2; }
+
+            let empty: list<tuple<i32, i32>> = [];
+            let empty_map: map<i32, i32> = to_map(empty);
+            if empty_map.len() != 0 { return 3; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, TernaryListLiteralsUseDeclaredElementType)
 {
     std::string code = R"(

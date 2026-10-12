@@ -512,7 +512,9 @@ fn example() {
   evaluating the projection once per source element.
 - `to_map(pairs)` materializes `(key, value)` tuples into the built-in
   `map<K, V>`. Map iteration order is unspecified; the last pair in source
-  order supplies the value for duplicate keys.
+  order supplies the value for duplicate keys. `to_map_projected` evaluates
+  each projection once. These built-in-map adapters scan the seen keys while
+  materializing, so their worst-case time is quadratic in the input length.
 - `to_map_projected(data, projection)` materializes projected pairs into the
   built-in map with the same last-source-value-wins behavior.
 - `swap_ranges(left, right)` returns two copied lists with corresponding

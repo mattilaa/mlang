@@ -390,6 +390,58 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                     return cloneTypeNode(found->second);
                 return inferExpressionTypeNode(expr, functionTemplate->line);
             }
+            if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
+            {
+                std::string objectName = field->structName;
+                if(auto* object =
+                       dynamic_cast<IdentifierNode*>(field->object))
+                    objectName = object->name;
+                if(!objectName.empty())
+                {
+                    auto parameter = parametersByName.find(objectName);
+                    if(parameter != parametersByName.end())
+                    {
+                        TypeNode* objectType = parameter->second;
+                        if(auto* reference =
+                               dynamic_cast<ReferenceTypeNode*>(objectType))
+                            objectType = reference->elementType;
+                        std::string structName;
+                        if(auto* structRef =
+                               dynamic_cast<StructTypeRefNode*>(objectType))
+                        {
+                            structName =
+                                resolveVisibleStructName(structRef->structName);
+                            if(structName.empty())
+                                structName = structRef->structName;
+                        }
+                        else if(auto* genericStruct =
+                                    dynamic_cast<GenericStructTypeRefNode*>(
+                                        objectType))
+                            structName = getOrCreateMonomorphizedStruct(
+                                genericStruct->structName,
+                                genericStruct->typeArgs);
+                        auto members = structMembers.find(structName);
+                        if(members != structMembers.end())
+                            for(const auto& member : members->second)
+                                if(member.first == field->fieldName)
+                                    return cloneTypeNode(member.second);
+                    }
+                }
+                return inferExpressionTypeNode(expr, functionTemplate->line);
+            }
+            if(auto* tuple = dynamic_cast<TupleLiteralNode*>(expr))
+            {
+                auto* elementTypes = new TypeListNode();
+                if(tuple->elements)
+                    for(auto* element : tuple->elements->elements)
+                    {
+                        TypeNode* elementType = inferClosureExpr(element);
+                        if(!elementType)
+                            return nullptr;
+                        elementTypes->addType(elementType);
+                    }
+                return new TupleTypeNode(elementTypes);
+            }
             if(auto* binary = dynamic_cast<BinaryOpNode*>(expr))
             {
                 switch(binary->op)
@@ -568,8 +620,22 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
             continue;
         TypeNode* closureResult = inferClosureResult(closure);
         if(closureResult)
-            bindUnboundReturnType(functionTemplate->returnType,
-                                  closureResult);
+        {
+            auto* mapReturn =
+                dynamic_cast<MapTypeNode*>(functionTemplate->returnType);
+            auto* tupleResult = dynamic_cast<TupleTypeNode*>(closureResult);
+            if(mapReturn && tupleResult && tupleResult->elementTypes &&
+               tupleResult->elementTypes->types.size() == 2)
+            {
+                bindType(mapReturn->keyType,
+                         tupleResult->elementTypes->types[0]);
+                bindType(mapReturn->valueType,
+                         tupleResult->elementTypes->types[1]);
+            }
+            else
+                bindUnboundReturnType(functionTemplate->returnType,
+                                      closureResult);
+        }
     }
     return true;
 }

@@ -1,10 +1,10 @@
 {
-  "tests": 300,
+  "tests": 303,
   "name": "AllTests",
   "testsuites": [
     {
       "name": "MLATest",
-      "tests": 300,
+      "tests": 303,
       "testsuite": [
         {
           "name": "EmptyMain",
@@ -777,734 +777,749 @@
           "line": 2831
         },
         {
-          "name": "LegacyBuiltinTypeAliasesAreRejected",
+          "name": "IntegerWidthCasts",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
           "line": 2846
         },
         {
+          "name": "LegacyBuiltinTypeAliasesAreRejected",
+          "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
+          "line": 2861
+        },
+        {
           "name": "SingleLineComment",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 2871
+          "line": 2886
         },
         {
           "name": "MultiLineComment",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 2883
+          "line": 2898
         },
         {
           "name": "NegativeNumbers",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 2900
+          "line": 2915
         },
         {
           "name": "ZeroValue",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 2912
+          "line": 2927
         },
         {
           "name": "TypedVarStructWithoutInitializerIsZeroInitialized",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 2924
+          "line": 2939
         },
         {
           "name": "TypedVarScalarBraceZeroInit",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 2946
+          "line": 2961
         },
         {
           "name": "TypedVarDerivedStructBraceZeroInit",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 2957
+          "line": 2972
         },
         {
           "name": "TypedVarGenericStructBraceZeroInit",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 2981
+          "line": 2996
         },
         {
           "name": "GenericStructGetMethodIsNotTreatedAsMultiarrayGet",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3002
+          "line": 3017
         },
         {
           "name": "TypedVarScalarImplicitZeroInitWarns",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3023
+          "line": 3038
         },
         {
           "name": "TypedVarScalarBraceZeroInitDoesNotWarn",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3040
+          "line": 3055
         },
         {
           "name": "DeriveJsonRoundTripsDerivedStructAndPropertyMetadata",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3056
+          "line": 3071
         },
         {
           "name": "DeriveJsonMissingFieldReturnsErr",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3107
+          "line": 3122
         },
         {
           "name": "LargeExpression",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3125
+          "line": 3140
         },
         {
           "name": "TernaryReturn",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3137
+          "line": 3152
         },
         {
           "name": "TernaryTypeMismatch",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3148
+          "line": 3163
+        },
+        {
+          "name": "ListOfTuplesUsesDeclaredFieldTypes",
+          "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
+          "line": 3180
+        },
+        {
+          "name": "RangesMaterializeBuiltinMapsFromGenericPairs",
+          "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
+          "line": 3204
         },
         {
           "name": "TernaryListLiteralsUseDeclaredElementType",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3165
+          "line": 3246
         },
         {
           "name": "TernaryPrecedence",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3205
+          "line": 3286
         },
         {
           "name": "TernaryArithmeticInConditionAndArm",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3216
+          "line": 3297
         },
         {
           "name": "TernaryWithFunctionCallCondition",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3235
+          "line": 3316
         },
         {
           "name": "TernaryMultiline",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3248
+          "line": 3329
         },
         {
           "name": "ResultIsOkAndUnwrap",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3262
+          "line": 3343
         },
         {
           "name": "ResultUnwrapWarns",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3279
+          "line": 3360
         },
         {
           "name": "UppercaseSumTypesAreNotBuiltins",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3295
+          "line": 3376
         },
         {
           "name": "LegacyRuntimeHandleTypesAreNotBuiltins",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3311
+          "line": 3392
         },
         {
           "name": "FloatModuloByZeroReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3326
+          "line": 3407
         },
         {
           "name": "ReturnInferenceMixedReturnFormsReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3341
+          "line": 3422
         },
         {
           "name": "ReturnInferenceIncompatibleTypesReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3365
+          "line": 3446
         },
         {
           "name": "UpdateExpressionStructWithoutTraitReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3388
+          "line": 3469
         },
         {
           "name": "BinaryAddStructWithoutAddTraitReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3405
+          "line": 3486
         },
         {
           "name": "UnaryNegStructWithoutNegTraitReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3423
+          "line": 3504
         },
         {
           "name": "IndexExpressionWithPostfixUpdateReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3440
+          "line": 3521
         },
         {
           "name": "SpaceshipStructWithoutCompareTraitReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3458
+          "line": 3539
         },
         {
           "name": "OwnershipUseAfterMoveReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3476
+          "line": 3557
         },
         {
           "name": "OwnershipCopyTypeRemainsUsableAfterAssignment",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3500
+          "line": 3581
         },
         {
           "name": "OwnershipAddressOfIsNonConsumingRead",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3516
+          "line": 3597
         },
         {
           "name": "OwnershipIfBranchMoveMakesValueUnavailableAfterIf",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3537
+          "line": 3618
         },
         {
           "name": "OwnershipMatchArmMoveMakesValueUnavailableAfterMatch",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3563
+          "line": 3644
         },
         {
           "name": "OwnershipTernaryBranchMovesArePathSensitiveDuringEvaluation",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3591
+          "line": 3672
         },
         {
           "name": "OwnershipTernaryMoveStillConsumesAfterMerge",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3608
+          "line": 3689
         },
         {
           "name": "OwnershipCannotMoveWhileBorrowedByPointer",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3637
+          "line": 3718
         },
         {
           "name": "OwnershipStringDoubleFreeReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3659
+          "line": 3740
         },
         {
           "name": "OwnershipStringUseAfterFreeReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3676
+          "line": 3757
         },
         {
           "name": "OwnershipStringLiteralFreeReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3693
+          "line": 3774
         },
         {
           "name": "OwnershipFreeAliasDoubleFreeReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3708
+          "line": 3789
         },
         {
           "name": "OwnershipScopeExitFreeMethodConsumesValue",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3729
+          "line": 3810
         },
         {
           "name": "OwnershipUseOutsideBlockReportsUnknownVariable",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3757
+          "line": 3838
         },
         {
           "name": "OwnershipHandleFreeDoubleFreeReportsError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3776
+          "line": 3857
         },
         {
           "name": "OwnershipPointerReassignReleasesPreviousBorrow",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3796
+          "line": 3877
         },
         {
           "name": "OwnershipIfReturnBranchBorrowDoesNotLeak",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3818
+          "line": 3899
         },
         {
           "name": "OwnershipCannotCreateSecondActiveBorrow",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3845
+          "line": 3926
         },
         {
           "name": "OwnershipRebindingSamePointerBorrowAllowed",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3866
+          "line": 3947
         },
         {
           "name": "OwnershipCannotAliasBorrowFromPointerVariable",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3883
+          "line": 3964
         },
         {
           "name": "OwnershipBorrowEndsWhenPointerGoesOutOfScope",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3906
+          "line": 3987
         },
         {
           "name": "OwnershipOuterPointerBorrowRestoredAfterShadowedPointerScope",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3925
+          "line": 4006
         },
         {
           "name": "OwnershipLoopLocalPointerBorrowDoesNotLeakAfterLoop",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3951
+          "line": 4032
         },
         {
           "name": "OwnershipEmptyRangeLoopDoesNotMoveOuterValue",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3970
+          "line": 4051
         },
         {
           "name": "OwnershipNonEmptyRangeLoopStillMovesOuterValue",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 3992
+          "line": 4073
         },
         {
           "name": "OwnershipOuterPointerBorrowSurvivesLoopLocalPointer",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4018
+          "line": 4099
         },
         {
           "name": "OwnershipCannotReturnPointerBorrowingLocal",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4044
+          "line": 4125
         },
         {
           "name": "OwnershipCanReturnPointerBorrowingGlobal",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4065
+          "line": 4146
         },
         {
           "name": "OwnershipCannotStoreLocalBorrowInGlobalPointer",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4084
+          "line": 4165
         },
         {
           "name": "OwnershipCanStoreGlobalBorrowInGlobalPointer",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4102
+          "line": 4183
         },
         {
           "name": "OwnershipCannotBorrowInnerLocalIntoOuterPointer",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4116
+          "line": 4197
         },
         {
           "name": "OwnershipCanBorrowIntoPointerWhenLifetimesMatch",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4135
+          "line": 4216
         },
         {
           "name": "OwnershipCannotBorrowSameOwnerTwiceInSingleCall",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4149
+          "line": 4230
         },
         {
           "name": "OwnershipCannotBorrowCallArgWhenOwnerAlreadyBorrowed",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4172
+          "line": 4253
         },
         {
           "name": "OwnershipCanBorrowDisjointFieldsInSingleCall",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4196
+          "line": 4277
         },
         {
           "name": "OwnershipCannotBorrowWholeAndFieldInSingleCall",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4218
+          "line": 4299
         },
         {
           "name": "OwnershipCannotBorrowNestedOverlappingFieldsInSingleCall",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4242
+          "line": 4323
         },
         {
           "name": "OwnershipCanBorrowNestedDisjointFieldsInSingleCall",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4269
+          "line": 4350
         },
         {
           "name": "OwnershipCannotCallMethodWhileObjectBorrowed",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4294
+          "line": 4375
         },
         {
           "name": "OwnershipCannotBorrowMethodReceiverAndFieldArgSameObject",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4333
+          "line": 4414
         },
         {
           "name": "OwnershipCanBorrowMethodReceiverAndArgFromDifferentObject",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4361
+          "line": 4442
         },
         {
           "name": "OwnershipCannotMixBorrowAndMoveSameCall",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4386
+          "line": 4467
         },
         {
           "name": "OwnershipCannotMixMoveAndBorrowSameCall",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4410
+          "line": 4491
         },
         {
           "name": "OwnershipCannotMoveMethodReceiverAndPassAsArg",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4434
+          "line": 4515
         },
         {
           "name": "OwnershipCannotMixBorrowPointerVarAndMoveSameCall",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4460
+          "line": 4541
         },
         {
           "name": "OwnershipCannotBorrowPointerVarAndAddressSameOwnerInCall",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4485
+          "line": 4566
         },
         {
           "name": "OwnershipCannotBorrowMutInCallWhenSharedBorrowActive",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4510
+          "line": 4591
         },
         {
           "name": "OwnershipCannotAssignFieldWhileOwnerBorrowed",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4535
+          "line": 4616
         },
         {
           "name": "OwnershipCanAssignFieldAfterBorrowScopeEnds",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4556
+          "line": 4637
         },
         {
           "name": "OwnershipCannotReturnPointerBorrowingLocalField",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4575
+          "line": 4656
         },
         {
           "name": "OwnershipCannotStorePointerBorrowingLocalFieldInGlobalPointer",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4600
+          "line": 4681
         },
         {
           "name": "EnumWithI64BackingCompilesAndMatches",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4625
+          "line": 4706
         },
         {
           "name": "EnumWithU8BackingCompiles",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4652
+          "line": 4733
         },
         {
           "name": "EnumExplicitValueOverflowFails",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4677
+          "line": 4758
         },
         {
           "name": "EnumImplicitValueOverflowFails",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4695
+          "line": 4776
         },
         {
           "name": "EnumCanReferenceCompatibleOtherEnumValue",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4715
+          "line": 4796
         },
         {
           "name": "EnumReferenceValueMustFitTargetBackingType",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4760
+          "line": 4841
         },
         {
           "name": "EnumReferenceSignedToUnsignedIncompatibilityHasClearError",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4785
+          "line": 4866
         },
         {
           "name": "EnumPrintsAsStringInPrintln",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4810
+          "line": 4891
         },
         {
           "name": "EnumPrintUnknownValueFallback",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4828
+          "line": 4909
         },
         {
           "name": "EnumForLoopIteratesInDeclarationOrder",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4846
+          "line": 4927
         },
         {
           "name": "EnumBackingValidExampleCompilesAndRuns",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4866
+          "line": 4947
         },
         {
           "name": "EnumBackingExplicitOverflowExampleFails",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4876
+          "line": 4957
         },
         {
           "name": "EnumBackingImplicitOverflowExampleFails",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4886
+          "line": 4967
         },
         {
           "name": "EnumPrintExampleCompilesAndRuns",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4897
+          "line": 4978
         },
         {
           "name": "FizzBuzz",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4919
+          "line": 5000
         },
         {
           "name": "SumOfSquares",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4949
+          "line": 5030
         },
         {
           "name": "IsPrime",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4968
+          "line": 5049
         },
         {
           "name": "AssertRuntimePasses",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 4998
+          "line": 5079
         },
         {
           "name": "AssertRuntimeFailurePrintsMessage",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5010
+          "line": 5091
         },
         {
           "name": "StaticAssertCompileTimeTruePasses",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5024
+          "line": 5105
         },
         {
           "name": "StaticAssertCompileTimeFalseFails",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5036
+          "line": 5117
         },
         {
           "name": "StaticAssertNonConstExpressionFails",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5051
+          "line": 5132
         },
         {
           "name": "CexprExpressionInitializesRuntimeValue",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5068
+          "line": 5149
         },
         {
           "name": "CexprFunctionTwiceI32EvaluatesAtCompileTime",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5083
+          "line": 5164
         },
         {
           "name": "CexprFunctionEvaluatesFloatArithmeticAtCompileTime",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5099
+          "line": 5180
         },
         {
           "name": "CexprDeclarationProvidesCompileTimeValue",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5120
+          "line": 5201
         },
         {
           "name": "LocalCexprDeclarationProvidesCompileTimeValue",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5137
+          "line": 5218
         },
         {
           "name": "CexprDeclarationRejectsRuntimeInitializer",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5150
+          "line": 5231
         },
         {
           "name": "CexprIfSelectsCompileTimeBranch",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5167
+          "line": 5248
         },
         {
           "name": "CexprIfSupportsElseBranch",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5184
+          "line": 5265
         },
         {
           "name": "CexprElseIfSelectsCompileTimeBranchAndIgnoresOtherReturnTypes",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5200
+          "line": 5281
         },
         {
           "name": "GenericMutableReferenceInfersElementType",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5220
+          "line": 5301
         },
         {
           "name": "GenericCexprFunctionDispatchesOnTypeId",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5238
+          "line": 5319
         },
         {
           "name": "GenericCexprFunctionDispatchesOnStructTypeId",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5285
+          "line": 5366
         },
         {
           "name": "CexprStructValueReportsUnsupportedValueEvaluation",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5318
+          "line": 5399
         },
         {
           "name": "CexprIfRejectsRuntimeCondition",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5339
+          "line": 5420
         },
         {
           "name": "StaticAssertAcceptsCexprFunctionCall",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5358
+          "line": 5439
         },
         {
           "name": "StaticAssertAcceptsPostfixCexprFunctionForm",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5374
+          "line": 5455
         },
         {
           "name": "CexprRejectsNonCexprFunctionCall",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5390
+          "line": 5471
         },
         {
           "name": "CexprReportsRuntimeVariableName",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5410
+          "line": 5491
         },
         {
           "name": "CexprReportsUnsupportedExpressionKind",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5427
+          "line": 5508
         },
         {
           "name": "RawPointerDereferenceOutsideUnsafeFails",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5443
+          "line": 5524
         },
         {
           "name": "RawPointerDereferenceInsideUnsafeCompiles",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5461
+          "line": 5542
         },
         {
           "name": "KnownNullPointerDereferenceFailsAtCompileTime",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5480
+          "line": 5561
         },
         {
           "name": "UnsafeRawPointerDereferenceChecksNullAtRuntime",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5497
+          "line": 5578
         },
         {
           "name": "BorrowedPointerDereferenceOutsideUnsafeStillAllowed",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5515
+          "line": 5596
         },
         {
           "name": "FreeObjsReleasesHeterogeneousStructs",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5529
+          "line": 5610
         },
         {
           "name": "VariadicGenericCommaFoldPushesArgumentsInOrder",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5556
+          "line": 5637
         },
         {
           "name": "VariadicGenericConstructibilityFoldRejectsBadArgument",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5578
+          "line": 5659
         },
         {
           "name": "VariadicGenericCommaFoldSupportsHeterogeneousReceivers",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5599
+          "line": 5680
         },
         {
           "name": "FreeObjsRejectsObjectWithoutReleaseMethod",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5631
+          "line": 5712
         },
         {
           "name": "FreeObjsRejectsEmptyPack",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5659
+          "line": 5740
         },
         {
           "name": "SwitchCasesCanReturnFromFunction",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5674
+          "line": 5755
         },
         {
           "name": "NamespaceBlockQualifiesDeclarationsAndLocalTypes",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5693
+          "line": 5774
         },
         {
           "name": "NamespaceAliasShortensQualifiedPaths",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5722
+          "line": 5803
         },
         {
           "name": "DiagnosticsInImportedModuleNameModuleFile",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5771
+          "line": 5852
         },
         {
           "name": "DebugInfoDescribesFunctionsLinesAndVariables",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5840
+          "line": 5921
         },
         {
           "name": "DebugInfoOnlyWithFlag",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5871
+          "line": 5952
         },
         {
           "name": "DebugInfoDescribesComplexContainerAndFieldTypes",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5883
+          "line": 5964
         },
         {
           "name": "DebugInfoProgramRunsTheSame",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5915
+          "line": 5996
         },
         {
           "name": "DebugInfoNamesImportedModuleFile",
           "file": "\/Users\/mattilaa\/projects\/mlang\/tests\/mla_tests.cpp",
-          "line": 5922
+          "line": 6003
         }
       ]
     }

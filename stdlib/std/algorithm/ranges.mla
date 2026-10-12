@@ -1362,7 +1362,7 @@ generic<T, Generator>
 pub fn generate_n_in_place(data: &mut list<T>, count: i64,
                            generator: Generator) -> i64 {
     let n: i64 = data.len();
-    let limit: i64 = if count < n { count } else { n };
+    let limit: i64 = count < n ? count : n;
     if limit <= 0 { return 0; }
     for i in 0..limit { data[i] = generator(); }
     return limit;
@@ -1869,11 +1869,25 @@ pub fn to_flat_multimap_projected(data: &list<T>, projection: Projection)
 /// @ingroup algorithm_ranges
 generic<K, V>
 pub fn to_map(data: &list<tuple<K, V>>) -> map<K, V> {
-    var converted: map<K, V> = {};
+    var converted: map<K, V> {};
+    var seen: list<K> = [];
     let n: i64 = data.len();
-    for i in 0..n {
+    var i: i64 = n;
+    while i > 0 {
+        i = i - 1;
         let entry: tuple<K, V> = data[i];
-        converted[entry.0] = entry.1;
+        var already_seen: bool = false;
+        for j in 0..seen.len() {
+            if seen[j] == entry.0 {
+                already_seen = true;
+                break;
+            }
+        }
+        if !already_seen {
+            let singleton: map<K, V> = {entry.0: entry.1};
+            converted.extend(singleton);
+            seen.push(entry.0);
+        }
     }
     return converted;
 }
@@ -1883,11 +1897,25 @@ pub fn to_map(data: &list<tuple<K, V>>) -> map<K, V> {
 /// @ingroup algorithm_ranges
 generic<T, K, V, Projection>
 pub fn to_map_projected(data: &list<T>, projection: Projection) -> map<K, V> {
-    var converted: map<K, V> = {};
+    var converted: map<K, V> {};
+    var seen: list<K> = [];
     let n: i64 = data.len();
-    for i in 0..n {
+    var i: i64 = n;
+    while i > 0 {
+        i = i - 1;
         let entry: tuple<K, V> = projection(data[i]);
-        converted[entry.0] = entry.1;
+        var already_seen: bool = false;
+        for j in 0..seen.len() {
+            if seen[j] == entry.0 {
+                already_seen = true;
+                break;
+            }
+        }
+        if !already_seen {
+            let singleton: map<K, V> = {entry.0: entry.1};
+            converted.extend(singleton);
+            seen.push(entry.0);
+        }
     }
     return converted;
 }
@@ -1904,7 +1932,7 @@ pub fn swap_ranges(left: &list<T>, right: &list<T>)
     var swapped_right: list<T> = [];
     let left_len: i64 = left.len();
     let right_len: i64 = right.len();
-    let common_len: i64 = if left_len < right_len { left_len } else { right_len };
+    let common_len: i64 = left_len < right_len ? left_len : right_len;
     for i in 0..common_len {
         swapped_left.push(right[i]);
         swapped_right.push(left[i]);
@@ -3640,7 +3668,7 @@ generic<T, ChooseIndex>
 pub fn sample_to(source: &list<T>, destination: &mut list<T>, count: i64,
                  choose_index: ChooseIndex) -> i64 {
     let capacity: i64 = destination.len();
-    let mut_count: i64 = if count < capacity { count } else { capacity };
+    let mut_count: i64 = count < capacity ? count : capacity;
     let sampled: list<T> = sample(source, mut_count, choose_index);
     let written: i64 = sampled.len();
     for i in 0..written { destination[i] = sampled[i]; }
@@ -3657,7 +3685,7 @@ pub fn sample_to_heterogeneous(source: &list<T>,
     destination: &mut list<Output>, count: i64,
     choose_index: ChooseIndex) -> i64 {
     let capacity: i64 = destination.len();
-    let sample_count: i64 = if count < capacity { count } else { capacity };
+    let sample_count: i64 = count < capacity ? count : capacity;
     let sampled: list<T> = sample(source, sample_count, choose_index);
     let written: i64 = sampled.len();
     for i in 0..written { destination[i] = sampled[i]; }
@@ -9874,8 +9902,8 @@ pub fn chunked(data: &list<T>, chunk_size: i64) -> list<list<T>> {
     while start < n {
         var chunk: list<T> = [];
         let remaining: i64 = n - start;
-        let actual_size: i64 = if chunk_size < remaining
-            { chunk_size } else { remaining };
+        let actual_size: i64 = chunk_size < remaining
+            ? chunk_size : remaining;
         let end: i64 = start + actual_size;
         for i in start..end {
             chunk.push(data[i]);
@@ -9900,8 +9928,8 @@ pub fn chunked_to(data: &list<T>, destination: &mut list<list<T>>,
     var written: i64 = 0;
     while start < n && written < capacity {
         let remaining: i64 = n - start;
-        let actual_size: i64 = if chunk_size < remaining
-            { chunk_size } else { remaining };
+        let actual_size: i64 = chunk_size < remaining
+            ? chunk_size : remaining;
         let end: i64 = start + actual_size;
         var chunk: list<T> = [];
         for i in start..end { chunk.push(data[i]); }
@@ -9925,8 +9953,8 @@ pub fn chunked_to_projected(data: &list<T>,
     var written: i64 = 0;
     while start < n && written < capacity {
         let remaining: i64 = n - start;
-        let actual_size: i64 = if chunk_size < remaining
-            { chunk_size } else { remaining };
+        let actual_size: i64 = chunk_size < remaining
+            ? chunk_size : remaining;
         let end: i64 = start + actual_size;
         var chunk: list<Output> = [];
         for i in start..end { chunk.push(projection(data[i])); }
@@ -10725,7 +10753,7 @@ pub fn pairwise_to(data: &list<T>,
                    destination: &mut list<tuple<T, T>>) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 2 { n - 1 } else { 0 };
+    var count: i64 = n >= 2 ? n - 1 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count { destination[i] = (data[i], data[i + 1]); }
     return count;
@@ -10738,7 +10766,7 @@ pub fn adjacent3_to(data: &list<T>,
                     destination: &mut list<tuple<T, T, T>>) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 3 { n - 2 } else { 0 };
+    var count: i64 = n >= 3 ? n - 2 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = (data[i], data[i + 1], data[i + 2]);
@@ -10753,7 +10781,7 @@ pub fn adjacent4_to(data: &list<T>,
                     destination: &mut list<tuple<T, T, T, T>>) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 4 { n - 3 } else { 0 };
+    var count: i64 = n >= 4 ? n - 3 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = (data[i], data[i + 1], data[i + 2], data[i + 3]);
@@ -10768,7 +10796,7 @@ pub fn adjacent5_to(data: &list<T>,
                     destination: &mut list<tuple<T, T, T, T, T>>) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 5 { n - 4 } else { 0 };
+    var count: i64 = n >= 5 ? n - 4 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = (data[i], data[i + 1], data[i + 2], data[i + 3],
@@ -10784,7 +10812,7 @@ pub fn adjacent6_to(data: &list<T>,
                     destination: &mut list<tuple<T, T, T, T, T, T>>) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 6 { n - 5 } else { 0 };
+    var count: i64 = n >= 6 ? n - 5 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = (data[i], data[i + 1], data[i + 2], data[i + 3],
@@ -10800,7 +10828,7 @@ pub fn adjacent7_to(data: &list<T>,
                     destination: &mut list<tuple<T, T, T, T, T, T, T>>) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 7 { n - 6 } else { 0 };
+    var count: i64 = n >= 7 ? n - 6 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = (data[i], data[i + 1], data[i + 2], data[i + 3],
@@ -10816,7 +10844,7 @@ pub fn adjacent8_to(data: &list<T>,
                     destination: &mut list<tuple<T, T, T, T, T, T, T, T>>) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 8 { n - 7 } else { 0 };
+    var count: i64 = n >= 8 ? n - 7 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = (data[i], data[i + 1], data[i + 2], data[i + 3],
@@ -11058,7 +11086,7 @@ pub fn adjacent_transform_to(data: &list<T>, destination: &mut list<Output>,
                              operation: Operation) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n > 0 { n - 1 } else { 0 };
+    var count: i64 = n > 0 ? n - 1 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count { destination[i] = operation(data[i], data[i + 1]); }
     return count;
@@ -11072,7 +11100,7 @@ pub fn adjacent_transform_to_projected(
     projection: Projection) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n > 0 { n - 1 } else { 0 };
+    var count: i64 = n > 0 ? n - 1 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = operation(projection(data[i]),
@@ -11088,7 +11116,7 @@ pub fn adjacent_transform3_to(data: &list<T>, destination: &mut list<Output>,
                               operation: Operation) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 3 { n - 2 } else { 0 };
+    var count: i64 = n >= 3 ? n - 2 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = operation(data[i], data[i + 1], data[i + 2]);
@@ -11104,7 +11132,7 @@ pub fn adjacent_transform3_to_projected(
     projection: Projection) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 3 { n - 2 } else { 0 };
+    var count: i64 = n >= 3 ? n - 2 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = operation(projection(data[i]),
@@ -11120,7 +11148,7 @@ pub fn adjacent_transform4_to(data: &list<T>, destination: &mut list<Output>,
                               operation: Operation) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 4 { n - 3 } else { 0 };
+    var count: i64 = n >= 4 ? n - 3 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = operation(data[i], data[i + 1], data[i + 2],
@@ -11137,7 +11165,7 @@ pub fn adjacent_transform4_to_projected(
     projection: Projection) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 4 { n - 3 } else { 0 };
+    var count: i64 = n >= 4 ? n - 3 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = operation(projection(data[i]),
@@ -11154,7 +11182,7 @@ pub fn adjacent_transform5_to(data: &list<T>, destination: &mut list<Output>,
                               operation: Operation) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 5 { n - 4 } else { 0 };
+    var count: i64 = n >= 5 ? n - 4 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = operation(data[i], data[i + 1], data[i + 2],
@@ -11171,7 +11199,7 @@ pub fn adjacent_transform5_to_projected(
     projection: Projection) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 5 { n - 4 } else { 0 };
+    var count: i64 = n >= 5 ? n - 4 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = operation(projection(data[i]),
@@ -11188,7 +11216,7 @@ pub fn adjacent_transform6_to(data: &list<T>, destination: &mut list<Output>,
                               operation: Operation) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 6 { n - 5 } else { 0 };
+    var count: i64 = n >= 6 ? n - 5 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = operation(data[i], data[i + 1], data[i + 2],
@@ -11205,7 +11233,7 @@ pub fn adjacent_transform6_to_projected(
     projection: Projection) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 6 { n - 5 } else { 0 };
+    var count: i64 = n >= 6 ? n - 5 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = operation(projection(data[i]),
@@ -11223,7 +11251,7 @@ pub fn adjacent_transform7_to(data: &list<T>, destination: &mut list<Output>,
                               operation: Operation) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 7 { n - 6 } else { 0 };
+    var count: i64 = n >= 7 ? n - 6 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = operation(data[i], data[i + 1], data[i + 2],
@@ -11241,7 +11269,7 @@ pub fn adjacent_transform7_to_projected(
     projection: Projection) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 7 { n - 6 } else { 0 };
+    var count: i64 = n >= 7 ? n - 6 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = operation(projection(data[i]),
@@ -11259,7 +11287,7 @@ pub fn adjacent_transform8_to(data: &list<T>, destination: &mut list<Output>,
                               operation: Operation) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 8 { n - 7 } else { 0 };
+    var count: i64 = n >= 8 ? n - 7 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = operation(data[i], data[i + 1], data[i + 2],
@@ -11277,7 +11305,7 @@ pub fn adjacent_transform8_to_projected(
     projection: Projection) -> i64 {
     let n: i64 = data.len();
     let capacity: i64 = destination.len();
-    var count: i64 = if n >= 8 { n - 7 } else { 0 };
+    var count: i64 = n >= 8 ? n - 7 : 0;
     if capacity < count { count = capacity; }
     for i in 0..count {
         destination[i] = operation(projection(data[i]),
