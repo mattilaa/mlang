@@ -10719,6 +10719,65 @@ pub fn zip_longest_to(left: &list<T>, right: &list<U>,
     return n;
 }
 
+/// @brief Zip any number of same-typed ranges through the longest input.
+/// Each output row contains one option per input range; absent elements are
+/// represented by `None`. Empty input collections produce no rows.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn zip_longest_many(ranges: &list<list<T>>) -> list<list<option<T>>> {
+    var out: list<list<option<T>>> = [];
+    let range_count: i64 = ranges.len();
+    var row_count: i64 = 0;
+    for range_index in 0..range_count {
+        let range: list<T> = ranges[range_index];
+        if range.len() > row_count { row_count = range.len(); }
+    }
+
+    for row_index in 0..row_count {
+        var row: list<option<T>> = [];
+        for range_index in 0..range_count {
+            let range: list<T> = ranges[range_index];
+            var value: option<T> = None<T>();
+            if row_index < range.len() {
+                value = Some<T>(range[row_index]);
+            }
+            row.push(value);
+        }
+        out.push(row);
+    }
+    return out;
+}
+
+/// @brief Write arbitrary-arity longest-zip rows into bounded output.
+/// Returns the number of rows written; each row has one option per input.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn zip_longest_many_to(ranges: &list<list<T>>,
+                           destination: &mut list<list<option<T>>>) -> i64 {
+    let range_count: i64 = ranges.len();
+    let destination_len: i64 = destination.len();
+    var row_count: i64 = 0;
+    for range_index in 0..range_count {
+        let range: list<T> = ranges[range_index];
+        if range.len() > row_count { row_count = range.len(); }
+    }
+    if destination_len < row_count { row_count = destination_len; }
+
+    for row_index in 0..row_count {
+        var row: list<option<T>> = [];
+        for range_index in 0..range_count {
+            let range: list<T> = ranges[range_index];
+            var value: option<T> = None<T>();
+            if row_index < range.len() {
+                value = Some<T>(range[row_index]);
+            }
+            row.push(value);
+        }
+        destination[row_index] = row;
+    }
+    return row_count;
+}
+
 /// @brief Pair corresponding elements from three ranges, stopping at the
 /// shortest input. C++23 `views::zip` counterpart with heterogeneous inputs.
 /// @ingroup algorithm_ranges

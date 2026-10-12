@@ -25,6 +25,8 @@ use std::algorithm::ranges::elements_1;
 use std::algorithm::ranges::elements_2;
 use std::algorithm::ranges::zip_longest;
 use std::algorithm::ranges::zip_longest_to;
+use std::algorithm::ranges::zip_longest_many;
+use std::algorithm::ranges::zip_longest_many_to;
 use std::algorithm::ranges::sort_in_place_by_projected;
 use std::algorithm::ranges::sort_in_place;
 use std::algorithm::ranges::make_heap_in_place_by_projected;
@@ -298,6 +300,32 @@ fn test_ranges_zip_longest_preserves_uneven_tails() {
     let bounded_left: option<i32> = bounded_tail.0;
     let bounded_right: option<i64> = bounded_tail.1;
     verify(bounded_left.unwrap() == 20 && bounded_right.is_none());
+}
+
+#[test]
+fn test_ranges_zip_longest_many_accepts_runtime_arity() {
+    let ranges: list<list<i32>> = [[1, 2], [10], [100, 200, 300]];
+    let rows: list<list<option<i32>>> = zip_longest_many(ranges);
+    let first: list<option<i32>> = rows[0];
+    let second: list<option<i32>> = rows[1];
+    let third: list<option<i32>> = rows[2];
+    verify(rows.len() == 3 && first.len() == 3 &&
+           first[0].unwrap() == 1 && first[1].unwrap() == 10 &&
+           first[2].unwrap() == 100);
+    verify(second[0].unwrap() == 2 && second[1].is_none() &&
+           second[2].unwrap() == 200);
+    verify(third[0].is_none() && third[1].is_none() &&
+           third[2].unwrap() == 300);
+
+    var bounded: list<list<option<i32>>> = [[], []];
+    verify(zip_longest_many_to(ranges, &mut bounded) == 2);
+    let bounded_second: list<option<i32>> = bounded[1];
+    verify(bounded_second.len() == 3 && bounded_second[0].unwrap() == 2 &&
+           bounded_second[1].is_none() && bounded_second[2].unwrap() == 200);
+
+    let no_ranges: list<list<i32>> = [];
+    let no_rows: list<list<option<i32>>> = zip_longest_many(no_ranges);
+    verify(no_rows.len() == 0);
 }
 
 #[test]

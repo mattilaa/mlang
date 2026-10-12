@@ -584,6 +584,9 @@ fn example() {
 - `zip_longest(left, right)` preserves both input tails and represents missing
   elements with `None`; `zip_longest_to` writes the prefix that fits into a
   caller-provided tuple list.
+- `zip_longest_many(ranges)` handles a runtime number of same-typed ranges,
+  returning one row per position through the longest input and one option per
+  range. `zip_longest_many_to` provides bounded row output.
 - `zip_to` has two-through-eight-range overloads that write heterogeneous
   tuples into a preallocated destination. Each overload stops at the shortest
   input or destination, returns the number written, and preserves any unused
@@ -848,6 +851,8 @@ fn example() {
 - `zip_longest(left, right)` is a Mlang extension for unequal lengths: it
   returns option-wrapped values through the longer input; `zip_longest_to`
   provides the bounded-output form.
+- `zip_longest_many(ranges)` extends that behavior to a runtime-sized list of
+  same-typed ranges, with `zip_longest_many_to` for bounded destinations.
 - `pairwise(data)` materializes tuples of each adjacent pair (C++23
   `views::pairwise` style); inputs shorter than two elements produce an empty
   list.
