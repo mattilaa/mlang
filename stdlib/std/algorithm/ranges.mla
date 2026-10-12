@@ -1637,6 +1637,28 @@ pub fn copy_backward_to_projected(source: &list<T>,
     return (source_first, destination_first);
 }
 
+/// @brief Project a source suffix into a distinct type aligned to output end.
+/// Returns the first copied indices in both lists. If output is shorter, the
+/// source suffix that fits is used and the unused destination prefix is kept.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn copy_backward_to_heterogeneous_projected(
+    source: &list<T>, destination: &mut list<Output>, projection: Projection)
+    -> tuple<i64, i64> {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    let count: i64 = source_len < destination_len ? source_len : destination_len;
+    let source_first: i64 = source_len - count;
+    let destination_first: i64 = destination_len - count;
+    var offset: i64 = count;
+    while offset > 0 {
+        offset = offset - 1;
+        destination[destination_first + offset] =
+            projection(source[source_first + offset]);
+    }
+    return (source_first, destination_first);
+}
+
 /// @brief Materialize a range as a new list with the requested element type.
 /// This is the eager-list counterpart of C++23 `std::ranges::to` for list
 /// construction. Each source element is converted to `Output` in order.

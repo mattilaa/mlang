@@ -530,6 +530,7 @@ use std::algorithm::ranges::copy_n_to_heterogeneous_projected;
 use std::algorithm::ranges::copy_backward_to;
 use std::algorithm::ranges::copy_backward_to_heterogeneous;
 use std::algorithm::ranges::copy_backward_to_projected;
+use std::algorithm::ranges::copy_backward_to_heterogeneous_projected;
 use std::algorithm::ranges::to_list;
 use std::algorithm::ranges::to_list_projected;
 use std::algorithm::ranges::to_flat_set;
@@ -7734,6 +7735,16 @@ fn test_algorithm_ranges_heterogeneous_bounded_copy_family() {
     verify(backward_positions.0 == 3 && backward_positions.1 == 0);
     verify(backward[0] == 40.0 && backward[1] == 50.0 &&
            backward[2] == 60.0);
+
+    let to_halves = |value: i32| { return f64(value) / 2.0; };
+    var backward_projected: list<f64> = [91.0, 0.0, 0.0];
+    let projected_positions: tuple<i64, i64> =
+        copy_backward_to_heterogeneous_projected(
+            source, backward_projected, to_halves);
+    verify(projected_positions.0 == 3 && projected_positions.1 == 0);
+    verify(backward_projected[0] == 20.0 &&
+           backward_projected[1] == 25.0 &&
+           backward_projected[2] == 30.0);
 
     let above_three = |key: i32| { return key > 3; };
     let tens = |value: i32| { return value / 10; };

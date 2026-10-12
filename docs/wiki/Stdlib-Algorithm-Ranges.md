@@ -445,6 +445,8 @@ fn example() {
   suffix to the destination end, and returns the copied subrange start indices.
 - `copy_backward_to_heterogeneous` aligns a source suffix to the destination
   end while converting into a different destination element type.
+- `copy_backward_to_heterogeneous_projected` adds direct projection to that
+  suffix-aligned heterogeneous copy, without allocating an intermediate list.
 - `copy_if_to(source, destination, predicate)` writes matching source values
   into an existing destination and stops when it fills. It returns
   `(consumed, written)` so callers can resume from the exact source position;
