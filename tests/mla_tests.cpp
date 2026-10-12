@@ -3213,6 +3213,25 @@ TEST_F(MLATest, TernaryPrecedence)
     EXPECT_EQ(compileAndRunExitCode(code), 4);
 }
 
+TEST_F(MLATest, TernaryArithmeticInConditionAndArm)
+{
+    std::string code = R"(
+        fn chunk_end(start: i64, chunk_size: i64, n: i64) -> i64 {
+            let end: i64 = start + chunk_size < n
+                ? start + chunk_size
+                : n;
+            return end;
+        }
+
+        fn main() -> i32 {
+            if chunk_end(0, 3, 8) != 3 { return 1; }
+            if chunk_end(7, 3, 8) != 8 { return 2; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, TernaryWithFunctionCallCondition)
 {
     std::string code = R"(
