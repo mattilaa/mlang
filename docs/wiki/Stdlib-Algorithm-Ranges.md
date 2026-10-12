@@ -753,6 +753,9 @@ fn example() {
 - `chunk_by_projected(data, equivalent, projection)` groups adjacent values
   when their projected keys are equivalent, preserving the original elements
   in each eager output chunk.
+- `chunk_by_to` writes predicate-defined maximal groups into bounded output;
+  its projected form compares projected keys while retaining original values.
+  Both return the group count and preserve unused destination entries.
 - `windows(data, size)` materializes every overlapping fixed-size sublist
   (C++23 `views::slide` style); invalid sizes produce an empty list. `slide`
   is the standard view spelling.

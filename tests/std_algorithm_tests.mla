@@ -754,6 +754,8 @@ use std::algorithm::ranges::zip_transform7_projected;
 use std::algorithm::ranges::zip_transform8_projected;
 use std::algorithm::ranges::chunk_by;
 use std::algorithm::ranges::chunk_by_projected;
+use std::algorithm::ranges::chunk_by_to;
+use std::algorithm::ranges::chunk_by_to_projected;
 use std::algorithm::ranges::unique;
 use std::algorithm::ranges::unique_copy;
 use std::algorithm::ranges::unique_stable;
@@ -6100,6 +6102,19 @@ fn test_algorithm_ranges_chunk_by() {
     let empty: list<i32> = [];
     let no_groups: list<list<i32>> = chunk_by(empty, consecutive);
     verify(no_groups.len() == 0);
+
+    var bounded: list<list<i32>> = [[-1], [-2], [-3], [-4]];
+    verify(chunk_by_to(values, bounded, consecutive) == 3);
+    let bounded_first: list<i32> = bounded[0];
+    let bounded_middle: list<i32> = bounded[1];
+    let bounded_last: list<i32> = bounded[2];
+    let untouched: list<i32> = bounded[3];
+    verify(bounded_first.len() == 2 && bounded_first[0] == 1 &&
+           bounded_first[1] == 2);
+    verify(bounded_middle.len() == 3 && bounded_middle[0] == 5 &&
+           bounded_middle[2] == 7);
+    verify(bounded_last.len() == 1 && bounded_last[0] == 10);
+    verify(untouched[0] == -4);
 }
 
 #[test]
@@ -6118,6 +6133,15 @@ fn test_algorithm_ranges_chunk_by_projected() {
     let empty: list<i32> = [];
     let no_groups: list<list<i32>> = chunk_by_projected(empty, equal_key, tens);
     verify(no_groups.len() == 0);
+
+    var bounded: list<list<i32>> = [[-1], [-2]];
+    verify(chunk_by_to_projected(values, bounded, equal_key, tens) == 2);
+    let projected_first: list<i32> = bounded[0];
+    let projected_second: list<i32> = bounded[1];
+    verify(projected_first.len() == 3 && projected_first[0] == 11 &&
+           projected_first[2] == 19);
+    verify(projected_second.len() == 2 && projected_second[0] == 21 &&
+           projected_second[1] == 25);
 }
 
 #[test]

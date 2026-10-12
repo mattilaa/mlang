@@ -4515,7 +4515,7 @@ fn ranges_default_equal(left: T, right: T) -> bool {
     return left == right;
 }
 
-generic<T, Output, Equivalent, Projection>
+generic<T, Equivalent, Projection>
 fn ranges_unique_copy_to_core(source: &list<T>,
                               destination: &mut list<Output>,
                               equivalent: Equivalent,
@@ -9794,6 +9794,57 @@ pub fn chunk_by_projected(data: &list<T>, equivalent: Equivalent,
     }
     out.push(chunk);
     return out;
+}
+
+/// @brief Write predicate-defined adjacent groups into bounded storage.
+/// Each group is stable and maximal under `equivalent`; returns the number of
+/// groups written and preserves unused destination entries.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent>
+pub fn chunk_by_to(data: &list<T>, destination: &mut list<list<T>>,
+                   equivalent: Equivalent) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var start: i64 = 0;
+    var written: i64 = 0;
+    while start < n && written < capacity {
+        var end: i64 = start + 1;
+        while end < n && equivalent(data[end - 1], data[end]) {
+            end = end + 1;
+        }
+        var group: list<T> = [];
+        for i in start..end { group.push(data[i]); }
+        destination[written] = group;
+        written = written + 1;
+        start = end;
+    }
+    return written;
+}
+
+/// @brief Write projected predicate-defined groups into bounded storage.
+/// Original values are preserved in each output group.
+/// @ingroup algorithm_ranges
+generic<T, Output, Equivalent, Projection>
+pub fn chunk_by_to_projected(data: &list<T>,
+    destination: &mut list<list<T>>, equivalent: Equivalent,
+    projection: Projection) -> i64 {
+    let n: i64 = data.len();
+    let capacity: i64 = destination.len();
+    var start: i64 = 0;
+    var written: i64 = 0;
+    while start < n && written < capacity {
+        var end: i64 = start + 1;
+        while end < n && equivalent(projection(data[end - 1]),
+                                    projection(data[end])) {
+            end = end + 1;
+        }
+        var group: list<T> = [];
+        for i in start..end { group.push(data[i]); }
+        destination[written] = group;
+        written = written + 1;
+        start = end;
+    }
+    return written;
 }
 
 /// @brief Materialize every overlapping window of `window_size` elements.
