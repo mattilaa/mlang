@@ -825,6 +825,8 @@ fn example() {
   input as one field.
 - `concat(left, right)` copies two same-typed ranges into one list (C++23
   `views::concat` style).
+- `concat_many(ranges)` concatenates a list of same-typed ranges into one list,
+  supporting any number of ranges, including empty inner and outer lists.
 - `zip` overloads for two through eight ranges materialize heterogeneous
   tuples, stopping at the shortest input (C++23 `views::zip` style).
 - `pairwise(data)` materializes tuples of each adjacent pair (C++23

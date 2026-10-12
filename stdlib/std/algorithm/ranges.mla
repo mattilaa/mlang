@@ -10468,6 +10468,24 @@ pub fn concat(left: &list<T>, right: &list<T>) -> list<T> {
     return out;
 }
 
+/// @brief Concatenate a list of ranges into one copied list.
+/// An empty outer list or empty inner range contributes no elements.
+/// Eager-list counterpart to a multi-input C++23 `views::concat`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn concat_many(ranges: &list<list<T>>) -> list<T> {
+    var out: list<T> = [];
+    let range_count: i64 = ranges.len();
+    for range_index in 0..range_count {
+        let range: list<T> = ranges[range_index];
+        let element_count: i64 = range.len();
+        for element_index in 0..element_count {
+            out.push(range[element_index]);
+        }
+    }
+    return out;
+}
+
 /// @brief Pair corresponding elements into tuples, stopping at the shorter list.
 /// Eager C++23 `views::zip` equivalent; both inputs remain unchanged.
 /// @ingroup algorithm_ranges

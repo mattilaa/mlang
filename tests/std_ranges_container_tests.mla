@@ -10,6 +10,7 @@ use std::algorithm::ranges::find;
 use std::algorithm::ranges::contains;
 use std::algorithm::ranges::count;
 use std::algorithm::ranges::transform;
+use std::algorithm::ranges::concat_many;
 use std::algorithm::ranges::sort_in_place_by_projected;
 use std::algorithm::ranges::sort_in_place;
 use std::algorithm::ranges::make_heap_in_place_by_projected;
@@ -130,6 +131,18 @@ fn test_generic_range_algorithms_accept_fixed_arrays() {
     verify(values.len() == 4 && values[0] == 8 && values[1] == 4 &&
            values[2] == 12 && values[3] == 4);
 
+}
+
+#[test]
+fn test_ranges_concat_many() {
+    let ranges: list<list<i32>> = [[1, 2], [], [3], [4, 5]];
+    let flattened: list<i32> = concat_many(ranges);
+    verify(flattened.len() == 5 && flattened[0] == 1 &&
+           flattened[1] == 2 && flattened[2] == 3 &&
+           flattened[3] == 4 && flattened[4] == 5);
+    let empty: list<list<i32>> = [];
+    let empty_flattened: list<i32> = concat_many(empty);
+    verify(empty_flattened.len() == 0);
 }
 
 #[test]
