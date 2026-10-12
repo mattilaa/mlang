@@ -575,6 +575,8 @@ fn example() {
   the destination suffix unchanged.
 - `sample_to_heterogeneous` provides the same bounded behavior while
   converting selected source values to an independently typed destination.
+- `sample_to_projected` applies a projection directly to selected source
+  elements while writing bounded output, without an intermediate sample list.
 - `shuffle(data, choose_index)` returns a randomized copy. The selector receives
   each current exclusive bound; use a uniformly distributed selector for an
   unbiased permutation. Because lists are eagerly rebuilt without indexed
@@ -726,6 +728,9 @@ fn example() {
 - `reverse_copy_to_heterogeneous` and `rotate_copy_to_heterogeneous` preserve
   those bounded sequence semantics while converting source values to an
   independently typed destination.
+- `reverse_copy_to_projected` and `rotate_copy_to_projected` apply a projection
+  while writing those sequences, so transformed values can be emitted without
+  a separate mapped-list allocation.
 - `rotate_in_place(&mut data, middle)` moves the suffix beginning at `middle`
   before the prefix using at most O(N) swaps and no output allocation. It
   returns the index of the original first element after rotation (the Mlang

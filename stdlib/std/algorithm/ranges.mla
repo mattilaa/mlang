@@ -3562,6 +3562,42 @@ pub fn sample_to_heterogeneous(source: &list<T>,
     return written;
 }
 
+/// @brief Sample projected values directly into bounded output storage.
+/// Selects distinct source elements in original order without materializing a
+/// sampled or projected intermediate list.
+/// @ingroup algorithm_ranges
+generic<T, Output, ChooseIndex, Projection>
+pub fn sample_to_projected(source: &list<T>,
+    destination: &mut list<Output>, count: i64,
+    choose_index: ChooseIndex, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let capacity: i64 = destination.len();
+    var target: i64 = count;
+    if target < 0 { target = 0; }
+    if target > capacity { target = capacity; }
+    if target > source_len { target = source_len; }
+
+    var written: i64 = 0;
+    for i in 0..source_len {
+        let needed: i64 = target - written;
+        let remaining_items: i64 = source_len - i;
+        if needed >= remaining_items {
+            destination[written] = projection(source[i]);
+            written = written + 1;
+        } else if needed > 0 {
+            let requested_index: i64 = choose_index(remaining_items);
+            let selected_index: i64 = requested_index < 0 ? 0 :
+                (requested_index >= remaining_items ?
+                    remaining_items - 1 : requested_index);
+            if selected_index < needed {
+                destination[written] = projection(source[i]);
+                written = written + 1;
+            }
+        }
+    }
+    return written;
+}
+
 /// @brief Return a shuffled copy using a bounded random-index selector.
 /// `choose_index(upper_bound)` must return an index in
 /// `[0, upper_bound)`. The eager implementation leaves the source unchanged;
@@ -9490,6 +9526,21 @@ pub fn reverse_copy_to_heterogeneous(source: &list<T>,
     return written;
 }
 
+/// @brief Write projected reversed source values to bounded output.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn reverse_copy_to_projected(source: &list<T>,
+    destination: &mut list<Output>, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var written: i64 = 0;
+    while written < destination_len && written < source_len {
+        destination[written] = projection(source[source_len - written - 1]);
+        written = written + 1;
+    }
+    return written;
+}
+
 /// @brief Return a copy rotated left by `amount` positions.
 /// Negative amounts rotate right; amounts are normalized modulo list length.
 /// @ingroup algorithm_ranges
@@ -9592,6 +9643,33 @@ pub fn rotate_copy_to_heterogeneous(source: &list<T>, middle: i64,
     source_index = 0;
     while written < destination_len && source_index < split {
         destination[written] = source[source_index];
+        written = written + 1;
+        source_index = source_index + 1;
+    }
+    return written;
+}
+
+/// @brief Write projected rotated source values to bounded output.
+/// The split point is clamped just like `rotate_copy_to`.
+/// @ingroup algorithm_ranges
+generic<T, Output, Projection>
+pub fn rotate_copy_to_projected(source: &list<T>, middle: i64,
+    destination: &mut list<Output>, projection: Projection) -> i64 {
+    let source_len: i64 = source.len();
+    let destination_len: i64 = destination.len();
+    var split: i64 = middle;
+    if split < 0 { split = 0; }
+    if split > source_len { split = source_len; }
+    var written: i64 = 0;
+    var source_index: i64 = split;
+    while written < destination_len && source_index < source_len {
+        destination[written] = projection(source[source_index]);
+        written = written + 1;
+        source_index = source_index + 1;
+    }
+    source_index = 0;
+    while written < destination_len && source_index < split {
+        destination[written] = projection(source[source_index]);
         written = written + 1;
         source_index = source_index + 1;
     }
