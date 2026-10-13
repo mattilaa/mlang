@@ -40,6 +40,8 @@ use std::algorithm::ranges::max_projected;
 use std::algorithm::ranges::min_option;
 use std::algorithm::ranges::max_option;
 use std::algorithm::ranges::minmax_option;
+use std::algorithm::ranges::clamp_value;
+use std::algorithm::ranges::clamp_value_by;
 use std::algorithm::ranges::zip_longest;
 use std::algorithm::ranges::zip_longest_to;
 use std::algorithm::ranges::zip_longest_many;
@@ -362,6 +364,21 @@ fn test_ranges_min_max_option_values_on_empty_ranges() {
     let empty: list<i32> = [];
     verify(min_option(empty).is_none() && max_option(empty).is_none() &&
            minmax_option(empty).is_none());
+}
+
+#[test]
+fn test_ranges_clamp_single_value() {
+    verify(clamp_value(i32(-2), i32(0), i32(10)) == 0);
+    verify(clamp_value(i32(5), i32(0), i32(10)) == 5);
+    verify(clamp_value(i32(12), i32(0), i32(10)) == 10);
+}
+
+#[test]
+fn test_ranges_clamp_single_value_with_custom_ordering() {
+    let greater = |left: i32, right: i32| { return left > right; };
+    verify(clamp_value_by(i32(5), i32(10), i32(0), greater) == 5);
+    verify(clamp_value_by(i32(12), i32(10), i32(0), greater) == 10);
+    verify(clamp_value_by(i32(-2), i32(10), i32(0), greater) == 0);
 }
 
 #[test]

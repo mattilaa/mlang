@@ -707,6 +707,10 @@ fn example() {
 - `remove`, `take`, `drop`, `unique`, `unique_stable`, and `clamp` return a
   transformed copy. `unique` removes only adjacent duplicates;
   `unique_stable` keeps the first occurrence of each value.
+- `clamp_value(value, low, high)` clamps one value to inclusive bounds, while
+  `clamp_value_by(value, low, high, less)` uses a custom strict ordering.
+  Both require ordered bounds; the existing `clamp` overload applies the same
+  operation elementwise to a list.
 - `take_while(data, predicate)` copies the initial matching prefix;
   `drop_while(data, predicate)` copies the rest after that prefix, matching the
   eager behavior of C++20 `views::take_while` and `views::drop_while`.

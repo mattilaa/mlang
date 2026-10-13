@@ -14338,6 +14338,26 @@ pub fn clamp(data: &list<T>, low: T, high: T) -> list<T> {
     return out;
 }
 
+/// @brief Clamp one value to inclusive bounds (C++ `std::clamp` semantics).
+/// Requires `low <= high`; returns the original value when it is in range.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn clamp_value(value: T, low: T, high: T) -> T {
+    if value < low { return low; }
+    if high < value { return high; }
+    return value;
+}
+
+/// @brief Clamp one value according to a strict weak ordering.
+/// Requires that `low` does not follow `high` under `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn clamp_value_by(value: T, low: T, high: T, less: Less) -> T {
+    if less(value, low) { return low; }
+    if less(high, value) { return high; }
+    return value;
+}
+
 /// @brief Clamp a copied list using projected element and bound keys.
 /// `low` and `high` must be ordered by their projected keys.
 /// @ingroup algorithm_ranges
