@@ -10778,6 +10778,53 @@ pub fn zip_longest_many_to(ranges: &list<list<T>>,
     return row_count;
 }
 
+/// @brief Transform two ranges through the longer input without an
+/// intermediate `zip_longest` list. Missing values use caller-provided fill
+/// values; use `zip_longest` when explicit presence states are required.
+/// @ingroup algorithm_ranges
+generic<T, U, Output, Operation>
+pub fn zip_longest_transform(left: &list<T>, right: &list<U>,
+                             left_default: T, right_default: U,
+                             operation: Operation) -> list<Output> {
+    var out: list<Output> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var n: i64 = left_len;
+    if right_len > n { n = right_len; }
+    for i in 0..n {
+        var left_value: T = left_default;
+        var right_value: U = right_default;
+        if i < left_len { left_value = left[i]; }
+        if i < right_len { right_value = right[i]; }
+        out.push(operation(left_value, right_value));
+    }
+    return out;
+}
+
+/// @brief Transform longest-zip rows directly into bounded output.
+/// The operation receives caller-provided fill values for missing elements;
+/// no call occurs beyond the destination length.
+/// @ingroup algorithm_ranges
+generic<T, U, Output, Operation>
+pub fn zip_longest_transform_to(left: &list<T>, right: &list<U>,
+    destination: &mut list<Output>, left_default: T, right_default: U,
+    operation: Operation) -> i64 {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let destination_len: i64 = destination.len();
+    var n: i64 = left_len;
+    if right_len > n { n = right_len; }
+    if destination_len < n { n = destination_len; }
+    for i in 0..n {
+        var left_value: T = left_default;
+        var right_value: U = right_default;
+        if i < left_len { left_value = left[i]; }
+        if i < right_len { right_value = right[i]; }
+        destination[i] = operation(left_value, right_value);
+    }
+    return n;
+}
+
 /// @brief Pair corresponding elements from three ranges, stopping at the
 /// shortest input. C++23 `views::zip` counterpart with heterogeneous inputs.
 /// @ingroup algorithm_ranges

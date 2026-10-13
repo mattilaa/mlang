@@ -27,6 +27,8 @@ use std::algorithm::ranges::zip_longest;
 use std::algorithm::ranges::zip_longest_to;
 use std::algorithm::ranges::zip_longest_many;
 use std::algorithm::ranges::zip_longest_many_to;
+use std::algorithm::ranges::zip_longest_transform;
+use std::algorithm::ranges::zip_longest_transform_to;
 use std::algorithm::ranges::sort_in_place_by_projected;
 use std::algorithm::ranges::sort_in_place;
 use std::algorithm::ranges::make_heap_in_place_by_projected;
@@ -326,6 +328,27 @@ fn test_ranges_zip_longest_many_accepts_runtime_arity() {
     let no_ranges: list<list<i32>> = [];
     let no_rows: list<list<option<i32>>> = zip_longest_many(no_ranges);
     verify(no_rows.len() == 0);
+}
+
+#[test]
+fn test_ranges_zip_longest_transform_uses_fill_values() {
+    let left: list<i32> = [10, 20, 30];
+    let right: list<i64> = [1];
+    let sum_filled = |first: i32, second: i64| {
+        return i64(first) + second;
+    };
+    let missing_left: i32 = 0;
+    let missing_right: i64 = -2;
+    let sums: list<i64> = zip_longest_transform(
+        left, right, missing_left, missing_right, sum_filled);
+    verify(sums.len() == 3 && sums[0] == 11 &&
+           sums[1] == 18 && sums[2] == 28);
+
+    var bounded: list<i64> = [0, 0];
+    verify(zip_longest_transform_to(
+        left, right, &mut bounded, missing_left, missing_right,
+        sum_filled) == 2);
+    verify(bounded[0] == 11 && bounded[1] == 18);
 }
 
 #[test]

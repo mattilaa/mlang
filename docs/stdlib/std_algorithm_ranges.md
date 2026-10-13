@@ -587,6 +587,11 @@ fn example() {
 - `zip_longest_many(ranges)` handles a runtime number of same-typed ranges,
   returning one row per position through the longest input and one option per
   range. `zip_longest_many_to` provides bounded row output.
+- `zip_longest_transform(left, right, operation)` applies an operation to
+  elements through the longer input without materializing the intermediate
+  tuple list. It takes one fill value per input for missing elements;
+  `zip_longest_transform_to` writes a bounded result. Use `zip_longest` when
+  the operation needs explicit presence states.
 - `zip_to` has two-through-eight-range overloads that write heterogeneous
   tuples into a preallocated destination. Each overload stops at the shortest
   input or destination, returns the number written, and preserves any unused
@@ -853,6 +858,9 @@ fn example() {
   provides the bounded-output form.
 - `zip_longest_many(ranges)` extends that behavior to a runtime-sized list of
   same-typed ranges, with `zip_longest_many_to` for bounded destinations.
+- `zip_longest_transform` consumes longest-zip pairs directly using explicit
+  fill values; its `_to` variant writes to a caller-provided bounded
+  destination. Use `zip_longest` when missing-value state must remain explicit.
 - `pairwise(data)` materializes tuples of each adjacent pair (C++23
   `views::pairwise` style); inputs shorter than two elements produce an empty
   list.
