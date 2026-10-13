@@ -38,6 +38,8 @@ use std::algorithm::ranges::max_by;
 use std::algorithm::ranges::minmax_by;
 use std::algorithm::ranges::minmax_projected;
 use std::algorithm::ranges::minmax_by_projected;
+use std::algorithm::ranges::min_by_projected;
+use std::algorithm::ranges::max_by_projected;
 use std::algorithm::ranges::min_projected;
 use std::algorithm::ranges::max_projected;
 use std::algorithm::ranges::min_option;
@@ -378,6 +380,21 @@ fn test_ranges_minmax_two_values_with_comparator_and_projection() {
         minmax_by_projected(i32(5), i32(3), greater, negate);
     verify_eq(3, both.0);
     verify_eq(5, both.1);
+}
+
+#[test]
+fn test_ranges_min_max_two_values_with_projection() {
+    let negate = |value: i32| { return -value; };
+    verify(min_projected(i32(5), i32(3), negate) == 5);
+    verify(max_projected(i32(5), i32(3), negate) == 3);
+}
+
+#[test]
+fn test_ranges_min_max_two_values_with_comparator_and_projection() {
+    let greater = |left: i32, right: i32| { return left > right; };
+    let negate = |value: i32| { return -value; };
+    verify(min_by_projected(i32(5), i32(3), greater, negate) == 3);
+    verify(max_by_projected(i32(5), i32(3), greater, negate) == 5);
 }
 
 #[test]

@@ -8107,8 +8107,20 @@ pub fn min_projected(data: &list<T>, projection: Projection) -> T {
 }
 
 generic<T, Projection>
+pub fn min_projected(left: T, right: T, projection: Projection) -> T {
+    if projection(right) < projection(left) { return right; }
+    return left;
+}
+
+generic<T, Projection>
 pub fn max_projected(data: &list<T>, projection: Projection) -> T {
     return max_element_value_projected(data, projection);
+}
+
+generic<T, Projection>
+pub fn max_projected(left: T, right: T, projection: Projection) -> T {
+    if projection(left) < projection(right) { return right; }
+    return left;
 }
 
 generic<T, Projection>
@@ -8131,9 +8143,27 @@ pub fn min_by_projected(data: &list<T>, less: Less, projection: Projection)
 }
 
 generic<T, Less, Projection>
+pub fn min_by_projected(left: T, right: T, less: Less,
+                        projection: Projection) -> T {
+    let left_key = projection(left);
+    let right_key = projection(right);
+    if less(right_key, left_key) { return right; }
+    return left;
+}
+
+generic<T, Less, Projection>
 pub fn max_by_projected(data: &list<T>, less: Less, projection: Projection)
     -> T {
     return max_element_value_by_projected(data, less, projection);
+}
+
+generic<T, Less, Projection>
+pub fn max_by_projected(left: T, right: T, less: Less,
+                        projection: Projection) -> T {
+    let left_key = projection(left);
+    let right_key = projection(right);
+    if less(left_key, right_key) { return right; }
+    return left;
 }
 
 generic<T, Less, Projection>

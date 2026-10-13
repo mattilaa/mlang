@@ -220,6 +220,9 @@ fn example() {
 - `minmax(left, right)` returns the two values in ascending order. Its
   `minmax_by`, `minmax_projected`, and `minmax_by_projected` overloads apply a
   comparator, projection, or both while returning the original values.
+- The two-value `min_projected`/`max_projected` and
+  `min_by_projected`/`max_by_projected` overloads apply the same projection
+  rules while returning the selected original value.
 - The `_projected` extrema forms select indices or original values by a unary
   key projection. Individual min/max selection keeps the first tie; minmax
   keeps the first minimum and last maximum, and index forms return `-1` for
