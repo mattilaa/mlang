@@ -63,6 +63,10 @@ pub fn lcm(a: T, b: T) -> T {
 
 extern pub fn __mlang_std_midpoint_f32(first: f32, second: f32) -> f32;
 extern pub fn __mlang_std_midpoint_f64(first: f64, second: f64) -> f64;
+extern pub fn __mlang_std_lerp_f32(first: f32, second: f32, amount: f32)
+    -> f32;
+extern pub fn __mlang_std_lerp_f64(first: f64, second: f64, amount: f64)
+    -> f64;
 
 /// @brief Compute the floating-point midpoint without overflowing.
 /// Implements the C++20 `std::midpoint` floating overload for `f32`.
@@ -74,6 +78,20 @@ pub fn midpoint_f32(first: f32, second: f32) -> f32 {
 /// Implements the C++20 `std::midpoint` floating overload for `f64`.
 pub fn midpoint_f64(first: f64, second: f64) -> f64 {
     return __mlang_std_midpoint_f64(first, second);
+}
+
+/// @brief Interpolate between two `f32` values using C++20 `std::lerp` rules.
+/// Returns exact endpoints at amount 0 or 1 and avoids intermediate overflow
+/// when interpolating between finite endpoints.
+pub fn lerp_f32(first: f32, second: f32, amount: f32) -> f32 {
+    return __mlang_std_lerp_f32(first, second, amount);
+}
+
+/// @brief Interpolate between two `f64` values using C++20 `std::lerp` rules.
+/// Returns exact endpoints at amount 0 or 1 and avoids intermediate overflow
+/// when interpolating between finite endpoints.
+pub fn lerp_f64(first: f64, second: f64, amount: f64) -> f64 {
+    return __mlang_std_lerp_f64(first, second, amount);
 }
 
 /// @brief Compute the signed 8-bit midpoint without overflow.

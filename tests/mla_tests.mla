@@ -1,4 +1,5 @@
 mod std::strbuf;
+mod std::algorithm::numeric;
 mod dsp::fft;
 mod std::testing;
 use std::strbuf::eq;
@@ -8,6 +9,8 @@ use std::testing::verify_eq;
 use std::testing::verify_eq_i32;
 use std::testing::verify_false;
 use std::testing::verify_true;
+use std::algorithm::numeric::lerp_f32;
+use std::algorithm::numeric::lerp_f64;
 
 #[test]
 fn test_main_default_return_works() {
@@ -239,4 +242,29 @@ fn test_nested_function_complex_composition() {
 fn test_checked_narrow_integer_cast() {
     let value: u32 = narrow_cast<u32>(42i32);
     verify_eq_i32(42, i32(value));
+}
+
+#[test]
+fn test_cpp20_lerp_f64_endpoints_interpolation_and_extrapolation() {
+    verify(lerp_f64(2.0, 10.0, 0.0) == 2.0);
+    verify(lerp_f64(2.0, 10.0, 1.0) == 10.0);
+    verify(lerp_f64(2.0, 10.0, 0.25) == 4.0);
+    verify(lerp_f64(10.0, 2.0, 0.25) == 8.0);
+    verify(lerp_f64(-10.0, 10.0, 0.75) == 5.0);
+    verify(lerp_f64(2.0, 10.0, 2.0) == 18.0);
+    verify(lerp_f64(2.0, 10.0, -1.0) == -6.0);
+}
+
+#[test]
+fn test_cpp20_lerp_f32_avoids_cross_zero_overflow() {
+    verify(lerp_f32(2.0f, 10.0f, 0.0f) == 2.0f);
+    verify(lerp_f32(2.0f, 10.0f, 1.0f) == 10.0f);
+    verify(lerp_f32(2.0f, 10.0f, 0.25f) == 4.0f);
+    verify(lerp_f32(10.0f, 2.0f, 0.25f) == 8.0f);
+    verify(lerp_f32(-10.0f, 10.0f, 0.75f) == 5.0f);
+    verify(lerp_f32(2.0f, 10.0f, 2.0f) == 18.0f);
+    verify(lerp_f32(2.0f, 10.0f, -1.0f) == -6.0f);
+    verify(lerp_f32(-300000000000000000000000000000000000000.0f,
+                    300000000000000000000000000000000000000.0f,
+                    0.5f) == 0.0f);
 }
