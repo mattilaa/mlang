@@ -227,6 +227,10 @@ fn example() {
   `_by_projected` forms return `Some(original_value)` or `None` for empty
   ranges. Their `minmax_element` counterparts return an optional pair and
   preserve the same tie rules.
+- `min_option`, `max_option`, and `minmax_option` give safe value-level
+  extrema; the matching `*_by_option`, `*_projected_option`, and
+  `*_by_projected_option` forms preserve custom ordering and return original
+  elements rather than projected keys.
 - The corresponding `min_element_index_by`, `max_element_index_by`,
   `min_element_value_by`, and `max_element_value_by` forms accept a strict
   ordering comparator and also keep the first equivalent element.

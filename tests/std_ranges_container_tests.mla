@@ -40,6 +40,15 @@ use std::algorithm::ranges::max_projected;
 use std::algorithm::ranges::min_option;
 use std::algorithm::ranges::max_option;
 use std::algorithm::ranges::minmax_option;
+use std::algorithm::ranges::min_by_option;
+use std::algorithm::ranges::max_by_option;
+use std::algorithm::ranges::minmax_by_option;
+use std::algorithm::ranges::min_projected_option;
+use std::algorithm::ranges::max_projected_option;
+use std::algorithm::ranges::minmax_projected_option;
+use std::algorithm::ranges::min_by_projected_option;
+use std::algorithm::ranges::max_by_projected_option;
+use std::algorithm::ranges::minmax_by_projected_option;
 use std::algorithm::ranges::clamp_value;
 use std::algorithm::ranges::clamp_value_by;
 use std::algorithm::ranges::zip_longest;
@@ -379,6 +388,39 @@ fn test_ranges_clamp_single_value_with_custom_ordering() {
     verify(clamp_value_by(i32(5), i32(10), i32(0), greater) == 5);
     verify(clamp_value_by(i32(12), i32(10), i32(0), greater) == 10);
     verify(clamp_value_by(i32(-2), i32(10), i32(0), greater) == 0);
+}
+
+#[test]
+fn test_ranges_min_max_option_comparator_projection_variants() {
+    let empty: list<i32> = [];
+    let values: list<i32> = [4, -2, 9, -2];
+    let greater = |left: i32, right: i32| { return left > right; };
+    let negate = |value: i32| { return -value; };
+
+    verify(min_by_option(empty, greater).is_none());
+    verify(max_by_option(empty, greater).is_none());
+    verify(minmax_by_option(empty, greater).is_none());
+    verify(min_projected_option(empty, negate).is_none());
+    verify(max_projected_option(empty, negate).is_none());
+    verify(minmax_projected_option(empty, negate).is_none());
+    verify(min_by_projected_option(empty, greater, negate).is_none());
+    verify(max_by_projected_option(empty, greater, negate).is_none());
+    verify(minmax_by_projected_option(empty, greater, negate).is_none());
+
+    verify(min_by_option(values, greater).unwrap() == 9);
+    verify(max_by_option(values, greater).unwrap() == -2);
+    let by_bounds: tuple<i32, i32> = minmax_by_option(values, greater).unwrap();
+    verify(by_bounds.0 == 9 && by_bounds.1 == -2);
+    verify(min_projected_option(values, negate).unwrap() == 9);
+    verify(max_projected_option(values, negate).unwrap() == -2);
+    let projected_bounds: tuple<i32, i32> =
+        minmax_projected_option(values, negate).unwrap();
+    verify(projected_bounds.0 == 9 && projected_bounds.1 == -2);
+    verify(min_by_projected_option(values, greater, negate).unwrap() == -2);
+    verify(max_by_projected_option(values, greater, negate).unwrap() == 9);
+    let both_bounds: tuple<i32, i32> =
+        minmax_by_projected_option(values, greater, negate).unwrap();
+    verify(both_bounds.0 == -2 && both_bounds.1 == 9);
 }
 
 #[test]

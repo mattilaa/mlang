@@ -8140,6 +8140,66 @@ pub fn minmax_option(data: &list<T>) -> option<tuple<T, T>> {
     return minmax_element(data);
 }
 
+/// @brief Safe comparator-ordered value extrema; return `None` if empty.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn min_by_option(data: &list<T>, less: Less) -> option<T> {
+    return min_element_by(data, less);
+}
+
+generic<T, Less>
+pub fn max_by_option(data: &list<T>, less: Less) -> option<T> {
+    return max_element_by(data, less);
+}
+
+generic<T, Less>
+pub fn minmax_by_option(data: &list<T>, less: Less)
+    -> option<tuple<T, T>> {
+    return minmax_element_by(data, less);
+}
+
+/// @brief Safe projected value extrema; return original elements or `None`.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn min_projected_option(data: &list<T>, projection: Projection)
+    -> option<T> {
+    return min_element_projected(data, projection);
+}
+
+generic<T, Projection>
+pub fn max_projected_option(data: &list<T>, projection: Projection)
+    -> option<T> {
+    return max_element_projected(data, projection);
+}
+
+generic<T, Projection>
+pub fn minmax_projected_option(data: &list<T>, projection: Projection)
+    -> option<tuple<T, T>> {
+    return minmax_element_projected(data, projection);
+}
+
+/// @brief Safe comparator-and-projection value extrema; return `None` empty.
+/// Returned values are original elements, not projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Less, Projection>
+pub fn min_by_projected_option(data: &list<T>, less: Less,
+                               projection: Projection) -> option<T> {
+    return min_element_by_projected(data, less, projection);
+}
+
+generic<T, Less, Projection>
+pub fn max_by_projected_option(data: &list<T>, less: Less,
+                               projection: Projection) -> option<T> {
+    return max_element_by_projected(data, less, projection);
+}
+
+generic<T, Less, Projection>
+pub fn minmax_by_projected_option(data: &list<T>, less: Less,
+                                  projection: Projection)
+    -> option<tuple<T, T>> {
+    return minmax_element_by_projected(data, less, projection);
+}
+
 /// @brief Return count of elements equal to value.
 /// @ingroup algorithm_ranges
 generic<T, U>
