@@ -8056,8 +8056,14 @@ pub fn minmax(data: &list<T>) -> tuple<T, T> {
     return minmax_element_value(data);
 }
 
-/// @brief Comparator-ordered minimum, maximum, and min/max range values.
-/// The two-value overloads use the same strict ordering.
+generic<T>
+pub fn minmax(left: T, right: T) -> tuple<T, T> {
+    if right < left { return (right, left); }
+    return (left, right);
+}
+
+/// @brief Comparator-ordered minimum, maximum, and min/max values.
+/// Range overloads require nonempty input; two-value forms accept a pair.
 /// @ingroup algorithm_ranges
 generic<T, Less>
 pub fn min_by(data: &list<T>, less: Less) -> T {
@@ -8086,8 +8092,14 @@ pub fn minmax_by(data: &list<T>, less: Less) -> tuple<T, T> {
     return minmax_element_value_by(data, less);
 }
 
-/// @brief Projected counterparts to `min`, `max`, and `minmax` for ranges.
-/// Returned values are the original elements, not their projected keys.
+generic<T, Less>
+pub fn minmax_by(left: T, right: T, less: Less) -> tuple<T, T> {
+    if less(right, left) { return (right, left); }
+    return (left, right);
+}
+
+/// @brief Projected counterparts to `min`, `max`, and `minmax`.
+/// Range forms require nonempty input; returns original values, not keys.
 /// @ingroup algorithm_ranges
 generic<T, Projection>
 pub fn min_projected(data: &list<T>, projection: Projection) -> T {
@@ -8103,6 +8115,13 @@ generic<T, Projection>
 pub fn minmax_projected(data: &list<T>, projection: Projection)
     -> tuple<T, T> {
     return minmax_element_value_projected(data, projection);
+}
+
+generic<T, Projection>
+pub fn minmax_projected(left: T, right: T, projection: Projection)
+    -> tuple<T, T> {
+    if projection(right) < projection(left) { return (right, left); }
+    return (left, right);
 }
 
 generic<T, Less, Projection>
@@ -8121,6 +8140,15 @@ generic<T, Less, Projection>
 pub fn minmax_by_projected(data: &list<T>, less: Less,
                            projection: Projection) -> tuple<T, T> {
     return minmax_element_value_by_projected(data, less, projection);
+}
+
+generic<T, Less, Projection>
+pub fn minmax_by_projected(left: T, right: T, less: Less,
+                           projection: Projection) -> tuple<T, T> {
+    let left_key = projection(left);
+    let right_key = projection(right);
+    if less(right_key, left_key) { return (right, left); }
+    return (left, right);
 }
 
 /// @brief Safe range min/max variants that return None on empty input.

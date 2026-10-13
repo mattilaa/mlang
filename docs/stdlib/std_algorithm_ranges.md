@@ -215,6 +215,9 @@ fn example() {
 - `minmax_element_value(data)` and `minmax_element_value_by(data, less)` return
   both selected values in one traversal; like the individual value forms, they
   require nonempty input.
+- `minmax(left, right)` returns the two values in ascending order. Its
+  `minmax_by`, `minmax_projected`, and `minmax_by_projected` overloads apply a
+  comparator, projection, or both while returning the original values.
 - The `_projected` extrema forms select indices or original values by a unary
   key projection. Individual min/max selection keeps the first tie; minmax
   keeps the first minimum and last maximum, and index forms return `-1` for

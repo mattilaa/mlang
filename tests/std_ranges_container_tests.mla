@@ -7,6 +7,7 @@ mod std::flat_multimap;
 
 use std::testing::verify;
 use std::testing::verify_eq;
+use std::testing::verify_eq;
 use std::algorithm::ranges::find;
 use std::algorithm::ranges::contains;
 use std::algorithm::ranges::count;
@@ -35,6 +36,8 @@ use std::algorithm::ranges::minmax;
 use std::algorithm::ranges::min_by;
 use std::algorithm::ranges::max_by;
 use std::algorithm::ranges::minmax_by;
+use std::algorithm::ranges::minmax_projected;
+use std::algorithm::ranges::minmax_by_projected;
 use std::algorithm::ranges::min_projected;
 use std::algorithm::ranges::max_projected;
 use std::algorithm::ranges::min_option;
@@ -343,6 +346,38 @@ fn test_ranges_minmax_value_algorithms() {
     let values: list<i32> = [4, -2, 9, -2];
     let bounds: tuple<i32, i32> = minmax(values);
     verify(bounds.0 == -2 && bounds.1 == 9);
+}
+
+#[test]
+fn test_ranges_minmax_two_values() {
+    let bounds: tuple<i32, i32> = minmax(i32(5), i32(3));
+    verify(bounds.0 == 3 && bounds.1 == 5);
+}
+
+#[test]
+fn test_ranges_minmax_two_values_with_comparator() {
+    let greater = |left: i32, right: i32| { return left > right; };
+    let descending: tuple<i32, i32> =
+        minmax_by(i32(5), i32(3), greater);
+    verify(descending.0 == 5 && descending.1 == 3);
+}
+
+#[test]
+fn test_ranges_minmax_two_values_with_projection() {
+    let negate = |value: i32| { return -value; };
+    let projected: tuple<i32, i32> =
+        minmax_projected(i32(5), i32(3), negate);
+    verify(projected.0 == 5 && projected.1 == 3);
+}
+
+#[test]
+fn test_ranges_minmax_two_values_with_comparator_and_projection() {
+    let greater = |left: i32, right: i32| { return left > right; };
+    let negate = |value: i32| { return -value; };
+    let both: tuple<i32, i32> =
+        minmax_by_projected(i32(5), i32(3), greater, negate);
+    verify_eq(3, both.0);
+    verify_eq(5, both.1);
 }
 
 #[test]
