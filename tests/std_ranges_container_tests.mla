@@ -6,6 +6,7 @@ mod std::flat_map;
 mod std::flat_multimap;
 
 use std::testing::verify;
+use std::testing::verify_eq;
 use std::algorithm::ranges::find;
 use std::algorithm::ranges::contains;
 use std::algorithm::ranges::count;
@@ -28,6 +29,17 @@ use std::algorithm::ranges::elements_4;
 use std::algorithm::ranges::elements_5;
 use std::algorithm::ranges::elements_6;
 use std::algorithm::ranges::elements_7;
+use std::algorithm::ranges::min;
+use std::algorithm::ranges::max;
+use std::algorithm::ranges::minmax;
+use std::algorithm::ranges::min_by;
+use std::algorithm::ranges::max_by;
+use std::algorithm::ranges::minmax_by;
+use std::algorithm::ranges::min_projected;
+use std::algorithm::ranges::max_projected;
+use std::algorithm::ranges::min_option;
+use std::algorithm::ranges::max_option;
+use std::algorithm::ranges::minmax_option;
 use std::algorithm::ranges::zip_longest;
 use std::algorithm::ranges::zip_longest_to;
 use std::algorithm::ranges::zip_longest_many;
@@ -307,6 +319,49 @@ fn test_ranges_project_tuple_eight_elements() {
     verify(sixth.len() == 1 && sixth[0] == 100000);
     verify(seventh.len() == 1 && seventh[0] == 1000000);
     verify(eighth.len() == 1 && eighth[0] == 10000000);
+}
+
+#[test]
+fn test_ranges_min_and_max_value_algorithms() {
+    let values: list<i32> = [4, -2, 9, -2];
+    verify(min(values) == -2 && max(values) == 9);
+}
+
+#[test]
+fn test_ranges_minmax_value_algorithms() {
+    let values: list<i32> = [4, -2, 9, -2];
+    let bounds: tuple<i32, i32> = minmax(values);
+    verify(bounds.0 == -2 && bounds.1 == 9);
+}
+
+#[test]
+fn test_ranges_min_two_values() { verify(min(5, 3) == 3); }
+
+#[test]
+fn test_ranges_max_two_values() { verify(max(5, 3) == 5); }
+
+#[test]
+fn test_ranges_min_max_comparator_value_algorithms() {
+    let values: list<i32> = [4, -2, 9, -2];
+    let greater = |left: i32, right: i32| { return left > right; };
+    verify(min_by(values, greater) == 9 && max_by(values, greater) == -2);
+    let reversed_bounds: tuple<i32, i32> = minmax_by(values, greater);
+    verify(reversed_bounds.0 == 9 && reversed_bounds.1 == -2);
+}
+
+#[test]
+fn test_ranges_min_max_projected_value_algorithms() {
+    let values: list<i32> = [4, -2, 9, -2];
+    let negate = |value: i32| { return -value; };
+    verify(min_projected(values, negate) == 9);
+    verify(max_projected(values, negate) == -2);
+}
+
+#[test]
+fn test_ranges_min_max_option_values_on_empty_ranges() {
+    let empty: list<i32> = [];
+    verify(min_option(empty).is_none() && max_option(empty).is_none() &&
+           minmax_option(empty).is_none());
 }
 
 #[test]

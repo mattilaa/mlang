@@ -8025,6 +8025,121 @@ pub fn minmax_element_value_by_projected(data: &list<T>, less: Less,
     return (minimum, maximum);
 }
 
+/// @brief Return the minimum of a nonempty range or of two values.
+/// These are the value-oriented C++20 `std::ranges::min` overloads.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn min(data: &list<T>) -> T { return min_element_value(data); }
+
+generic<T>
+pub fn min(left: T, right: T) -> T {
+    if right < left { return right; }
+    return left;
+}
+
+/// @brief Return the maximum of a nonempty range or of two values.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn max(data: &list<T>) -> T { return max_element_value(data); }
+
+generic<T>
+pub fn max(left: T, right: T) -> T {
+    if left < right { return right; }
+    return left;
+}
+
+/// @brief Return the minimum and maximum values from a range or value pair.
+/// The range overload requires nonempty input and keeps first-min/last-max ties.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn minmax(data: &list<T>) -> tuple<T, T> {
+    return minmax_element_value(data);
+}
+
+/// @brief Comparator-ordered minimum, maximum, and min/max range values.
+/// The two-value overloads use the same strict ordering.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn min_by(data: &list<T>, less: Less) -> T {
+    return min_element_value_by(data, less);
+}
+
+generic<T, Less>
+pub fn min_by(left: T, right: T, less: Less) -> T {
+    if less(right, left) { return right; }
+    return left;
+}
+
+generic<T, Less>
+pub fn max_by(data: &list<T>, less: Less) -> T {
+    return max_element_value_by(data, less);
+}
+
+generic<T, Less>
+pub fn max_by(left: T, right: T, less: Less) -> T {
+    if less(left, right) { return right; }
+    return left;
+}
+
+generic<T, Less>
+pub fn minmax_by(data: &list<T>, less: Less) -> tuple<T, T> {
+    return minmax_element_value_by(data, less);
+}
+
+/// @brief Projected counterparts to `min`, `max`, and `minmax` for ranges.
+/// Returned values are the original elements, not their projected keys.
+/// @ingroup algorithm_ranges
+generic<T, Projection>
+pub fn min_projected(data: &list<T>, projection: Projection) -> T {
+    return min_element_value_projected(data, projection);
+}
+
+generic<T, Projection>
+pub fn max_projected(data: &list<T>, projection: Projection) -> T {
+    return max_element_value_projected(data, projection);
+}
+
+generic<T, Projection>
+pub fn minmax_projected(data: &list<T>, projection: Projection)
+    -> tuple<T, T> {
+    return minmax_element_value_projected(data, projection);
+}
+
+generic<T, Less, Projection>
+pub fn min_by_projected(data: &list<T>, less: Less, projection: Projection)
+    -> T {
+    return min_element_value_by_projected(data, less, projection);
+}
+
+generic<T, Less, Projection>
+pub fn max_by_projected(data: &list<T>, less: Less, projection: Projection)
+    -> T {
+    return max_element_value_by_projected(data, less, projection);
+}
+
+generic<T, Less, Projection>
+pub fn minmax_by_projected(data: &list<T>, less: Less,
+                           projection: Projection) -> tuple<T, T> {
+    return minmax_element_value_by_projected(data, less, projection);
+}
+
+/// @brief Safe range min/max variants that return None on empty input.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn min_option(data: &list<T>) -> option<T> {
+    return min_element(data);
+}
+
+generic<T>
+pub fn max_option(data: &list<T>) -> option<T> {
+    return max_element(data);
+}
+
+generic<T>
+pub fn minmax_option(data: &list<T>) -> option<tuple<T, T>> {
+    return minmax_element(data);
+}
+
 /// @brief Return count of elements equal to value.
 /// @ingroup algorithm_ranges
 generic<T, U>
