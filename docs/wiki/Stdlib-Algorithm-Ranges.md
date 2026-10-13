@@ -902,10 +902,10 @@ fn example() {
   overflow.
 - `keys(data)` and `values(data)` project the first or second member of each
   `tuple<K, V>` (eager counterparts to C++20 `views::keys` and `views::values`).
-- `elements_0`, `elements_1`, and `elements_2` project fields from three-tuple
-  ranges; overloads of `elements_0` through `elements_3` do the same for
-  four-tuples. These eager helpers cover common C++20 `views::elements<N>`
-  uses when working with zipped records.
+- `elements_0` through `elements_2` project fields from three-tuple ranges;
+  overloads through `elements_7` cover four- through eight-tuple ranges.
+  These eager helpers provide C++20 `views::elements<N>`-style projections
+  for every tuple width supported by `zip`.
 - `cartesian_product` overloads for two through eight ranges materialize
   every value combination in nested-loop order; the rightmost input varies
   fastest (C++23 `views::cartesian_product` style). Any empty input produces

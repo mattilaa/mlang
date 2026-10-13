@@ -24,6 +24,10 @@ use std::algorithm::ranges::elements_0;
 use std::algorithm::ranges::elements_1;
 use std::algorithm::ranges::elements_2;
 use std::algorithm::ranges::elements_3;
+use std::algorithm::ranges::elements_4;
+use std::algorithm::ranges::elements_5;
+use std::algorithm::ranges::elements_6;
+use std::algorithm::ranges::elements_7;
 use std::algorithm::ranges::zip_longest;
 use std::algorithm::ranges::zip_longest_to;
 use std::algorithm::ranges::zip_longest_many;
@@ -289,6 +293,20 @@ fn test_ranges_project_tuple_quadruple_elements() {
     verify(second[0] == 10 && second[1] == 20);
     verify(third[0] == 100 && third[1] == 200);
     verify(fourth[0] == 1000 && fourth[1] == 2000);
+}
+
+#[test]
+fn test_ranges_project_tuple_eight_elements() {
+    let records: list<tuple<i32, i64, i32, i64, i32, i64, i32, i64>> = [
+        (1, 10, 100, 1000, 10000, 100000, 1000000, 10000000)];
+    let fifth: list<i32> = elements_4(records);
+    let sixth: list<i64> = elements_5(records);
+    let seventh: list<i32> = elements_6(records);
+    let eighth: list<i64> = elements_7(records);
+    verify(fifth.len() == 1 && fifth[0] == 10000);
+    verify(sixth.len() == 1 && sixth[0] == 100000);
+    verify(seventh.len() == 1 && seventh[0] == 1000000);
+    verify(eighth.len() == 1 && eighth[0] == 10000000);
 }
 
 #[test]

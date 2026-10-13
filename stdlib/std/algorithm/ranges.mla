@@ -12309,6 +12309,370 @@ pub fn elements_3(data: &list<tuple<A, B, C, D>>) -> list<D> {
     return projected;
 }
 
+/// @brief Project tuple field 0 from 5-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<0>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E>
+pub fn elements_0(data: &list<tuple<A, B, C, D, E>>) -> list<A> {
+    var projected: list<A> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E> = data[i];
+        projected.push(entry.0);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 1 from 5-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<1>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E>
+pub fn elements_1(data: &list<tuple<A, B, C, D, E>>) -> list<B> {
+    var projected: list<B> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E> = data[i];
+        projected.push(entry.1);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 2 from 5-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<2>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E>
+pub fn elements_2(data: &list<tuple<A, B, C, D, E>>) -> list<C> {
+    var projected: list<C> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E> = data[i];
+        projected.push(entry.2);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 3 from 5-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<3>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E>
+pub fn elements_3(data: &list<tuple<A, B, C, D, E>>) -> list<D> {
+    var projected: list<D> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E> = data[i];
+        projected.push(entry.3);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 4 from 5-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<4>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E>
+pub fn elements_4(data: &list<tuple<A, B, C, D, E>>) -> list<E> {
+    var projected: list<E> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E> = data[i];
+        projected.push(entry.4);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 0 from 6-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<0>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F>
+pub fn elements_0(data: &list<tuple<A, B, C, D, E, F>>) -> list<A> {
+    var projected: list<A> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F> = data[i];
+        projected.push(entry.0);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 1 from 6-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<1>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F>
+pub fn elements_1(data: &list<tuple<A, B, C, D, E, F>>) -> list<B> {
+    var projected: list<B> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F> = data[i];
+        projected.push(entry.1);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 2 from 6-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<2>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F>
+pub fn elements_2(data: &list<tuple<A, B, C, D, E, F>>) -> list<C> {
+    var projected: list<C> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F> = data[i];
+        projected.push(entry.2);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 3 from 6-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<3>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F>
+pub fn elements_3(data: &list<tuple<A, B, C, D, E, F>>) -> list<D> {
+    var projected: list<D> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F> = data[i];
+        projected.push(entry.3);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 4 from 6-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<4>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F>
+pub fn elements_4(data: &list<tuple<A, B, C, D, E, F>>) -> list<E> {
+    var projected: list<E> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F> = data[i];
+        projected.push(entry.4);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 5 from 6-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<5>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F>
+pub fn elements_5(data: &list<tuple<A, B, C, D, E, F>>) -> list<F> {
+    var projected: list<F> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F> = data[i];
+        projected.push(entry.5);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 0 from 7-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<0>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G>
+pub fn elements_0(data: &list<tuple<A, B, C, D, E, F, G>>) -> list<A> {
+    var projected: list<A> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G> = data[i];
+        projected.push(entry.0);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 1 from 7-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<1>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G>
+pub fn elements_1(data: &list<tuple<A, B, C, D, E, F, G>>) -> list<B> {
+    var projected: list<B> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G> = data[i];
+        projected.push(entry.1);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 2 from 7-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<2>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G>
+pub fn elements_2(data: &list<tuple<A, B, C, D, E, F, G>>) -> list<C> {
+    var projected: list<C> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G> = data[i];
+        projected.push(entry.2);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 3 from 7-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<3>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G>
+pub fn elements_3(data: &list<tuple<A, B, C, D, E, F, G>>) -> list<D> {
+    var projected: list<D> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G> = data[i];
+        projected.push(entry.3);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 4 from 7-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<4>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G>
+pub fn elements_4(data: &list<tuple<A, B, C, D, E, F, G>>) -> list<E> {
+    var projected: list<E> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G> = data[i];
+        projected.push(entry.4);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 5 from 7-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<5>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G>
+pub fn elements_5(data: &list<tuple<A, B, C, D, E, F, G>>) -> list<F> {
+    var projected: list<F> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G> = data[i];
+        projected.push(entry.5);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 6 from 7-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<6>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G>
+pub fn elements_6(data: &list<tuple<A, B, C, D, E, F, G>>) -> list<G> {
+    var projected: list<G> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G> = data[i];
+        projected.push(entry.6);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 0 from 8-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<0>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G, H>
+pub fn elements_0(data: &list<tuple<A, B, C, D, E, F, G, H>>) -> list<A> {
+    var projected: list<A> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G, H> = data[i];
+        projected.push(entry.0);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 1 from 8-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<1>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G, H>
+pub fn elements_1(data: &list<tuple<A, B, C, D, E, F, G, H>>) -> list<B> {
+    var projected: list<B> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G, H> = data[i];
+        projected.push(entry.1);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 2 from 8-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<2>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G, H>
+pub fn elements_2(data: &list<tuple<A, B, C, D, E, F, G, H>>) -> list<C> {
+    var projected: list<C> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G, H> = data[i];
+        projected.push(entry.2);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 3 from 8-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<3>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G, H>
+pub fn elements_3(data: &list<tuple<A, B, C, D, E, F, G, H>>) -> list<D> {
+    var projected: list<D> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G, H> = data[i];
+        projected.push(entry.3);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 4 from 8-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<4>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G, H>
+pub fn elements_4(data: &list<tuple<A, B, C, D, E, F, G, H>>) -> list<E> {
+    var projected: list<E> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G, H> = data[i];
+        projected.push(entry.4);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 5 from 8-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<5>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G, H>
+pub fn elements_5(data: &list<tuple<A, B, C, D, E, F, G, H>>) -> list<F> {
+    var projected: list<F> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G, H> = data[i];
+        projected.push(entry.5);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 6 from 8-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<6>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G, H>
+pub fn elements_6(data: &list<tuple<A, B, C, D, E, F, G, H>>) -> list<G> {
+    var projected: list<G> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G, H> = data[i];
+        projected.push(entry.6);
+    }
+    return projected;
+}
+
+/// @brief Project tuple field 7 from 8-element tuple ranges.
+/// Eager counterpart to C++20 `views::elements<7>`.
+/// @ingroup algorithm_ranges
+generic<A, B, C, D, E, F, G, H>
+pub fn elements_7(data: &list<tuple<A, B, C, D, E, F, G, H>>) -> list<H> {
+    var projected: list<H> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let entry: tuple<A, B, C, D, E, F, G, H> = data[i];
+        projected.push(entry.7);
+    }
+    return projected;
+}
+
 /// @brief Merge two nondecreasing ranges into one stable sorted copy.
 /// Both inputs must already be sorted; equal elements from `left` come first.
 /// C++20 `std::ranges::merge` equivalent for same-typed lists.
