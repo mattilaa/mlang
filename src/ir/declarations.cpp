@@ -1259,6 +1259,25 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         return;
     }
 
+    if(auto* functionType = dynamic_cast<FunctionTypeNode*>(declaredType))
+    {
+        llvm::Type* callableType = getLLVMTypeFromNode(functionType);
+        if(!callableType || initValue->getType() != callableType)
+        {
+            reportError(node->line,
+                        "initializer does not match callable type for '" +
+                            node->name + "'");
+            return;
+        }
+        llvm::AllocaInst* alloca = createEntryBlockAlloca(
+            builder.GetInsertBlock()->getParent(), callableType, node->name);
+        builder.CreateStore(initValue, alloca);
+        namedValues[node->name] = alloca;
+        variableTypes[node->name] = TypeNode::TYPE_FUNCTION;
+        constantVariables.insert(node->name);
+        return;
+    }
+
     llvm::Type* targetType = getLLVMType(declaredType->kind);
     llvm::AllocaInst* alloca =
         builder.CreateAlloca(targetType, nullptr, node->name);
@@ -2415,6 +2434,40 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         variableTypes[node->name] = TypeNode::TYPE_STRUCT;
         structVariableTypes[node->name] = resolvedStructName;
         registerStructCleanupIfNeeded(node->name, resolvedStructName);
+        return;
+    }
+
+    if(auto* functionType = dynamic_cast<FunctionTypeNode*>(declaredType))
+    {
+        llvm::Type* callableType = getLLVMTypeFromNode(functionType);
+        if(!callableType)
+        {
+            reportError(node->line,
+                        "invalid callable type for '" + node->name + "'");
+            return;
+        }
+        llvm::AllocaInst* alloca = createEntryBlockAlloca(
+            builder.GetInsertBlock()->getParent(), callableType, node->name);
+        if(node->initExpr)
+        {
+            llvm::Value* initValue =
+                generateExpression(node->initExpr, functionType);
+            if(!initValue || initValue->getType() != callableType)
+            {
+                reportError(node->line,
+                            "initializer does not match callable type for '" +
+                                node->name + "'");
+                return;
+            }
+            builder.CreateStore(initValue, alloca);
+        }
+        else
+        {
+            storeZeroInitializedValue(alloca, callableType);
+            emitImplicitZeroInitWarning();
+        }
+        namedValues[node->name] = alloca;
+        variableTypes[node->name] = TypeNode::TYPE_FUNCTION;
         return;
     }
 

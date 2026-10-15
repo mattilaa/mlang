@@ -1046,6 +1046,21 @@ fn main() -> i32 {
 }
 ```
 
+Non-borrowing closures can also be returned and then invoked through a typed
+local:
+
+```mla
+fn make_reader() -> fn() -> i32 {
+    let read = || { return 17; };
+    return read;
+}
+
+fn main() -> i32 {
+    let read: fn() -> i32 = make_reader();
+    return read();
+}
+```
+
 Use `fn() -> Result` for zero-argument callables and `fn(Args...) -> Result`
 for other signatures. Function-typed parameters use the closure code/environment
 representation. Because Mlang does not yet have a no-escape parameter

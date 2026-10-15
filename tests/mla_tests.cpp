@@ -4361,6 +4361,22 @@ TEST_F(MLATest, BorrowedClosureCannotPassToEscapingParameter)
     EXPECT_NE(rc, 0);
 }
 
+TEST_F(MLATest, NonBorrowingClosureCanBeReturnedAndInvoked)
+{
+    std::string code = R"(
+        fn make_reader() -> fn() -> i32 {
+            let read = || { return 17; };
+            return read;
+        }
+        fn main() -> i32 {
+            let read: fn() -> i32 = make_reader();
+            var another_read: fn() -> i32 = make_reader();
+            return read() + another_read();
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 34);
+}
+
 TEST_F(MLATest, OwnershipCanReturnPointerBorrowingGlobal)
 {
     std::string code = R"(
