@@ -711,6 +711,8 @@ private:
         std::vector<std::pair<std::string, TypeNode*>>& captures);
     bool tryGenerateRuntimeClosureValue(const std::string& name,
                                         ClosureNode* closure, int line);
+    bool tryCopyRuntimeClosureValue(const std::string& name,
+                                    const std::string& sourceName, int line);
     void generateCexprDeclaration(CexprDeclNode* node,
                                   bool emitRuntimeBinding = true);
     void generateVarDeclaration(VarDeclNode* node);

@@ -15,14 +15,17 @@ bool CodeGenerator::getRuntimeClosureCaptures(
     ClosureNode* closure,
     std::vector<std::pair<std::string, TypeNode*>>& captures)
 {
-    if(!closure ||
-       (closure->parameters && !closure->parameters->parameters.empty()))
+    if(!closure)
         return false;
 
     std::set<std::string> used;
     if(closure->body)
         for(auto* statement : closure->body->statements)
             collect_used_idents(statement, used);
+    if(closure->parameters)
+        for(auto* parameter : closure->parameters->parameters)
+            if(parameter)
+                used.erase(parameter->name);
     std::function<bool(StatementNode*)> hasValueReturn =
         [&](StatementNode* statement) -> bool
     {
@@ -178,6 +181,55 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
     return true;
 }
 
+bool CodeGenerator::tryCopyRuntimeClosureValue(const std::string& name,
+                                              const std::string& sourceName,
+                                              int line)
+{
+    auto runtime = runtimeClosureVariables.find(sourceName);
+    auto closure = closureVariables.find(sourceName);
+    auto source = namedValues.find(sourceName);
+    if(runtime == runtimeClosureVariables.end() ||
+       closure == closureVariables.end() || runtime->second != closure->second ||
+       source == namedValues.end())
+        return false;
+
+    auto* sourceSlot = llvm::dyn_cast<llvm::AllocaInst>(source->second);
+    if(!sourceSlot)
+    {
+        reportError(line, "runtime closure source is not a local value");
+        return true;
+    }
+    llvm::Value* value = builder.CreateLoad(sourceSlot->getAllocatedType(),
+                                            sourceSlot,
+                                            name + ".closure.copy");
+    llvm::AllocaInst* slot = createEntryBlockAlloca(
+        builder.GetInsertBlock()->getParent(), sourceSlot->getAllocatedType(),
+        name + ".closure");
+    builder.CreateStore(value, slot);
+    namedValues[name] = slot;
+    closureVariables[name] = closure->second;
+    runtimeClosureVariables[name] = runtime->second;
+    auto owners = runtimeClosureBorrowOwners.find(sourceName);
+    if(owners != runtimeClosureBorrowOwners.end())
+    {
+        runtimeClosureBorrowOwners[name] = owners->second;
+        for(const auto& owner : owners->second)
+        {
+            auto exclusive = activeMutBorrower.find(owner);
+            if(exclusive != activeMutBorrower.end())
+            {
+                reportError(line, "cannot copy closure '" + sourceName +
+                                      "' while its capture '" + owner +
+                                      "' is mutably borrowed");
+                return true;
+            }
+            activeBorrowers[owner].insert(name);
+        }
+    }
+    recordVariableScopeDepth(name);
+    return true;
+}
+
 bool CodeGenerator::validateBooleanBranchPrediction(
     BranchPrediction prediction, TypeNode* declaredType,
     ExpressionNode* initializer, int line, int col)
@@ -271,10 +323,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
            closure != closureVariables.end() &&
            runtime->second == closure->second)
         {
-            reportError(node->line,
-                        "copying a runtime closure value is not supported; "
-                        "call it directly instead");
-            return;
+            if(tryCopyRuntimeClosureValue(node->name, source->name,
+                                          node->line))
+                return;
         }
     }
 
@@ -1218,10 +1269,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
            closure != closureVariables.end() &&
            runtime->second == closure->second)
         {
-            reportError(node->line,
-                        "copying a runtime closure value is not supported; "
-                        "call it directly instead");
-            return;
+            if(tryCopyRuntimeClosureValue(node->name, source->name,
+                                          node->line))
+                return;
         }
     }
 

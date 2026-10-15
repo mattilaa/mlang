@@ -1606,9 +1606,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(node->name == "atomic_i64_free")
         return generateAtomicI64Free(node);
 
-    // Non-capturing, zero-argument closures are stored as runtime function
-    // pointers and invoked indirectly. Other closures use the established
-    // inline path until environment layouts and borrow / escape rules exist.
+    // Runtime closures are represented by a code pointer and an environment
+    // pointer. Their declared parameter types determine the indirect call ABI.
     auto runtimeClosure = runtimeClosureVariables.find(node->name);
     auto declaredClosure = closureVariables.find(node->name);
     if(runtimeClosure != runtimeClosureVariables.end() &&
@@ -1618,10 +1617,13 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         ClosureNode* closure = declaredClosure->second;
         const size_t expectedCount =
             closure->parameters ? closure->parameters->parameters.size() : 0;
-        if(expectedCount != 0 || !node->arguments.empty())
+        if(node->arguments.size() != expectedCount)
         {
             reportError(node->line, "runtime closure '" + node->name +
-                                        "' expects no arguments");
+                                        "' expects " +
+                                        std::to_string(expectedCount) +
+                                        " argument(s), got " +
+                                        std::to_string(node->arguments.size()));
             return nullptr;
         }
         auto valueIt = namedValues.find(node->name);
@@ -1647,13 +1649,53 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         llvm::Type* erasedPointerType =
             llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
+        std::vector<llvm::Type*> signatureParameters = {erasedPointerType};
+        std::vector<llvm::Value*> callArguments = {environment};
+        if(closure->parameters)
+        {
+            for(size_t i = 0; i < closure->parameters->parameters.size(); ++i)
+            {
+                auto* parameter = closure->parameters->parameters[i];
+                llvm::Type* parameterType =
+                    parameter ? getLLVMTypeFromNode(parameter->type) : nullptr;
+                llvm::Value* argument = generateExpression(node->arguments[i]);
+                if(!parameterType || !argument)
+                {
+                    reportError(node->line,
+                                "runtime closure parameter types must be "
+                                "known and arguments must be valid");
+                    return nullptr;
+                }
+                if(argument->getType() != parameterType)
+                {
+                    if(argument->getType()->isIntegerTy() &&
+                       parameterType->isIntegerTy())
+                        argument = builder.CreateIntCast(
+                            argument, parameterType, true,
+                            "closure.arg.cast");
+                    else if(argument->getType()->isFloatingPointTy() &&
+                            parameterType->isFloatingPointTy())
+                        argument = builder.CreateFPCast(
+                            argument, parameterType, "closure.arg.cast");
+                    else
+                    {
+                        reportError(node->line,
+                                    "runtime closure argument type does not "
+                                    "match its parameter");
+                        return nullptr;
+                    }
+                }
+                signatureParameters.push_back(parameterType);
+                callArguments.push_back(argument);
+            }
+        }
         llvm::FunctionType* signature = llvm::FunctionType::get(
-            llvm::Type::getVoidTy(context), {erasedPointerType}, false);
+            llvm::Type::getVoidTy(context), signatureParameters, false);
 #if LLVM_VERSION_MAJOR < 15
         code = builder.CreateBitCast(code, signature->getPointerTo(),
                                      node->name + ".callable");
 #endif
-        return builder.CreateCall(signature, code, {environment},
+        return builder.CreateCall(signature, code, callArguments,
                                   node->name + ".call");
     }
 
@@ -3006,13 +3048,6 @@ llvm::Function* CodeGenerator::generateClosureFn(
     const std::vector<std::pair<std::string, TypeNode*>>* captures,
     const std::set<std::string>* constCaptures)
 {
-    if(node->parameters && !node->parameters->parameters.empty())
-    {
-        reportError(node->line,
-                    "thread_spawn closure does not support parameters");
-        return nullptr;
-    }
-
     static int closureSeq = 0;
     std::string closureName = "__mlang_closure_" + std::to_string(closureSeq++);
 
@@ -3025,6 +3060,22 @@ llvm::Function* CodeGenerator::generateClosureFn(
 #endif
     if(captures)
         closureParameters.push_back(erasedPointerType);
+    if(node->parameters)
+    {
+        for(auto* parameter : node->parameters->parameters)
+        {
+            llvm::Type* parameterType =
+                parameter ? getLLVMTypeFromNode(parameter->type) : nullptr;
+            if(!parameterType)
+            {
+                reportError(node->line,
+                            "runtime closure parameter has an unsupported "
+                            "type");
+                return nullptr;
+            }
+            closureParameters.push_back(parameterType);
+        }
+    }
     llvm::FunctionType* closureFnType = llvm::FunctionType::get(
         llvm::Type::getVoidTy(context), closureParameters, false);
     llvm::Function* closureFn =
@@ -3179,6 +3230,45 @@ llvm::Function* CodeGenerator::generateClosureFn(
         }
     }
 
+    if(node->parameters)
+    {
+        size_t parameterIndex = captures ? 1 : 0;
+        for(auto* parameter : node->parameters->parameters)
+        {
+            llvm::Argument* argument = closureFn->getArg(parameterIndex++);
+            argument->setName(parameter->name);
+            llvm::Type* localType = argument->getType();
+            llvm::AllocaInst* local = builder.CreateAlloca(
+                localType, nullptr, parameter->name + ".addr");
+            llvm::Value* incoming = &*argument;
+            if(localType->isStructTy())
+                incoming = applyStructCopySemantics(incoming);
+            builder.CreateStore(incoming, local);
+            namedValues[parameter->name] = local;
+            recordVariableScopeDepth(parameter->name);
+            if(parameter->type)
+            {
+                variableTypes[parameter->name] = parameter->type->kind;
+                if(auto* structType =
+                       dynamic_cast<StructTypeRefNode*>(parameter->type))
+                    structVariableTypes[parameter->name] =
+                        structType->structName;
+                else if(auto* genericStruct =
+                            dynamic_cast<GenericStructTypeRefNode*>(
+                                parameter->type))
+                    structVariableTypes[parameter->name] =
+                        genericStruct->getMangledName();
+                else if(auto* listType =
+                            dynamic_cast<GenericListTypeNode*>(parameter->type))
+                    listElementTypes[parameter->name] = listType->elementType;
+                else if(auto* mapType =
+                            dynamic_cast<MapTypeNode*>(parameter->type))
+                    mapKeyValueTypes[parameter->name] = {
+                        mapType->keyType, mapType->valueType};
+            }
+        }
+    }
+
     if(node->body)
     {
         for(auto* stmt : node->body->statements)
@@ -3265,6 +3355,13 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
 
     if(auto* closureArg = dynamic_cast<ClosureNode*>(node->arguments[0]))
     {
+        if(closureArg->parameters &&
+           !closureArg->parameters->parameters.empty())
+        {
+            reportError(node->line,
+                        "thread_spawn closure does not support parameters");
+            return nullptr;
+        }
         if(node->arguments.size() != 1)
         {
             reportError(node->line,

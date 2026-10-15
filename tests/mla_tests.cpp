@@ -4218,6 +4218,33 @@ TEST_F(MLATest, ClosureBorrowCannotEscapeThroughFunctionArgument)
     EXPECT_NE(out.find("borrows local variable 'count'"), std::string::npos);
 }
 
+TEST_F(MLATest, RuntimeClosureAcceptsTypedArguments)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var count: i32 = 2;
+            let add = |amount: i32| { count += amount; };
+            add(5);
+            return count;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
+TEST_F(MLATest, RuntimeClosureCanBeCopiedWithinBorrowScope)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var count: i32 = 0;
+            let bump = || { count += 1; };
+            let another = bump;
+            another();
+            return count;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 1);
+}
+
 TEST_F(MLATest, OwnershipCanReturnPointerBorrowingGlobal)
 {
     std::string code = R"(
