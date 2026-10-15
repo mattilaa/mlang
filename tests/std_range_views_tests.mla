@@ -1,0 +1,31 @@
+mod std::testing;
+mod std::ranges::views;
+
+use std::testing::verify;
+use std::ranges::views::*;
+
+#[test]
+fn test_take_and_drop_views_are_indexable_and_lazy() {
+    let prefix = take([10, 20, 30, 40], 2);
+    verify(prefix.len() == 2);
+    let first: option<i64> = prefix.get(0);
+    let second: option<i64> = prefix.get(1);
+    let out_of_range: option<i64> = prefix.get(2);
+    verify(first.unwrap() == 10);
+    verify(second.unwrap() == 20);
+    verify(out_of_range.is_none());
+    let prefix_values: list<i64> = prefix.collect();
+    verify(prefix_values.len() == 2 && prefix_values[1] == 20);
+
+    let suffix = drop([10, 20, 30, 40], 2);
+    verify(suffix.len() == 2);
+    let first: option<i64> = suffix.get(0);
+    let second: option<i64> = suffix.get(1);
+    let out_of_range: option<i64> = suffix.get(-1);
+    verify(first.unwrap() == 30);
+    verify(second.unwrap() == 40);
+    verify(out_of_range.is_none());
+    verify(take([1, 2], 0).len() == 0);
+    verify(drop([1, 2], 10).len() == 0);
+}
+

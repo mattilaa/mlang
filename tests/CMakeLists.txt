@@ -84,6 +84,7 @@ else()
     set(MLA_TEST_FILES
         "mla_tests.mla"
         "std_atomic_float_tests.mla"
+        "std_range_views_tests.mla"
     )
 endif()
 
