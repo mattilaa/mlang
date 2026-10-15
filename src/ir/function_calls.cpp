@@ -2062,6 +2062,14 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     {
         if(!expr)
             return nullptr;
+        if(auto* identifier = dynamic_cast<IdentifierNode*>(expr))
+        {
+            auto functionItem = functionOverloads.find(identifier->name);
+            if(functionItem != functionOverloads.end() &&
+               !namedValues.count(identifier->name) &&
+               !globalNamedValues.count(identifier->name))
+                return nullptr;
+        }
         if(TypeNode* ty = getLValueType(expr, node->line))
             return ty;
 
@@ -2710,6 +2718,41 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         auto actual = functionTypeVariables.find(id->name);
                         if(actual != functionTypeVariables.end())
                             actualFunction = actual->second;
+                        else
+                        {
+                            auto items = functionOverloads.find(id->name);
+                            if(items != functionOverloads.end())
+                            {
+                                size_t matchingItems = 0;
+                                for(const auto& item : items->second)
+                                {
+                                    if(!isOverloadVisible(item) || !item.node ||
+                                       !item.function ||
+                                       !item.node->parameters ||
+                                       item.node->parameters->isVarArg ||
+                                       !item.node->typeParams.empty() ||
+                                       item.node->parameters->parameters.size() !=
+                                           (expectedFunction->parameterTypes
+                                                ? expectedFunction->parameterTypes
+                                                      ->types.size()
+                                                : 0))
+                                        continue;
+                                    auto* itemParams = new TypeListNode();
+                                    for(auto* parameter :
+                                        item.node->parameters->parameters)
+                                        itemParams->addType(
+                                            cloneTypeNode(parameter->type));
+                                    auto* itemType = new FunctionTypeNode(
+                                        itemParams,
+                                        cloneTypeNode(item.node->returnType));
+                                    if(typeMangle(itemType) ==
+                                       typeMangle(expectedFunction))
+                                        ++matchingItems;
+                                }
+                                if(matchingItems == 1)
+                                    actualFunction = expectedFunction;
+                            }
+                        }
                     }
                     if(!actualFunction ||
                        typeMangle(expectedFunction) !=

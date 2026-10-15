@@ -4326,6 +4326,25 @@ TEST_F(MLATest, FunctionTypeAliasWorksForCallbackParameters)
     EXPECT_EQ(compileAndRunExitCode(code), 21);
 }
 
+TEST_F(MLATest, NamedFunctionCanBePassedAsCallableValue)
+{
+    std::string code = R"(
+        fn square(value: i32) -> i32 {
+            return value * value;
+        }
+        fn square(value: i64) -> i64 {
+            return value * value;
+        }
+        fn apply(mapper: fn(i32) -> i32, value: i32) -> i32 {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            return apply(square, 8);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 64);
+}
+
 TEST_F(MLATest, FunctionTypedClosureRejectsBorrowedCaptureEscape)
 {
     std::string code = R"(

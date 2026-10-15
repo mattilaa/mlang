@@ -1056,6 +1056,21 @@ fn apply(mapper: IntMapper, value: i32) -> i32 {
 }
 ```
 
+An ordinary named function with a matching signature can also be passed
+directly as a callback. The compiler adapts it to the closure calling
+convention; overloaded names must have one unambiguous match:
+
+```mla
+fn square(value: i32) -> i32 { return value * value; }
+fn apply(mapper: IntMapper, value: i32) -> i32 {
+    return mapper(value);
+}
+
+fn main() -> i32 {
+    return apply(square, 8);
+}
+```
+
 Non-borrowing closures can also be returned and then invoked through a typed
 local:
 
