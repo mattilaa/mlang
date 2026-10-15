@@ -1,0 +1,98 @@
+mod std::testing;
+mod std::sync;
+mod std::bits;
+mod std::thread;
+
+use std::testing::verify;
+use std::sync::AtomicF32;
+use std::sync::AtomicF64;
+use std::sync::AtomicOrder;
+use std::bits::bit_cast_u64_from_f64;
+use std::thread::*;
+
+fn atomic_f64_increment_worker(raw_handle: i64, iterations: i64) -> i32 {
+    let value: AtomicF64 = AtomicF64 { handle: raw_handle };
+    var index: i64 = 0;
+    while index < iterations {
+        let previous: result<f64, str8> = value.fetch_add_with_order(
+            0.5, AtomicOrder::Relaxed);
+        if previous.is_err() { return 1; }
+        index = index + 1;
+    }
+    return 0;
+}
+
+#[test]
+fn test_atomic_f32_cpp20_floating_operations() {
+    let created: result<AtomicF32, str8> = AtomicF32::new(1.5f);
+    verify(created.is_ok());
+    let value: AtomicF32 = created.unwrap();
+    verify(value.is_valid());
+
+    let added: result<f32, str8> = value.fetch_add(2.25f);
+    let loaded: result<f32, str8> = value.load();
+    verify(added.is_ok() && loaded.is_ok());
+    verify(added.unwrap() == 1.5f && loaded.unwrap() == 3.75f);
+
+    let exchanged: result<tuple<bool, f32>, str8> =
+        value.compare_exchange(3.75f, 8.5f);
+    verify(exchanged.is_ok());
+    let exchange_outcome: tuple<bool, f32> = exchanged.unwrap();
+    verify(exchange_outcome.0 && exchange_outcome.1 == 3.75f);
+
+    let failed: result<tuple<bool, f32>, str8> =
+        value.compare_exchange(3.75f, 9.0f);
+    verify(failed.is_ok());
+    let failed_outcome: tuple<bool, f32> = failed.unwrap();
+    verify(!failed_outcome.0 && failed_outcome.1 == 8.5f);
+
+    let subtracted: result<f32, str8> = value.fetch_sub(0.5f);
+    let final_value: result<f32, str8> = value.load();
+    verify(subtracted.is_ok() && final_value.is_ok());
+    verify(subtracted.unwrap() == 8.5f && final_value.unwrap() == 8.0f);
+
+    let waited: result<i32, str8> = value.wait(8.5f);
+    let notified: result<i32, str8> = value.notify_all();
+    verify(waited.is_ok() && notified.is_ok());
+    verify(value.close() == 0);
+}
+
+#[test]
+fn test_atomic_f64_cpp20_floating_operations() {
+    let created: result<AtomicF64, str8> = AtomicF64::new(-2.5);
+    verify(created.is_ok());
+    let value: AtomicF64 = created.unwrap();
+
+    let added: result<f64, str8> = value.fetch_add(7.25);
+    let loaded: result<f64, str8> = value.load_with_order(AtomicOrder::Acquire);
+    verify(added.is_ok() && loaded.is_ok());
+    verify(added.unwrap() == -2.5 && loaded.unwrap() == 4.75);
+
+    let replaced: result<f64, str8> = value.exchange(10.0);
+    verify(replaced.is_ok() && replaced.unwrap() == 4.75);
+    let subtracted: result<f64, str8> =
+        value.fetch_sub_with_order(0.5, AtomicOrder::AcqRel);
+    let final_value: result<f64, str8> = value.load();
+    verify(subtracted.is_ok() && final_value.is_ok());
+    verify(subtracted.unwrap() == 10.0 && final_value.unwrap() == 9.5);
+
+    let stored: result<i32, str8> = value.store(-0.0);
+    let zero: result<f64, str8> = value.load();
+    verify(stored.is_ok() && zero.is_ok());
+    verify(bit_cast_u64_from_f64(zero.unwrap()) ==
+           bit_cast_u64_from_f64(-0.0));
+    verify(value.close() == 0);
+}
+
+#[test]
+fn test_atomic_f64_concurrent_fetch_add_is_atomic() {
+    let created: result<AtomicF64, str8> = AtomicF64::new(0.0);
+    verify(created.is_ok());
+    let value: AtomicF64 = created.unwrap();
+    let first: thread = thread::spawn(atomic_f64_increment_worker, value.handle, 1000);
+    let second: thread = thread::spawn(atomic_f64_increment_worker, value.handle, 1000);
+    verify(join(first) == 0 && join(second) == 0);
+    let final_value: result<f64, str8> = value.load();
+    verify(final_value.is_ok() && final_value.unwrap() == 1000.0);
+    verify(value.close() == 0);
+}

@@ -7,12 +7,17 @@
 /// - Channel (string message queue)
 /// - LockFreeQueue (string SPSC lock-free queue)
 /// - SpscQueue<T> (preallocated, fixed-size event queue)
-/// - AtomicI64, AtomicU64, AtomicU32, AtomicU16, AtomicU8, AtomicI32, AtomicI16, AtomicI8, AtomicBool, and AtomicFlag
+/// - AtomicI64, AtomicU64, AtomicU32, AtomicU16, AtomicU8, AtomicI32, AtomicI16, AtomicI8, AtomicF32, AtomicF64, AtomicBool, and AtomicFlag
 
 
 /// \cond INTERNAL_IMPORTS
 mod std::sync::detail;
+mod std::bits;
 use std::sync::detail::*;
+use std::bits::bit_cast_u32_from_f32;
+use std::bits::bit_cast_u64_from_f64;
+use std::bits::bit_cast_f32_from_u32;
+use std::bits::bit_cast_f64_from_u64;
 /// \endcond
 
 /// @brief mutex handle.
@@ -93,6 +98,18 @@ pub struct AtomicU16 {
 /// @brief Shared atomic unsigned 8-bit integer.
 /// Arithmetic read-modify-write operations wrap modulo 2^8.
 pub struct AtomicU8 {
+    var handle: i64;
+};
+
+/// @brief Shared C++20-style atomic f32 value.
+/// Floating fetch operations use a compare/exchange loop over the value bits.
+pub struct AtomicF32 {
+    var handle: i64;
+};
+
+/// @brief Shared C++20-style atomic f64 value.
+/// Floating fetch operations use a compare/exchange loop over the value bits.
+pub struct AtomicF64 {
     var handle: i64;
 };
 
@@ -465,6 +482,286 @@ impl AtomicU64 {
 
     pub fn close(self: AtomicU64) -> i32 {
         return __mlang_std_sync_atomic_i64_free(self.handle);
+    }
+}
+
+impl AtomicF64 {
+    pub fn new(initial: f64) -> result<AtomicF64, str8> {
+        let storage: result<AtomicU64, str8> =
+            AtomicU64::new(bit_cast_u64_from_f64(initial));
+        if storage.is_err() { return Err<AtomicF64, str8>(storage.unwrap_err()); }
+        let created: AtomicU64 = storage.unwrap();
+        return Ok<AtomicF64, str8>(AtomicF64 { handle: created.handle });
+    }
+
+    pub fn is_valid(self: AtomicF64) -> bool { return self.handle != 0; }
+
+    pub fn load(self: AtomicF64) -> result<f64, str8> {
+        return self.load_with_order(AtomicOrder::SeqCst);
+    }
+
+    pub fn load_with_order(self: AtomicF64, order: AtomicOrder)
+        -> result<f64, str8> {
+        let storage: AtomicU64 = AtomicU64 { handle: self.handle };
+        let loaded: result<u64, str8> = storage.load_with_order(order);
+        if loaded.is_err() { return Err<f64, str8>(loaded.unwrap_err()); }
+        return Ok<f64, str8>(bit_cast_f64_from_u64(loaded.unwrap()));
+    }
+
+    pub fn store(self: AtomicF64, value: f64) -> result<i32, str8> {
+        return self.store_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn store_with_order(self: AtomicF64, value: f64, order: AtomicOrder)
+        -> result<i32, str8> {
+        let storage: AtomicU64 = AtomicU64 { handle: self.handle };
+        return storage.store_with_order(bit_cast_u64_from_f64(value), order);
+    }
+
+    pub fn exchange(self: AtomicF64, value: f64) -> result<f64, str8> {
+        return self.exchange_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn exchange_with_order(self: AtomicF64, value: f64,
+                               order: AtomicOrder) -> result<f64, str8> {
+        let storage: AtomicU64 = AtomicU64 { handle: self.handle };
+        let exchanged: result<u64, str8> = storage.exchange_with_order(
+            bit_cast_u64_from_f64(value), order);
+        if exchanged.is_err() { return Err<f64, str8>(exchanged.unwrap_err()); }
+        return Ok<f64, str8>(bit_cast_f64_from_u64(exchanged.unwrap()));
+    }
+
+    pub fn fetch_add(self: AtomicF64, value: f64) -> result<f64, str8> {
+        return self.fetch_add_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_add_with_order(self: AtomicF64, value: f64,
+                                order: AtomicOrder) -> result<f64, str8> {
+        let storage: AtomicU64 = AtomicU64 { handle: self.handle };
+        let loaded: result<u64, str8> = storage.load_with_order(AtomicOrder::Relaxed);
+        if loaded.is_err() { return Err<f64, str8>(loaded.unwrap_err()); }
+        var expected: u64 = loaded.unwrap();
+        while true {
+            let previous: f64 = bit_cast_f64_from_u64(expected);
+            let desired: u64 = bit_cast_u64_from_f64(previous + value);
+            let exchanged: result<tuple<bool, u64>, str8> =
+                storage.compare_exchange_with_order(expected, desired, order);
+            if exchanged.is_err() { return Err<f64, str8>(exchanged.unwrap_err()); }
+            let outcome: tuple<bool, u64> = exchanged.unwrap();
+            if outcome.0 { return Ok<f64, str8>(previous); }
+            expected = outcome.1;
+        }
+        return Err<f64, str8>("unreachable atomic f64 add");
+    }
+
+    pub fn fetch_sub(self: AtomicF64, value: f64) -> result<f64, str8> {
+        return self.fetch_sub_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_sub_with_order(self: AtomicF64, value: f64,
+                                order: AtomicOrder) -> result<f64, str8> {
+        let storage: AtomicU64 = AtomicU64 { handle: self.handle };
+        let loaded: result<u64, str8> = storage.load_with_order(AtomicOrder::Relaxed);
+        if loaded.is_err() { return Err<f64, str8>(loaded.unwrap_err()); }
+        var expected: u64 = loaded.unwrap();
+        while true {
+            let previous: f64 = bit_cast_f64_from_u64(expected);
+            let desired: u64 = bit_cast_u64_from_f64(previous - value);
+            let exchanged: result<tuple<bool, u64>, str8> =
+                storage.compare_exchange_with_order(expected, desired, order);
+            if exchanged.is_err() { return Err<f64, str8>(exchanged.unwrap_err()); }
+            let outcome: tuple<bool, u64> = exchanged.unwrap();
+            if outcome.0 { return Ok<f64, str8>(previous); }
+            expected = outcome.1;
+        }
+        return Err<f64, str8>("unreachable atomic f64 sub");
+    }
+
+    pub fn compare_exchange(self: AtomicF64, expected: f64, desired: f64)
+        -> result<tuple<bool, f64>, str8> {
+        return self.compare_exchange_with_order(
+            expected, desired, AtomicOrder::SeqCst);
+    }
+
+    pub fn compare_exchange_with_order(self: AtomicF64, expected: f64,
+                                       desired: f64, order: AtomicOrder)
+        -> result<tuple<bool, f64>, str8> {
+        let storage: AtomicU64 = AtomicU64 { handle: self.handle };
+        let exchanged: result<tuple<bool, u64>, str8> =
+            storage.compare_exchange_with_order(
+                bit_cast_u64_from_f64(expected),
+                bit_cast_u64_from_f64(desired), order);
+        if exchanged.is_err() {
+            return Err<tuple<bool, f64>, str8>(exchanged.unwrap_err());
+        }
+        let outcome: tuple<bool, u64> = exchanged.unwrap();
+        return Ok<tuple<bool, f64>, str8>(
+            (outcome.0, bit_cast_f64_from_u64(outcome.1)));
+    }
+
+    pub fn wait(self: AtomicF64, old_value: f64) -> result<i32, str8> {
+        return self.wait_with_order(old_value, AtomicOrder::SeqCst);
+    }
+
+    pub fn wait_with_order(self: AtomicF64, old_value: f64,
+                           order: AtomicOrder) -> result<i32, str8> {
+        let storage: AtomicU64 = AtomicU64 { handle: self.handle };
+        return storage.wait_with_order(bit_cast_u64_from_f64(old_value), order);
+    }
+
+    pub fn notify_one(self: AtomicF64) -> result<i32, str8> {
+        let storage: AtomicU64 = AtomicU64 { handle: self.handle };
+        return storage.notify_one();
+    }
+
+    pub fn notify_all(self: AtomicF64) -> result<i32, str8> {
+        let storage: AtomicU64 = AtomicU64 { handle: self.handle };
+        return storage.notify_all();
+    }
+
+    pub fn close(self: AtomicF64) -> i32 {
+        let storage: AtomicU64 = AtomicU64 { handle: self.handle };
+        return storage.close();
+    }
+}
+
+impl AtomicF32 {
+    pub fn new(initial: f32) -> result<AtomicF32, str8> {
+        let storage: result<AtomicU32, str8> =
+            AtomicU32::new(bit_cast_u32_from_f32(initial));
+        if storage.is_err() { return Err<AtomicF32, str8>(storage.unwrap_err()); }
+        let created: AtomicU32 = storage.unwrap();
+        return Ok<AtomicF32, str8>(AtomicF32 { handle: created.handle });
+    }
+
+    pub fn is_valid(self: AtomicF32) -> bool { return self.handle != 0; }
+
+    pub fn load(self: AtomicF32) -> result<f32, str8> {
+        return self.load_with_order(AtomicOrder::SeqCst);
+    }
+
+    pub fn load_with_order(self: AtomicF32, order: AtomicOrder)
+        -> result<f32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        let loaded: result<u32, str8> = storage.load_with_order(order);
+        if loaded.is_err() { return Err<f32, str8>(loaded.unwrap_err()); }
+        return Ok<f32, str8>(bit_cast_f32_from_u32(loaded.unwrap()));
+    }
+
+    pub fn store(self: AtomicF32, value: f32) -> result<i32, str8> {
+        return self.store_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn store_with_order(self: AtomicF32, value: f32, order: AtomicOrder)
+        -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return storage.store_with_order(bit_cast_u32_from_f32(value), order);
+    }
+
+    pub fn exchange(self: AtomicF32, value: f32) -> result<f32, str8> {
+        return self.exchange_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn exchange_with_order(self: AtomicF32, value: f32,
+                               order: AtomicOrder) -> result<f32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        let exchanged: result<u32, str8> = storage.exchange_with_order(
+            bit_cast_u32_from_f32(value), order);
+        if exchanged.is_err() { return Err<f32, str8>(exchanged.unwrap_err()); }
+        return Ok<f32, str8>(bit_cast_f32_from_u32(exchanged.unwrap()));
+    }
+
+    pub fn fetch_add(self: AtomicF32, value: f32) -> result<f32, str8> {
+        return self.fetch_add_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_add_with_order(self: AtomicF32, value: f32,
+                                order: AtomicOrder) -> result<f32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        let loaded: result<u32, str8> = storage.load_with_order(AtomicOrder::Relaxed);
+        if loaded.is_err() { return Err<f32, str8>(loaded.unwrap_err()); }
+        var expected: u32 = loaded.unwrap();
+        while true {
+            let previous: f32 = bit_cast_f32_from_u32(expected);
+            let desired: u32 = bit_cast_u32_from_f32(previous + value);
+            let exchanged: result<tuple<bool, u32>, str8> =
+                storage.compare_exchange_with_order(expected, desired, order);
+            if exchanged.is_err() { return Err<f32, str8>(exchanged.unwrap_err()); }
+            let outcome: tuple<bool, u32> = exchanged.unwrap();
+            if outcome.0 { return Ok<f32, str8>(previous); }
+            expected = outcome.1;
+        }
+        return Err<f32, str8>("unreachable atomic f32 add");
+    }
+
+    pub fn fetch_sub(self: AtomicF32, value: f32) -> result<f32, str8> {
+        return self.fetch_sub_with_order(value, AtomicOrder::SeqCst);
+    }
+
+    pub fn fetch_sub_with_order(self: AtomicF32, value: f32,
+                                order: AtomicOrder) -> result<f32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        let loaded: result<u32, str8> = storage.load_with_order(AtomicOrder::Relaxed);
+        if loaded.is_err() { return Err<f32, str8>(loaded.unwrap_err()); }
+        var expected: u32 = loaded.unwrap();
+        while true {
+            let previous: f32 = bit_cast_f32_from_u32(expected);
+            let desired: u32 = bit_cast_u32_from_f32(previous - value);
+            let exchanged: result<tuple<bool, u32>, str8> =
+                storage.compare_exchange_with_order(expected, desired, order);
+            if exchanged.is_err() { return Err<f32, str8>(exchanged.unwrap_err()); }
+            let outcome: tuple<bool, u32> = exchanged.unwrap();
+            if outcome.0 { return Ok<f32, str8>(previous); }
+            expected = outcome.1;
+        }
+        return Err<f32, str8>("unreachable atomic f32 sub");
+    }
+
+    pub fn compare_exchange(self: AtomicF32, expected: f32, desired: f32)
+        -> result<tuple<bool, f32>, str8> {
+        return self.compare_exchange_with_order(
+            expected, desired, AtomicOrder::SeqCst);
+    }
+
+    pub fn compare_exchange_with_order(self: AtomicF32, expected: f32,
+                                       desired: f32, order: AtomicOrder)
+        -> result<tuple<bool, f32>, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        let exchanged: result<tuple<bool, u32>, str8> =
+            storage.compare_exchange_with_order(
+                bit_cast_u32_from_f32(expected),
+                bit_cast_u32_from_f32(desired), order);
+        if exchanged.is_err() {
+            return Err<tuple<bool, f32>, str8>(exchanged.unwrap_err());
+        }
+        let outcome: tuple<bool, u32> = exchanged.unwrap();
+        return Ok<tuple<bool, f32>, str8>(
+            (outcome.0, bit_cast_f32_from_u32(outcome.1)));
+    }
+
+    pub fn wait(self: AtomicF32, old_value: f32) -> result<i32, str8> {
+        return self.wait_with_order(old_value, AtomicOrder::SeqCst);
+    }
+
+    pub fn wait_with_order(self: AtomicF32, old_value: f32,
+                           order: AtomicOrder) -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return storage.wait_with_order(bit_cast_u32_from_f32(old_value), order);
+    }
+
+    pub fn notify_one(self: AtomicF32) -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return storage.notify_one();
+    }
+
+    pub fn notify_all(self: AtomicF32) -> result<i32, str8> {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return storage.notify_all();
+    }
+
+    pub fn close(self: AtomicF32) -> i32 {
+        let storage: AtomicU32 = AtomicU32 { handle: self.handle };
+        return storage.close();
     }
 }
 

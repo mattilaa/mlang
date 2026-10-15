@@ -12,6 +12,8 @@ Module file: `stdlib/std/sync.mla`
 - `AtomicU32` (native-width 32-bit unsigned atomic integer)
 - `AtomicU16` (16-bit unsigned atomic integer)
 - `AtomicU8` (8-bit unsigned atomic integer)
+- `AtomicF32` (32-bit floating atomic value)
+- `AtomicF64` (64-bit floating atomic value)
 - `AtomicI16` (16-bit signed atomic integer)
 - `AtomicI8` (8-bit signed atomic integer)
 - `AtomicI32` (native-width 32-bit signed atomic integer)
@@ -165,6 +167,19 @@ The current implementation uses the existing 64-bit atomic runtime storage;
 it does not promise lock-free behavior. As with `AtomicI64`, use explicit
 acquire/release ordering when publishing other data, notify after changing a
 waited-on value, and close only after every thread has stopped using it.
+
+### AtomicF32 and AtomicF64
+
+`AtomicF32` and `AtomicF64` provide C++20 floating atomic value operations:
+ordered `load`, `store`, `exchange`, strong `compare_exchange`, `wait`, and
+notifications, plus floating-point `fetch_add` and `fetch_sub`. The arithmetic
+operations use a compare/exchange loop, so concurrent updates are atomic even
+though the result is computed in Mlang. Storage reuses the corresponding
+integer atomic representation and bit-casts values without numeric
+conversion. Consequently comparison and wait observe exact floating-point
+representations (including signed zero and NaN payloads); these types do not
+promise lock-free behavior. Handles are shared on copy and must be closed
+exactly once after all users stop.
 
 ### AtomicU32
 

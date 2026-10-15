@@ -81,7 +81,10 @@ if(MLA_REGISTER_ALL_MLANG_SUITES)
         "test_*.mla"
     )
 else()
-    set(MLA_TEST_FILES "mla_tests.mla")
+    set(MLA_TEST_FILES
+        "mla_tests.mla"
+        "std_atomic_float_tests.mla"
+    )
 endif()
 
 list(SORT MLA_TEST_FILES)
