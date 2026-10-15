@@ -43,6 +43,7 @@
 - [[std::algorithm::genetic|Stdlib-Algorithm-Genetic]]
 - [[std::algorithm::order|Stdlib-Algorithm-Order]]
 - [[std::algorithm::ranges|Stdlib-Algorithm-Ranges]]
+- [[std::ranges::views|Stdlib-Ranges-Views]]
 - [[std::argparser|Stdlib-Argparser]]
 - [[std::array|Stdlib-Array]]
 - [[std::bench|Stdlib-Bench]]

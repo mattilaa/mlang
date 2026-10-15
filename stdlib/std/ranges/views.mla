@@ -1,0 +1,71 @@
+/// \file views.mla
+/// \brief Owning, indexable C++20-style range views for Mlang lists.
+///
+/// These adapters defer element selection or transformation until `get` or
+/// `collect` is called. Views own their source list because Mlang does not yet
+/// have lifetime-parameterized borrowed views.
+
+/// @brief A lazy prefix view. The view owns its source list.
+pub struct TakeView<T> {
+    var source: list<T>;
+    var count: i64;
+};
+
+/// @brief A lazy suffix view. The view owns its source list.
+pub struct DropView<T> {
+    var source: list<T>;
+    var offset: i64;
+};
+
+impl<T> TakeView {
+    pub fn len(self: &TakeView<T>) -> i64 {
+        let source_len: i64 = self.source.len();
+        return self.count < source_len ? self.count : source_len;
+    }
+
+    pub fn get(self: &TakeView<T>, index: i64) -> option<T> {
+        if index < 0 || index >= self.len() { return None<T>(); }
+        return Some<T>(self.source[index]);
+    }
+
+    pub fn collect(self: &TakeView<T>) -> list<T> {
+        var output: list<T> = [];
+        for index in 0..self.len() { output.push(self.source[index]); }
+        return output;
+    }
+}
+
+impl<T> DropView {
+    pub fn len(self: &DropView<T>) -> i64 {
+        let source_len: i64 = self.source.len();
+        return source_len - self.offset;
+    }
+
+    pub fn get(self: &DropView<T>, index: i64) -> option<T> {
+        if index < 0 || index >= self.len() { return None<T>(); }
+        return Some<T>(self.source[self.offset + index]);
+    }
+
+    pub fn collect(self: &DropView<T>) -> list<T> {
+        var output: list<T> = [];
+        for index in 0..self.len() {
+            output.push(self.source[self.offset + index]);
+        }
+        return output;
+    }
+}
+
+/// @brief Create a lazy `views::take` prefix over an owned list.
+generic<T>
+pub fn take(source: list<T>, count: i64) -> TakeView<T> {
+    return TakeView<T> { source: source, count: count < 0 ? 0 : count };
+}
+
+/// @brief Create a lazy `views::drop` suffix over an owned list.
+generic<T>
+pub fn drop(source: list<T>, count: i64) -> DropView<T> {
+    let source_len: i64 = source.len();
+    let offset: i64 = count < 0 ? 0 : (count < source_len ? count : source_len);
+    return DropView<T> { source: source, offset: offset };
+}
+

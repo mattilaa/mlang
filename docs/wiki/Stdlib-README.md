@@ -104,6 +104,7 @@ Currently provided:
     (`accumulate_i64`, `partial_sum_i64`, `adjacent_difference_i64`,
      `inner_product_i64`)
   - [`std::algorithm::ranges`](Stdlib-Algorithm-Ranges): C++20 ranges-style helpers for [`list<i64>`](Quick-Guide#types)
+  - [`std::ranges::views`](Stdlib-Ranges-Views): lazy, indexable list prefix/suffix views
     (`unique_i64`, `unique_stable_i64`, `find_i64`, `count_i64`,
      `contains_i64`, `remove_i64`, `take_i64`, `drop_i64`)
   - [`std::algorithm::rand`](Stdlib-Module-API): random helpers mirroring [`std::rand`](Stdlib-Rand)
