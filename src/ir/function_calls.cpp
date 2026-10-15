@@ -1690,13 +1690,19 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
         }
         llvm::FunctionType* signature = llvm::FunctionType::get(
-            llvm::Type::getVoidTy(context), signatureParameters, false);
+            runtimeClosureReturnTypes.count(node->name)
+                ? getLLVMTypeFromNode(
+                      runtimeClosureReturnTypes.at(node->name))
+                : llvm::Type::getVoidTy(context),
+            signatureParameters, false);
 #if LLVM_VERSION_MAJOR < 15
         code = builder.CreateBitCast(code, signature->getPointerTo(),
                                      node->name + ".callable");
 #endif
         return builder.CreateCall(signature, code, callArguments,
-                                  node->name + ".call");
+                                  signature->getReturnType()->isVoidTy()
+                                      ? ""
+                                      : node->name + ".call");
     }
 
     // Inline closure/lambda call: inc(...)
@@ -3046,7 +3052,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 llvm::Function* CodeGenerator::generateClosureFn(
     ClosureNode* node,
     const std::vector<std::pair<std::string, TypeNode*>>* captures,
-    const std::set<std::string>* constCaptures)
+    const std::set<std::string>* constCaptures,
+    TypeNode* returnType)
 {
     static int closureSeq = 0;
     std::string closureName = "__mlang_closure_" + std::to_string(closureSeq++);
@@ -3076,14 +3083,25 @@ llvm::Function* CodeGenerator::generateClosureFn(
             closureParameters.push_back(parameterType);
         }
     }
+    llvm::Type* llvmReturnType = returnType
+                                     ? getLLVMTypeFromNode(returnType)
+                                     : llvm::Type::getVoidTy(context);
+    if(!llvmReturnType)
+    {
+        reportError(node->line,
+                    "runtime closure has an unsupported return type");
+        return nullptr;
+    }
     llvm::FunctionType* closureFnType = llvm::FunctionType::get(
-        llvm::Type::getVoidTy(context), closureParameters, false);
+        llvmReturnType, closureParameters, false);
     llvm::Function* closureFn =
         llvm::Function::Create(closureFnType, llvm::Function::PrivateLinkage,
                                closureName, module.get());
 
     // Save current codegen state so we can restore it after the closure body
     auto savedIP = builder.saveIP();
+    llvm::Value* savedExceptionFrame = currentFunctionExceptionFrame;
+    currentFunctionExceptionFrame = nullptr;
     auto savedNamedValues = namedValues;
     auto savedConstantVars = constantVariables;
     auto savedMovedVars = movedVariables;
@@ -3104,6 +3122,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     auto savedPtrBorrowScopes = pointerBorrowScopes;
     auto savedVarDepthScopes = variableScopeDepthScopes;
     auto savedRuntimeClosureVariables = runtimeClosureVariables;
+    auto savedRuntimeClosureReturnTypes = runtimeClosureReturnTypes;
     auto savedRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     auto savedLoopBreak = loopBreakBlocks;
     auto savedLoopContinue = loopContinueBlocks;
@@ -3114,6 +3133,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     auto savedClosureConstCaptures = closureConstCaptures;
     auto savedClosureCaptureReferenceAliases = closureCaptureReferenceAliases;
     auto savedActiveInline = activeInlineClosures;
+    auto savedSemanticReturnType = currentSemanticReturnType;
 
     // Initialise a fresh scope for the closure body
     namedValues.clear();
@@ -3121,6 +3141,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     movedVariables.clear();
     closureVariables.clear();
     runtimeClosureVariables.clear();
+    runtimeClosureReturnTypes.clear();
     runtimeClosureBorrowOwners.clear();
     closureCaptureAliases.clear();
     closureCaptureTypes.clear();
@@ -3149,6 +3170,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     loopBreakBlocks.clear();
     loopContinueBlocks.clear();
     currentModule = "";
+    currentSemanticReturnType = returnType;
 
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(context, "entry", closureFn);
@@ -3283,7 +3305,17 @@ llvm::Function* CodeGenerator::generateClosureFn(
     exitCleanupScope();
 
     if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
-        builder.CreateRetVoid();
+    {
+        if(llvmReturnType->isVoidTy())
+            builder.CreateRetVoid();
+        else
+        {
+            reportError(node->line,
+                        "runtime closure with a value return must return on "
+                        "every reachable path");
+            builder.CreateRet(llvm::UndefValue::get(llvmReturnType));
+        }
+    }
 
     // Restore caller state
     namedValues = std::move(savedNamedValues);
@@ -3308,8 +3340,10 @@ llvm::Function* CodeGenerator::generateClosureFn(
     loopBreakBlocks = std::move(savedLoopBreak);
     loopContinueBlocks = std::move(savedLoopContinue);
     currentModule = std::move(savedModule);
+    currentFunctionExceptionFrame = savedExceptionFrame;
     closureVariables = std::move(savedClosureVars);
     runtimeClosureVariables = std::move(savedRuntimeClosureVariables);
+    runtimeClosureReturnTypes = std::move(savedRuntimeClosureReturnTypes);
     runtimeClosureBorrowOwners =
         std::move(savedRuntimeClosureBorrowOwners);
     closureCaptureAliases = std::move(savedClosureCaptureAliases);
@@ -3318,6 +3352,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     closureCaptureReferenceAliases =
         std::move(savedClosureCaptureReferenceAliases);
     activeInlineClosures = std::move(savedActiveInline);
+    currentSemanticReturnType = savedSemanticReturnType;
     builder.restoreIP(savedIP);
 
     return closureFn;

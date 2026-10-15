@@ -4245,6 +4245,18 @@ TEST_F(MLATest, RuntimeClosureCanBeCopiedWithinBorrowScope)
     EXPECT_EQ(compileAndRunExitCode(code), 1);
 }
 
+TEST_F(MLATest, RuntimeClosureReturnsValueAndBorrowsCapture)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let base: i32 = 7;
+            let add_base = |value: i32| { return value + base; };
+            return add_base(5);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 12);
+}
+
 TEST_F(MLATest, OwnershipCanReturnPointerBorrowingGlobal)
 {
     std::string code = R"(

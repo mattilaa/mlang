@@ -13,10 +13,13 @@ using mlang::ir_detail::ast_analysis::collect_used_idents;
 
 bool CodeGenerator::getRuntimeClosureCaptures(
     ClosureNode* closure,
-    std::vector<std::pair<std::string, TypeNode*>>& captures)
+    std::vector<std::pair<std::string, TypeNode*>>& captures,
+    TypeNode*& returnType)
 {
     if(!closure)
         return false;
+
+    returnType = new TypeNode(TypeNode::TYPE_VOID);
 
     std::set<std::string> used;
     if(closure->body)
@@ -26,50 +29,150 @@ bool CodeGenerator::getRuntimeClosureCaptures(
         for(auto* parameter : closure->parameters->parameters)
             if(parameter)
                 used.erase(parameter->name);
-    std::function<bool(StatementNode*)> hasValueReturn =
-        [&](StatementNode* statement) -> bool
+    auto savedNamedValues = namedValues;
+    auto savedVariableScopeDepth = variableScopeDepth;
+    auto savedVariableTypes = variableTypes;
+    auto savedStructVariableTypes = structVariableTypes;
+    auto savedEnumVariableTypes = enumVariableTypes;
+    auto savedListElementTypes = listElementTypes;
+    auto savedMapKeyValueTypes = mapKeyValueTypes;
+    auto savedTupleElementTypes = tupleElementTypes;
+    auto savedArrayCapacities = arrayCapacities;
+    auto savedMultiarrayMutability = multiarrayMutability;
+    bool parameterTypesValid = true;
+    if(closure->parameters)
+    {
+        for(auto* parameter : closure->parameters->parameters)
+        {
+            llvm::Type* llvmType =
+                parameter ? getLLVMTypeFromNode(parameter->type) : nullptr;
+            if(!parameter || !parameter->type || !llvmType)
+            {
+                parameterTypesValid = false;
+                break;
+            }
+            auto* slot = createEntryBlockAlloca(
+                builder.GetInsertBlock()->getParent(), llvmType,
+                parameter->name + ".infer.addr");
+            namedValues[parameter->name] = slot;
+            variableScopeDepth[parameter->name] = currentScopeDepth();
+            variableTypes[parameter->name] = parameter->type->kind;
+            if(auto* structType =
+                   dynamic_cast<StructTypeRefNode*>(parameter->type))
+                structVariableTypes[parameter->name] = structType->structName;
+            else if(auto* genericStruct =
+                        dynamic_cast<GenericStructTypeRefNode*>(parameter->type))
+                structVariableTypes[parameter->name] =
+                    genericStruct->getMangledName();
+            if(auto* listType =
+                   dynamic_cast<GenericListTypeNode*>(parameter->type))
+            {
+                listElementTypes[parameter->name] = listType->elementType;
+                if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(listType))
+                    arrayCapacities[parameter->name] = arrayType->capacity;
+                if(auto* multiarrayType =
+                       dynamic_cast<MultiArrayTypeNode*>(listType))
+                    multiarrayMutability[parameter->name] =
+                        multiarrayType->elementsMutable;
+            }
+            if(auto* mapType = dynamic_cast<MapTypeNode*>(parameter->type))
+                mapKeyValueTypes[parameter->name] = {
+                    mapType->keyType, mapType->valueType};
+            if(auto* tupleType =
+                   dynamic_cast<TupleTypeNode*>(parameter->type))
+                tupleElementTypes[parameter->name] =
+                    tupleType->elementTypes->types;
+        }
+    }
+
+    bool sawValueReturn = false;
+    bool sawVoidReturn = false;
+    bool returnTypesValid = parameterTypesValid;
+    std::function<void(StatementNode*)> inferReturns =
+        [&](StatementNode* statement)
     {
         if(auto* ret = dynamic_cast<ReturnNode*>(statement))
-            return ret->expression != nullptr;
+        {
+            if(!ret->expression)
+            {
+                sawVoidReturn = true;
+                return;
+            }
+            TypeNode* inferred =
+                inferExpressionTypeNode(ret->expression, closure->line);
+            if(!inferred)
+            {
+                returnTypesValid = false;
+                return;
+            }
+            if(sawVoidReturn)
+                returnTypesValid = false;
+            if(!sawValueReturn)
+            {
+                returnType = inferred;
+                sawValueReturn = true;
+            }
+            else if(typeMangle(returnType) != typeMangle(inferred))
+                returnTypesValid = false;
+            return;
+        }
         if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
         {
             if(block->statements)
                 for(auto* nested : block->statements->statements)
-                    if(hasValueReturn(nested))
-                        return true;
+                    inferReturns(nested);
         }
         if(auto* branch = dynamic_cast<IfNode*>(statement))
         {
             if(branch->thenBranch)
                 for(auto* nested : branch->thenBranch->statements)
-                    if(hasValueReturn(nested))
-                        return true;
+                    inferReturns(nested);
             if(branch->elseBranch)
                 for(auto* nested : branch->elseBranch->statements)
-                    if(hasValueReturn(nested))
-                        return true;
-            return hasValueReturn(branch->elseIfBranch);
+                    inferReturns(nested);
+            inferReturns(branch->elseIfBranch);
         }
         if(auto* loop = dynamic_cast<ForNode*>(statement))
         {
             if(loop->body)
                 for(auto* nested : loop->body->statements)
-                    if(hasValueReturn(nested))
-                        return true;
+                    inferReturns(nested);
         }
         if(auto* loop = dynamic_cast<WhileNode*>(statement))
         {
             if(loop->body)
                 for(auto* nested : loop->body->statements)
-                    if(hasValueReturn(nested))
-                        return true;
+                    inferReturns(nested);
         }
-        return false;
     };
     if(closure->body)
         for(auto* statement : closure->body->statements)
-            if(hasValueReturn(statement))
-                return false;
+            inferReturns(statement);
+
+    namedValues = std::move(savedNamedValues);
+    variableScopeDepth = std::move(savedVariableScopeDepth);
+    variableTypes = std::move(savedVariableTypes);
+    structVariableTypes = std::move(savedStructVariableTypes);
+    enumVariableTypes = std::move(savedEnumVariableTypes);
+    listElementTypes = std::move(savedListElementTypes);
+    mapKeyValueTypes = std::move(savedMapKeyValueTypes);
+    tupleElementTypes = std::move(savedTupleElementTypes);
+    arrayCapacities = std::move(savedArrayCapacities);
+    multiarrayMutability = std::move(savedMultiarrayMutability);
+    if(!returnTypesValid || (sawValueReturn && sawVoidReturn))
+    {
+        reportError(closure->line,
+                    "runtime closure return expressions must have one "
+                    "consistent, inferable type");
+        return false;
+    }
+    if(!sawValueReturn)
+        returnType = new TypeNode(TypeNode::TYPE_VOID);
+
+    if(closure->parameters)
+        for(auto* parameter : closure->parameters->parameters)
+            if(parameter)
+                used.erase(parameter->name);
     for(const auto& name : used)
     {
         auto value = namedValues.find(name);
@@ -94,11 +197,13 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
                                                    int line)
 {
     std::vector<std::pair<std::string, TypeNode*>> captures;
-    if(!getRuntimeClosureCaptures(closure, captures))
+    TypeNode* returnType = nullptr;
+    if(!getRuntimeClosureCaptures(closure, captures, returnType))
         return false;
 
     llvm::Function* closureFn =
-        generateClosureFn(closure, &captures, &constantVariables);
+        generateClosureFn(closure, &captures, &constantVariables,
+                          returnType);
     if(!closureFn)
         return true; // A diagnostic has already been reported.
 
@@ -161,6 +266,7 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
 
     namedValues[name] = closureSlot;
     runtimeClosureVariables[name] = closure;
+    runtimeClosureReturnTypes[name] = returnType;
     auto& owners = runtimeClosureBorrowOwners[name];
     owners.clear();
     for(const auto& capture : captures)
@@ -209,6 +315,9 @@ bool CodeGenerator::tryCopyRuntimeClosureValue(const std::string& name,
     namedValues[name] = slot;
     closureVariables[name] = closure->second;
     runtimeClosureVariables[name] = runtime->second;
+    auto returnType = runtimeClosureReturnTypes.find(sourceName);
+    if(returnType != runtimeClosureReturnTypes.end())
+        runtimeClosureReturnTypes[name] = returnType->second;
     auto owners = runtimeClosureBorrowOwners.find(sourceName);
     if(owners != runtimeClosureBorrowOwners.end())
     {

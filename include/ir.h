@@ -216,10 +216,10 @@ private:
     // Inline closures: var inc = || { ... }; inc();
     // Maps closure variable name -> its AST node for inline body generation.
     std::map<std::string, ClosureNode*> closureVariables;
-    // A small runtime-callable path for non-capturing, zero-argument closures.
-    // Capturing closures continue to use the established inline lowering until
-    // their environment layout and borrow/escape rules are available.
+    // Runtime-callable closure values use a code pointer plus a stack
+    // environment. Borrow checks keep captured owners alive for local values.
     std::map<std::string, ClosureNode*> runtimeClosureVariables;
+    std::map<std::string, TypeNode*> runtimeClosureReturnTypes;
     // Owner variables borrowed by each runtime closure's stack environment.
     std::map<std::string, std::set<std::string>> runtimeClosureBorrowOwners;
     // Generic closure parameter -> captured local name -> hidden parameter
@@ -708,7 +708,8 @@ private:
     void generateLetDeclaration(LetDeclNode* node);
     bool getRuntimeClosureCaptures(
         ClosureNode* closure,
-        std::vector<std::pair<std::string, TypeNode*>>& captures);
+        std::vector<std::pair<std::string, TypeNode*>>& captures,
+        TypeNode*& returnType);
     bool tryGenerateRuntimeClosureValue(const std::string& name,
                                         ClosureNode* closure, int line);
     bool tryCopyRuntimeClosureValue(const std::string& name,
@@ -787,7 +788,8 @@ private:
         ClosureNode* node,
         const std::vector<std::pair<std::string, TypeNode*>>* captures =
             nullptr,
-        const std::set<std::string>* constCaptures = nullptr);
+        const std::set<std::string>* constCaptures = nullptr,
+        TypeNode* returnType = nullptr);
     llvm::Value* generateThreadJoin(FunctionCallNode* node);
     llvm::Value* buildHandleValue(const std::string& handleTypeName,
                                   llvm::Value* rawHandle, int line);
