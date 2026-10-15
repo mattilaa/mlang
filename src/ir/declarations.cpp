@@ -638,6 +638,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             }
             if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
             {
+                if(auto* returnType = dynamic_cast<FunctionTypeNode*>(
+                       getLValueType(call, node->line)))
+                    return returnType->kind;
                 if(call->name == "String::new" ||
                    call->name == "String::with_capacity" ||
                    call->name == "String::from" ||
@@ -832,6 +835,14 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                     pointerKnownNull[node->name] = *knownNull;
                 else
                     pointerKnownNull.erase(node->name);
+            }
+            else if(auto* callableType =
+                        dynamic_cast<FunctionTypeNode*>(inferredExprType))
+            {
+                variableTypes[node->name] = TypeNode::TYPE_FUNCTION;
+                functionTypeVariables[node->name] =
+                    static_cast<FunctionTypeNode*>(
+                        cloneTypeNode(callableType));
             }
         }
 
@@ -1828,6 +1839,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             }
             if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
             {
+                if(auto* returnType = dynamic_cast<FunctionTypeNode*>(
+                       getLValueType(call, node->line)))
+                    return returnType->kind;
                 if(call->name == "String::new" ||
                    call->name == "String::with_capacity" ||
                    call->name == "String::from" ||
@@ -1895,6 +1909,15 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         TypeNode::TypeKind inferredKind = infer_kind_from_expr(node->initExpr);
         variableTypes[node->name] = inferredKind;
+        if(TypeNode* inferredType =
+               getLValueType(node->initExpr, node->line))
+        {
+            if(auto* callableType =
+                   dynamic_cast<FunctionTypeNode*>(inferredType))
+                functionTypeVariables[node->name] =
+                    static_cast<FunctionTypeNode*>(
+                        cloneTypeNode(callableType));
+        }
 
         if(auto* id = dynamic_cast<IdentifierNode*>(node->initExpr))
         {

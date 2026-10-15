@@ -4369,8 +4369,8 @@ TEST_F(MLATest, NonBorrowingClosureCanBeReturnedAndInvoked)
             return read;
         }
         fn main() -> i32 {
-            let read: fn() -> i32 = make_reader();
-            var another_read: fn() -> i32 = make_reader();
+            let read = make_reader();
+            var another_read = make_reader();
             return read() + another_read();
         }
     )";

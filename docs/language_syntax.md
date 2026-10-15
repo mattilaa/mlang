@@ -1056,10 +1056,14 @@ fn make_reader() -> fn() -> i32 {
 }
 
 fn main() -> i32 {
-    let read: fn() -> i32 = make_reader();
+    let read = make_reader();
     return read();
 }
 ```
+
+When a function returns a callable type, a local initialized from that call
+inherits the callable signature, so repeating the annotation is optional for
+both `let` and `var`.
 
 Use `fn() -> Result` for zero-argument callables and `fn(Args...) -> Result`
 for other signatures. Function-typed parameters use the closure code/environment
