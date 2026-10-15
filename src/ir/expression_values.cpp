@@ -292,6 +292,56 @@ static bool isNumericTypeKind(TypeNode::TypeKind kind)
     }
 }
 
+FunctionTypeNode* CodeGenerator::inferFunctionItemType(
+    IdentifierNode* identifier)
+{
+    if(!identifier || namedValues.count(identifier->name) ||
+       globalNamedValues.count(identifier->name))
+        return nullptr;
+    auto overloads = functionOverloads.find(identifier->name);
+    if(overloads == functionOverloads.end())
+        return nullptr;
+
+    FunctionDefNode* match = nullptr;
+    for(const auto& overload : overloads->second)
+    {
+        if(!isOverloadVisible(overload) || !overload.node)
+            continue;
+        if(!overload.node->parameters ||
+           overload.node->parameters->isVarArg ||
+           !overload.node->typeParams.empty())
+        {
+            reportError(identifier->line,
+                        "cannot infer callable type for generic or variadic "
+                        "function item '" + identifier->name +
+                            "'; add an explicit fn(...) -> ... annotation");
+            return nullptr;
+        }
+        if(match)
+        {
+            reportError(identifier->line,
+                        "function item '" + identifier->name +
+                            "' is overloaded; add an explicit fn(...) -> ... "
+                            "annotation");
+            return nullptr;
+        }
+        match = overload.node;
+    }
+    if(!match)
+    {
+        reportError(identifier->line,
+                    "no visible non-generic function item named '" +
+                        identifier->name + "'");
+        return nullptr;
+    }
+
+    auto* parameters = new TypeListNode();
+    for(auto* parameter : match->parameters->parameters)
+        parameters->addType(cloneTypeNode(parameter->type));
+    return new FunctionTypeNode(parameters,
+                                cloneTypeNode(match->returnType));
+}
+
 llvm::Value* CodeGenerator::generateFunctionItemValue(
     IdentifierNode* identifier, FunctionTypeNode* callableType)
 {

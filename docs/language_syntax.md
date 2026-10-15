@@ -1071,11 +1071,13 @@ fn main() -> i32 {
 }
 ```
 
-Use an explicit function type to store a named function in a callable local:
+An unambiguous named function also infers its callable type in a local. If the
+name is overloaded, add an explicit function type to select its signature:
 
 ```mla
-let square_fn: IntMapper = square;
-var selected: IntMapper = square_fn;
+let square_fn = square;
+var selected: IntMapper = square;
+selected = square_fn;
 ```
 
 Non-borrowing closures can also be returned and then invoked through a typed

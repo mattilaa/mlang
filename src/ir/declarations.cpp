@@ -435,6 +435,48 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                                         node->col))
         return;
 
+    if(!declaredType)
+    {
+        if(auto* functionItem =
+               dynamic_cast<IdentifierNode*>(node->expression))
+        {
+            if(functionOverloads.count(functionItem->name) &&
+               !namedValues.count(functionItem->name) &&
+               !globalNamedValues.count(functionItem->name))
+            {
+                FunctionTypeNode* inferredType =
+                    inferFunctionItemType(functionItem);
+                if(!inferredType)
+                    return;
+                llvm::Value* initValue =
+                    generateFunctionItemValue(functionItem, inferredType);
+                llvm::Type* storageType =
+                    getLLVMTypeFromNode(inferredType);
+                if(!initValue || !storageType ||
+                   initValue->getType() != storageType)
+                {
+                    if(initValue)
+                        reportError(node->line,
+                                    "cannot store inferred function item '" +
+                                        functionItem->name + "'");
+                    return;
+                }
+                llvm::AllocaInst* alloca = createEntryBlockAlloca(
+                    builder.GetInsertBlock()->getParent(), storageType,
+                    node->name);
+                builder.CreateStore(initValue, alloca);
+                namedValues[node->name] = alloca;
+                clearMovedVariable(node->name);
+                clearPointerBorrow(node->name);
+                variableTypes[node->name] = TypeNode::TYPE_FUNCTION;
+                functionTypeVariables[node->name] = inferredType;
+                recordVariableScopeDepth(node->name);
+                constantVariables.insert(node->name);
+                return;
+            }
+        }
+    }
+
     if(auto* source = dynamic_cast<IdentifierNode*>(node->expression))
     {
         auto runtime = runtimeClosureVariables.find(source->name);
@@ -1429,6 +1471,46 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                                         node->initExpr, node->line,
                                         node->col))
         return;
+
+    if(!declaredType && !node->isGlobalStorage && !node->isStaticStorage)
+    {
+        if(auto* functionItem =
+               dynamic_cast<IdentifierNode*>(node->initExpr))
+        {
+            if(functionOverloads.count(functionItem->name) &&
+               !namedValues.count(functionItem->name) &&
+               !globalNamedValues.count(functionItem->name))
+            {
+                FunctionTypeNode* inferredType =
+                    inferFunctionItemType(functionItem);
+                if(!inferredType)
+                    return;
+                llvm::Value* initValue =
+                    generateFunctionItemValue(functionItem, inferredType);
+                llvm::Type* storageType =
+                    getLLVMTypeFromNode(inferredType);
+                if(!initValue || !storageType ||
+                   initValue->getType() != storageType)
+                {
+                    if(initValue)
+                        reportError(node->line,
+                                    "cannot store inferred function item '" +
+                                        functionItem->name + "'");
+                    return;
+                }
+                llvm::AllocaInst* alloca = createEntryBlockAlloca(
+                    builder.GetInsertBlock()->getParent(), storageType,
+                    node->name);
+                builder.CreateStore(initValue, alloca);
+                namedValues[node->name] = alloca;
+                clearMovedVariable(node->name);
+                variableTypes[node->name] = TypeNode::TYPE_FUNCTION;
+                functionTypeVariables[node->name] = inferredType;
+                recordVariableScopeDepth(node->name);
+                return;
+            }
+        }
+    }
 
     if(auto* source = dynamic_cast<IdentifierNode*>(node->initExpr))
     {

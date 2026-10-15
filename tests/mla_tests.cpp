@@ -4360,6 +4360,38 @@ TEST_F(MLATest, NamedFunctionCanInitializeCallableLocals)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+TEST_F(MLATest, UniqueNamedFunctionInfersCallableLocalType)
+{
+    std::string code = R"(
+        fn square(value: i32) -> i32 { return value * value; }
+        fn increment(value: i32) -> i32 { return value + 1; }
+        fn main() -> i32 {
+            let square_fn = square;
+            var increment_fn = increment;
+            return square_fn(8) + increment_fn(1);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 66);
+}
+
+TEST_F(MLATest, OverloadedNamedFunctionNeedsCallableAnnotationForInference)
+{
+    std::string code = R"(
+        fn square(value: i32) -> i32 { return value * value; }
+        fn square(value: i64) -> i64 { return value * value; }
+        fn main() -> i32 {
+            let square_fn = square;
+            return square_fn(8);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("is overloaded; add an explicit fn(...) -> ... annotation"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, FunctionTypedClosureRejectsBorrowedCaptureEscape)
 {
     std::string code = R"(

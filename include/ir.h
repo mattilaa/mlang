@@ -822,6 +822,7 @@ private:
                                        TypeNode* declaredType);
     llvm::Value* generateFunctionItemValue(IdentifierNode* identifier,
                                            FunctionTypeNode* callableType);
+    FunctionTypeNode* inferFunctionItemType(IdentifierNode* identifier);
     TypeNode* overloadParameterType(
         const std::vector<FunctionOverloadInfo>& overloads, size_t argCount,
         size_t index) const;
