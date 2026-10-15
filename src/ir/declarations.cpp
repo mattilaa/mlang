@@ -11,7 +11,9 @@
 using mlang::ir_detail::common::Helpers;
 using mlang::ir_detail::ast_analysis::collect_used_idents;
 
-bool CodeGenerator::isNonCapturingRuntimeClosure(ClosureNode* closure)
+bool CodeGenerator::getRuntimeClosureCaptures(
+    ClosureNode* closure,
+    std::vector<std::pair<std::string, TypeNode*>>& captures)
 {
     if(!closure ||
        (closure->parameters && !closure->parameters->parameters.empty()))
@@ -68,9 +70,110 @@ bool CodeGenerator::isNonCapturingRuntimeClosure(ClosureNode* closure)
     for(const auto& name : used)
     {
         auto value = namedValues.find(name);
-        if(value != namedValues.end() &&
-           !llvm::isa<llvm::GlobalVariable>(value->second))
+        if(value == namedValues.end() ||
+           llvm::isa<llvm::GlobalVariable>(value->second))
+            continue;
+        if(closureVariables.find(name) != closureVariables.end())
             return false;
+        if(!llvm::isa<llvm::AllocaInst>(value->second))
+            return false;
+        auto* ident = new IdentifierNode(name);
+        TypeNode* type = getLValueType(ident, closure->line);
+        if(!type)
+            return false;
+        captures.emplace_back(name, type);
+    }
+    return true;
+}
+
+bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
+                                                   ClosureNode* closure,
+                                                   int line)
+{
+    std::vector<std::pair<std::string, TypeNode*>> captures;
+    if(!getRuntimeClosureCaptures(closure, captures))
+        return false;
+
+    llvm::Function* closureFn =
+        generateClosureFn(closure, &captures, &constantVariables);
+    if(!closureFn)
+        return true; // A diagnostic has already been reported.
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* erasedPointerType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* erasedPointerType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+
+    llvm::Value* environmentValue =
+        llvm::ConstantPointerNull::get(
+            llvm::cast<llvm::PointerType>(erasedPointerType));
+    if(!captures.empty())
+    {
+        std::vector<llvm::Type*> fields(captures.size(), erasedPointerType);
+        llvm::StructType* environmentType =
+            llvm::StructType::get(context, fields);
+        llvm::Function* currentFunction =
+            builder.GetInsertBlock()->getParent();
+        llvm::AllocaInst* environment = createEntryBlockAlloca(
+            currentFunction, environmentType, name + ".env");
+        for(size_t i = 0; i < captures.size(); ++i)
+        {
+            auto captured = namedValues.find(captures[i].first);
+            if(captured == namedValues.end())
+            {
+                reportError(line, "captured variable is unavailable: '" +
+                                       captures[i].first + "'");
+                return true;
+            }
+            llvm::Value* address = builder.CreatePointerCast(
+                captured->second, erasedPointerType, "capture.address");
+            llvm::Value* field = builder.CreateStructGEP(
+                environmentType, environment, static_cast<unsigned>(i),
+                captures[i].first + ".capture.field");
+            builder.CreateStore(address, field);
+        }
+        environmentValue = builder.CreatePointerCast(environment,
+                                                    erasedPointerType,
+                                                    name + ".env.ptr");
+    }
+
+    std::vector<llvm::Type*> closureFields = {erasedPointerType,
+                                             erasedPointerType};
+    llvm::StructType* closureType =
+        llvm::StructType::get(context, closureFields);
+    llvm::AllocaInst* closureSlot = createEntryBlockAlloca(
+        builder.GetInsertBlock()->getParent(), closureType, name + ".closure");
+    llvm::Value* codeField =
+        builder.CreateStructGEP(closureType, closureSlot, 0,
+                                name + ".closure.code.addr");
+    llvm::Value* envField =
+        builder.CreateStructGEP(closureType, closureSlot, 1,
+                                name + ".closure.env.addr");
+    builder.CreateStore(builder.CreatePointerCast(closureFn,
+                                                  erasedPointerType),
+                        codeField);
+    builder.CreateStore(environmentValue, envField);
+
+    namedValues[name] = closureSlot;
+    runtimeClosureVariables[name] = closure;
+    auto& owners = runtimeClosureBorrowOwners[name];
+    owners.clear();
+    for(const auto& capture : captures)
+        owners.insert(capture.first);
+    for(const auto& owner : owners)
+    {
+        auto exclusive = activeMutBorrower.find(owner);
+        if(exclusive != activeMutBorrower.end())
+        {
+            reportError(line, "cannot capture '" + owner +
+                                   "' in closure '" + name +
+                                   "' while it is mutably borrowed by '" +
+                                   exclusive->second + "'");
+            return true;
+        }
+        activeBorrowers[owner].insert(name);
     }
     return true;
 }
@@ -160,29 +263,29 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                                         node->col))
         return;
 
+    if(auto* source = dynamic_cast<IdentifierNode*>(node->expression))
+    {
+        auto runtime = runtimeClosureVariables.find(source->name);
+        auto closure = closureVariables.find(source->name);
+        if(runtime != runtimeClosureVariables.end() &&
+           closure != closureVariables.end() &&
+           runtime->second == closure->second)
+        {
+            reportError(node->line,
+                        "copying a runtime closure value is not supported; "
+                        "call it directly instead");
+            return;
+        }
+    }
+
     // Inline closure: let inc = || { ... }
     if(auto* closureInit = dynamic_cast<ClosureNode*>(node->expression))
     {
         closureVariables[node->name] = closureInit;
         recordVariableScopeDepth(node->name);
-        if(isNonCapturingRuntimeClosure(closureInit))
-        {
-            llvm::Function* closureFn = generateClosureFn(closureInit);
-            if(!closureFn)
-                return;
-            runtimeClosureVariables[node->name] = closureInit;
-#if LLVM_VERSION_MAJOR >= 15
-            llvm::Type* ptrType = llvm::PointerType::get(context, 0);
-#else
-            llvm::Type* ptrType = llvm::PointerType::get(
-                llvm::Type::getInt8Ty(context), 0);
-#endif
-            llvm::AllocaInst* alloca = builder.CreateAlloca(
-                ptrType, nullptr, node->name + ".closure");
-            builder.CreateStore(closureFn, alloca);
-            namedValues[node->name] = alloca;
+        if(tryGenerateRuntimeClosureValue(node->name, closureInit,
+                                          node->line))
             return;
-        }
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
@@ -1107,6 +1210,30 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                                         node->col))
         return;
 
+    if(auto* source = dynamic_cast<IdentifierNode*>(node->initExpr))
+    {
+        auto runtime = runtimeClosureVariables.find(source->name);
+        auto closure = closureVariables.find(source->name);
+        if(runtime != runtimeClosureVariables.end() &&
+           closure != closureVariables.end() &&
+           runtime->second == closure->second)
+        {
+            reportError(node->line,
+                        "copying a runtime closure value is not supported; "
+                        "call it directly instead");
+            return;
+        }
+    }
+
+    if((node->isStaticStorage || node->isGlobalStorage) &&
+       dynamic_cast<ClosureNode*>(node->initExpr))
+    {
+        reportError(node->line,
+                    "a closure with a stack environment cannot be stored in "
+                    "global or static storage");
+        return;
+    }
+
     if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(declaredType))
     {
         llvm::Type* traitObjType = getLLVMTypeFromNode(traitObj);
@@ -1376,24 +1503,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(auto* closureInit = dynamic_cast<ClosureNode*>(node->initExpr))
         {
             closureVariables[node->name] = closureInit;
-            if(isNonCapturingRuntimeClosure(closureInit))
-            {
-                llvm::Function* closureFn = generateClosureFn(closureInit);
-                if(!closureFn)
-                    return;
-                runtimeClosureVariables[node->name] = closureInit;
-#if LLVM_VERSION_MAJOR >= 15
-                llvm::Type* ptrType = llvm::PointerType::get(context, 0);
-#else
-                llvm::Type* ptrType = llvm::PointerType::get(
-                    llvm::Type::getInt8Ty(context), 0);
-#endif
-                llvm::AllocaInst* alloca = builder.CreateAlloca(
-                    ptrType, nullptr, node->name + ".closure");
-                builder.CreateStore(closureFn, alloca);
-                namedValues[node->name] = alloca;
+            if(tryGenerateRuntimeClosureValue(node->name, closureInit,
+                                              node->line))
                 return;
-            }
 #if LLVM_VERSION_MAJOR >= 15
             llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else

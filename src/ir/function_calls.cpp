@@ -1635,11 +1635,26 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             "' is not available in this scope");
             return nullptr;
         }
-        llvm::Value* code = builder.CreateLoad(
-            alloca->getAllocatedType(), alloca, node->name + ".code");
+        llvm::Value* closureValue = builder.CreateLoad(
+            alloca->getAllocatedType(), alloca, node->name + ".closure.value");
+        llvm::Value* code = builder.CreateExtractValue(
+            closureValue, 0, node->name + ".code");
+        llvm::Value* environment = builder.CreateExtractValue(
+            closureValue, 1, node->name + ".environment");
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* erasedPointerType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* erasedPointerType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
         llvm::FunctionType* signature = llvm::FunctionType::get(
-            llvm::Type::getVoidTy(context), {}, false);
-        return builder.CreateCall(signature, code, {}, node->name + ".call");
+            llvm::Type::getVoidTy(context), {erasedPointerType}, false);
+#if LLVM_VERSION_MAJOR < 15
+        code = builder.CreateBitCast(code, signature->getPointerTo(),
+                                     node->name + ".callable");
+#endif
+        return builder.CreateCall(signature, code, {environment},
+                                  node->name + ".call");
     }
 
     // Inline closure/lambda call: inc(...)
@@ -2705,6 +2720,61 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return nullptr;
     }
 
+    for(size_t argumentIndex = 0;
+        argumentIndex < node->arguments.size(); ++argumentIndex)
+    {
+        auto* identifier =
+            dynamic_cast<IdentifierNode*>(node->arguments[argumentIndex]);
+        if(!identifier)
+            continue;
+        auto runtime = runtimeClosureVariables.find(identifier->name);
+        auto declared = closureVariables.find(identifier->name);
+        if(runtime == runtimeClosureVariables.end() ||
+           declared == closureVariables.end() ||
+           runtime->second != declared->second)
+            continue;
+
+        bool specializedInlineCallback = false;
+        if(best->node && best->node->parameters)
+        {
+            for(const auto& bound : best->node->boundClosureParameters)
+            {
+                if(bound.second != runtime->second)
+                    continue;
+                for(size_t parameterIndex = 0;
+                    parameterIndex <
+                    best->node->parameters->parameters.size();
+                    ++parameterIndex)
+                {
+                    if(best->node->parameters->parameters[parameterIndex]
+                               ->name == bound.first &&
+                       parameterIndex == argumentIndex)
+                        specializedInlineCallback = true;
+                }
+            }
+        }
+        if(specializedInlineCallback)
+            continue;
+
+        auto owners = runtimeClosureBorrowOwners.find(identifier->name);
+        if(owners != runtimeClosureBorrowOwners.end() &&
+           !owners->second.empty())
+        {
+            reportError(node->line, "cannot pass closure '" +
+                                        identifier->name +
+                                        "' to function '" + node->name +
+                                        "' because it borrows local variable '" +
+                                        *owners->second.begin() + "'");
+        }
+        else
+        {
+            reportError(node->line, "runtime closure values can only be "
+                                        "called directly or used as generic "
+                                        "callbacks");
+        }
+        return nullptr;
+    }
+
     llvm::Function* callee = best->function;
     size_t expectedArgs = callee->arg_size();
     bool isVarArg = callee->isVarArg();
@@ -2931,7 +3001,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     return callResult;
 }
 
-llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
+llvm::Function* CodeGenerator::generateClosureFn(
+    ClosureNode* node,
+    const std::vector<std::pair<std::string, TypeNode*>>* captures,
+    const std::set<std::string>* constCaptures)
 {
     if(node->parameters && !node->parameters->parameters.empty())
     {
@@ -2943,8 +3016,17 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     static int closureSeq = 0;
     std::string closureName = "__mlang_closure_" + std::to_string(closureSeq++);
 
-    llvm::FunctionType* closureFnType =
-        llvm::FunctionType::get(llvm::Type::getVoidTy(context), {}, false);
+    std::vector<llvm::Type*> closureParameters;
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* erasedPointerType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* erasedPointerType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    if(captures)
+        closureParameters.push_back(erasedPointerType);
+    llvm::FunctionType* closureFnType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(context), closureParameters, false);
     llvm::Function* closureFn =
         llvm::Function::Create(closureFnType, llvm::Function::PrivateLinkage,
                                closureName, module.get());
@@ -2961,10 +3043,17 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     auto savedVarTypes = variableTypes;
     auto savedStructVarTypes = structVariableTypes;
     auto savedEnumVarTypes = enumVariableTypes;
+    auto savedListElementTypes = listElementTypes;
+    auto savedMapKeyValueTypes = mapKeyValueTypes;
+    auto savedTupleElementTypes = tupleElementTypes;
+    auto savedPointerElementTypes = pointerElementTypes;
+    auto savedArrayCapacities = arrayCapacities;
+    auto savedMultiarrayMutability = multiarrayMutability;
     auto savedCleanupScopes = cleanupScopes;
     auto savedPtrBorrowScopes = pointerBorrowScopes;
     auto savedVarDepthScopes = variableScopeDepthScopes;
     auto savedRuntimeClosureVariables = runtimeClosureVariables;
+    auto savedRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     auto savedLoopBreak = loopBreakBlocks;
     auto savedLoopContinue = loopContinueBlocks;
     auto savedModule = currentModule;
@@ -2981,6 +3070,7 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     movedVariables.clear();
     closureVariables.clear();
     runtimeClosureVariables.clear();
+    runtimeClosureBorrowOwners.clear();
     closureCaptureAliases.clear();
     closureCaptureTypes.clear();
     closureConstCaptures.clear();
@@ -2994,6 +3084,12 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     variableTypes.clear();
     structVariableTypes.clear();
     enumVariableTypes.clear();
+    listElementTypes.clear();
+    mapKeyValueTypes.clear();
+    tupleElementTypes.clear();
+    pointerElementTypes.clear();
+    arrayCapacities.clear();
+    multiarrayMutability.clear();
     arrayCapacities.clear();
     arrayKnownLengths.clear();
     cleanupScopes.clear();
@@ -3007,8 +3103,81 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
         llvm::BasicBlock::Create(context, "entry", closureFn);
     builder.SetInsertPoint(entry);
     seedFunctionScopeWithGlobals();
-
     enterCleanupScope();
+
+    if(captures && !captures->empty())
+    {
+        std::vector<llvm::Type*> environmentFields(captures->size(),
+                                                   erasedPointerType);
+        llvm::StructType* environmentType =
+            llvm::StructType::get(context, environmentFields);
+        llvm::Value* environment = &*closureFn->arg_begin();
+#if LLVM_VERSION_MAJOR < 15
+        environment = builder.CreateBitCast(
+            environment,
+            llvm::PointerType::get(environmentType, 0), "closure.env.cast");
+#endif
+        for(size_t i = 0; i < captures->size(); ++i)
+        {
+            const auto& capture = (*captures)[i];
+            llvm::Type* capturedType = getLLVMTypeFromNode(capture.second);
+            if(!capturedType)
+            {
+                reportError(node->line,
+                            "unsupported runtime closure capture type for '" +
+                                capture.first + "'");
+                continue;
+            }
+            llvm::Value* field = builder.CreateStructGEP(
+                environmentType, environment, static_cast<unsigned>(i),
+                capture.first + ".capture.field");
+            llvm::Value* address = builder.CreateLoad(
+                erasedPointerType, field, capture.first + ".capture.address");
+#if LLVM_VERSION_MAJOR < 15
+            address = builder.CreateBitCast(
+                address, llvm::PointerType::get(capturedType, 0),
+                capture.first + ".capture.typed");
+#endif
+            namedValues[capture.first] = address;
+            closureCaptureReferenceAliases.insert(capture.first);
+            recordVariableScopeDepth(capture.first);
+            variableTypes[capture.first] = capture.second->kind;
+            if(auto* structType =
+                   dynamic_cast<StructTypeRefNode*>(capture.second))
+            {
+                std::string enumName =
+                    resolveVisibleEnumName(structType->structName);
+                if(!enumName.empty())
+                {
+                    variableTypes[capture.first] = TypeNode::TYPE_INT;
+                    enumVariableTypes[capture.first] = enumName;
+                }
+                else
+                    structVariableTypes[capture.first] = structType->structName;
+            }
+            if(auto* listType =
+                   dynamic_cast<GenericListTypeNode*>(capture.second))
+            {
+                listElementTypes[capture.first] = listType->elementType;
+                if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(listType))
+                    arrayCapacities[capture.first] = arrayType->capacity;
+                if(auto* multiarrayType =
+                       dynamic_cast<MultiArrayTypeNode*>(listType))
+                    multiarrayMutability[capture.first] =
+                        multiarrayType->elementsMutable;
+            }
+            if(auto* mapType = dynamic_cast<MapTypeNode*>(capture.second))
+                mapKeyValueTypes[capture.first] = {
+                    mapType->keyType, mapType->valueType};
+            if(auto* tupleType = dynamic_cast<TupleTypeNode*>(capture.second))
+                tupleElementTypes[capture.first] =
+                    tupleType->elementTypes->types;
+            if(auto* ptrType = dynamic_cast<PointerTypeNode*>(capture.second))
+                pointerElementTypes[capture.first] = ptrType->elementType;
+            if(constCaptures && constCaptures->count(capture.first))
+                constantVariables.insert(capture.first);
+        }
+    }
 
     if(node->body)
     {
@@ -3037,6 +3206,12 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     variableTypes = std::move(savedVarTypes);
     structVariableTypes = std::move(savedStructVarTypes);
     enumVariableTypes = std::move(savedEnumVarTypes);
+    listElementTypes = std::move(savedListElementTypes);
+    mapKeyValueTypes = std::move(savedMapKeyValueTypes);
+    tupleElementTypes = std::move(savedTupleElementTypes);
+    pointerElementTypes = std::move(savedPointerElementTypes);
+    arrayCapacities = std::move(savedArrayCapacities);
+    multiarrayMutability = std::move(savedMultiarrayMutability);
     cleanupScopes = std::move(savedCleanupScopes);
     pointerBorrowScopes = std::move(savedPtrBorrowScopes);
     variableScopeDepthScopes = std::move(savedVarDepthScopes);
@@ -3045,6 +3220,8 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     currentModule = std::move(savedModule);
     closureVariables = std::move(savedClosureVars);
     runtimeClosureVariables = std::move(savedRuntimeClosureVariables);
+    runtimeClosureBorrowOwners =
+        std::move(savedRuntimeClosureBorrowOwners);
     closureCaptureAliases = std::move(savedClosureCaptureAliases);
     closureCaptureTypes = std::move(savedClosureCaptureTypes);
     closureConstCaptures = std::move(savedClosureConstCaptures);

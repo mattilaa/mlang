@@ -220,6 +220,8 @@ private:
     // Capturing closures continue to use the established inline lowering until
     // their environment layout and borrow/escape rules are available.
     std::map<std::string, ClosureNode*> runtimeClosureVariables;
+    // Owner variables borrowed by each runtime closure's stack environment.
+    std::map<std::string, std::set<std::string>> runtimeClosureBorrowOwners;
     // Generic closure parameter -> captured local name -> hidden parameter
     // name used to transfer captures into its specialization.
     std::map<std::string, std::map<std::string, std::string>>
@@ -704,7 +706,11 @@ private:
     void generateStatement(StatementNode* node);
     void generateReturnStatement(ReturnNode* node);
     void generateLetDeclaration(LetDeclNode* node);
-    bool isNonCapturingRuntimeClosure(ClosureNode* closure);
+    bool getRuntimeClosureCaptures(
+        ClosureNode* closure,
+        std::vector<std::pair<std::string, TypeNode*>>& captures);
+    bool tryGenerateRuntimeClosureValue(const std::string& name,
+                                        ClosureNode* closure, int line);
     void generateCexprDeclaration(CexprDeclNode* node,
                                   bool emitRuntimeBinding = true);
     void generateVarDeclaration(VarDeclNode* node);
@@ -732,6 +738,7 @@ private:
     void generateTryCatchStatement(TryCatchNode* node);
     void enterCleanupScope();
     void exitCleanupScope();
+    void releaseRuntimeClosureBorrows(const std::string& closureName);
     void emitAllActiveCleanups();
     void emitActiveCleanupsDeeperThan(int scopeDepth);
     ScopeCleanup resolveDropFunctionForStruct(const std::string& structTypeName);
@@ -774,7 +781,11 @@ private:
     llvm::Value* generateVariadicGenericCall(FunctionCallNode* node,
                                               FunctionDefNode* functionTemplate);
     llvm::Value* generateThreadSpawn(FunctionCallNode* node);
-    llvm::Function* generateClosureFn(ClosureNode* node);
+    llvm::Function* generateClosureFn(
+        ClosureNode* node,
+        const std::vector<std::pair<std::string, TypeNode*>>* captures =
+            nullptr,
+        const std::set<std::string>* constCaptures = nullptr);
     llvm::Value* generateThreadJoin(FunctionCallNode* node);
     llvm::Value* buildHandleValue(const std::string& handleTypeName,
                                   llvm::Value* rawHandle, int line);

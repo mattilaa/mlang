@@ -39,11 +39,36 @@ void CodeGenerator::enterCleanupScope()
     variableScopeDepthScopes.emplace_back();
 }
 
+void CodeGenerator::releaseRuntimeClosureBorrows(
+    const std::string& closureName)
+{
+    auto captures = runtimeClosureBorrowOwners.find(closureName);
+    if(captures == runtimeClosureBorrowOwners.end())
+        return;
+    for(const auto& owner : captures->second)
+    {
+        auto borrowers = activeBorrowers.find(owner);
+        if(borrowers == activeBorrowers.end())
+            continue;
+        borrowers->second.erase(closureName);
+        if(borrowers->second.empty())
+            activeBorrowers.erase(borrowers);
+    }
+}
+
 void CodeGenerator::exitCleanupScope()
 {
     if(cleanupScopes.empty() || pointerBorrowScopes.empty() ||
        variableScopeDepthScopes.empty())
         return;
+
+    const int exitingDepth = static_cast<int>(cleanupScopes.size());
+    for(const auto& closure : runtimeClosureBorrowOwners)
+    {
+        auto depth = variableScopeDepth.find(closure.first);
+        if(depth != variableScopeDepth.end() && depth->second == exitingDepth)
+            releaseRuntimeClosureBorrows(closure.first);
+    }
 
     auto actions = std::move(cleanupScopes.back());
     cleanupScopes.pop_back();

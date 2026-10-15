@@ -289,6 +289,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedVariableScopeDepthScopes = variableScopeDepthScopes;
     auto savedClosureVariables = closureVariables;
     auto savedRuntimeClosureVariables = runtimeClosureVariables;
+    auto savedRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     auto savedClosureCaptureAliases = closureCaptureAliases;
     auto savedClosureCaptureTypes = closureCaptureTypes;
     auto savedClosureConstCaptures = closureConstCaptures;
@@ -315,6 +316,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     movedVariables.clear();
     closureVariables.clear();
     runtimeClosureVariables.clear();
+    runtimeClosureBorrowOwners.clear();
     closureVariables = node->boundClosureParameters;
     closureCaptureAliases = node->boundClosureCaptureAliases;
     closureCaptureTypes = node->boundClosureCaptureTypes;
@@ -624,6 +626,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     variableScopeDepthScopes = std::move(savedVariableScopeDepthScopes);
     closureVariables = std::move(savedClosureVariables);
     runtimeClosureVariables = std::move(savedRuntimeClosureVariables);
+    runtimeClosureBorrowOwners =
+        std::move(savedRuntimeClosureBorrowOwners);
     closureCaptureAliases = std::move(savedClosureCaptureAliases);
     closureCaptureTypes = std::move(savedClosureCaptureTypes);
     closureConstCaptures = std::move(savedClosureConstCaptures);

@@ -88,6 +88,55 @@ CodeGenerator::pointerExpressionKnownNull(ExpressionNode* expr) const
 bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
                                              const std::string& action)
 {
+    if(dynamic_cast<ClosureNode*>(expr))
+    {
+        reportError(line, "cannot " + action +
+                              " a closure literal before its capture lifetime "
+                              "is proven safe");
+        return false;
+    }
+    if(auto* idExpr = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto runtimeClosure = runtimeClosureVariables.find(idExpr->name);
+        auto declaredClosure = closureVariables.find(idExpr->name);
+        if(runtimeClosure != runtimeClosureVariables.end() &&
+           declaredClosure != closureVariables.end() &&
+           runtimeClosure->second == declaredClosure->second)
+        {
+            auto owners = runtimeClosureBorrowOwners.find(idExpr->name);
+            if(owners != runtimeClosureBorrowOwners.end() &&
+               !owners->second.empty())
+            {
+                reportError(line, "cannot " + action + " closure '" +
+                                      idExpr->name +
+                                      "' because it borrows local variable '" +
+                                      *owners->second.begin() + "'");
+            }
+            else
+            {
+                reportError(line, "cannot " + action + " runtime closure '" +
+                                      idExpr->name +
+                                      "'; closure values cannot escape their "
+                                      "local scope yet");
+            }
+            return false;
+        }
+        auto closureIt = runtimeClosureBorrowOwners.find(idExpr->name);
+        if(closureIt != runtimeClosureBorrowOwners.end())
+        {
+            for(const auto& owner : closureIt->second)
+            {
+                if(globalNamedValues.find(owner) != globalNamedValues.end())
+                    continue;
+                reportError(line, "cannot " + action + " closure '" +
+                                      idExpr->name +
+                                      "' because it borrows local variable '" +
+                                      owner + "'");
+                return false;
+            }
+        }
+    }
+
     std::string ownerName;
     if(auto* idExpr = dynamic_cast<IdentifierNode*>(expr))
     {

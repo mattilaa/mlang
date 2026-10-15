@@ -92,6 +92,25 @@ llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
     if(!validateVariableAccessible(node->name, node->line, node->col))
         return nullptr;
 
+    // Closure values are invoked through the dedicated call path. For generic
+    // callback specialization the closure body is substituted from its AST;
+    // never expose its stack environment as an ordinary pointer value.
+    auto runtimeClosure = runtimeClosureVariables.find(node->name);
+    auto closureNode = closureVariables.find(node->name);
+    if(runtimeClosure != runtimeClosureVariables.end() &&
+       closureNode != closureVariables.end() &&
+       runtimeClosure->second == closureNode->second)
+    {
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* pointerType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* pointerType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        return llvm::ConstantPointerNull::get(
+            llvm::cast<llvm::PointerType>(pointerType));
+    }
+
     llvm::Value* value = namedValues[node->name];
 
     if(closureCaptureReferenceAliases.count(node->name))

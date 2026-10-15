@@ -4160,6 +4160,64 @@ TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocal)
               std::string::npos);
 }
 
+TEST_F(MLATest, ClosureCannotReturnBorrowingLocalCapture)
+{
+    std::string code = R"(
+        fn bad_closure() -> ptr<void> {
+            var count: i32 = 0;
+            let bump = || { count += 1; };
+            return bump;
+        }
+        fn main() -> i32 { return 0; }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return closure 'bump'"), std::string::npos);
+    EXPECT_NE(out.find("borrows local variable 'count'"), std::string::npos);
+}
+
+TEST_F(MLATest, ClosureBorrowBlocksMutationUntilLastUse)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var count: i32 = 0;
+            let bump = || { count += 1; };
+            count = 5;
+            bump();
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'count' while borrowed by 'bump'"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, ClosureBorrowCannotEscapeThroughFunctionArgument)
+{
+    std::string code = R"(
+        fn store_callback(callback: ptr<void>) -> ptr<void> {
+            return callback;
+        }
+        fn main() -> i32 {
+            var count: i32 = 0;
+            let bump = || { count += 1; };
+            store_callback(bump);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass closure 'bump'"), std::string::npos);
+    EXPECT_NE(out.find("borrows local variable 'count'"), std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipCanReturnPointerBorrowingGlobal)
 {
     std::string code = R"(
