@@ -1046,6 +1046,16 @@ fn main() -> i32 {
 }
 ```
 
+Use a type alias when a callback signature is shared by several functions:
+
+```mla
+alias IntMapper = fn(i32) -> i32;
+
+fn apply(mapper: IntMapper, value: i32) -> i32 {
+    return mapper(value);
+}
+```
+
 Non-borrowing closures can also be returned and then invoked through a typed
 local:
 

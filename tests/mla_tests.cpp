@@ -4311,6 +4311,21 @@ TEST_F(MLATest, FunctionTypedClosureRunsAcrossFunctionBoundaries)
     EXPECT_EQ(compileAndRunExitCode(code), 7);
 }
 
+TEST_F(MLATest, FunctionTypeAliasWorksForCallbackParameters)
+{
+    std::string code = R"(
+        alias IntMapper = fn(i32) -> i32;
+        fn apply(mapper: IntMapper, value: i32) -> i32 {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let triple = |value: i32| { return value * 3; };
+            return apply(triple, 7);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 21);
+}
+
 TEST_F(MLATest, FunctionTypedClosureRejectsBorrowedCaptureEscape)
 {
     std::string code = R"(
