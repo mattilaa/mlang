@@ -3,6 +3,16 @@
 
 TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 {
+    if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+    {
+        if(call->name == "std::copy")
+        {
+            if(call->arguments.size() == 1)
+                return inferExpressionTypeNode(call->arguments.front(), line);
+            return nullptr;
+        }
+    }
+
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
     {
         if(closureVariables.find(id->name) != closureVariables.end())
@@ -54,9 +64,9 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             {
                 auto multiIt = multiarrayMutability.find(id->name);
                 if(multiIt != multiarrayMutability.end())
-                    return new MultiArrayTypeNode(
-                        cloneTypeNode(listIt->second), capIt->second,
-                        multiIt->second);
+                    return new MultiArrayTypeNode(cloneTypeNode(listIt->second),
+                                                  capIt->second,
+                                                  multiIt->second);
                 return new ArrayTypeNode(cloneTypeNode(listIt->second),
                                          capIt->second);
             }
@@ -228,19 +238,19 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                 methodCall->methodName == "multiply") &&
                methodCall->arguments.size() == 1)
             {
-                auto* right = dynamic_cast<MultiArrayTypeNode*>(getLValueType(
-                    methodCall->arguments[0], line));
+                auto* right = dynamic_cast<MultiArrayTypeNode*>(
+                    getLValueType(methodCall->arguments[0], line));
                 auto* leftColumns =
                     dynamic_cast<ArrayTypeNode*>(matrixType->elementType);
-                auto* rightColumns = right ? dynamic_cast<ArrayTypeNode*>(
-                                                  right->elementType)
-                                           : nullptr;
+                auto* rightColumns =
+                    right ? dynamic_cast<ArrayTypeNode*>(right->elementType)
+                          : nullptr;
                 if(leftColumns && rightColumns &&
                    leftColumns->capacity == right->capacity)
                     return new MultiArrayTypeNode(
-                        new ArrayTypeNode(cloneTypeNode(
-                                              leftColumns->elementType),
-                                          rightColumns->capacity),
+                        new ArrayTypeNode(
+                            cloneTypeNode(leftColumns->elementType),
+                            rightColumns->capacity),
                         matrixType->capacity, false);
             }
         }
@@ -260,8 +270,7 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                 }
                 if(methodCall->arguments.size() == dimensions)
                 {
-                    auto* optionType =
-                        new GenericStructTypeRefNode("option");
+                    auto* optionType = new GenericStructTypeRefNode("option");
                     optionType->typeArgs.push_back(cloneTypeNode(elementType));
                     return optionType;
                 }
@@ -307,8 +316,7 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
            methodCall->methodName == "is_none")
             return new TypeNode(TypeNode::TYPE_BOOL);
         if(methodCall->methodName == "first" ||
-           methodCall->methodName == "last" ||
-           methodCall->methodName == "pop")
+           methodCall->methodName == "last" || methodCall->methodName == "pop")
         {
             TypeNode* objectType = getLValueType(methodCall->object, line);
             if(auto* listType = dynamic_cast<GenericListTypeNode*>(objectType))
@@ -652,19 +660,19 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
                 methodCall->methodName == "multiply") &&
                methodCall->arguments.size() == 1)
             {
-                auto* right = dynamic_cast<MultiArrayTypeNode*>(getLValueType(
-                    methodCall->arguments[0], line));
+                auto* right = dynamic_cast<MultiArrayTypeNode*>(
+                    getLValueType(methodCall->arguments[0], line));
                 auto* leftColumns =
                     dynamic_cast<ArrayTypeNode*>(matrixType->elementType);
-                auto* rightColumns = right ? dynamic_cast<ArrayTypeNode*>(
-                                                  right->elementType)
-                                           : nullptr;
+                auto* rightColumns =
+                    right ? dynamic_cast<ArrayTypeNode*>(right->elementType)
+                          : nullptr;
                 if(leftColumns && rightColumns &&
                    leftColumns->capacity == right->capacity)
                     return new MultiArrayTypeNode(
-                        new ArrayTypeNode(cloneTypeNode(
-                                              leftColumns->elementType),
-                                          rightColumns->capacity),
+                        new ArrayTypeNode(
+                            cloneTypeNode(leftColumns->elementType),
+                            rightColumns->capacity),
                         matrixType->capacity, false);
             }
         }
@@ -689,8 +697,8 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
             return inferred;
         ConstexprValue value;
         std::string errorMessage;
-        if(evalConstexprExpression(cexprExpr->expression, value,
-                                   &errorMessage, nullptr, 0))
+        if(evalConstexprExpression(cexprExpr->expression, value, &errorMessage,
+                                   nullptr, 0))
             return new TypeNode(value.typeKind);
         return nullptr;
     }

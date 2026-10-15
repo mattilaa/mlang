@@ -14,13 +14,17 @@ counts act as zero. Counts beyond the source length are clamped.
 
 These are owning views because Mlang does not yet have lifetime-parameterized
 borrowed views. Passing a list into an adapter transfers it to the view.
+If the original list must remain usable, explicitly copy its storage first
+with `std::copy(source)`; this is supported when the list element type is
+`Copy`. Copies are never inserted implicitly just to keep the source alive.
 
 ```mlang
 mod std::ranges::views;
 use std::ranges::views::*;
 
 fn main() -> i32 {
-    let first_three = take([10, 20, 30, 40], 3);
+    let source: list<i64> = [10, 20, 30, 40];
+    let first_three = take(std::copy(source), 3);
     println!("{} {}", first_three.len(), first_three.get(1).unwrap());
     let last_two = drop([10, 20, 30, 40], 2);
     let values: list<i64> = last_two.collect();

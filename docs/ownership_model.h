@@ -43,6 +43,12 @@
  *   cannot be fully resolved at classification time
  *
  * Recursive type cycles are conservatively treated as move-only.
+ *
+ * `std::copy(value)` explicitly requests a copy without consuming `value`.
+ * Primitive and otherwise `Copy` values use their normal value-copy
+ * semantics. Lists receive independent backing storage when their element
+ * type is `Copy`; lists with move-only or unresolved element types are
+ * rejected. Other move-only types cannot be copied by this operation.
  */
 
 /**

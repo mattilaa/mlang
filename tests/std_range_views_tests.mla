@@ -29,3 +29,20 @@ fn test_take_and_drop_views_are_indexable_and_lazy() {
     verify(drop([1, 2], 10).len() == 0);
 }
 
+#[test]
+fn test_std_copy_explicitly_duplicates_copyable_list_storage() {
+    var source: list<i64> = [3, 5, 8];
+    var duplicate: list<i64> = std::copy(source);
+    duplicate[0] = 21;
+    verify(source[0] == 3);
+    verify(duplicate[0] == 21);
+    verify(source.len() == duplicate.len());
+
+    let scalar: i64 = std::copy(source[1]);
+    verify(scalar == 5);
+
+    var empty_source: list<i64> = [];
+    let empty: list<i64> = std::copy(empty_source);
+    verify(empty.len() == 0);
+}
+
