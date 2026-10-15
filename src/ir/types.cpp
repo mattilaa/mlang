@@ -169,6 +169,17 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
         return llvm::StructType::get(context, elemTypes);
     }
 
+    if(dynamic_cast<FunctionTypeNode*>(typeNode))
+    {
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* pointerType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* pointerType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        return llvm::StructType::get(context, {pointerType, pointerType});
+    }
+
     // Handle trait object type: { i8* data, i8* vtable }
     if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(typeNode))
     {

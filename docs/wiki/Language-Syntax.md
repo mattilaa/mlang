@@ -1035,6 +1035,30 @@ an explicit return type.
 
 ## Lambda + Fold Expressions
 
+Callable closure values can be written with Rust-like function types. The
+parameter and result types are explicit, and the value can be accepted as a
+function parameter or declared as a local:
+
+```mla
+fn invoke(callback: fn(i32) -> void, value: i32) -> void {
+    callback(value);
+}
+
+fn main() -> i32 {
+    let report = |value: i32| { print(value); };
+    invoke(report, 42);
+    return 0;
+}
+```
+
+Use `fn() -> Result` for zero-argument callables and `fn(Args...) -> Result`
+for other signatures. Function-typed parameters use the closure code/environment
+representation. Because Mlang does not yet have a no-escape parameter
+annotation, passing a closure that borrows local variables across a function
+boundary is conservatively rejected. Returning a locally borrowed closure is
+also rejected; non-borrowing closures can be returned when the compiler can
+prove their capture environment safe.
+
 Inline typed lambda (captures outer variables, callable via bound name):
 
 ```rust

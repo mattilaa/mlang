@@ -27,6 +27,9 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
         }
 
         TypeNode::TypeKind kind = typeIt->second;
+        auto functionType = functionTypeVariables.find(id->name);
+        if(functionType != functionTypeVariables.end())
+            return cloneTypeNode(functionType->second);
         if(kind == TypeNode::TYPE_STRUCT)
         {
             auto structIt = structVariableTypes.find(id->name);

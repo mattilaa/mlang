@@ -1478,6 +1478,9 @@ static LayoutInfo computeTypeLayout(TypeNode* type, ProgramNode* program,
     case TypeNode::TYPE_TRAIT_OBJECT:
         // dyn Trait is lowered to a fat pointer { data_ptr, vtable_ptr }.
         return {16, 8, true};
+    case TypeNode::TYPE_FUNCTION:
+        // Callable values use the same { code_ptr, environment_ptr } layout.
+        return {16, 8, true};
     case TypeNode::TYPE_STRUCT:
     case TypeNode::TYPE_LIST:
     case TypeNode::TYPE_MAP:

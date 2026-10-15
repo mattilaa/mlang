@@ -64,6 +64,15 @@ std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
         return out;
     }
 
+    if(auto* functionType = dynamic_cast<FunctionTypeNode*>(typeNode))
+    {
+        std::string out = "fn";
+        if(functionType->parameterTypes)
+            for(auto* parameter : functionType->parameterTypes->types)
+                out += "_" + typeMangle(parameter);
+        return out + "_to_" + typeMangle(functionType->returnType);
+    }
+
     if(auto* genStruct = dynamic_cast<GenericStructTypeRefNode*>(typeNode))
     {
         std::string out = "struct_" + genStruct->structName;
@@ -180,6 +189,16 @@ TypeNode* CodeGenerator::cloneTypeNode(TypeNode* typeNode)
         return new TupleTypeNode(list);
     }
 
+    if(auto* functionType = dynamic_cast<FunctionTypeNode*>(typeNode))
+    {
+        auto* params = new TypeListNode();
+        if(functionType->parameterTypes)
+            for(auto* parameter : functionType->parameterTypes->types)
+                params->addType(cloneTypeNode(parameter));
+        return new FunctionTypeNode(params,
+                                    cloneTypeNode(functionType->returnType));
+    }
+
     if(auto* structType = dynamic_cast<StructTypeRefNode*>(typeNode))
         return new StructTypeRefNode(structType->structName);
 
@@ -254,6 +273,17 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
             }
         }
         return tupleType;
+    }
+
+    if(auto* functionType = dynamic_cast<FunctionTypeNode*>(typeNode))
+    {
+        if(functionType->parameterTypes)
+            for(auto*& parameter : functionType->parameterTypes->types)
+                parameter = resolveTypeAliasNode(parameter, scopeTypeParams,
+                                                 aliasStack);
+        functionType->returnType = resolveTypeAliasNode(
+            functionType->returnType, scopeTypeParams, aliasStack);
+        return functionType;
     }
 
     if(auto* ptrType = dynamic_cast<PointerTypeNode*>(typeNode))
@@ -402,6 +432,14 @@ bool CodeGenerator::validateTypeArgumentTraitBounds(
                     return true;
             }
             return false;
+        }
+        if(auto* functionType = dynamic_cast<FunctionTypeNode*>(type))
+        {
+            if(functionType->parameterTypes)
+                for(auto* parameter : functionType->parameterTypes->types)
+                    if(containsScopedTypeParam(parameter))
+                        return true;
+            return containsScopedTypeParam(functionType->returnType);
         }
         if(auto* ptrType = dynamic_cast<PointerTypeNode*>(type))
             return containsScopedTypeParam(ptrType->elementType);

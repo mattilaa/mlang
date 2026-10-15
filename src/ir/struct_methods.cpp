@@ -256,6 +256,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     auto savedClosureVariables = closureVariables;
     auto savedRuntimeClosureVariables = runtimeClosureVariables;
     auto savedRuntimeClosureReturnTypes = runtimeClosureReturnTypes;
+    auto savedFunctionTypeVariables = functionTypeVariables;
     auto savedRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     auto savedActiveInlineClosures = activeInlineClosures;
     auto savedTraitObjectVariableTypes = traitObjectVariableTypes;
@@ -300,6 +301,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         closureVariables = savedClosureVariables;
         runtimeClosureVariables = savedRuntimeClosureVariables;
         runtimeClosureReturnTypes = savedRuntimeClosureReturnTypes;
+        functionTypeVariables = savedFunctionTypeVariables;
         runtimeClosureBorrowOwners = savedRuntimeClosureBorrowOwners;
         activeInlineClosures = savedActiveInlineClosures;
     };
@@ -332,6 +334,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     closureVariables.clear();
     runtimeClosureVariables.clear();
     runtimeClosureReturnTypes.clear();
+    functionTypeVariables.clear();
     runtimeClosureBorrowOwners.clear();
     activeInlineClosures.clear();
     cleanupScopes.clear();

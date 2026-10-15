@@ -533,6 +533,19 @@ CodeGenerator::substituteTypeParams(TypeNode* type,
         return new TupleTypeNode(newTypeList);
     }
 
+    if(auto* functionType = dynamic_cast<FunctionTypeNode*>(type))
+    {
+        auto* parameters = new TypeListNode();
+        if(functionType->parameterTypes)
+            for(auto* parameter : functionType->parameterTypes->types)
+                parameters->addType(
+                    substituteTypeParams(parameter, typeParams, typeArgs));
+        return new FunctionTypeNode(
+            parameters,
+            substituteTypeParams(functionType->returnType, typeParams,
+                                 typeArgs));
+    }
+
     // Basic types don't need substitution
     return type;
 }

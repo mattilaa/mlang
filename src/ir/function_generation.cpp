@@ -290,6 +290,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedClosureVariables = closureVariables;
     auto savedRuntimeClosureVariables = runtimeClosureVariables;
     auto savedRuntimeClosureReturnTypes = runtimeClosureReturnTypes;
+    auto savedFunctionTypeVariables = functionTypeVariables;
     auto savedRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     auto savedClosureCaptureAliases = closureCaptureAliases;
     auto savedClosureCaptureTypes = closureCaptureTypes;
@@ -318,6 +319,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     closureVariables.clear();
     runtimeClosureVariables.clear();
     runtimeClosureReturnTypes.clear();
+    functionTypeVariables.clear();
     runtimeClosureBorrowOwners.clear();
     closureVariables = node->boundClosureParameters;
     closureCaptureAliases = node->boundClosureCaptureAliases;
@@ -512,6 +514,10 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                 traitObjectVariableTypes[std::string(arg.getName())] =
                     traitObjType->traitName;
             }
+            if(auto* functionType =
+                   dynamic_cast<FunctionTypeNode*>(paramNode->type))
+                functionTypeVariables[std::string(arg.getName())] =
+                    functionType;
         }
         // mlang -g: the parameter, with its MLang type.
         if(paramIdx < node->parameters->parameters.size())
@@ -629,6 +635,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     closureVariables = std::move(savedClosureVariables);
     runtimeClosureVariables = std::move(savedRuntimeClosureVariables);
     runtimeClosureReturnTypes = std::move(savedRuntimeClosureReturnTypes);
+    functionTypeVariables = std::move(savedFunctionTypeVariables);
     runtimeClosureBorrowOwners =
         std::move(savedRuntimeClosureBorrowOwners);
     closureCaptureAliases = std::move(savedClosureCaptureAliases);

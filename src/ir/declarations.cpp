@@ -267,6 +267,12 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
     namedValues[name] = closureSlot;
     runtimeClosureVariables[name] = closure;
     runtimeClosureReturnTypes[name] = returnType;
+    auto* signatureParameters = new TypeListNode();
+    if(closure->parameters)
+        for(auto* parameter : closure->parameters->parameters)
+            signatureParameters->addType(cloneTypeNode(parameter->type));
+    functionTypeVariables[name] =
+        new FunctionTypeNode(signatureParameters, cloneTypeNode(returnType));
     auto& owners = runtimeClosureBorrowOwners[name];
     owners.clear();
     for(const auto& capture : captures)
@@ -318,6 +324,9 @@ bool CodeGenerator::tryCopyRuntimeClosureValue(const std::string& name,
     auto returnType = runtimeClosureReturnTypes.find(sourceName);
     if(returnType != runtimeClosureReturnTypes.end())
         runtimeClosureReturnTypes[name] = returnType->second;
+    auto signature = functionTypeVariables.find(sourceName);
+    if(signature != functionTypeVariables.end())
+        functionTypeVariables[name] = signature->second;
     auto owners = runtimeClosureBorrowOwners.find(sourceName);
     if(owners != runtimeClosureBorrowOwners.end())
     {
@@ -415,6 +424,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     }
     recordScopedPointerVariable(node->name);
     enumVariableTypes.erase(node->name);
+    if(auto* functionType = dynamic_cast<FunctionTypeNode*>(declaredType))
+        functionTypeVariables[node->name] = functionType;
 
     if(!validateFixedArrayInitializer(declaredType, node->expression,
                                       node->line))
@@ -445,7 +456,21 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         recordVariableScopeDepth(node->name);
         if(tryGenerateRuntimeClosureValue(node->name, closureInit,
                                           node->line))
+        {
+            if(auto* expected =
+                   dynamic_cast<FunctionTypeNode*>(declaredType))
+            {
+                auto actual = functionTypeVariables.find(node->name);
+                if(actual == functionTypeVariables.end() ||
+                   typeMangle(actual->second) != typeMangle(expected))
+                    reportError(node->line,
+                                "closure initializer does not match declared "
+                                "function type");
+                else
+                    functionTypeVariables[node->name] = expected;
+            }
             return;
+        }
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
@@ -684,6 +709,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
         if(auto* id = dynamic_cast<IdentifierNode*>(node->expression))
         {
+            auto functionType = functionTypeVariables.find(id->name);
+            if(functionType != functionTypeVariables.end())
+                functionTypeVariables[node->name] = functionType->second;
             auto sit = structVariableTypes.find(id->name);
             if(sit != structVariableTypes.end())
             {
@@ -1362,6 +1390,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     clearPointerBorrow(node->name);
     // `var` is always mutable, including when shadowing a previous `let`.
     constantVariables.erase(node->name);
+    if(auto* functionType = dynamic_cast<FunctionTypeNode*>(declaredType))
+        functionTypeVariables[node->name] = functionType;
 
     if(!validateFixedArrayInitializer(declaredType, node->initExpr, node->line))
         return;
@@ -1664,7 +1694,21 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             closureVariables[node->name] = closureInit;
             if(tryGenerateRuntimeClosureValue(node->name, closureInit,
                                               node->line))
+            {
+                if(auto* expected =
+                       dynamic_cast<FunctionTypeNode*>(declaredType))
+                {
+                    auto actual = functionTypeVariables.find(node->name);
+                    if(actual == functionTypeVariables.end() ||
+                       typeMangle(actual->second) != typeMangle(expected))
+                        reportError(node->line,
+                                    "closure initializer does not match "
+                                    "declared function type");
+                    else
+                        functionTypeVariables[node->name] = expected;
+                }
                 return;
+            }
 #if LLVM_VERSION_MAJOR >= 15
             llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else

@@ -4295,6 +4295,41 @@ TEST_F(MLATest, RuntimeClosureCannotBeAssignedPastCaptureScope)
               std::string::npos);
 }
 
+TEST_F(MLATest, FunctionTypedClosureTypeChecksAcrossFunctionBoundaries)
+{
+    std::string code = R"(
+        fn apply(callback: fn(i32) -> void) -> i32 {
+            return 7;
+        }
+        fn main() -> i32 {
+            let callback = |value: i32| {};
+            return apply(callback);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 0) << out;
+}
+
+TEST_F(MLATest, FunctionTypedClosureRejectsBorrowedCaptureEscape)
+{
+    std::string code = R"(
+        fn bad() -> fn() -> i32 {
+            var local: i32 = 9;
+            let read = || { return local; };
+            return read;
+        }
+        fn main() -> i32 { return 0; }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return closure 'read' because it borrows local variable 'local'"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipCanReturnPointerBorrowingGlobal)
 {
     std::string code = R"(

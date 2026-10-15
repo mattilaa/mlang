@@ -114,10 +114,10 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
             }
             else
             {
-                reportError(line, "cannot " + action + " runtime closure '" +
-                                      idExpr->name +
-                                      "'; closure values cannot escape their "
-                                      "local scope yet");
+                // An empty owner set means the closure environment contains
+                // no stack borrows (global captures are not put in the
+                // environment), so the value may cross a function boundary.
+                return true;
             }
             return false;
         }
@@ -134,6 +134,16 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
                                       owner + "'");
                 return false;
             }
+        }
+        if(functionTypeVariables.find(idExpr->name) !=
+               functionTypeVariables.end() &&
+           runtimeClosureVariables.find(idExpr->name) ==
+               runtimeClosureVariables.end())
+        {
+            reportError(line, "cannot " + action + " callable parameter '" +
+                                  idExpr->name +
+                                  "' because its capture lifetime is unknown");
+            return false;
         }
     }
 

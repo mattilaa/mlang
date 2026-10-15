@@ -67,6 +67,24 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
             return;
 
         llvm::Value* returnValue = nullptr;
+        if(dynamic_cast<FunctionTypeNode*>(currentSemanticReturnType))
+        {
+            if(auto* id = dynamic_cast<IdentifierNode*>(node->expression))
+            {
+                auto functionType = functionTypeVariables.find(id->name);
+                auto value = namedValues.find(id->name);
+                auto* slot = value == namedValues.end()
+                                 ? nullptr
+                                 : llvm::dyn_cast<llvm::AllocaInst>(
+                                       value->second);
+                if(functionType != functionTypeVariables.end() && slot)
+                    returnValue = builder.CreateLoad(
+                        slot->getAllocatedType(), slot,
+                        id->name + ".closure.return");
+            }
+        }
+        if(!returnValue)
+        {
         if(auto* traitObj =
                dynamic_cast<TraitObjectTypeNode*>(currentSemanticReturnType))
         {
@@ -87,6 +105,7 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
                 returnValue = coerceTraitObjectValue(returnValue, traitObjType,
                                                      node->line);
             }
+        }
         }
         else
         {

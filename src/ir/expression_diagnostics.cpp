@@ -53,6 +53,8 @@ std::string displayTypeName(TypeNode* type)
     }
     if(auto* trait = dynamic_cast<TraitObjectTypeNode*>(type))
         return "dyn " + trait->traitName;
+    if(auto* function = dynamic_cast<FunctionTypeNode*>(type))
+        return function->toString();
 
     switch(type->kind)
     {
@@ -104,6 +106,8 @@ std::string displayTypeName(TypeNode* type)
         return "reference";
     case TypeNode::TYPE_TRAIT_OBJECT:
         return "dyn";
+    case TypeNode::TYPE_FUNCTION:
+        return "function";
     }
 
     return "unknown";

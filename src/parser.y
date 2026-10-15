@@ -263,6 +263,15 @@ static void qualify_type_in_namespace(TypeNode* type, const std::string& ns,
         return;
     }
 
+    if(auto* functionType = dynamic_cast<FunctionTypeNode*>(type))
+    {
+        if(functionType->parameterTypes)
+            for(TypeNode* parameter : functionType->parameterTypes->types)
+                qualify_type_in_namespace(parameter, ns, names);
+        qualify_type_in_namespace(functionType->returnType, ns, names);
+        return;
+    }
+
     if(auto* ptrType = dynamic_cast<PointerTypeNode*>(type))
     {
         qualify_type_in_namespace(ptrType->elementType, ns, names);
@@ -2035,7 +2044,7 @@ enum UpdatePosition
 %type <ast> arch_gated_function_def arch_gated_test_function_def arch_gated_inline_function_def
 %type <ast> type_alias_def namespace_block namespace_alias_def
 %type <ast> struct_def field_def enum_def enum_variant_list enum_variant
-%type <ast> function_def type parameter_list parameters parameter
+%type <ast> function_def type function_type_parameters parameter_list parameters parameter
 %type <ast> statement_list statement expression ternary_expression cast_expression
 %type <ast> switch_subject_expression switch_case_value
 %type <ast> block_condition_expression block_condition_logical_or block_condition_logical_and
@@ -2840,6 +2849,9 @@ type
     | LIST GENERIC_LT type GT { $$ = mla_ast_generic_list_type($3); }
     | MAP GENERIC_LT type COMMA type GT { $$ = mla_ast_map_type($3, $5); }
     | tuple_type
+    | FUNCTION LPAREN function_type_parameters RPAREN ARROW type
+        { $$ = new FunctionTypeNode(static_cast<TypeListNode*>($3),
+                                    static_cast<TypeNode*>($6)); }
     | PTR GENERIC_LT type GT { $$ = mla_ast_pointer_type($3); }
     | AMP type               { $$ = mla_ast_reference_type($2, 0); }
     | AMP_MUT type           { $$ = mla_ast_reference_type($2, 1); }
@@ -2869,6 +2881,11 @@ type
             else
                 $$ = mla_ast_generic_struct_type_ref($1, $3);
         }
+    ;
+
+function_type_parameters
+    : { $$ = new TypeListNode(); }
+    | type_list { $$ = $1; }
     ;
 
 multiarray_dimensions

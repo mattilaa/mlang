@@ -1608,15 +1608,13 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
     // Runtime closures are represented by a code pointer and an environment
     // pointer. Their declared parameter types determine the indirect call ABI.
-    auto runtimeClosure = runtimeClosureVariables.find(node->name);
-    auto declaredClosure = closureVariables.find(node->name);
-    if(runtimeClosure != runtimeClosureVariables.end() &&
-       declaredClosure != closureVariables.end() &&
-       runtimeClosure->second == declaredClosure->second)
+    auto closureSignature = functionTypeVariables.find(node->name);
+    if(closureSignature != functionTypeVariables.end())
     {
-        ClosureNode* closure = declaredClosure->second;
-        const size_t expectedCount =
-            closure->parameters ? closure->parameters->parameters.size() : 0;
+        FunctionTypeNode* closureType = closureSignature->second;
+        const size_t expectedCount = closureType->parameterTypes
+                                         ? closureType->parameterTypes->types.size()
+                                         : 0;
         if(node->arguments.size() != expectedCount)
         {
             reportError(node->line, "runtime closure '" + node->name +
@@ -1651,13 +1649,12 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 #endif
         std::vector<llvm::Type*> signatureParameters = {erasedPointerType};
         std::vector<llvm::Value*> callArguments = {environment};
-        if(closure->parameters)
+        if(closureType->parameterTypes)
         {
-            for(size_t i = 0; i < closure->parameters->parameters.size(); ++i)
+            for(size_t i = 0; i < closureType->parameterTypes->types.size(); ++i)
             {
-                auto* parameter = closure->parameters->parameters[i];
-                llvm::Type* parameterType =
-                    parameter ? getLLVMTypeFromNode(parameter->type) : nullptr;
+                TypeNode* parameter = closureType->parameterTypes->types[i];
+                llvm::Type* parameterType = getLLVMTypeFromNode(parameter);
                 llvm::Value* argument = generateExpression(node->arguments[i]);
                 if(!parameterType || !argument)
                 {
@@ -1690,10 +1687,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
         }
         llvm::FunctionType* signature = llvm::FunctionType::get(
-            runtimeClosureReturnTypes.count(node->name)
-                ? getLLVMTypeFromNode(
-                      runtimeClosureReturnTypes.at(node->name))
-                : llvm::Type::getVoidTy(context),
+            getLLVMTypeFromNode(closureType->returnType),
             signatureParameters, false);
 #if LLVM_VERSION_MAJOR < 15
         code = builder.CreateBitCast(code, signature->getPointerTo(),
@@ -2539,9 +2533,22 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     for(size_t argIndex = 0; argIndex < node->arguments.size(); ++argIndex)
     {
         auto arg = node->arguments[argIndex];
-        llvm::Value* argVal = generateArgumentValue(
-            arg, overloadParameterType(overloadIt->second,
-                                       node->arguments.size(), argIndex));
+        llvm::Value* argVal = nullptr;
+        if(auto* identifier = dynamic_cast<IdentifierNode*>(arg))
+        {
+            auto functionType = functionTypeVariables.find(identifier->name);
+            auto value = namedValues.find(identifier->name);
+            auto* slot = value == namedValues.end()
+                             ? nullptr
+                             : llvm::dyn_cast<llvm::AllocaInst>(value->second);
+            if(functionType != functionTypeVariables.end() && slot)
+                argVal = builder.CreateLoad(slot->getAllocatedType(), slot,
+                                            identifier->name + ".closure.arg");
+        }
+        if(!argVal)
+            argVal = generateArgumentValue(
+                arg, overloadParameterType(overloadIt->second,
+                                           node->arguments.size(), argIndex));
         if(!argVal)
             return nullptr;
         // &s where s is a string: generateExpression(OP_ADDR) returns the
@@ -2775,11 +2782,46 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             dynamic_cast<IdentifierNode*>(node->arguments[argumentIndex]);
         if(!identifier)
             continue;
+        auto callableType = functionTypeVariables.find(identifier->name);
         auto runtime = runtimeClosureVariables.find(identifier->name);
         auto declared = closureVariables.find(identifier->name);
+        const bool hasRuntimeAst =
+            runtime != runtimeClosureVariables.end() &&
+            declared != closureVariables.end() &&
+            runtime->second == declared->second && runtime->second;
+        if(callableType != functionTypeVariables.end() && !hasRuntimeAst)
+        {
+            auto* expectedType =
+                best->node && best->node->parameters &&
+                        argumentIndex < best->node->parameters->parameters.size()
+                    ? dynamic_cast<FunctionTypeNode*>(
+                          best->node->parameters->parameters[argumentIndex]
+                              ->type)
+                    : nullptr;
+            if(!expectedType ||
+               typeMangle(callableType->second) != typeMangle(expectedType))
+            {
+                reportError(node->line,
+                            "callable argument '" + identifier->name +
+                                "' requires a matching fn(...) -> ... "
+                                "parameter on function '" + node->name + "'");
+                return nullptr;
+            }
+            auto owners = runtimeClosureBorrowOwners.find(identifier->name);
+            if(owners != runtimeClosureBorrowOwners.end() &&
+               !owners->second.empty())
+            {
+                reportError(node->line,
+                            "cannot pass closure '" + identifier->name +
+                                "' because it may borrow local variable '" +
+                                *owners->second.begin() + "'");
+                return nullptr;
+            }
+            continue;
+        }
         if(runtime == runtimeClosureVariables.end() ||
            declared == closureVariables.end() ||
-           runtime->second != declared->second)
+           runtime->second != declared->second || !runtime->second)
             continue;
 
         bool specializedInlineCallback = false;
@@ -2816,9 +2858,24 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         }
         else
         {
-            reportError(node->line, "runtime closure values can only be "
-                                        "called directly or used as generic "
-                                        "callbacks");
+            auto* expectedType =
+                best->node && best->node->parameters &&
+                        argumentIndex < best->node->parameters->parameters.size()
+                    ? dynamic_cast<FunctionTypeNode*>(
+                          best->node->parameters->parameters[argumentIndex]
+                              ->type)
+                    : nullptr;
+            auto actualType = functionTypeVariables.find(identifier->name);
+            if(!expectedType || actualType == functionTypeVariables.end() ||
+               typeMangle(actualType->second) != typeMangle(expectedType))
+            {
+                reportError(node->line,
+                            "runtime closure values can only be passed to a "
+                            "matching fn(...) -> ... parameter or used as a "
+                            "generic callback");
+                return nullptr;
+            }
+            continue;
         }
         return nullptr;
     }
@@ -3123,6 +3180,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     auto savedVarDepthScopes = variableScopeDepthScopes;
     auto savedRuntimeClosureVariables = runtimeClosureVariables;
     auto savedRuntimeClosureReturnTypes = runtimeClosureReturnTypes;
+    auto savedFunctionTypeVariables = functionTypeVariables;
     auto savedRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     auto savedLoopBreak = loopBreakBlocks;
     auto savedLoopContinue = loopContinueBlocks;
@@ -3142,6 +3200,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     closureVariables.clear();
     runtimeClosureVariables.clear();
     runtimeClosureReturnTypes.clear();
+    functionTypeVariables.clear();
     runtimeClosureBorrowOwners.clear();
     closureCaptureAliases.clear();
     closureCaptureTypes.clear();
@@ -3344,6 +3403,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     closureVariables = std::move(savedClosureVars);
     runtimeClosureVariables = std::move(savedRuntimeClosureVariables);
     runtimeClosureReturnTypes = std::move(savedRuntimeClosureReturnTypes);
+    functionTypeVariables = std::move(savedFunctionTypeVariables);
     runtimeClosureBorrowOwners =
         std::move(savedRuntimeClosureBorrowOwners);
     closureCaptureAliases = std::move(savedClosureCaptureAliases);

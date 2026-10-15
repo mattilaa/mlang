@@ -220,6 +220,8 @@ private:
     // environment. Borrow checks keep captured owners alive for local values.
     std::map<std::string, ClosureNode*> runtimeClosureVariables;
     std::map<std::string, TypeNode*> runtimeClosureReturnTypes;
+    // Static signatures associated with callable values and typed callbacks.
+    std::map<std::string, FunctionTypeNode*> functionTypeVariables;
     // Owner variables borrowed by each runtime closure's stack environment.
     std::map<std::string, std::set<std::string>> runtimeClosureBorrowOwners;
     // Generic closure parameter -> captured local name -> hidden parameter

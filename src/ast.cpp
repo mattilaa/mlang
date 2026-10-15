@@ -2954,6 +2954,12 @@ std::string TupleTypeNode::toString() const
     return "tuple<" + elementTypes->toString() + ">";
 }
 
+std::string FunctionTypeNode::toString() const
+{
+    return "fn(" + (parameterTypes ? parameterTypes->toString() : "") +
+           ") -> " + (returnType ? returnType->toString() : "void");
+}
+
 // Struct type reference
 ASTNode* create_struct_type_ref_impl(char* name)
 {

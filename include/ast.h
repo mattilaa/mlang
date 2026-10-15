@@ -91,7 +91,8 @@ public:
         TYPE_U32,
         TYPE_U64,
         TYPE_REF,      // &T  -- immutable reference
-        TYPE_REF_MUT   // &mut T -- mutable reference
+        TYPE_REF_MUT,  // &mut T -- mutable reference
+        TYPE_FUNCTION  // fn(T1, T2) -> R -- callable closure value
     };
 
     TypeKind kind;
@@ -213,6 +214,22 @@ public:
     TypeListNode* elementTypes;
     TupleTypeNode(TypeListNode* types)
         : TypeNode(TYPE_TUPLE), elementTypes(types)
+    {
+    }
+    std::string toString() const override;
+};
+
+// First-class callable type. Values use the runtime closure representation
+// {code pointer, environment pointer}; the signature is statically typed.
+class FunctionTypeNode : public TypeNode
+{
+public:
+    TypeListNode* parameterTypes;
+    TypeNode* returnType;
+
+    FunctionTypeNode(TypeListNode* parameters, TypeNode* result)
+        : TypeNode(TYPE_FUNCTION), parameterTypes(parameters),
+          returnType(result)
     {
     }
     std::string toString() const override;
