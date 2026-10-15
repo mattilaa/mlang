@@ -101,7 +101,7 @@ If you are new to MLang, read these pages in this order:
   Every multi-file project under `examples/<name>/`, with a short description
   and its build or run command.
 - [Ownership Model Notes](https://github.com/mattilaa/mlang/blob/main/docs/ownership_model.h)
-  Current ownership and move/copy model notes used by the compiler.
+  Current ownership, move/copy rules, `std::copy` caveats, and closure status.
 
 ## First Example
 

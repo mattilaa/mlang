@@ -16,7 +16,11 @@ These are owning views because Mlang does not yet have lifetime-parameterized
 borrowed views. Passing a list into an adapter transfers it to the view.
 If the original list must remain usable, explicitly copy its storage first
 with `std::copy(source)`; this is supported when the list element type is
-`Copy`. Copies are never inserted implicitly just to keep the source alive.
+`Copy`. The list gets a separate backing buffer, but elements are copied using
+their ordinary `Copy` semantics. This is not a recursive clone: pointer-like
+values, strings, and pointer fields inside elements continue to share their
+targets. Mlang does not currently provide a general `Clone` trait or custom
+copy hook. Copies are never inserted implicitly just to keep the source alive.
 
 ```mlang
 mod std::ranges::views;
@@ -26,6 +30,7 @@ fn main() -> i32 {
     let source: list<i64> = [10, 20, 30, 40];
     let first_three = take(std::copy(source), 3);
     println!("{} {}", first_three.len(), first_three.get(1).unwrap());
+    println!("source still has {} items", source.len());
     let last_two = drop([10, 20, 30, 40], 2);
     let values: list<i64> = last_two.collect();
     println!("{} {}", values[0], values[1]);

@@ -20,11 +20,12 @@
  * @ingroup ownership_model
  * @brief Values that are duplicated by assignment/passing.
  *
- * In phase 1, the following are classified as `Copy`:
+ * The current compiler classifies the following as `Copy`:
  * - scalar numeric types
  *   (`i8..i64`, `u8..u64`, `f32`, `f64`)
  * - `bool`
  * - raw pointers (`ptr<T>`)
+ * - `string`, `str8`, and `str16` values (pointer-like, shallow copies)
  * - enums
  * - tuples where all elements are `Copy`
  * - structs where all fields are `Copy`
@@ -35,8 +36,7 @@
  * @ingroup ownership_model
  * @brief Values that transfer ownership when assigned or passed by value.
  *
- * In phase 1, the following are classified as move-only by default:
- * - `str8`, `str16`
+ * The current compiler classifies the following as move-only by default:
  * - `list<T>`
  * - `map<K, V>`
  * - unknown or generic-parameter-backed struct types when field ownership
@@ -45,10 +45,22 @@
  * Recursive type cycles are conservatively treated as move-only.
  *
  * `std::copy(value)` explicitly requests a copy without consuming `value`.
- * Primitive and otherwise `Copy` values use their normal value-copy
- * semantics. Lists receive independent backing storage when their element
- * type is `Copy`; lists with move-only or unresolved element types are
- * rejected. Other move-only types cannot be copied by this operation.
+ * It follows the type's existing `Copy` semantics; it does not call a custom
+ * clone method or recursively duplicate pointed-to resources. In particular,
+ * copying a string or raw pointer copies the pointer, not its target. Copying
+ * a struct copies its fields according to their normal `Copy` semantics.
+ *
+ * For a list, `std::copy` allocates independent backing storage and copies the
+ * element bytes only when the element type is `Copy`. This is a shallow
+ * element-wise value copy: pointer-like fields and strings inside elements
+ * still refer to the same targets. Lists with move-only or unresolved element
+ * types, and other move-only values, are rejected. There is currently no
+ * general `Clone` trait or user-defined copy hook.
+ *
+ * Mlang closures are currently inline compiler constructs, not storable
+ * callable values. Rust-style borrowed-by-default captures with lifetime
+ * checks, and explicit owned/move captures, are a design direction rather
+ * than implemented behavior.
  */
 
 /**
