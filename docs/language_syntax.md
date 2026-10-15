@@ -1071,6 +1071,23 @@ fn main() -> i32 {
 }
 ```
 
+Generic functions can also accept and invoke a named function item as a
+callable parameter. The other arguments infer its concrete signature, which
+lets an overloaded function item be selected after generic type substitution:
+
+```mla
+generic<T> fn apply(mapper: fn(T) -> T, value: T) -> T {
+    return mapper(value);
+}
+
+fn main() -> i32 {
+    return apply(square, 8); // selects square(i64) for the inferred T
+}
+```
+
+This generic callback inference currently applies to named function items;
+generic lambda arguments still require additional compiler support.
+
 An unambiguous named function also infers its callable type in a local. If the
 name is overloaded, add an explicit function type to select its signature:
 

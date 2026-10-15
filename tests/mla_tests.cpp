@@ -4389,6 +4389,21 @@ TEST_F(MLATest, ReturnTypeSelectsNamedFunctionOverload)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+TEST_F(MLATest, GenericFunctionCanInvokeCallableParameter)
+{
+    std::string code = R"(
+        fn square(value: i32) -> i32 { return value * value; }
+        fn square(value: i64) -> i64 { return value * value; }
+        generic<T> fn apply(mapper: fn(T) -> T, value: T) -> T {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            return apply(square, 8);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 64);
+}
+
 TEST_F(MLATest, UniqueNamedFunctionInfersCallableLocalType)
 {
     std::string code = R"(

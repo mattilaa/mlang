@@ -269,6 +269,28 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                 concrete = concreteRef->elementType;
             return bindType(patternRef->elementType, concrete);
         }
+        if(auto* patternFunction =
+               dynamic_cast<FunctionTypeNode*>(pattern))
+        {
+            auto* concreteFunction =
+                dynamic_cast<FunctionTypeNode*>(concrete);
+            const size_t patternCount =
+                patternFunction->parameterTypes
+                    ? patternFunction->parameterTypes->types.size()
+                    : 0;
+            const size_t concreteCount =
+                concreteFunction && concreteFunction->parameterTypes
+                    ? concreteFunction->parameterTypes->types.size()
+                    : 0;
+            if(!concreteFunction || patternCount != concreteCount)
+                return false;
+            for(size_t i = 0; i < patternCount; ++i)
+                if(!bindType(patternFunction->parameterTypes->types[i],
+                             concreteFunction->parameterTypes->types[i]))
+                    return false;
+            return bindType(patternFunction->returnType,
+                            concreteFunction->returnType);
+        }
         if(auto* patternName = dynamic_cast<StructTypeRefNode*>(pattern))
         {
             if(typeParamNames.count(patternName->structName))
@@ -542,6 +564,19 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         // overload probing can diagnose the closure name as an unknown local.
         else
         {
+            if(dynamic_cast<FunctionTypeNode*>(parameterType))
+            {
+                if(auto* identifier =
+                       dynamic_cast<IdentifierNode*>(arguments[i]))
+                {
+                    auto overloads = functionOverloads.find(identifier->name);
+                    if(overloads != functionOverloads.end() &&
+                       !functionTypeVariables.count(identifier->name) &&
+                       !namedValues.count(identifier->name) &&
+                       !globalNamedValues.count(identifier->name))
+                        continue; // Resolve after other arguments bind T.
+                }
+            }
             bool isBoundClosure =
                 dynamic_cast<ClosureNode*>(arguments[i]) != nullptr;
             if(auto* identifier = dynamic_cast<IdentifierNode*>(arguments[i]))
@@ -555,6 +590,49 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         }
         if(!concrete || !bindType(parameterType, concrete))
             return false;
+    }
+
+    // Named overloads used as generic callbacks must be resolved against the
+    // function type after ordinary arguments have supplied any type bindings.
+    for(size_t i = 0; i < arguments.size(); ++i)
+    {
+        auto* expectedFunction = dynamic_cast<FunctionTypeNode*>(
+            functionTemplate->parameters->parameters[i]->type);
+        auto* identifier = dynamic_cast<IdentifierNode*>(arguments[i]);
+        if(!expectedFunction || !identifier ||
+           functionTypeVariables.count(identifier->name) ||
+           namedValues.count(identifier->name) ||
+           globalNamedValues.count(identifier->name))
+            continue;
+        auto overloads = functionOverloads.find(identifier->name);
+        if(overloads == functionOverloads.end())
+            continue;
+
+        std::map<std::string, TypeNode*> selectedBindings;
+        size_t matches = 0;
+        for(const auto& overload : overloads->second)
+        {
+            if(!isOverloadVisible(overload) || !overload.node ||
+               !overload.function || !overload.node->parameters ||
+               overload.node->parameters->isVarArg ||
+               !overload.node->typeParams.empty())
+                continue;
+            auto* parameters = new TypeListNode();
+            for(auto* parameter : overload.node->parameters->parameters)
+                parameters->addType(cloneTypeNode(parameter->type));
+            auto* actualFunction = new FunctionTypeNode(
+                parameters, cloneTypeNode(overload.node->returnType));
+            auto savedBindings = bindings;
+            if(bindType(expectedFunction, actualFunction))
+            {
+                ++matches;
+                selectedBindings = bindings;
+            }
+            bindings = std::move(savedBindings);
+        }
+        if(matches != 1)
+            return false;
+        bindings = std::move(selectedBindings);
     }
 
     auto bindUnboundReturnType = [&](TypeNode* pattern,
@@ -2656,9 +2734,99 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                             identifier->name + ".closure.arg");
         }
         if(!argVal)
-            argVal = generateArgumentValue(
-                arg, overloadParameterType(overloadIt->second,
-                                           node->arguments.size(), argIndex));
+        {
+            TypeNode* expectedArgumentType = overloadParameterType(
+                overloadIt->second, node->arguments.size(), argIndex);
+            // Generic specializations coexist with their unspecialized
+            // templates in the overload set. The template's fn(T)->T
+            // parameter makes the common-type helper return null; recover a
+            // concrete callback signature from the unique specialization
+            // whose other arguments match and which accepts this function
+            // item.
+            if(!expectedArgumentType &&
+               dynamic_cast<IdentifierNode*>(arg))
+            {
+                auto* functionItem = static_cast<IdentifierNode*>(arg);
+                auto items = functionOverloads.find(functionItem->name);
+                TypeNode* selectedType = nullptr;
+                bool conflictingTypes = false;
+                if(items != functionOverloads.end())
+                {
+                    for(const auto& candidate : overloadIt->second)
+                    {
+                        if(!candidate.function || !candidate.node ||
+                           !candidate.node->parameters ||
+                           candidate.node->parameters->parameters.size() !=
+                               node->arguments.size() ||
+                           argIndex >=
+                               candidate.node->parameters->parameters.size())
+                            continue;
+                        auto* callbackType = dynamic_cast<FunctionTypeNode*>(
+                            candidate.node->parameters
+                                ->parameters[argIndex]->type);
+                        if(!callbackType)
+                            continue;
+
+                        bool otherArgumentsMatch = true;
+                        for(size_t i = 0; i < node->arguments.size(); ++i)
+                        {
+                            if(i == argIndex)
+                                continue;
+                            TypeNode* actual = inferExpressionTypeNode(
+                                node->arguments[i], node->line);
+                            TypeNode* expected = candidate.node->parameters
+                                                     ->parameters[i]->type;
+                            if(!actual || !expected ||
+                               typeMangle(actual) != typeMangle(expected))
+                            {
+                                otherArgumentsMatch = false;
+                                break;
+                            }
+                        }
+                        if(!otherArgumentsMatch)
+                            continue;
+
+                        size_t matchingItems = 0;
+                        for(const auto& item : items->second)
+                        {
+                            if(!isOverloadVisible(item) || !item.node ||
+                               !item.function || !item.node->parameters ||
+                               item.node->parameters->isVarArg ||
+                               !item.node->typeParams.empty() ||
+                               item.node->parameters->parameters.size() !=
+                                   (callbackType->parameterTypes
+                                        ? callbackType->parameterTypes->types.size()
+                                        : 0))
+                                continue;
+                            auto* itemParameters = new TypeListNode();
+                            for(auto* parameter :
+                                item.node->parameters->parameters)
+                                itemParameters->addType(
+                                    cloneTypeNode(parameter->type));
+                            auto* itemType = new FunctionTypeNode(
+                                itemParameters,
+                                cloneTypeNode(item.node->returnType));
+                            if(typeMangle(itemType) ==
+                               typeMangle(callbackType))
+                                ++matchingItems;
+                        }
+                        if(matchingItems != 1)
+                            continue;
+                        if(selectedType &&
+                           typeMangle(selectedType) !=
+                               typeMangle(callbackType))
+                        {
+                            conflictingTypes = true;
+                            break;
+                        }
+                        selectedType = callbackType;
+                    }
+                }
+                if(!conflictingTypes)
+                    expectedArgumentType = selectedType;
+            }
+            argVal = generateArgumentValue(arg, expectedArgumentType);
+        }
         if(!argVal)
             return nullptr;
         // &s where s is a string: generateExpression(OP_ADDR) returns the
