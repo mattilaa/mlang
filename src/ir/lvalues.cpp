@@ -158,6 +158,137 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         return;
     }
 
+    if(auto* sourceId = dynamic_cast<IdentifierNode*>(node->expression))
+    {
+        auto targetRuntime = runtimeClosureVariables.find(node->name);
+        auto sourceRuntime = runtimeClosureVariables.find(sourceId->name);
+        auto targetClosure = closureVariables.find(node->name);
+        auto sourceClosure = closureVariables.find(sourceId->name);
+        if(targetRuntime != runtimeClosureVariables.end() &&
+           sourceRuntime != runtimeClosureVariables.end() &&
+           targetClosure != closureVariables.end() &&
+           sourceClosure != closureVariables.end() &&
+           targetRuntime->second == targetClosure->second &&
+           sourceRuntime->second == sourceClosure->second)
+        {
+            auto borrowers = activeBorrowers.find(node->name);
+            if(borrowers != activeBorrowers.end())
+            {
+                for(const auto& borrower : borrowers->second)
+                {
+                    if(borrower != node->name)
+                    {
+                        reportError(node->line, "cannot assign to closure '" +
+                                                      node->name +
+                                                      "' while borrowed by '" +
+                                                      borrower + "'");
+                        return;
+                    }
+                }
+            }
+
+            ClosureNode* targetNode = targetClosure->second;
+            ClosureNode* sourceNode = sourceClosure->second;
+            const size_t targetCount =
+                targetNode->parameters
+                    ? targetNode->parameters->parameters.size()
+                    : 0;
+            const size_t sourceCount =
+                sourceNode->parameters
+                    ? sourceNode->parameters->parameters.size()
+                    : 0;
+            bool sameSignature = targetCount == sourceCount;
+            for(size_t i = 0; sameSignature && i < targetCount; ++i)
+            {
+                auto* targetParam = targetNode->parameters->parameters[i];
+                auto* sourceParam = sourceNode->parameters->parameters[i];
+                sameSignature = targetParam && sourceParam &&
+                    typeMangle(targetParam->type) ==
+                        typeMangle(sourceParam->type);
+            }
+            auto targetReturn = runtimeClosureReturnTypes.find(node->name);
+            auto sourceReturn = runtimeClosureReturnTypes.find(sourceId->name);
+            sameSignature = sameSignature &&
+                targetReturn != runtimeClosureReturnTypes.end() &&
+                sourceReturn != runtimeClosureReturnTypes.end() &&
+                typeMangle(targetReturn->second) ==
+                    typeMangle(sourceReturn->second);
+            if(!sameSignature)
+            {
+                reportError(node->line,
+                            "cannot assign closure with a different "
+                            "signature to '" + node->name + "'");
+                return;
+            }
+
+            auto sourceSlotIt = namedValues.find(sourceId->name);
+            auto* targetSlot = llvm::dyn_cast<llvm::AllocaInst>(variable);
+            auto* sourceSlot = sourceSlotIt == namedValues.end()
+                                   ? nullptr
+                                   : llvm::dyn_cast<llvm::AllocaInst>(
+                                         sourceSlotIt->second);
+            if(!targetSlot || !sourceSlot ||
+               targetSlot->getAllocatedType() !=
+                   sourceSlot->getAllocatedType())
+            {
+                reportError(node->line,
+                            "runtime closure assignment requires compatible "
+                            "local closure slots");
+                return;
+            }
+
+            auto sourceOwners = runtimeClosureBorrowOwners.find(sourceId->name);
+            if(sourceOwners != runtimeClosureBorrowOwners.end())
+            {
+                for(const auto& owner : sourceOwners->second)
+                {
+                    auto targetDepth = variableScopeDepth.find(node->name);
+                    auto ownerDepth = variableScopeDepth.find(owner);
+                    if(targetDepth != variableScopeDepth.end() &&
+                       ownerDepth != variableScopeDepth.end() &&
+                       targetDepth->second < ownerDepth->second)
+                    {
+                        reportError(node->line, "cannot assign closure '" +
+                                                      sourceId->name +
+                                                      "' to longer-lived '" +
+                                                      node->name +
+                                                      "'; it borrows local '" +
+                                                      owner + "'");
+                        return;
+                    }
+                    if(activeMutBorrower.find(owner) !=
+                       activeMutBorrower.end())
+                    {
+                        reportError(node->line, "cannot assign closure '" +
+                                                      sourceId->name +
+                                                      "' while capture '" +
+                                                      owner +
+                                                      "' is mutably borrowed");
+                        return;
+                    }
+                }
+            }
+
+            releaseRuntimeClosureBorrows(node->name);
+            llvm::Value* closureValue = builder.CreateLoad(
+                sourceSlot->getAllocatedType(), sourceSlot,
+                node->name + ".closure.assign.value");
+            builder.CreateStore(closureValue, targetSlot);
+            closureVariables[node->name] = sourceNode;
+            runtimeClosureVariables[node->name] = sourceRuntime->second;
+            runtimeClosureReturnTypes[node->name] = sourceReturn->second;
+            auto& targetOwners = runtimeClosureBorrowOwners[node->name];
+            targetOwners.clear();
+            if(sourceOwners != runtimeClosureBorrowOwners.end())
+            {
+                targetOwners = sourceOwners->second;
+                for(const auto& owner : targetOwners)
+                    activeBorrowers[owner].insert(node->name);
+            }
+            return;
+        }
+    }
+
     std::unique_ptr<TypeNode> expectedSemanticType;
     auto listTypeIt = listElementTypes.find(node->name);
     if(listTypeIt != listElementTypes.end())

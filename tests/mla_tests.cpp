@@ -4257,6 +4257,44 @@ TEST_F(MLATest, RuntimeClosureReturnsValueAndBorrowsCapture)
     EXPECT_EQ(compileAndRunExitCode(code), 12);
 }
 
+TEST_F(MLATest, RuntimeClosureCanBeReassignedWithMatchingSignature)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var current = |delta: i32| { first += delta; };
+            let alternate = |delta: i32| { second += delta; };
+            current = alternate;
+            current(3);
+            return first + second;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 6);
+}
+
+TEST_F(MLATest, RuntimeClosureCannotBeAssignedPastCaptureScope)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var selected = || {};
+            if true {
+                var local: i32 = 3;
+                let captures_local = || { local += 1; };
+                selected = captures_local;
+            }
+            selected();
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign closure 'captures_local' to longer-lived 'selected'"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipCanReturnPointerBorrowingGlobal)
 {
     std::string code = R"(
