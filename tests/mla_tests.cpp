@@ -4345,6 +4345,21 @@ TEST_F(MLATest, NamedFunctionCanBePassedAsCallableValue)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+TEST_F(MLATest, NamedFunctionCanInitializeCallableLocals)
+{
+    std::string code = R"(
+        fn square(value: i32) -> i32 { return value * value; }
+        fn increment(value: i32) -> i32 { return value + 1; }
+        fn main() -> i32 {
+            let square_fn: fn(i32) -> i32 = square;
+            var selected: fn(i32) -> i32 = increment;
+            selected = square_fn;
+            return selected(8);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 64);
+}
+
 TEST_F(MLATest, FunctionTypedClosureRejectsBorrowedCaptureEscape)
 {
     std::string code = R"(

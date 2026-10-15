@@ -292,6 +292,104 @@ static bool isNumericTypeKind(TypeNode::TypeKind kind)
     }
 }
 
+llvm::Value* CodeGenerator::generateFunctionItemValue(
+    IdentifierNode* identifier, FunctionTypeNode* callableType)
+{
+    if(!identifier || !callableType)
+        return nullptr;
+    auto overloads = functionOverloads.find(identifier->name);
+    if(overloads == functionOverloads.end())
+        return nullptr;
+
+    std::vector<FunctionOverloadInfo*> matches;
+    for(auto& overload : overloads->second)
+    {
+        if(!isOverloadVisible(overload) || !overload.node ||
+           !overload.function || !overload.node->parameters ||
+           overload.node->parameters->isVarArg ||
+           !overload.node->typeParams.empty() ||
+           overload.node->parameters->parameters.size() !=
+               (callableType->parameterTypes
+                    ? callableType->parameterTypes->types.size()
+                    : 0))
+            continue;
+        auto* candidateParams = new TypeListNode();
+        for(auto* parameter : overload.node->parameters->parameters)
+            candidateParams->addType(cloneTypeNode(parameter->type));
+        auto* candidateType = new FunctionTypeNode(
+            candidateParams, cloneTypeNode(overload.node->returnType));
+        if(typeMangle(candidateType) == typeMangle(callableType))
+            matches.push_back(&overload);
+    }
+
+    if(matches.size() == 1)
+    {
+        llvm::Function* target = matches.front()->function;
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* erasedPointerType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* erasedPointerType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        std::vector<llvm::Type*> thunkParams = {erasedPointerType};
+        for(auto& parameter : target->args())
+            thunkParams.push_back(parameter.getType());
+        llvm::FunctionType* thunkType = llvm::FunctionType::get(
+            target->getReturnType(), thunkParams, false);
+        static size_t functionItemThunkId = 0;
+        llvm::Function* thunk = llvm::Function::Create(
+            thunkType, llvm::Function::PrivateLinkage,
+            "__mlang_function_item_" +
+                std::to_string(functionItemThunkId++),
+            module.get());
+        llvm::BasicBlock* entry =
+            llvm::BasicBlock::Create(context, "entry", thunk);
+        auto savedIP = builder.saveIP();
+        builder.SetInsertPoint(entry);
+        std::vector<llvm::Value*> targetArgs;
+        auto thunkArg = thunk->arg_begin();
+        ++thunkArg; // The closure environment is unused.
+        for(; thunkArg != thunk->arg_end(); ++thunkArg)
+            targetArgs.push_back(&*thunkArg);
+        llvm::CallInst* call = builder.CreateCall(target, targetArgs);
+        if(target->getReturnType()->isVoidTy())
+            builder.CreateRetVoid();
+        else
+            builder.CreateRet(call);
+        builder.restoreIP(savedIP);
+
+        llvm::Type* valueType = getLLVMTypeFromNode(callableType);
+        auto* closureStruct =
+            llvm::dyn_cast_or_null<llvm::StructType>(valueType);
+        if(!closureStruct || closureStruct->getNumElements() != 2)
+        {
+            reportError(identifier->line,
+                        "unsupported callable representation for function "
+                        "item '" + identifier->name + "'");
+            return nullptr;
+        }
+        llvm::Value* value = llvm::UndefValue::get(closureStruct);
+        value = builder.CreateInsertValue(
+            value, builder.CreatePointerCast(thunk, erasedPointerType), 0,
+            "function.item.code");
+        value = builder.CreateInsertValue(
+            value,
+            llvm::ConstantPointerNull::get(
+                llvm::cast<llvm::PointerType>(erasedPointerType)),
+            1, "function.item.environment");
+        return value;
+    }
+    if(matches.size() > 1)
+        reportError(identifier->line,
+                    "ambiguous function item '" + identifier->name +
+                        "' for callable signature");
+    else
+        reportError(identifier->line,
+                    "function item '" + identifier->name +
+                        "' does not match the expected callable signature");
+    return nullptr;
+}
+
 // A list literal (or array fill) passed for a parameter declared as a list of
 // a numeric type takes that element type, as it does when a `let` declares
 // one. Otherwise its integer literals default to i64 while the callee reads
@@ -305,114 +403,10 @@ llvm::Value* CodeGenerator::generateArgumentValue(ExpressionNode* arg,
     {
         if(auto* identifier = dynamic_cast<IdentifierNode*>(arg))
         {
-            auto overloads = functionOverloads.find(identifier->name);
-            if(overloads != functionOverloads.end())
-            {
-                std::vector<FunctionOverloadInfo*> matches;
-                for(auto& overload : overloads->second)
-                {
-                    if(!isOverloadVisible(overload) || !overload.node ||
-                       !overload.function ||
-                       !overload.node->parameters ||
-                       overload.node->parameters->isVarArg ||
-                       !overload.node->typeParams.empty() ||
-                       overload.node->parameters->parameters.size() !=
-                           (callableType->parameterTypes
-                                ? callableType->parameterTypes->types.size()
-                                : 0))
-                        continue;
-                    auto* candidateParams = new TypeListNode();
-                    for(auto* parameter :
-                        overload.node->parameters->parameters)
-                        candidateParams->addType(
-                            cloneTypeNode(parameter->type));
-                    auto* candidateType = new FunctionTypeNode(
-                        candidateParams,
-                        cloneTypeNode(overload.node->returnType));
-                    if(typeMangle(candidateType) == typeMangle(callableType))
-                        matches.push_back(&overload);
-                }
-
-                if(matches.size() == 1)
-                {
-                    FunctionOverloadInfo* match = matches.front();
-                    llvm::Function* target = match->function;
-#if LLVM_VERSION_MAJOR >= 15
-                    llvm::Type* erasedPointerType =
-                        llvm::PointerType::get(context, 0);
-#else
-                    llvm::Type* erasedPointerType = llvm::PointerType::get(
-                        llvm::Type::getInt8Ty(context), 0);
-#endif
-                    std::vector<llvm::Type*> thunkParams = {
-                        erasedPointerType};
-                    for(auto& parameter : target->args())
-                        thunkParams.push_back(parameter.getType());
-                    llvm::FunctionType* thunkType =
-                        llvm::FunctionType::get(target->getReturnType(),
-                                                thunkParams, false);
-                    static size_t functionItemThunkId = 0;
-                    llvm::Function* thunk = llvm::Function::Create(
-                        thunkType, llvm::Function::PrivateLinkage,
-                        "__mlang_function_item_" +
-                            std::to_string(functionItemThunkId++),
-                        module.get());
-                    llvm::BasicBlock* entry = llvm::BasicBlock::Create(
-                        context, "entry", thunk);
-                    auto savedIP = builder.saveIP();
-                    builder.SetInsertPoint(entry);
-                    std::vector<llvm::Value*> targetArgs;
-                    auto thunkArg = thunk->arg_begin();
-                    ++thunkArg; // The closure environment is unused.
-                    for(; thunkArg != thunk->arg_end(); ++thunkArg)
-                        targetArgs.push_back(&*thunkArg);
-                    llvm::CallInst* call =
-                        builder.CreateCall(target, targetArgs);
-                    if(target->getReturnType()->isVoidTy())
-                        builder.CreateRetVoid();
-                    else
-                        builder.CreateRet(call);
-                    builder.restoreIP(savedIP);
-
-                    llvm::Type* valueType =
-                        getLLVMTypeFromNode(callableType);
-                    auto* closureStruct =
-                        llvm::dyn_cast_or_null<llvm::StructType>(valueType);
-                    if(!closureStruct || closureStruct->getNumElements() != 2)
-                    {
-                        reportError(identifier->line,
-                                    "unsupported callable representation for "
-                                    "function item '" + identifier->name +
-                                        "'");
-                        return nullptr;
-                    }
-                    llvm::Value* value =
-                        llvm::UndefValue::get(closureStruct);
-                    value = builder.CreateInsertValue(
-                        value,
-                        builder.CreatePointerCast(thunk, erasedPointerType),
-                        0, "function.item.code");
-                    value = builder.CreateInsertValue(
-                        value,
-                        llvm::ConstantPointerNull::get(
-                            llvm::cast<llvm::PointerType>(erasedPointerType)),
-                        1, "function.item.environment");
-                    return value;
-                }
-                if(matches.size() > 1)
-                {
-                    reportError(identifier->line,
-                                "ambiguous function item '" +
-                                    identifier->name +
-                                    "' for callable signature");
-                    return nullptr;
-                }
-                reportError(identifier->line,
-                            "function item '" + identifier->name +
-                                "' does not match the expected callable "
-                                "signature");
-                return nullptr;
-            }
+            if(functionOverloads.count(identifier->name) &&
+               !namedValues.count(identifier->name) &&
+               !globalNamedValues.count(identifier->name))
+                return generateFunctionItemValue(identifier, callableType);
         }
     }
 

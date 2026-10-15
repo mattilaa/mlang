@@ -251,6 +251,13 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
     }
     else if(auto id = dynamic_cast<IdentifierNode*>(node))
     {
+        if(auto* callableType = dynamic_cast<FunctionTypeNode*>(expectedType))
+        {
+            if(functionOverloads.count(id->name) &&
+               !namedValues.count(id->name) &&
+               !globalNamedValues.count(id->name))
+                return generateFunctionItemValue(id, callableType);
+        }
         return generateIdentifier(id);
     }
     else if(auto fieldAcc = dynamic_cast<FieldAccessNode*>(node))

@@ -1071,6 +1071,13 @@ fn main() -> i32 {
 }
 ```
 
+Use an explicit function type to store a named function in a callable local:
+
+```mla
+let square_fn: IntMapper = square;
+var selected: IntMapper = square_fn;
+```
+
 Non-borrowing closures can also be returned and then invoked through a typed
 local:
 

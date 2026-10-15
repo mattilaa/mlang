@@ -820,6 +820,8 @@ private:
     // agree on for one argument.
     llvm::Value* generateArgumentValue(ExpressionNode* arg,
                                        TypeNode* declaredType);
+    llvm::Value* generateFunctionItemValue(IdentifierNode* identifier,
+                                           FunctionTypeNode* callableType);
     TypeNode* overloadParameterType(
         const std::vector<FunctionOverloadInfo>& overloads, size_t argCount,
         size_t index) const;
