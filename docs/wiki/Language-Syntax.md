@@ -1090,8 +1090,17 @@ fn main() -> i32 {
 }
 ```
 
-This generic callback inference currently applies to named function items;
-generic lambda arguments still require additional compiler support.
+This also supports a bound lambda with explicitly typed parameters:
+
+```mla
+fn main() -> i32 {
+    let square = |value: i64| { return value * value; };
+    return apply(square, 8);
+}
+```
+
+Inline lambda arguments and lambdas whose parameter or result types need to be
+inferred from a generic callback signature are not yet supported.
 
 An unambiguous named function also infers its callable type in a local. If the
 name is overloaded, add an explicit function type to select its signature:

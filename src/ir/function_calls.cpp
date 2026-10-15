@@ -525,6 +525,23 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         return result;
     };
 
+    auto inferClosureCallableType = [&](ClosureNode* closure) -> TypeNode*
+    {
+        if(!closure || !closure->parameters)
+            return nullptr;
+        auto* parameters = new TypeListNode();
+        for(auto* parameter : closure->parameters->parameters)
+        {
+            if(!parameter || !parameter->type)
+                return nullptr;
+            parameters->addType(cloneTypeNode(parameter->type));
+        }
+        TypeNode* result = inferClosureResult(closure);
+        if(!result)
+            return nullptr;
+        return new FunctionTypeNode(parameters, result);
+    };
+
     for(size_t i = 0; i < arguments.size(); ++i)
     {
         TypeNode* concrete = nullptr;
@@ -575,18 +592,38 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                        !namedValues.count(identifier->name) &&
                        !globalNamedValues.count(identifier->name))
                         continue; // Resolve after other arguments bind T.
+                    auto callable =
+                        functionTypeVariables.find(identifier->name);
+                    if(callable != functionTypeVariables.end())
+                        concrete = callable->second;
+                    else
+                    {
+                        auto closure = closureVariables.find(identifier->name);
+                        if(closure != closureVariables.end())
+                            concrete = inferClosureCallableType(
+                                closure->second);
+                    }
                 }
+                else if(auto* closure =
+                            dynamic_cast<ClosureNode*>(arguments[i]))
+                    concrete = inferClosureCallableType(closure);
             }
-            bool isBoundClosure =
-                dynamic_cast<ClosureNode*>(arguments[i]) != nullptr;
-            if(auto* identifier = dynamic_cast<IdentifierNode*>(arguments[i]))
-                isBoundClosure = closureVariables.count(identifier->name) != 0;
-            if(isBoundClosure)
-                concrete =
-                    new PointerTypeNode(new TypeNode(TypeNode::TYPE_VOID));
-            else
-                concrete = inferExpressionTypeNode(arguments[i],
-                                                   functionTemplate->line);
+            if(!concrete)
+            {
+                bool isBoundClosure =
+                    dynamic_cast<ClosureNode*>(arguments[i]) != nullptr;
+                if(auto* identifier =
+                       dynamic_cast<IdentifierNode*>(arguments[i]))
+                    isBoundClosure =
+                        closureVariables.count(identifier->name) != 0;
+                if(isBoundClosure &&
+                   !dynamic_cast<FunctionTypeNode*>(parameterType))
+                    concrete = new PointerTypeNode(
+                        new TypeNode(TypeNode::TYPE_VOID));
+                else if(!isBoundClosure)
+                    concrete = inferExpressionTypeNode(
+                        arguments[i], functionTemplate->line);
+            }
         }
         if(!concrete || !bindType(parameterType, concrete))
             return false;
@@ -814,7 +851,9 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
                 if(closureIt != closureVariables.end())
                     closure = closureIt->second;
             }
-            if(closure)
+            if(closure &&
+               !dynamic_cast<FunctionTypeNode*>(
+                   functionTemplate->parameters->parameters[i]->type))
             {
                 const std::string& parameterName =
                     functionTemplate->parameters->parameters[i]->name;

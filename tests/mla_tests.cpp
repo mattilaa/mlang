@@ -4404,6 +4404,20 @@ TEST_F(MLATest, GenericFunctionCanInvokeCallableParameter)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+TEST_F(MLATest, GenericFunctionCanInvokeBoundClosureParameter)
+{
+    std::string code = R"(
+        generic<T> fn apply(mapper: fn(T) -> T, value: T) -> T {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let square = |value: i64| { return value * value; };
+            return apply(square, 8);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 64);
+}
+
 TEST_F(MLATest, UniqueNamedFunctionInfersCallableLocalType)
 {
     std::string code = R"(
