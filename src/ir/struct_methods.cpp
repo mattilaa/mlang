@@ -254,6 +254,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     auto savedVariableTypes = variableTypes;
     auto savedStructVariableTypes = structVariableTypes;
     auto savedClosureVariables = closureVariables;
+    auto savedRuntimeClosureVariables = runtimeClosureVariables;
     auto savedActiveInlineClosures = activeInlineClosures;
     auto savedTraitObjectVariableTypes = traitObjectVariableTypes;
     auto savedEnumVariableTypes = enumVariableTypes;
@@ -295,6 +296,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         pointerBorrowScopes = savedPointerBorrowScopes;
         variableScopeDepthScopes = savedVariableScopeDepthScopes;
         closureVariables = savedClosureVariables;
+        runtimeClosureVariables = savedRuntimeClosureVariables;
         activeInlineClosures = savedActiveInlineClosures;
     };
 
@@ -324,6 +326,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     pointerElementTypes.clear();
     pointerKnownNull.clear();
     closureVariables.clear();
+    runtimeClosureVariables.clear();
     activeInlineClosures.clear();
     cleanupScopes.clear();
     pointerBorrowScopes.clear();

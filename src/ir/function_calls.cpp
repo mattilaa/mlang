@@ -1606,6 +1606,42 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(node->name == "atomic_i64_free")
         return generateAtomicI64Free(node);
 
+    // Non-capturing, zero-argument closures are stored as runtime function
+    // pointers and invoked indirectly. Other closures use the established
+    // inline path until environment layouts and borrow / escape rules exist.
+    auto runtimeClosure = runtimeClosureVariables.find(node->name);
+    auto declaredClosure = closureVariables.find(node->name);
+    if(runtimeClosure != runtimeClosureVariables.end() &&
+       declaredClosure != closureVariables.end() &&
+       runtimeClosure->second == declaredClosure->second)
+    {
+        ClosureNode* closure = declaredClosure->second;
+        const size_t expectedCount =
+            closure->parameters ? closure->parameters->parameters.size() : 0;
+        if(expectedCount != 0 || !node->arguments.empty())
+        {
+            reportError(node->line, "runtime closure '" + node->name +
+                                        "' expects no arguments");
+            return nullptr;
+        }
+        auto valueIt = namedValues.find(node->name);
+        auto* alloca = valueIt == namedValues.end()
+                           ? nullptr
+                           : llvm::dyn_cast<llvm::AllocaInst>(valueIt->second);
+        if(!alloca)
+        {
+            reportError(node->line,
+                        "runtime closure value '" + node->name +
+                            "' is not available in this scope");
+            return nullptr;
+        }
+        llvm::Value* code = builder.CreateLoad(
+            alloca->getAllocatedType(), alloca, node->name + ".code");
+        llvm::FunctionType* signature = llvm::FunctionType::get(
+            llvm::Type::getVoidTy(context), {}, false);
+        return builder.CreateCall(signature, code, {}, node->name + ".call");
+    }
+
     // Inline closure/lambda call: inc(...)
     {
         auto closIt = closureVariables.find(node->name);
@@ -2928,6 +2964,7 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     auto savedCleanupScopes = cleanupScopes;
     auto savedPtrBorrowScopes = pointerBorrowScopes;
     auto savedVarDepthScopes = variableScopeDepthScopes;
+    auto savedRuntimeClosureVariables = runtimeClosureVariables;
     auto savedLoopBreak = loopBreakBlocks;
     auto savedLoopContinue = loopContinueBlocks;
     auto savedModule = currentModule;
@@ -2943,6 +2980,7 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     constantVariables.clear();
     movedVariables.clear();
     closureVariables.clear();
+    runtimeClosureVariables.clear();
     closureCaptureAliases.clear();
     closureCaptureTypes.clear();
     closureConstCaptures.clear();
@@ -2968,8 +3006,8 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(context, "entry", closureFn);
     builder.SetInsertPoint(entry);
-
     seedFunctionScopeWithGlobals();
+
     enterCleanupScope();
 
     if(node->body)
@@ -3006,6 +3044,7 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     loopContinueBlocks = std::move(savedLoopContinue);
     currentModule = std::move(savedModule);
     closureVariables = std::move(savedClosureVars);
+    runtimeClosureVariables = std::move(savedRuntimeClosureVariables);
     closureCaptureAliases = std::move(savedClosureCaptureAliases);
     closureCaptureTypes = std::move(savedClosureCaptureTypes);
     closureConstCaptures = std::move(savedClosureConstCaptures);

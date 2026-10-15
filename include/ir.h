@@ -216,6 +216,10 @@ private:
     // Inline closures: var inc = || { ... }; inc();
     // Maps closure variable name -> its AST node for inline body generation.
     std::map<std::string, ClosureNode*> closureVariables;
+    // A small runtime-callable path for non-capturing, zero-argument closures.
+    // Capturing closures continue to use the established inline lowering until
+    // their environment layout and borrow/escape rules are available.
+    std::map<std::string, ClosureNode*> runtimeClosureVariables;
     // Generic closure parameter -> captured local name -> hidden parameter
     // name used to transfer captures into its specialization.
     std::map<std::string, std::map<std::string, std::string>>
@@ -700,6 +704,7 @@ private:
     void generateStatement(StatementNode* node);
     void generateReturnStatement(ReturnNode* node);
     void generateLetDeclaration(LetDeclNode* node);
+    bool isNonCapturingRuntimeClosure(ClosureNode* closure);
     void generateCexprDeclaration(CexprDeclNode* node,
                                   bool emitRuntimeBinding = true);
     void generateVarDeclaration(VarDeclNode* node);

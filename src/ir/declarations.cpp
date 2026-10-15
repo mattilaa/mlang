@@ -1,11 +1,79 @@
 #include "ir.h"
+#include "ir/ast_analysis.h"
 #include "ir/common.h"
 #include "ir/expression_type_kind.h"
 
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Intrinsics.h>
 
+#include <functional>
+
 using mlang::ir_detail::common::Helpers;
+using mlang::ir_detail::ast_analysis::collect_used_idents;
+
+bool CodeGenerator::isNonCapturingRuntimeClosure(ClosureNode* closure)
+{
+    if(!closure ||
+       (closure->parameters && !closure->parameters->parameters.empty()))
+        return false;
+
+    std::set<std::string> used;
+    if(closure->body)
+        for(auto* statement : closure->body->statements)
+            collect_used_idents(statement, used);
+    std::function<bool(StatementNode*)> hasValueReturn =
+        [&](StatementNode* statement) -> bool
+    {
+        if(auto* ret = dynamic_cast<ReturnNode*>(statement))
+            return ret->expression != nullptr;
+        if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+        {
+            if(block->statements)
+                for(auto* nested : block->statements->statements)
+                    if(hasValueReturn(nested))
+                        return true;
+        }
+        if(auto* branch = dynamic_cast<IfNode*>(statement))
+        {
+            if(branch->thenBranch)
+                for(auto* nested : branch->thenBranch->statements)
+                    if(hasValueReturn(nested))
+                        return true;
+            if(branch->elseBranch)
+                for(auto* nested : branch->elseBranch->statements)
+                    if(hasValueReturn(nested))
+                        return true;
+            return hasValueReturn(branch->elseIfBranch);
+        }
+        if(auto* loop = dynamic_cast<ForNode*>(statement))
+        {
+            if(loop->body)
+                for(auto* nested : loop->body->statements)
+                    if(hasValueReturn(nested))
+                        return true;
+        }
+        if(auto* loop = dynamic_cast<WhileNode*>(statement))
+        {
+            if(loop->body)
+                for(auto* nested : loop->body->statements)
+                    if(hasValueReturn(nested))
+                        return true;
+        }
+        return false;
+    };
+    if(closure->body)
+        for(auto* statement : closure->body->statements)
+            if(hasValueReturn(statement))
+                return false;
+    for(const auto& name : used)
+    {
+        auto value = namedValues.find(name);
+        if(value != namedValues.end() &&
+           !llvm::isa<llvm::GlobalVariable>(value->second))
+            return false;
+    }
+    return true;
+}
 
 bool CodeGenerator::validateBooleanBranchPrediction(
     BranchPrediction prediction, TypeNode* declaredType,
@@ -97,6 +165,24 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     {
         closureVariables[node->name] = closureInit;
         recordVariableScopeDepth(node->name);
+        if(isNonCapturingRuntimeClosure(closureInit))
+        {
+            llvm::Function* closureFn = generateClosureFn(closureInit);
+            if(!closureFn)
+                return;
+            runtimeClosureVariables[node->name] = closureInit;
+#if LLVM_VERSION_MAJOR >= 15
+            llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+            llvm::Type* ptrType = llvm::PointerType::get(
+                llvm::Type::getInt8Ty(context), 0);
+#endif
+            llvm::AllocaInst* alloca = builder.CreateAlloca(
+                ptrType, nullptr, node->name + ".closure");
+            builder.CreateStore(closureFn, alloca);
+            namedValues[node->name] = alloca;
+            return;
+        }
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
@@ -1290,6 +1376,24 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(auto* closureInit = dynamic_cast<ClosureNode*>(node->initExpr))
         {
             closureVariables[node->name] = closureInit;
+            if(isNonCapturingRuntimeClosure(closureInit))
+            {
+                llvm::Function* closureFn = generateClosureFn(closureInit);
+                if(!closureFn)
+                    return;
+                runtimeClosureVariables[node->name] = closureInit;
+#if LLVM_VERSION_MAJOR >= 15
+                llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+                llvm::Type* ptrType = llvm::PointerType::get(
+                    llvm::Type::getInt8Ty(context), 0);
+#endif
+                llvm::AllocaInst* alloca = builder.CreateAlloca(
+                    ptrType, nullptr, node->name + ".closure");
+                builder.CreateStore(closureFn, alloca);
+                namedValues[node->name] = alloca;
+                return;
+            }
 #if LLVM_VERSION_MAJOR >= 15
             llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else

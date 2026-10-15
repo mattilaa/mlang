@@ -103,6 +103,7 @@ void collect_used_idents(ASTNode* node, std::set<std::string>& out)
     }
     if(auto* asgn = dynamic_cast<AssignmentNode*>(node))
     {
+        out.insert(asgn->name);
         collect_used_idents(asgn->expression, out);
         return;
     }

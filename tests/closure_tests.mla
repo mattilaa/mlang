@@ -8,6 +8,14 @@ mod std::thread;
 use std::thread::*;
 use std::testing::verify;
 
+// A closure with no captures is emitted as a runtime function value and
+// invoked indirectly instead of being expanded at each call site.
+#[test]
+fn test_non_capturing_runtime_closure() {
+    let run = || { verify(true); };
+    run();
+}
+
 // ── Compound assignment ───────────────────────────────────────────────────────
 
 #[test]
