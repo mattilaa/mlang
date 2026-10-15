@@ -2797,6 +2797,53 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return nullptr;
     }
 
+    auto callableParameterIsNoEscape = [&](size_t parameterIndex)
+    {
+        if(!best->node || !best->node->body || !best->node->parameters ||
+           parameterIndex >= best->node->parameters->parameters.size())
+            return false;
+        ParameterNode* parameter =
+            best->node->parameters->parameters[parameterIndex];
+        if(!parameter ||
+           !dynamic_cast<FunctionTypeNode*>(parameter->type))
+            return false;
+
+        auto isDirectInvocation = [&](ExpressionNode* expression)
+        {
+            auto* call = dynamic_cast<FunctionCallNode*>(expression);
+            if(!call || call->name != parameter->name)
+                return false;
+            std::set<std::string> usedIdentifiers;
+            for(auto* argument : call->arguments)
+                collect_used_idents(argument, usedIdentifiers);
+            return usedIdentifiers.find(parameter->name) ==
+                   usedIdentifiers.end();
+        };
+
+        // Deliberately prove only this small, auditable subset. More complex
+        // bodies may be safe, but are treated as potentially escaping until
+        // the AST escape analysis can reason about them explicitly.
+        for(auto* statement : best->node->body->statements)
+        {
+            if(auto* expressionStatement =
+                   dynamic_cast<ExpressionStatementNode*>(statement))
+            {
+                if(!isDirectInvocation(expressionStatement->expression))
+                    return false;
+                continue;
+            }
+            if(auto* returnStatement = dynamic_cast<ReturnNode*>(statement))
+            {
+                if(returnStatement->expression &&
+                   !isDirectInvocation(returnStatement->expression))
+                    return false;
+                continue;
+            }
+            return false;
+        }
+        return true;
+    };
+
     for(size_t argumentIndex = 0;
         argumentIndex < node->arguments.size(); ++argumentIndex)
     {
@@ -2829,14 +2876,12 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                 "parameter on function '" + node->name + "'");
                 return nullptr;
             }
-            auto owners = runtimeClosureBorrowOwners.find(identifier->name);
-            if(owners != runtimeClosureBorrowOwners.end() &&
-               !owners->second.empty())
+            if(!callableParameterIsNoEscape(argumentIndex))
             {
                 reportError(node->line,
-                            "cannot pass closure '" + identifier->name +
-                                "' because it may borrow local variable '" +
-                                *owners->second.begin() + "'");
+                            "cannot pass callable '" + identifier->name +
+                                "' to function '" + node->name +
+                                "' because that parameter may escape");
                 return nullptr;
             }
             continue;
@@ -2870,36 +2915,41 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
         auto owners = runtimeClosureBorrowOwners.find(identifier->name);
         if(owners != runtimeClosureBorrowOwners.end() &&
-           !owners->second.empty())
+           !owners->second.empty() &&
+           !callableParameterIsNoEscape(argumentIndex))
         {
             reportError(node->line, "cannot pass closure '" +
                                         identifier->name +
                                         "' to function '" + node->name +
                                         "' because it borrows local variable '" +
                                         *owners->second.begin() + "'");
+            return nullptr;
         }
-        else
+        auto* expectedType =
+            best->node && best->node->parameters &&
+                    argumentIndex < best->node->parameters->parameters.size()
+                ? dynamic_cast<FunctionTypeNode*>(
+                      best->node->parameters->parameters[argumentIndex]->type)
+                : nullptr;
+        auto actualType = functionTypeVariables.find(identifier->name);
+        if(!expectedType || actualType == functionTypeVariables.end() ||
+           typeMangle(actualType->second) != typeMangle(expectedType))
         {
-            auto* expectedType =
-                best->node && best->node->parameters &&
-                        argumentIndex < best->node->parameters->parameters.size()
-                    ? dynamic_cast<FunctionTypeNode*>(
-                          best->node->parameters->parameters[argumentIndex]
-                              ->type)
-                    : nullptr;
-            auto actualType = functionTypeVariables.find(identifier->name);
-            if(!expectedType || actualType == functionTypeVariables.end() ||
-               typeMangle(actualType->second) != typeMangle(expectedType))
-            {
-                reportError(node->line,
-                            "runtime closure values can only be passed to a "
-                            "matching fn(...) -> ... parameter or used as a "
-                            "generic callback");
-                return nullptr;
-            }
-            continue;
+            reportError(node->line,
+                        "runtime closure values can only be passed to a "
+                        "matching fn(...) -> ... parameter or used as a "
+                        "generic callback");
+            return nullptr;
         }
-        return nullptr;
+        if(!callableParameterIsNoEscape(argumentIndex))
+        {
+            reportError(node->line,
+                        "cannot pass closure '" + identifier->name +
+                            "' to function '" + node->name +
+                            "' because that parameter may escape");
+            return nullptr;
+        }
+        continue;
     }
 
     llvm::Function* callee = best->function;

@@ -1052,7 +1052,11 @@ representation. Because Mlang does not yet have a no-escape parameter
 annotation, passing a closure that borrows local variables across a function
 boundary is conservatively rejected. Returning a locally borrowed closure is
 also rejected; non-borrowing closures can be returned when the compiler can
-prove their capture environment safe.
+prove their capture environment safe. A borrowed closure may be passed to a
+function-typed parameter when the compiler can prove the callee only invokes
+or ignores that parameter; storing it, returning it, forwarding it, or passing
+it to an opaque/external function is rejected. This no-escape analysis is
+intentionally conservative.
 
 Inline typed lambda (captures outer variables, callable via bound name):
 

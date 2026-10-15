@@ -4329,6 +4329,38 @@ TEST_F(MLATest, FunctionTypedClosureRejectsBorrowedCaptureEscape)
               std::string::npos);
 }
 
+TEST_F(MLATest, BorrowedClosureCanPassToProvenNoEscapeParameter)
+{
+    std::string code = R"(
+        fn invoke(callback: fn() -> i32) -> i32 {
+            return callback();
+        }
+        fn main() -> i32 {
+            var local: i32 = 13;
+            let read = || { return local; };
+            return invoke(read);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 13);
+}
+
+TEST_F(MLATest, BorrowedClosureCannotPassToEscapingParameter)
+{
+    std::string code = R"(
+        extern fn retain(callback: fn() -> i32);
+        fn main() -> i32 {
+            var local: i32 = 13;
+            let read = || { return local; };
+            retain(read);
+            return local;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    compileCapture(rc);
+    EXPECT_NE(rc, 0);
+}
+
 TEST_F(MLATest, OwnershipCanReturnPointerBorrowingGlobal)
 {
     std::string code = R"(

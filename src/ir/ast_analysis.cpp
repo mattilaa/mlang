@@ -36,6 +36,13 @@ void collect_used_idents(ASTNode* node, std::set<std::string>& out)
             collect_used_idents(arg, out);
         return;
     }
+    if(auto* closure = dynamic_cast<ClosureNode*>(node))
+    {
+        if(closure->body)
+            for(auto* statement : closure->body->statements)
+                collect_used_idents(statement, out);
+        return;
+    }
     if(auto* mc = dynamic_cast<MethodCallNode*>(node))
     {
         collect_used_idents(mc->object, out);
