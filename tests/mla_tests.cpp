@@ -4295,21 +4295,20 @@ TEST_F(MLATest, RuntimeClosureCannotBeAssignedPastCaptureScope)
               std::string::npos);
 }
 
-TEST_F(MLATest, FunctionTypedClosureTypeChecksAcrossFunctionBoundaries)
+TEST_F(MLATest, FunctionTypedClosureRunsAcrossFunctionBoundaries)
 {
     std::string code = R"(
-        fn apply(callback: fn(i32) -> void) -> i32 {
-            return 7;
+        var observed: i32 = 0;
+        fn apply(callback: fn(i32) -> void, value: i32) -> void {
+            callback(value);
         }
         fn main() -> i32 {
-            let callback = |value: i32| {};
-            return apply(callback);
+            let callback = |value: i32| { observed = value; };
+            apply(callback, 5);
+            return observed + 2;
         }
     )";
-    writeSource(code);
-    int rc = 0;
-    std::string out = compileCapture(rc);
-    EXPECT_EQ(rc, 0) << out;
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
 }
 
 TEST_F(MLATest, FunctionTypedClosureRejectsBorrowedCaptureEscape)

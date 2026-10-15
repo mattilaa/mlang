@@ -2012,7 +2012,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             return false;
         return dynamic_cast<GenericListTypeNode*>(type) != nullptr ||
                dynamic_cast<MapTypeNode*>(type) != nullptr ||
-               dynamic_cast<TupleTypeNode*>(type) != nullptr;
+               dynamic_cast<TupleTypeNode*>(type) != nullptr ||
+               dynamic_cast<FunctionTypeNode*>(type) != nullptr;
     };
 
     auto isListToFixedArrayCompatible = [&](TypeNode* expected,
@@ -2698,6 +2699,27 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
                 TypeNode* actualSemantic =
                     semanticArgumentType(node->arguments[i]);
+                if(auto* expectedFunction =
+                       dynamic_cast<FunctionTypeNode*>(expectedSemantic))
+                {
+                    FunctionTypeNode* actualFunction =
+                        dynamic_cast<FunctionTypeNode*>(actualSemantic);
+                    if(auto* id = dynamic_cast<IdentifierNode*>(
+                           node->arguments[i]))
+                    {
+                        auto actual = functionTypeVariables.find(id->name);
+                        if(actual != functionTypeVariables.end())
+                            actualFunction = actual->second;
+                    }
+                    if(!actualFunction ||
+                       typeMangle(expectedFunction) !=
+                           typeMangle(actualFunction))
+                    {
+                        ok = false;
+                        break;
+                    }
+                    continue;
+                }
                 if(auto* traitObj =
                        dynamic_cast<TraitObjectTypeNode*>(expectedSemantic))
                 {

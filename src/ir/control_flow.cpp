@@ -85,70 +85,72 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
         }
         if(!returnValue)
         {
-        if(auto* traitObj =
-               dynamic_cast<TraitObjectTypeNode*>(currentSemanticReturnType))
-        {
-            llvm::Type* traitObjType = getLLVMTypeFromNode(traitObj);
-            TypeNode* exprType = getLValueType(node->expression, node->line);
-            if(dynamic_cast<TraitObjectTypeNode*>(exprType))
+            if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(
+                   currentSemanticReturnType))
             {
-                returnValue = generateExpression(node->expression);
-                returnValue = coerceTraitObjectValue(returnValue, traitObjType,
-                                                     node->line);
+                llvm::Type* traitObjType = getLLVMTypeFromNode(traitObj);
+                TypeNode* exprType =
+                    getLValueType(node->expression, node->line);
+                if(dynamic_cast<TraitObjectTypeNode*>(exprType))
+                {
+                    returnValue = generateExpression(node->expression);
+                    returnValue = coerceTraitObjectValue(
+                        returnValue, traitObjType, node->line);
+                }
+                else if(exprType)
+                    returnValue = buildTraitObjectValue(
+                        node->expression, traitObj->traitName, node->line,
+                        true);
+                else
+                {
+                    returnValue = generateExpression(node->expression);
+                    returnValue = coerceTraitObjectValue(
+                        returnValue, traitObjType, node->line);
+                }
             }
-            else if(exprType)
-                returnValue = buildTraitObjectValue(
-                    node->expression, traitObj->traitName, node->line, true);
             else
             {
-                returnValue = generateExpression(node->expression);
-                returnValue = coerceTraitObjectValue(returnValue, traitObjType,
-                                                     node->line);
-            }
-        }
-        }
-        else
-        {
-            if(auto* returnList =
-                   dynamic_cast<GenericListTypeNode*>(
-                       currentSemanticReturnType))
-            {
-                if(auto* returnArray =
-                       dynamic_cast<ArrayTypeNode*>(
+                if(auto* returnList =
+                       dynamic_cast<GenericListTypeNode*>(
                            currentSemanticReturnType))
                 {
-                    if(!validateFixedArrayInitializer(
-                           returnArray, node->expression, node->line))
-                        return;
-                }
+                    if(auto* returnArray =
+                           dynamic_cast<ArrayTypeNode*>(
+                               currentSemanticReturnType))
+                    {
+                        if(!validateFixedArrayInitializer(
+                               returnArray, node->expression, node->line))
+                            return;
+                    }
 
-                llvm::Type* elemType =
-                    getLLVMTypeFromNode(returnList->elementType);
-                if(auto* listLit =
-                       dynamic_cast<ListLiteralNode*>(node->expression))
-                    returnValue = generateListLiteral(listLit, elemType);
-                else if(auto* arrFill =
-                            dynamic_cast<ArrayFillNode*>(node->expression))
-                    returnValue = generateArrayFill(arrFill, elemType);
-            }
-            else if(auto* returnMap =
-                        dynamic_cast<MapTypeNode*>(currentSemanticReturnType))
-            {
-                if(auto* mapLit =
-                       dynamic_cast<MapLiteralNode*>(node->expression))
+                    llvm::Type* elemType =
+                        getLLVMTypeFromNode(returnList->elementType);
+                    if(auto* listLit =
+                           dynamic_cast<ListLiteralNode*>(node->expression))
+                        returnValue = generateListLiteral(listLit, elemType);
+                    else if(auto* arrFill =
+                                dynamic_cast<ArrayFillNode*>(node->expression))
+                        returnValue = generateArrayFill(arrFill, elemType);
+                }
+                else if(auto* returnMap = dynamic_cast<MapTypeNode*>(
+                            currentSemanticReturnType))
                 {
-                    llvm::Type* keyType =
-                        getLLVMTypeFromNode(returnMap->keyType);
-                    llvm::Type* valueType =
-                        getLLVMTypeFromNode(returnMap->valueType);
-                    returnValue =
-                        generateMapLiteral(mapLit, keyType, valueType);
+                    if(auto* mapLit =
+                           dynamic_cast<MapLiteralNode*>(node->expression))
+                    {
+                        llvm::Type* keyType =
+                            getLLVMTypeFromNode(returnMap->keyType);
+                        llvm::Type* valueType =
+                            getLLVMTypeFromNode(returnMap->valueType);
+                        returnValue =
+                            generateMapLiteral(mapLit, keyType, valueType);
+                    }
                 }
-            }
 
-            if(!returnValue)
-                returnValue = generateExpression(node->expression,
-                                                 currentSemanticReturnType);
+                if(!returnValue)
+                    returnValue = generateExpression(
+                        node->expression, currentSemanticReturnType);
+            }
         }
         if(!returnValue)
             return;
