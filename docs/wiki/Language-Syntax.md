@@ -1080,6 +1080,15 @@ When a function returns a callable type, a local initialized from that call
 inherits the callable signature, so repeating the annotation is optional for
 both `let` and `var`.
 
+A mutable callable local can be reassigned from another compatible callable
+value and then invoked through the same signature:
+
+```mla
+var transform = make_incrementer();
+transform = make_doubler();
+let result = transform(9);
+```
+
 Use `fn() -> Result` for zero-argument callables and `fn(Args...) -> Result`
 for other signatures. Function-typed parameters use the closure code/environment
 representation. Because Mlang does not yet have a no-escape parameter

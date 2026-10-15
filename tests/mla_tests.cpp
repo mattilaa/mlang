@@ -4392,6 +4392,26 @@ TEST_F(MLATest, NonBorrowingClosureCanBeReturnedAndInvoked)
     EXPECT_EQ(compileAndRunExitCode(code), 34);
 }
 
+TEST_F(MLATest, ReturnedClosureCanReplaceMutableCallable)
+{
+    std::string code = R"(
+        fn make_incrementer() -> fn(i32) -> i32 {
+            let increment = |value: i32| { return value + 1; };
+            return increment;
+        }
+        fn make_doubler() -> fn(i32) -> i32 {
+            let double = |value: i32| { return value * 2; };
+            return double;
+        }
+        fn main() -> i32 {
+            var transform = make_incrementer();
+            transform = make_doubler();
+            return transform(9);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 18);
+}
+
 TEST_F(MLATest, OwnershipCanReturnPointerBorrowingGlobal)
 {
     std::string code = R"(
