@@ -4360,6 +4360,37 @@ TEST_F(MLATest, NamedFunctionCanInitializeCallableLocals)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+TEST_F(MLATest, NamedFunctionCanBeReturnedAsCallableValue)
+{
+    std::string code = R"(
+        fn square(value: i32) -> i32 { return value * value; }
+        fn get_square() -> fn(i32) -> i32 {
+            return square;
+        }
+        fn main() -> i32 {
+            let square_fn = get_square();
+            return square_fn(8);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 64);
+}
+
+TEST_F(MLATest, ReturnTypeSelectsNamedFunctionOverload)
+{
+    std::string code = R"(
+        fn square(value: i32) -> i32 { return value * value; }
+        fn square(value: i64) -> i64 { return value * value; }
+        fn get_square() -> fn(i32) -> i32 {
+            return square;
+        }
+        fn main() -> i32 {
+            let square_fn = get_square();
+            return square_fn(8);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 64);
+}
+
 TEST_F(MLATest, UniqueNamedFunctionInfersCallableLocalType)
 {
     std::string code = R"(

@@ -1099,6 +1099,19 @@ When a function returns a callable type, a local initialized from that call
 inherits the callable signature, so repeating the annotation is optional for
 both `let` and `var`.
 
+A function can also return a named function as a callable value. When that
+name is overloaded, the declared return signature selects the matching
+overload:
+
+```mla
+fn square(value: i32) -> i32 { return value * value; }
+fn square(value: i64) -> i64 { return value * value; }
+
+fn get_square() -> fn(i32) -> i32 {
+    return square;
+}
+```
+
 A mutable callable local can be reassigned from another compatible callable
 value and then invoked through the same signature:
 
