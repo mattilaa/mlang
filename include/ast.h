@@ -548,6 +548,18 @@ public:
     std::string toString() const override;
 };
 
+// Invocation of a callable expression that is not a direct named call,
+// e.g. `make_callback()(value)`.
+class CallableInvokeNode : public ExpressionNode
+{
+public:
+    ExpressionNode* callable;
+    std::vector<ExpressionNode*> arguments;
+
+    explicit CallableInvokeNode(ExpressionNode* value) : callable(value) {}
+    std::string toString() const override;
+};
+
 // Method call on a struct instance: obj.method(args)
 class MethodCallNode : public ExpressionNode
 {

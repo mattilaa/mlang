@@ -260,6 +260,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
         }
         return generateIdentifier(id);
     }
+    else if(auto* callableInvoke = dynamic_cast<CallableInvokeNode*>(node))
+    {
+        return generateCallableInvocation(callableInvoke);
+    }
     else if(auto fieldAcc = dynamic_cast<FieldAccessNode*>(node))
     {
         return generateFieldAccess(fieldAcc);

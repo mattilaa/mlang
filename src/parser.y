@@ -3635,6 +3635,22 @@ condition_unary
 
 condition_postfix
     : condition_primary { $$ = $1; }
+    | condition_postfix LPAREN RPAREN
+        {
+            auto* call = new CallableInvokeNode(
+                static_cast<ExpressionNode*>($1));
+            call->line = yylineno;
+            $$ = call;
+        }
+    | condition_postfix LPAREN argument_list RPAREN
+        {
+            auto* call = new CallableInvokeNode(
+                static_cast<ExpressionNode*>($1));
+            if($3)
+                call->arguments = static_cast<ArgumentListNode*>($3)->args;
+            call->line = yylineno;
+            $$ = call;
+        }
     | condition_postfix DOT IDENTIFIER { $$ = mla_ast_field_access_expr($1, $3, yylineno); }
     | condition_postfix DOT IDENTIFIER LPAREN RPAREN
         { $$ = mla_ast_method_call_expr($1, $3, NULL, yylineno); }
@@ -4005,6 +4021,22 @@ struct_field_init_list
 
 postfix_expression
     : primary_expression { $$ = $1; }
+    | postfix_expression LPAREN RPAREN
+        {
+            auto* call = new CallableInvokeNode(
+                static_cast<ExpressionNode*>($1));
+            call->line = yylineno;
+            $$ = call;
+        }
+    | postfix_expression LPAREN argument_list RPAREN
+        {
+            auto* call = new CallableInvokeNode(
+                static_cast<ExpressionNode*>($1));
+            if($3)
+                call->arguments = static_cast<ArgumentListNode*>($3)->args;
+            call->line = yylineno;
+            $$ = call;
+        }
     | postfix_expression DOT IDENTIFIER { $$ = mla_ast_field_access_expr($1, $3, yylineno); }
     | postfix_expression DOT IDENTIFIER LPAREN RPAREN
         { $$ = mla_ast_method_call_expr($1, $3, NULL, yylineno); }

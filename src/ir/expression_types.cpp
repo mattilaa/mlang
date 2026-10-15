@@ -3,6 +3,14 @@
 
 TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 {
+    if(auto* invoke = dynamic_cast<CallableInvokeNode*>(expr))
+    {
+        auto* callableType =
+            dynamic_cast<FunctionTypeNode*>(
+                getLValueType(invoke->callable, line));
+        return callableType ? cloneTypeNode(callableType->returnType) : nullptr;
+    }
+
     if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
     {
         if(call->name == "std::copy")

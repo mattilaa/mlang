@@ -1115,6 +1115,10 @@ fn square(value: i64) -> i64 { return value * value; }
 fn get_square() -> fn(i32) -> i32 {
     return square;
 }
+
+fn main() -> i32 {
+    return get_square()(8);
+}
 ```
 
 A mutable callable local can be reassigned from another compatible callable

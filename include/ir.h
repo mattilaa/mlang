@@ -783,6 +783,7 @@ private:
     llvm::Value* generateEnumLiteral(EnumLiteralNode* node);
     llvm::Value* generateFieldAccess(FieldAccessNode* node);
     llvm::Value* generateFunctionCall(FunctionCallNode* node);
+    llvm::Value* generateCallableInvocation(CallableInvokeNode* node);
     llvm::Value* generateVariadicGenericCall(FunctionCallNode* node,
                                               FunctionDefNode* functionTemplate);
     llvm::Value* generateThreadSpawn(FunctionCallNode* node);

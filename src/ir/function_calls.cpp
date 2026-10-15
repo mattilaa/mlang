@@ -814,6 +814,107 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
     }
 }
 
+llvm::Value* CodeGenerator::generateCallableInvocation(
+    CallableInvokeNode* node)
+{
+    TypeNode* callableSemantic = getLValueType(node->callable, node->line);
+    auto* callableType = dynamic_cast<FunctionTypeNode*>(callableSemantic);
+    if(!callableType)
+    {
+        reportError(node->line,
+                    "expression is not a callable function value");
+        return nullptr;
+    }
+    const size_t expectedCount = callableType->parameterTypes
+                                     ? callableType->parameterTypes->types.size()
+                                     : 0;
+    if(node->arguments.size() != expectedCount)
+    {
+        reportError(node->line, "callable expects " +
+                                    std::to_string(expectedCount) +
+                                    " argument(s), got " +
+                                    std::to_string(node->arguments.size()));
+        return nullptr;
+    }
+
+    llvm::Value* callableValue = generateExpression(node->callable,
+                                                    callableType);
+    if(!callableValue)
+        return nullptr;
+    auto* closureStruct =
+        llvm::dyn_cast<llvm::StructType>(callableValue->getType());
+    if(!closureStruct || closureStruct->getNumElements() != 2)
+    {
+        reportError(node->line,
+                    "callable value has an unsupported runtime representation");
+        return nullptr;
+    }
+
+    llvm::Value* code = builder.CreateExtractValue(callableValue, 0,
+                                                   "callable.code");
+    llvm::Value* environment = builder.CreateExtractValue(
+        callableValue, 1, "callable.environment");
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* erasedPointerType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* erasedPointerType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    std::vector<llvm::Type*> signatureParameters = {erasedPointerType};
+    std::vector<llvm::Value*> callArguments = {environment};
+    if(callableType->parameterTypes)
+    {
+        for(size_t i = 0; i < expectedCount; ++i)
+        {
+            TypeNode* parameter = callableType->parameterTypes->types[i];
+            llvm::Type* parameterType = getLLVMTypeFromNode(parameter);
+            llvm::Value* argument = generateArgumentValue(
+                node->arguments[i], parameter);
+            if(!parameterType || !argument)
+            {
+                reportError(node->line,
+                            "callable parameter types must be known and "
+                            "arguments must be valid");
+                return nullptr;
+            }
+            if(argument->getType() != parameterType)
+            {
+                if(argument->getType()->isIntegerTy() &&
+                   parameterType->isIntegerTy())
+                    argument = builder.CreateIntCast(argument, parameterType,
+                                                      true, "callable.arg.cast");
+                else if(argument->getType()->isFloatingPointTy() &&
+                        parameterType->isFloatingPointTy())
+                    argument = builder.CreateFPCast(argument, parameterType,
+                                                     "callable.arg.cast");
+                else
+                {
+                    reportError(node->line,
+                                "callable argument type does not match its "
+                                "parameter");
+                    return nullptr;
+                }
+            }
+            signatureParameters.push_back(parameterType);
+            callArguments.push_back(argument);
+        }
+    }
+    llvm::Type* returnType = getLLVMTypeFromNode(callableType->returnType);
+    if(!returnType)
+    {
+        reportError(node->line, "callable return type is not known");
+        return nullptr;
+    }
+    llvm::FunctionType* signature = llvm::FunctionType::get(
+        returnType, signatureParameters, false);
+#if LLVM_VERSION_MAJOR < 15
+    code = builder.CreateBitCast(code, signature->getPointerTo(),
+                                 "callable.indirect");
+#endif
+    return builder.CreateCall(signature, code, callArguments,
+                              returnType->isVoidTy() ? "" : "callable.call");
+}
+
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
     // Explicit value copy. This is deliberately opt-in: ordinary by-value

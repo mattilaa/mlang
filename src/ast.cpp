@@ -2038,6 +2038,20 @@ std::string FunctionCallNode::toString() const
     return result;
 }
 
+std::string CallableInvokeNode::toString() const
+{
+    std::string result = callable ? callable->toString() : "<callable>";
+    result += "(";
+    for(size_t i = 0; i < arguments.size(); ++i)
+    {
+        if(i > 0)
+            result += ", ";
+        result += arguments[i]->toString();
+    }
+    result += ")";
+    return result;
+}
+
 std::string MethodCallNode::toString() const
 {
     std::string result = object->toString() + "." + methodName + "(";

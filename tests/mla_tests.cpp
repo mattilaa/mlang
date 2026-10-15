@@ -4368,8 +4368,7 @@ TEST_F(MLATest, NamedFunctionCanBeReturnedAsCallableValue)
             return square;
         }
         fn main() -> i32 {
-            let square_fn = get_square();
-            return square_fn(8);
+            return get_square()(8);
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 64);
@@ -4384,8 +4383,7 @@ TEST_F(MLATest, ReturnTypeSelectsNamedFunctionOverload)
             return square;
         }
         fn main() -> i32 {
-            let square_fn = get_square();
-            return square_fn(8);
+            return get_square()(8);
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 64);
