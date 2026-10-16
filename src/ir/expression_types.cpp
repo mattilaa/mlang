@@ -156,6 +156,10 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 
     if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
     {
+        auto callable = functionTypeVariables.find(call->name);
+        if(callable != functionTypeVariables.end() && callable->second)
+            return cloneTypeNode(callable->second->returnType);
+
         auto overloadIt = functionOverloads.find(call->name);
         if(overloadIt != functionOverloads.end())
         {

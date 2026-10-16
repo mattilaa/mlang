@@ -1167,6 +1167,17 @@ fn main() -> i32 {
 }
 ```
 
+A runtime closure may also take a function-typed parameter and invoke it:
+
+```mla
+fn invoke(callback: fn() -> i32) -> i32 {
+    let wrapper: fn(fn() -> i32) -> i32 = |callable| {
+        return callable();
+    };
+    return wrapper(callback);
+}
+```
+
 When a function returns a callable type, a local initialized from that call
 inherits the callable signature, so repeating the annotation is optional for
 both `let` and `var`.

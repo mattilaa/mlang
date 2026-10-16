@@ -4607,6 +4607,21 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultFromGenericMethod)
     EXPECT_EQ(compileAndRunExitCode(code), 97);
 }
 
+TEST_F(MLATest, RuntimeClosureCanInvokeCallableParameter)
+{
+    std::string code = R"(
+        fn answer() -> i32 { return 101; }
+        fn main() -> i32 {
+            let callback: fn() -> i32 = answer;
+            let invoke: fn(fn() -> i32) -> i32 = |callable| {
+                return callable();
+            };
+            return invoke(callback);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 101);
+}
+
 TEST_F(MLATest, GenericFunctionNeedsInputTypeForUnannotatedClosureParameter)
 {
     std::string code = R"(

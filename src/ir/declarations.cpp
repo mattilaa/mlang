@@ -32,6 +32,7 @@ bool CodeGenerator::getRuntimeClosureCaptures(
     auto savedNamedValues = namedValues;
     auto savedVariableScopeDepth = variableScopeDepth;
     auto savedVariableTypes = variableTypes;
+    auto savedFunctionTypeVariables = functionTypeVariables;
     auto savedStructVariableTypes = structVariableTypes;
     auto savedEnumVariableTypes = enumVariableTypes;
     auto savedListElementTypes = listElementTypes;
@@ -57,6 +58,9 @@ bool CodeGenerator::getRuntimeClosureCaptures(
             namedValues[parameter->name] = slot;
             variableScopeDepth[parameter->name] = currentScopeDepth();
             variableTypes[parameter->name] = parameter->type->kind;
+            if(auto* functionType =
+                   dynamic_cast<FunctionTypeNode*>(parameter->type))
+                functionTypeVariables[parameter->name] = functionType;
             if(auto* structType =
                    dynamic_cast<StructTypeRefNode*>(parameter->type))
                 structVariableTypes[parameter->name] = structType->structName;
@@ -152,6 +156,7 @@ bool CodeGenerator::getRuntimeClosureCaptures(
     namedValues = std::move(savedNamedValues);
     variableScopeDepth = std::move(savedVariableScopeDepth);
     variableTypes = std::move(savedVariableTypes);
+    functionTypeVariables = std::move(savedFunctionTypeVariables);
     structVariableTypes = std::move(savedStructVariableTypes);
     enumVariableTypes = std::move(savedEnumVariableTypes);
     listElementTypes = std::move(savedListElementTypes);

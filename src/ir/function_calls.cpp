@@ -4298,6 +4298,9 @@ llvm::Function* CodeGenerator::generateClosureFn(
             if(parameter->type)
             {
                 variableTypes[parameter->name] = parameter->type->kind;
+                if(auto* functionType =
+                       dynamic_cast<FunctionTypeNode*>(parameter->type))
+                    functionTypeVariables[parameter->name] = functionType;
                 if(auto* structType =
                        dynamic_cast<StructTypeRefNode*>(parameter->type))
                     structVariableTypes[parameter->name] =
