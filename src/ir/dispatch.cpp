@@ -325,13 +325,47 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
             closureReturnType = expectedFunctionType->returnType;
         if(expectedFunctionType)
         {
+            ClosureNode* typedClosure = closure;
+            auto* contextualParameters = new ParameterListNode();
+            const size_t expectedParameterCount =
+                expectedFunctionType->parameterTypes
+                    ? expectedFunctionType->parameterTypes->types.size()
+                    : 0;
+            const size_t declaredParameterCount =
+                closure->parameters ? closure->parameters->parameters.size()
+                                    : 0;
+            if(expectedParameterCount != declaredParameterCount)
+            {
+                reportError(closure->line,
+                            "inline closure parameter count does not match "
+                            "its callback signature");
+                return nullptr;
+            }
+            for(size_t i = 0; i < expectedParameterCount; ++i)
+            {
+                ParameterNode* original =
+                    closure->parameters->parameters[i];
+                TypeNode* parameterType =
+                    original->type
+                        ? original->type
+                        : expectedFunctionType->parameterTypes->types[i];
+                auto* contextualParameter = new ParameterNode(
+                    cloneTypeNode(parameterType), original->name);
+                contextualParameter->isPack = original->isPack;
+                contextualParameters->parameters.push_back(
+                    contextualParameter);
+            }
+            typedClosure = new ClosureNode(contextualParameters, closure->body);
+            typedClosure->line = closure->line;
+            typedClosure->col = closure->col;
+
             // Function values use the runtime closure ABI (code pointer plus
             // environment pointer). A temporary inline closure borrows its
             // local captures for this call; the call-site escape check ensures
             // the callback cannot outlive that environment.
             std::vector<std::pair<std::string, TypeNode*>> captures;
             TypeNode* inferredReturnType = nullptr;
-            if(!getRuntimeClosureCaptures(closure, captures,
+            if(!getRuntimeClosureCaptures(typedClosure, captures,
                                           inferredReturnType))
                 return nullptr;
             if(!inferredReturnType || !closureReturnType ||
@@ -344,7 +378,8 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
                 return nullptr;
             }
             llvm::Function* fn = generateClosureFn(
-                closure, &captures, &constantVariables, closureReturnType);
+                typedClosure, &captures, &constantVariables,
+                closureReturnType);
             if(!fn)
                 return nullptr;
             auto* closureStruct = llvm::dyn_cast_or_null<llvm::StructType>(

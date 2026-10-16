@@ -4431,6 +4431,32 @@ TEST_F(MLATest, GenericFunctionCanInvokeInlineClosureParameter)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+TEST_F(MLATest, GenericFunctionInfersInlineClosureParameterType)
+{
+    std::string code = R"(
+        generic<T, U> fn apply(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            return apply(|value| { return value * value; }, 8);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 64);
+}
+
+TEST_F(MLATest, GenericFunctionNeedsInputTypeForUnannotatedClosureParameter)
+{
+    std::string code = R"(
+        generic<T> fn apply(mapper: fn(T) -> T) -> T {
+            return mapper(8);
+        }
+        fn main() -> i32 {
+            return apply(|value| { return value * value; });
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, GenericFunctionCanInvokeInlineClosureWithBorrowedCapture)
 {
     std::string code = R"(

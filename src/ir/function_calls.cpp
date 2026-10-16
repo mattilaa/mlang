@@ -625,7 +625,134 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                         arguments[i], functionTemplate->line);
             }
         }
-        if(!concrete || !bindType(parameterType, concrete))
+        if(!concrete)
+        {
+            bool isClosureArgument =
+                dynamic_cast<ClosureNode*>(arguments[i]) != nullptr;
+            if(auto* identifier =
+                   dynamic_cast<IdentifierNode*>(arguments[i]))
+                isClosureArgument =
+                    closureVariables.count(identifier->name) != 0;
+            if(isClosureArgument &&
+               dynamic_cast<FunctionTypeNode*>(parameterType))
+                continue; // Infer after ordinary arguments bind type params.
+            return false;
+        }
+        if(!bindType(parameterType, concrete))
+            return false;
+    }
+
+    // A lambda may omit parameter annotations when the remaining call
+    // arguments determine its generic callback signature, as in apply(|x| x,
+    // value). Temporarily supply any now-concrete parameter types, infer the
+    // lambda result, and restore the parser AST before overload probing ends.
+    std::function<bool(TypeNode*)> hasUnboundTypeParameter =
+        [&](TypeNode* type) -> bool
+    {
+        if(!type)
+            return true;
+        if(auto* named = dynamic_cast<StructTypeRefNode*>(type))
+            return typeParamNames.count(named->structName) &&
+                   bindings.count(named->structName) == 0;
+        if(auto* generic = dynamic_cast<GenericStructTypeRefNode*>(type))
+        {
+            if(std::find(functionTemplate->typeParams.begin(),
+                         functionTemplate->typeParams.end(),
+                         generic->structName) !=
+               functionTemplate->typeParams.end() &&
+               bindings.count(generic->structName) == 0)
+                return true;
+            return std::any_of(generic->typeArgs.begin(), generic->typeArgs.end(),
+                               hasUnboundTypeParameter);
+        }
+        if(auto* list = dynamic_cast<GenericListTypeNode*>(type))
+            return hasUnboundTypeParameter(list->elementType);
+        if(auto* array = dynamic_cast<ArrayTypeNode*>(type))
+            return hasUnboundTypeParameter(array->elementType);
+        if(auto* multi = dynamic_cast<MultiArrayTypeNode*>(type))
+            return hasUnboundTypeParameter(multi->elementType);
+        if(auto* map = dynamic_cast<MapTypeNode*>(type))
+            return hasUnboundTypeParameter(map->keyType) ||
+                   hasUnboundTypeParameter(map->valueType);
+        if(auto* tuple = dynamic_cast<TupleTypeNode*>(type))
+            return !tuple->elementTypes ||
+                   std::any_of(tuple->elementTypes->types.begin(),
+                               tuple->elementTypes->types.end(),
+                               hasUnboundTypeParameter);
+        if(auto* pointer = dynamic_cast<PointerTypeNode*>(type))
+            return hasUnboundTypeParameter(pointer->elementType);
+        if(auto* reference = dynamic_cast<ReferenceTypeNode*>(type))
+            return hasUnboundTypeParameter(reference->elementType);
+        if(auto* function = dynamic_cast<FunctionTypeNode*>(type))
+        {
+            if(function->parameterTypes &&
+               std::any_of(function->parameterTypes->types.begin(),
+                           function->parameterTypes->types.end(),
+                           hasUnboundTypeParameter))
+                return true;
+            return hasUnboundTypeParameter(function->returnType);
+        }
+        return false;
+    };
+
+    for(size_t i = 0; i < arguments.size(); ++i)
+    {
+        auto* pattern = dynamic_cast<FunctionTypeNode*>(
+            functionTemplate->parameters->parameters[i]->type);
+        ClosureNode* closure = dynamic_cast<ClosureNode*>(arguments[i]);
+        if(auto* identifier = dynamic_cast<IdentifierNode*>(arguments[i]))
+        {
+            auto found = closureVariables.find(identifier->name);
+            if(found != closureVariables.end())
+                closure = found->second;
+        }
+        if(!pattern || !closure || !closure->parameters ||
+           !pattern->parameterTypes ||
+           pattern->parameterTypes->types.size() !=
+               closure->parameters->parameters.size())
+            continue;
+
+        std::vector<TypeNode*> typeArgs;
+        typeArgs.reserve(functionTemplate->typeParams.size());
+        for(const auto& name : functionTemplate->typeParams)
+        {
+            auto found = bindings.find(name);
+            typeArgs.push_back(found == bindings.end()
+                                   ? static_cast<TypeNode*>(
+                                         new StructTypeRefNode(name))
+                                   : cloneTypeNode(found->second));
+        }
+        auto* context = dynamic_cast<FunctionTypeNode*>(substituteTypeParams(
+            pattern, functionTemplate->typeParams, typeArgs));
+        if(!context || !context->parameterTypes)
+            return false;
+
+        std::vector<std::pair<ParameterNode*, TypeNode*>> savedParameterTypes;
+        bool canInfer = true;
+        for(size_t parameterIndex = 0;
+            parameterIndex < closure->parameters->parameters.size();
+            ++parameterIndex)
+        {
+            ParameterNode* parameter =
+                closure->parameters->parameters[parameterIndex];
+            TypeNode* expected =
+                context->parameterTypes->types[parameterIndex];
+            if(!parameter->type)
+            {
+                if(hasUnboundTypeParameter(expected))
+                {
+                    canInfer = false;
+                    break;
+                }
+                savedParameterTypes.emplace_back(parameter, nullptr);
+                parameter->type = cloneTypeNode(expected);
+            }
+        }
+        TypeNode* concrete = canInfer ? inferClosureCallableType(closure)
+                                      : nullptr;
+        for(const auto& saved : savedParameterTypes)
+            saved.first->type = saved.second;
+        if(!concrete || !bindType(pattern, concrete))
             return false;
     }
 
@@ -736,6 +863,12 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         }
         if(!closure)
             continue;
+        if(closure->parameters &&
+           std::any_of(closure->parameters->parameters.begin(),
+                       closure->parameters->parameters.end(),
+                       [](ParameterNode* parameter)
+                       { return !parameter || !parameter->type; }))
+            continue; // Its result was already inferred from callback context.
         TypeNode* closureResult = inferClosureResult(closure);
         if(closureResult)
         {
@@ -2775,14 +2908,47 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         if(!isCallableArgument)
             continue;
 
-        std::vector<std::pair<std::string, TypeNode*>> captures;
-        TypeNode* closureReturnType = nullptr;
-        if(!getRuntimeClosureCaptures(closure, captures, closureReturnType))
-            return nullptr;
-        for(const auto& capture : captures)
+        std::vector<std::string> capturedNames;
+        const bool hasUnannotatedParameter =
+            closure->parameters &&
+            std::any_of(closure->parameters->parameters.begin(),
+                        closure->parameters->parameters.end(),
+                        [](ParameterNode* parameter)
+                        { return !parameter || !parameter->type; });
+        if(hasUnannotatedParameter)
         {
-            auto exclusive = activeMutBorrower.find(capture.first);
-            auto shared = activeBorrowers.find(capture.first);
+            std::set<std::string> used;
+            if(closure->body)
+                for(auto* statement : closure->body->statements)
+                    collect_used_idents(statement, used);
+            for(auto* parameter : closure->parameters->parameters)
+                if(parameter)
+                    used.erase(parameter->name);
+            for(const auto& name : used)
+            {
+                auto value = namedValues.find(name);
+                if(value == namedValues.end() ||
+                   llvm::isa<llvm::GlobalVariable>(value->second) ||
+                   closureVariables.count(name) ||
+                   !llvm::isa<llvm::AllocaInst>(value->second))
+                    continue;
+                capturedNames.push_back(name);
+            }
+        }
+        else
+        {
+            std::vector<std::pair<std::string, TypeNode*>> captures;
+            TypeNode* closureReturnType = nullptr;
+            if(!getRuntimeClosureCaptures(closure, captures,
+                                          closureReturnType))
+                return nullptr;
+            for(const auto& capture : captures)
+                capturedNames.push_back(capture.first);
+        }
+        for(const auto& captureName : capturedNames)
+        {
+            auto exclusive = activeMutBorrower.find(captureName);
+            auto shared = activeBorrowers.find(captureName);
             if(exclusive != activeMutBorrower.end() ||
                (shared != activeBorrowers.end() &&
                 !shared->second.empty()))
@@ -2790,7 +2956,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 reportError(node->line,
                             "cannot pass inline closure because captured "
                             "variable '" +
-                                capture.first + "' is already borrowed");
+                                captureName + "' is already borrowed");
                 return nullptr;
             }
             for(size_t otherIndex = 0;
@@ -2803,7 +2969,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 auto* borrowedName =
                     borrow ? dynamic_cast<IdentifierNode*>(borrow->operand)
                            : nullptr;
-                if(borrowedName && borrowedName->name == capture.first &&
+                if(borrowedName && borrowedName->name == captureName &&
                    (borrow->op == UnaryOpNode::OP_ADDR ||
                     borrow->op == UnaryOpNode::OP_ADDR_MUT))
                 {
@@ -2811,7 +2977,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         node->line,
                         "cannot pass inline closure and a reference to "
                         "captured variable '" +
-                            capture.first + "' in the same call");
+                            captureName + "' in the same call");
                     return nullptr;
                 }
             }
@@ -2866,10 +3032,15 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         auto* callbackType = dynamic_cast<FunctionTypeNode*>(
                             candidate.node->parameters
                                 ->parameters[argIndex]->type);
-                        if(!callbackType || !closure->parameters ||
-                           !callbackType->parameterTypes ||
-                           callbackType->parameterTypes->types.size() !=
-                               closure->parameters->parameters.size())
+                        const size_t expectedCount =
+                            callbackType && callbackType->parameterTypes
+                                ? callbackType->parameterTypes->types.size()
+                                : 0;
+                        const size_t actualCount =
+                            closure->parameters
+                                ? closure->parameters->parameters.size()
+                                : 0;
+                        if(!callbackType || expectedCount != actualCount)
                             continue;
 
                         bool signatureMatches = true;
@@ -2878,13 +3049,17 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             closure->parameters->parameters.size();
                             ++parameterIndex)
                         {
-                            TypeNode* declared =
-                                closure->parameters->parameters[parameterIndex]
-                                    ->type;
+                            auto* actualParameter =
+                                closure->parameters
+                                    ->parameters[parameterIndex];
+                            TypeNode* declared = actualParameter
+                                                     ? actualParameter->type
+                                                     : nullptr;
                             TypeNode* expected = callbackType->parameterTypes
                                                      ->types[parameterIndex];
-                            if(!declared || !expected ||
-                               typeMangle(declared) != typeMangle(expected))
+                            if(!expected ||
+                               (declared && typeMangle(declared) !=
+                                                typeMangle(expected)))
                             {
                                 signatureMatches = false;
                                 break;
@@ -3011,6 +3186,67 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 }
                 if(!conflictingTypes)
                     expectedArgumentType = selectedType;
+            }
+            if(auto* closure = dynamic_cast<ClosureNode*>(arg))
+            {
+                const bool hasUnannotatedParameter =
+                    closure->parameters &&
+                    std::any_of(closure->parameters->parameters.begin(),
+                                closure->parameters->parameters.end(),
+                                [](const auto* parameter) {
+                                    return !parameter || !parameter->type;
+                                });
+                bool expectedCallbackIsUnresolved = false;
+                if(hasUnannotatedParameter && expectedArgumentType)
+                {
+                    auto* callbackType =
+                        dynamic_cast<FunctionTypeNode*>(expectedArgumentType);
+                    for(const auto& candidate : overloadIt->second)
+                    {
+                        if(!candidate.node ||
+                           candidate.node->typeParams.empty() ||
+                           !candidate.node->parameters ||
+                           argIndex >= candidate.node->parameters
+                                           ->parameters.size())
+                            continue;
+                        auto* templateCallback = dynamic_cast<FunctionTypeNode*>(
+                            candidate.node->parameters
+                                ->parameters[argIndex]->type);
+                        if(!templateCallback || !callbackType ||
+                           typeMangle(templateCallback) !=
+                               typeMangle(callbackType))
+                            continue;
+                        const auto& typeParams = candidate.node->typeParams;
+                        auto isTemplateType = [&](TypeNode* type) {
+                            auto* named = dynamic_cast<StructTypeRefNode*>(type);
+                            return named &&
+                                   std::find(typeParams.begin(),
+                                             typeParams.end(),
+                                             named->structName) !=
+                                       typeParams.end();
+                        };
+                        if((templateCallback->parameterTypes &&
+                            std::any_of(
+                                templateCallback->parameterTypes->types.begin(),
+                                templateCallback->parameterTypes->types.end(),
+                                isTemplateType)) ||
+                           isTemplateType(templateCallback->returnType))
+                        {
+                            expectedCallbackIsUnresolved = true;
+                            break;
+                        }
+                    }
+                }
+                if(hasUnannotatedParameter &&
+                   (!expectedArgumentType || expectedCallbackIsUnresolved))
+                {
+                    reportError(
+                        node->line,
+                        "cannot infer inline closure parameter types; add "
+                        "annotations or provide arguments that determine "
+                        "the callback input type");
+                    return nullptr;
+                }
             }
             argVal = generateArgumentValue(arg, expectedArgumentType);
         }
@@ -3184,16 +3420,20 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             parametersMatch && parameterIndex < expectedCount;
                             ++parameterIndex)
                         {
+                            auto* declaredParameter =
+                                closure->parameters
+                                    ->parameters[parameterIndex];
                             TypeNode* actualParameter =
-                                closure->parameters->parameters[parameterIndex]
-                                    ->type;
+                                declaredParameter ? declaredParameter->type
+                                                  : nullptr;
                             TypeNode* expectedParameter =
                                 expectedFunction->parameterTypes
                                     ->types[parameterIndex];
-                            parametersMatch =
-                                actualParameter && expectedParameter &&
-                                typeMangle(actualParameter) ==
-                                    typeMangle(expectedParameter);
+                            parametersMatch = expectedParameter &&
+                                              (!actualParameter ||
+                                               typeMangle(actualParameter) ==
+                                                   typeMangle(
+                                                       expectedParameter));
                         }
                         if(parametersMatch)
                             actualFunction = expectedFunction;

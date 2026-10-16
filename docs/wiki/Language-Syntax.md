@@ -1096,16 +1096,19 @@ typed parameters:
 ```mla
 fn main() -> i32 {
     var offset: i64 = 3;
-    let inline_result = apply(|value: i64| { return value + offset; }, 8);
+    let inline_result = apply(|value| { return value + offset; }, 8);
     let square = |value: i64| { return value * value; };
     return inline_result + apply(square, 8);
 }
 ```
 
-Inline lambda parameters need explicit types. An inline lambda may borrow local
-captures for the call, but the callback parameter must be proven not to escape:
-the callee may invoke it directly, but may not store or return it. The captured
-variable also cannot be passed by reference elsewhere in the same call.
+For generic callbacks, other arguments can supply the type of an unannotated
+lambda parameter; the callback result can then infer a separate generic result
+type. If the input type cannot be determined from the call, annotate it
+explicitly. An inline lambda may borrow local captures for the call, but the
+callback parameter must be proven not to escape: the callee may invoke it
+directly, but may not store or return it. The captured variable also cannot be
+passed by reference elsewhere in the same call.
 
 An unambiguous named function also infers its callable type in a local. If the
 name is overloaded, add an explicit function type to select its signature:

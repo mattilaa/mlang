@@ -2044,7 +2044,7 @@ enum UpdatePosition
 %type <ast> arch_gated_function_def arch_gated_test_function_def arch_gated_inline_function_def
 %type <ast> type_alias_def namespace_block namespace_alias_def
 %type <ast> struct_def field_def enum_def enum_variant_list enum_variant
-%type <ast> function_def type function_type_parameters parameter_list parameters parameter
+%type <ast> function_def type function_type_parameters parameter_list parameters parameter closure_parameters closure_parameter
 %type <ast> statement_list statement expression ternary_expression cast_expression
 %type <ast> switch_subject_expression switch_case_value
 %type <ast> block_condition_expression block_condition_logical_or block_condition_logical_and
@@ -2829,6 +2829,27 @@ parameter
         }
     | AMP IDENTIFIER
         { $$ = mla_ast_parameter(mla_ast_struct_type_ref(strdup("Self")), $2); }
+    ;
+
+closure_parameters
+    : closure_parameter { $$ = mla_ast_parameter_list($1); }
+    | closure_parameters COMMA closure_parameter
+        { $$ = add_parameter($1, $3); }
+    ;
+
+closure_parameter
+    : IDENTIFIER
+        {
+            $$ = mla_ast_parameter(NULL, $1);
+            $$->line = @1.first_line;
+            $$->col = @1.first_column;
+        }
+    | IDENTIFIER COLON type
+        {
+            $$ = mla_ast_parameter($3, $1);
+            $$->line = @1.first_line;
+            $$->col = @1.first_column;
+        }
     ;
 
 type
@@ -3728,9 +3749,9 @@ condition_primary
         { $$ = create_closure(NULL); }
     | PIPE_PIPE LBRACE statement_list RBRACE
         { $$ = create_closure($3); }
-    | PIPE parameters PIPE LBRACE RBRACE
+    | PIPE closure_parameters PIPE LBRACE RBRACE
         { $$ = create_closure_with_params($2, NULL); }
-    | PIPE parameters PIPE LBRACE statement_list RBRACE
+    | PIPE closure_parameters PIPE LBRACE statement_list RBRACE
         { $$ = create_closure_with_params($2, $5); }
     | fold_expression { $$ = $1; }
     | SIZEOF LPAREN type RPAREN
@@ -3948,9 +3969,9 @@ primary_expression
         { $$ = create_closure(NULL); }
     | PIPE_PIPE LBRACE statement_list RBRACE
         { $$ = create_closure($3); }
-    | PIPE parameters PIPE LBRACE RBRACE
+    | PIPE closure_parameters PIPE LBRACE RBRACE
         { $$ = create_closure_with_params($2, NULL); }
-    | PIPE parameters PIPE LBRACE statement_list RBRACE
+    | PIPE closure_parameters PIPE LBRACE statement_list RBRACE
         { $$ = create_closure_with_params($2, $5); }
     | fold_expression { $$ = $1; }
     | SIZEOF LPAREN type RPAREN
