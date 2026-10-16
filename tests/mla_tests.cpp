@@ -4535,6 +4535,36 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultThroughNestedLocal)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromListLiteral)
+{
+    std::string code = R"(
+        generic<T, U> fn apply(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let values = apply(|value| { return [value, value + 1]; }, 8);
+            return values.len() == 2 && values[0] == 8 && values[1] == 9
+                       ? 0
+                       : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromArrayFill)
+{
+    std::string code = R"(
+        generic<T, U> fn apply(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let repeated = apply(|value| { return [value; 2]; }, 8);
+            return repeated.len() == 2 && repeated[0] == 8 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, GenericFunctionInfersClosureResultFromNestedFields)
 {
     std::string code = R"(

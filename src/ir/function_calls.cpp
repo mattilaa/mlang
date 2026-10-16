@@ -475,6 +475,30 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                     }
                 return new TupleTypeNode(elementTypes);
             }
+            if(auto* list = dynamic_cast<ListLiteralNode*>(expr))
+            {
+                if(!list->elements || list->elements->elements.empty())
+                    return nullptr;
+                TypeNode* elementType = nullptr;
+                for(auto* element : list->elements->elements)
+                {
+                    TypeNode* current = inferClosureExpr(element);
+                    if(!current ||
+                       (elementType &&
+                        typeMangle(elementType) != typeMangle(current)))
+                        return nullptr;
+                    if(!elementType)
+                        elementType = current;
+                }
+                return new GenericListTypeNode(elementType);
+            }
+            if(auto* array = dynamic_cast<ArrayFillNode*>(expr))
+            {
+                TypeNode* elementType = inferClosureExpr(array->value);
+                if(!elementType)
+                    return nullptr;
+                return new GenericListTypeNode(elementType);
+            }
             if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
             {
                 TypeNode* baseType = inferClosureExpr(index->base);

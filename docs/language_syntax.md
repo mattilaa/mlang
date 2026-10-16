@@ -1136,7 +1136,9 @@ unannotated closure can also infer a result from chained struct fields such as
 `item.point.x`, including fields whose types come from generic structs. Indexing
 a list or map, methods with known signatures (including user-defined methods
 on structs), and basic unary operators are also supported in inferred results.
-Ternary expressions are supported when both branches have the same type.
+List and array-fill literals infer their element type from the closure
+parameters. Ternary expressions are supported when both branches have the same
+type.
 The inferred result may also be returned through a local binding inside the
 closure body, including one declared in a nested block (for example,
 `let result = value * value; return result;`).
