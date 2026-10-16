@@ -1085,17 +1085,20 @@ fn main() -> i32 {
 }
 ```
 
-This also supports a bound lambda with explicitly typed parameters:
+This also supports captureless inline lambdas and bound lambdas with explicitly
+typed parameters:
 
 ```mla
 fn main() -> i32 {
+    let inline_result = apply(|value: i64| { return value * value; }, 8);
     let square = |value: i64| { return value * value; };
-    return apply(square, 8);
+    return inline_result + apply(square, 8);
 }
 ```
 
-Inline lambda arguments and lambdas whose parameter or result types need to be
-inferred from a generic callback signature are not yet supported.
+Inline lambda parameters need explicit types, and inline lambdas passed through
+this function-type callback ABI cannot capture local variables. Capturing
+closures require environment-aware callback lowering.
 
 An unambiguous named function also infers its callable type in a local. If the
 name is overloaded, add an explicit function type to select its signature:

@@ -318,7 +318,53 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
     }
     else if(auto* closure = dynamic_cast<ClosureNode*>(node))
     {
-        llvm::Function* fn = generateClosureFn(closure);
+        TypeNode* closureReturnType = nullptr;
+        auto* expectedFunctionType =
+            dynamic_cast<FunctionTypeNode*>(expectedType);
+        if(expectedFunctionType)
+            closureReturnType = expectedFunctionType->returnType;
+        if(expectedFunctionType)
+        {
+            // Function values use the runtime closure ABI (code pointer plus
+            // environment pointer), even for captureless closures. Keep the
+            // environment null here; captured inline callbacks require
+            // environment construction and are diagnosed during body codegen.
+            std::vector<std::pair<std::string, TypeNode*>> noCaptures;
+            llvm::Function* fn = generateClosureFn(
+                closure, &noCaptures, nullptr, closureReturnType);
+            if(!fn)
+                return nullptr;
+            auto* closureStruct = llvm::dyn_cast_or_null<llvm::StructType>(
+                getLLVMTypeFromNode(expectedFunctionType));
+            if(!closureStruct || closureStruct->getNumElements() != 2)
+            {
+                reportError(closure->line,
+                            "unsupported inline closure value representation");
+                return nullptr;
+            }
+            llvm::Value* value = llvm::UndefValue::get(closureStruct);
+            llvm::Type* codeType = closureStruct->getElementType(0);
+            llvm::Value* code = fn;
+            if(code->getType() != codeType)
+                code = builder.CreateBitCast(code, codeType,
+                                             "closure.code.cast");
+            value = builder.CreateInsertValue(value, code, 0,
+                                              "closure.value.code");
+            auto* environmentPointer = llvm::dyn_cast<llvm::PointerType>(
+                closureStruct->getElementType(1));
+            if(!environmentPointer)
+            {
+                reportError(closure->line,
+                            "unsupported inline closure environment type");
+                return nullptr;
+            }
+            return builder.CreateInsertValue(
+                value,
+                llvm::ConstantPointerNull::get(environmentPointer), 1,
+                "closure.value.environment");
+        }
+        llvm::Function* fn =
+            generateClosureFn(closure, nullptr, nullptr, closureReturnType);
         if(!fn)
             return nullptr;
 #if LLVM_VERSION_MAJOR >= 15

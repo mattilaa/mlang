@@ -2776,6 +2776,83 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         {
             TypeNode* expectedArgumentType = overloadParameterType(
                 overloadIt->second, node->arguments.size(), argIndex);
+            if(!expectedArgumentType)
+            {
+                if(auto* closure = dynamic_cast<ClosureNode*>(arg))
+                {
+                    TypeNode* selectedType = nullptr;
+                    bool conflictingTypes = false;
+                    for(const auto& candidate : overloadIt->second)
+                    {
+                        if(!candidate.function || !candidate.node ||
+                           !candidate.node->typeParams.empty() ||
+                           !candidate.node->parameters ||
+                           candidate.node->parameters->parameters.size() !=
+                               node->arguments.size() ||
+                           argIndex >=
+                               candidate.node->parameters->parameters.size())
+                            continue;
+                        auto* callbackType = dynamic_cast<FunctionTypeNode*>(
+                            candidate.node->parameters
+                                ->parameters[argIndex]->type);
+                        if(!callbackType || !closure->parameters ||
+                           !callbackType->parameterTypes ||
+                           callbackType->parameterTypes->types.size() !=
+                               closure->parameters->parameters.size())
+                            continue;
+
+                        bool signatureMatches = true;
+                        for(size_t parameterIndex = 0;
+                            parameterIndex <
+                            closure->parameters->parameters.size();
+                            ++parameterIndex)
+                        {
+                            TypeNode* declared =
+                                closure->parameters->parameters[parameterIndex]
+                                    ->type;
+                            TypeNode* expected = callbackType->parameterTypes
+                                                     ->types[parameterIndex];
+                            if(!declared || !expected ||
+                               typeMangle(declared) != typeMangle(expected))
+                            {
+                                signatureMatches = false;
+                                break;
+                            }
+                        }
+                        if(!signatureMatches)
+                            continue;
+
+                        bool otherArgumentsMatch = true;
+                        for(size_t i = 0; i < node->arguments.size(); ++i)
+                        {
+                            if(i == argIndex)
+                                continue;
+                            TypeNode* actual = inferExpressionTypeNode(
+                                node->arguments[i], node->line);
+                            TypeNode* expected = candidate.node->parameters
+                                                     ->parameters[i]->type;
+                            if(!actual || !expected ||
+                               typeMangle(actual) != typeMangle(expected))
+                            {
+                                otherArgumentsMatch = false;
+                                break;
+                            }
+                        }
+                        if(!otherArgumentsMatch)
+                            continue;
+                        if(selectedType &&
+                           typeMangle(selectedType) !=
+                               typeMangle(callbackType))
+                        {
+                            conflictingTypes = true;
+                            break;
+                        }
+                        selectedType = callbackType;
+                    }
+                    if(!conflictingTypes)
+                        expectedArgumentType = selectedType;
+                }
+            }
             // Generic specializations coexist with their unspecialized
             // templates in the overload set. The template's fn(T)->T
             // parameter makes the common-type helper return null; recover a
@@ -3020,6 +3097,36 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 {
                     FunctionTypeNode* actualFunction =
                         dynamic_cast<FunctionTypeNode*>(actualSemantic);
+                    if(auto* closure = dynamic_cast<ClosureNode*>(
+                           node->arguments[i]))
+                    {
+                        const size_t expectedCount =
+                            expectedFunction->parameterTypes
+                                ? expectedFunction->parameterTypes->types.size()
+                                : 0;
+                        const size_t actualCount =
+                            closure->parameters
+                                ? closure->parameters->parameters.size()
+                                : 0;
+                        bool parametersMatch = expectedCount == actualCount;
+                        for(size_t parameterIndex = 0;
+                            parametersMatch && parameterIndex < expectedCount;
+                            ++parameterIndex)
+                        {
+                            TypeNode* actualParameter =
+                                closure->parameters->parameters[parameterIndex]
+                                    ->type;
+                            TypeNode* expectedParameter =
+                                expectedFunction->parameterTypes
+                                    ->types[parameterIndex];
+                            parametersMatch =
+                                actualParameter && expectedParameter &&
+                                typeMangle(actualParameter) ==
+                                    typeMangle(expectedParameter);
+                        }
+                        if(parametersMatch)
+                            actualFunction = expectedFunction;
+                    }
                     if(auto* id = dynamic_cast<IdentifierNode*>(
                            node->arguments[i]))
                     {
