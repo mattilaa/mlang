@@ -715,7 +715,8 @@ private:
     ClosureNode* contextualizeClosure(ClosureNode* closure,
                                       FunctionTypeNode* expectedType);
     bool tryGenerateRuntimeClosureValue(const std::string& name,
-                                        ClosureNode* closure, int line);
+                                        ClosureNode* closure, int line,
+                                        FunctionTypeNode* expectedType = nullptr);
     bool tryCopyRuntimeClosureValue(const std::string& name,
                                     const std::string& sourceName, int line);
     void generateCexprDeclaration(CexprDeclNode* node,

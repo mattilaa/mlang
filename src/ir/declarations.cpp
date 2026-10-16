@@ -240,12 +240,41 @@ ClosureNode* CodeGenerator::contextualizeClosure(
 
 bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
                                                    ClosureNode* closure,
-                                                   int line)
+                                                   int line,
+                                                   FunctionTypeNode* expectedType)
 {
     std::vector<std::pair<std::string, TypeNode*>> captures;
-    TypeNode* returnType = nullptr;
-    if(!getRuntimeClosureCaptures(closure, captures, returnType))
+    TypeNode* inferredReturnType = nullptr;
+    if(!getRuntimeClosureCaptures(closure, captures, inferredReturnType))
         return false;
+
+    TypeNode* returnType = inferredReturnType;
+    if(expectedType)
+    {
+        TypeNode* expectedReturnType = expectedType->returnType;
+        llvm::Type* inferredLLVM =
+            inferredReturnType ? getLLVMTypeFromNode(inferredReturnType)
+                               : nullptr;
+        llvm::Type* expectedLLVM =
+            expectedReturnType ? getLLVMTypeFromNode(expectedReturnType)
+                               : nullptr;
+        const bool compatible =
+            inferredReturnType && expectedReturnType &&
+            (typeMangle(inferredReturnType) == typeMangle(expectedReturnType) ||
+             (inferredLLVM && expectedLLVM &&
+              ((inferredLLVM->isIntegerTy() && expectedLLVM->isIntegerTy()) ||
+               (inferredLLVM->isFloatingPointTy() &&
+                expectedLLVM->isFloatingPointTy()) ||
+               (inferredLLVM->isPointerTy() && expectedLLVM->isPointerTy()))));
+        if(!compatible)
+        {
+            reportError(line,
+                        "closure return type does not match its callable "
+                        "type");
+            return true;
+        }
+        returnType = expectedReturnType;
+    }
 
     llvm::Function* closureFn =
         generateClosureFn(closure, &captures, &constantVariables,
@@ -313,12 +342,17 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
     namedValues[name] = closureSlot;
     runtimeClosureVariables[name] = closure;
     runtimeClosureReturnTypes[name] = returnType;
-    auto* signatureParameters = new TypeListNode();
-    if(closure->parameters)
-        for(auto* parameter : closure->parameters->parameters)
-            signatureParameters->addType(cloneTypeNode(parameter->type));
-    functionTypeVariables[name] =
-        new FunctionTypeNode(signatureParameters, cloneTypeNode(returnType));
+    if(expectedType)
+        functionTypeVariables[name] = expectedType;
+    else
+    {
+        auto* signatureParameters = new TypeListNode();
+        if(closure->parameters)
+            for(auto* parameter : closure->parameters->parameters)
+                signatureParameters->addType(cloneTypeNode(parameter->type));
+        functionTypeVariables[name] = new FunctionTypeNode(
+            signatureParameters, cloneTypeNode(returnType));
+    }
     auto& owners = runtimeClosureBorrowOwners[name];
     owners.clear();
     for(const auto& capture : captures)
@@ -546,8 +580,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             return;
         closureVariables[node->name] = effectiveClosure;
         recordVariableScopeDepth(node->name);
-        if(tryGenerateRuntimeClosureValue(node->name, effectiveClosure,
-                                          node->line))
+        if(tryGenerateRuntimeClosureValue(
+               node->name, effectiveClosure, node->line,
+               dynamic_cast<FunctionTypeNode*>(declaredType)))
         {
             if(auto* expected =
                    dynamic_cast<FunctionTypeNode*>(declaredType))
@@ -1858,8 +1893,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             if(!effectiveClosure)
                 return;
             closureVariables[node->name] = effectiveClosure;
-            if(tryGenerateRuntimeClosureValue(node->name, effectiveClosure,
-                                              node->line))
+            if(tryGenerateRuntimeClosureValue(
+                   node->name, effectiveClosure, node->line,
+                   dynamic_cast<FunctionTypeNode*>(declaredType)))
             {
                 if(auto* expected =
                        dynamic_cast<FunctionTypeNode*>(declaredType))

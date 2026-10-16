@@ -351,7 +351,8 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
             releaseRuntimeClosureBorrows(node->name);
             closureVariables[node->name] = contextual;
             if(!tryGenerateRuntimeClosureValue(node->name, contextual,
-                                               node->line))
+                                               node->line,
+                                               expectedCallableType))
                 return;
             auto actual = functionTypeVariables.find(node->name);
             if(actual == functionTypeVariables.end() ||

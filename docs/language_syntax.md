@@ -1053,9 +1053,10 @@ are inferred from that signature, both on initialization and on assignment:
 let add_one: fn(i32) -> i32 = |value| { return value + 1; };
 ```
 
-Replacing a mutable callable with an inline closure also checks its return
-signature and capture lifetimes; it cannot borrow a local that will go out of
-scope before the callable.
+The callable result type also provides context for the closure’s returned
+expression (including numeric conversions). Replacing a mutable callable with
+an inline closure checks its signature and capture lifetimes; it cannot borrow
+a local that will go out of scope before the callable.
 
 Use a type alias when a callback signature is shared by several functions:
 
