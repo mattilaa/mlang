@@ -4516,6 +4516,21 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultFromNestedFields)
     EXPECT_EQ(compileAndRunExitCode(code), 73);
 }
 
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromGenericStructField)
+{
+    std::string code = R"(
+        struct Box<T> { var value: T; };
+        generic<T, U> fn project(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let boxed: Box<i32> = Box<i32> { value: 83 };
+            return project(|item| { return item.value; }, boxed);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 83);
+}
+
 TEST_F(MLATest, GenericFunctionNeedsInputTypeForUnannotatedClosureParameter)
 {
     std::string code = R"(
