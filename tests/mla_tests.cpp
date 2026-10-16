@@ -4469,6 +4469,24 @@ TEST_F(MLATest, GenericFunctionInfersResultFromZeroArgumentClosure)
     EXPECT_EQ(compileAndRunExitCode(code), 7);
 }
 
+TEST_F(MLATest, GenericFunctionInfersResultFromNestedClosureReturns)
+{
+    std::string code = R"(
+        generic<T> fn provide(make: fn() -> T) -> T {
+            return make();
+        }
+        fn main() -> i32 {
+            return provide(|| {
+                if (true) {
+                    return 7;
+                }
+                return 9;
+            });
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
 TEST_F(MLATest, GenericFunctionInfersInlineClosureParameterType)
 {
     std::string code = R"(

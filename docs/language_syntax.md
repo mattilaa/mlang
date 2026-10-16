@@ -1120,12 +1120,15 @@ callback parameter must be proven not to escape: the callee may invoke it
 directly, but may not store or return it. The captured variable also cannot be
 passed by reference elsewhere in the same call.
 
-Zero-argument generic callbacks can infer their result type from the closure
-body:
+Generic callbacks can infer their result type from the closure body, including
+returns nested in conditional branches:
 
 ```mla
 generic<T> fn provide(make: fn() -> T) -> T { return make(); }
-let result = provide(|| { return 7; });
+let result = provide(|| {
+    if (condition) { return 7; }
+    return 9;
+});
 ```
 
 An unambiguous named function also infers its callable type in a local. If the

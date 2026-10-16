@@ -510,18 +510,58 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         };
 
         TypeNode* result = nullptr;
-        for(auto* statement : closure->body->statements)
+        bool resultIsConsistent = true;
+        std::function<void(StatementNode*)> inferReturns =
+            [&](StatementNode* statement)
         {
-            auto* ret = dynamic_cast<ReturnNode*>(statement);
-            if(!ret || !ret->expression)
-                continue;
-            TypeNode* returned = inferClosureExpr(ret->expression);
-            if(!returned)
-                return nullptr;
-            if(result && typeMangle(result) != typeMangle(returned))
-                return nullptr;
-            result = returned;
-        }
+            if(auto* ret = dynamic_cast<ReturnNode*>(statement))
+            {
+                if(!ret->expression)
+                    return;
+                TypeNode* returned = inferClosureExpr(ret->expression);
+                if(!returned ||
+                   (result && typeMangle(result) != typeMangle(returned)))
+                {
+                    resultIsConsistent = false;
+                    return;
+                }
+                result = returned;
+                return;
+            }
+            auto inferList = [&](StatementListNode* statements)
+            {
+                if(statements)
+                    for(auto* nested : statements->statements)
+                        inferReturns(nested);
+            };
+            if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+                inferList(block->statements);
+            else if(auto* branch = dynamic_cast<IfNode*>(statement))
+            {
+                inferList(branch->thenBranch);
+                inferList(branch->elseBranch);
+                inferReturns(branch->elseIfBranch);
+            }
+            else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+            {
+                inferList(branch->thenBranch);
+                inferList(branch->elseBranch);
+                inferReturns(branch->elseIfBranch);
+            }
+            else if(auto* loop = dynamic_cast<ForNode*>(statement))
+                inferList(loop->body);
+            else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+                inferList(loop->body);
+            else if(auto* tryCatch = dynamic_cast<TryCatchNode*>(statement))
+            {
+                inferReturns(tryCatch->tryBlock);
+                inferReturns(tryCatch->catchBlock);
+            }
+        };
+        for(auto* statement : closure->body->statements)
+            inferReturns(statement);
+        if(!resultIsConsistent)
+            return nullptr;
         return result;
     };
 
