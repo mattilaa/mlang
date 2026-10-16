@@ -398,6 +398,7 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         if(!closure || !closure->body)
             return nullptr;
         std::map<std::string, TypeNode*> parametersByName;
+        std::map<std::string, TypeNode*> localsByName;
         if(closure->parameters)
             for(auto* parameter : closure->parameters->parameters)
                 if(parameter && parameter->type)
@@ -413,6 +414,9 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                 auto found = parametersByName.find(identifier->name);
                 if(found != parametersByName.end())
                     return cloneTypeNode(found->second);
+                auto local = localsByName.find(identifier->name);
+                if(local != localsByName.end())
+                    return cloneTypeNode(local->second);
                 return inferExpressionTypeNode(expr, functionTemplate->line);
             }
             if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
@@ -584,6 +588,24 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         std::function<void(StatementNode*)> inferReturns =
             [&](StatementNode* statement)
         {
+            if(auto* let = dynamic_cast<LetDeclNode*>(statement))
+            {
+                TypeNode* localType = let->type
+                                          ? cloneTypeNode(let->type)
+                                          : inferClosureExpr(let->expression);
+                if(localType)
+                    localsByName[let->name] = localType;
+                return;
+            }
+            if(auto* variable = dynamic_cast<VarDeclNode*>(statement))
+            {
+                TypeNode* localType = variable->type
+                                          ? cloneTypeNode(variable->type)
+                                          : inferClosureExpr(variable->initExpr);
+                if(localType)
+                    localsByName[variable->name] = localType;
+                return;
+            }
             if(auto* ret = dynamic_cast<ReturnNode*>(statement))
             {
                 if(!ret->expression)

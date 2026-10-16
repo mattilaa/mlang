@@ -4500,6 +4500,22 @@ TEST_F(MLATest, GenericFunctionInfersInlineClosureParameterType)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+TEST_F(MLATest, GenericFunctionInfersClosureResultThroughLocal)
+{
+    std::string code = R"(
+        generic<T, U> fn apply(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            return apply(|value| {
+                let squared = value * value;
+                return squared;
+            }, 8);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 64);
+}
+
 TEST_F(MLATest, GenericFunctionInfersClosureResultFromNestedFields)
 {
     std::string code = R"(

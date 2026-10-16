@@ -92,9 +92,30 @@ bool CodeGenerator::getRuntimeClosureCaptures(
     bool sawValueReturn = false;
     bool sawVoidReturn = false;
     bool returnTypesValid = parameterTypesValid;
+    std::map<std::string, TypeNode*> inferredLocals;
     std::function<void(StatementNode*)> inferReturns =
         [&](StatementNode* statement)
     {
+        if(auto* let = dynamic_cast<LetDeclNode*>(statement))
+        {
+            TypeNode* localType = let->type
+                                      ? cloneTypeNode(let->type)
+                                      : inferExpressionTypeNode(let->expression,
+                                                                closure->line);
+            if(localType)
+                inferredLocals[let->name] = localType;
+            return;
+        }
+        if(auto* variable = dynamic_cast<VarDeclNode*>(statement))
+        {
+            TypeNode* localType = variable->type
+                                      ? cloneTypeNode(variable->type)
+                                      : inferExpressionTypeNode(
+                                            variable->initExpr, closure->line);
+            if(localType)
+                inferredLocals[variable->name] = localType;
+            return;
+        }
         if(auto* ret = dynamic_cast<ReturnNode*>(statement))
         {
             if(!ret->expression)
@@ -102,8 +123,17 @@ bool CodeGenerator::getRuntimeClosureCaptures(
                 sawVoidReturn = true;
                 return;
             }
-            TypeNode* inferred =
-                inferExpressionTypeNode(ret->expression, closure->line);
+            TypeNode* inferred = nullptr;
+            if(auto* identifier =
+                   dynamic_cast<IdentifierNode*>(ret->expression))
+            {
+                auto local = inferredLocals.find(identifier->name);
+                if(local != inferredLocals.end())
+                    inferred = cloneTypeNode(local->second);
+            }
+            if(!inferred)
+                inferred = inferExpressionTypeNode(ret->expression,
+                                                   closure->line);
             if(!inferred)
             {
                 returnTypesValid = false;
