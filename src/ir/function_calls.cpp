@@ -485,6 +485,15 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                    unary->op == UnaryOpNode::OP_BITNOT)
                     return inferClosureExpr(unary->operand);
             }
+            if(auto* ternary = dynamic_cast<TernaryNode*>(expr))
+            {
+                TypeNode* trueType = inferClosureExpr(ternary->trueExpr);
+                TypeNode* falseType = inferClosureExpr(ternary->falseExpr);
+                if(trueType && falseType &&
+                   typeMangle(trueType) != typeMangle(falseType))
+                    return nullptr;
+                return trueType ? trueType : falseType;
+            }
             if(auto* binary = dynamic_cast<BinaryOpNode*>(expr))
             {
                 switch(binary->op)

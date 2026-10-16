@@ -4547,6 +4547,21 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultFromIndexAndUnaryOps)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromTernary)
+{
+    std::string code = R"(
+        generic<T, U> fn project(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            return project(|flag| { return flag ? 17 : 29; }, true) == 17
+                       ? 0
+                       : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, GenericFunctionNeedsInputTypeForUnannotatedClosureParameter)
 {
     std::string code = R"(
