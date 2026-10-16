@@ -702,6 +702,29 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
            methodCall->methodName == "is_some" ||
            methodCall->methodName == "is_none")
             return new TypeNode(TypeNode::TYPE_BOOL);
+
+        if(auto* reference = dynamic_cast<ReferenceTypeNode*>(objectType))
+            objectType = reference->elementType;
+        std::string structName;
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(objectType))
+        {
+            structName = resolveVisibleStructName(structRef->structName);
+            if(structName.empty())
+                structName = structRef->structName;
+        }
+        else if(auto* genericStruct =
+                    dynamic_cast<GenericStructTypeRefNode*>(objectType))
+            structName = getOrCreateMonomorphizedStruct(
+                genericStruct->structName, genericStruct->typeArgs);
+        auto methods = structMethods.find(structName);
+        if(methods != structMethods.end())
+        {
+            auto selected = methods->second.find(methodCall->methodName);
+            if(selected != methods->second.end() &&
+               selected->second.second &&
+               selected->second.second->returnType)
+                return cloneTypeNode(selected->second.second->returnType);
+        }
     }
 
     if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(expr))

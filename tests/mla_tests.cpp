@@ -4589,6 +4589,24 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultFromCollectionPredicate)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromGenericMethod)
+{
+    std::string code = R"(
+        struct Box<T> { var value: T; };
+        impl<T> Box {
+            fn get(self: Box<T>) -> T { return self.value; }
+        }
+        generic<T, U> fn project(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let boxed: Box<i32> = Box<i32> { value: 97 };
+            return project(|item| { return item.get(); }, boxed);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 97);
+}
+
 TEST_F(MLATest, GenericFunctionNeedsInputTypeForUnannotatedClosureParameter)
 {
     std::string code = R"(

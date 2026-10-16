@@ -479,6 +479,35 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
             }
             if(auto* method = dynamic_cast<MethodCallNode*>(expr))
             {
+                TypeNode* receiverType = inferClosureExpr(method->object);
+                if(auto* reference =
+                       dynamic_cast<ReferenceTypeNode*>(receiverType))
+                    receiverType = reference->elementType;
+                std::string receiverStructName;
+                if(auto* structRef =
+                       dynamic_cast<StructTypeRefNode*>(receiverType))
+                {
+                    receiverStructName =
+                        resolveVisibleStructName(structRef->structName);
+                    if(receiverStructName.empty())
+                        receiverStructName = structRef->structName;
+                }
+                else if(auto* genericStruct =
+                            dynamic_cast<GenericStructTypeRefNode*>(
+                                receiverType))
+                    receiverStructName = getOrCreateMonomorphizedStruct(
+                        genericStruct->structName, genericStruct->typeArgs);
+
+                auto methods = structMethods.find(receiverStructName);
+                if(methods != structMethods.end())
+                {
+                    auto selected = methods->second.find(method->methodName);
+                    if(selected != methods->second.end() &&
+                       selected->second.second &&
+                       selected->second.second->returnType)
+                        return cloneTypeNode(
+                            selected->second.second->returnType);
+                }
                 if(method->methodName == "len")
                     return new TypeNode(TypeNode::TYPE_I64);
                 if(method->methodName == "is_empty" ||
