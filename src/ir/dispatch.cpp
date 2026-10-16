@@ -325,39 +325,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
             closureReturnType = expectedFunctionType->returnType;
         if(expectedFunctionType)
         {
-            ClosureNode* typedClosure = closure;
-            auto* contextualParameters = new ParameterListNode();
-            const size_t expectedParameterCount =
-                expectedFunctionType->parameterTypes
-                    ? expectedFunctionType->parameterTypes->types.size()
-                    : 0;
-            const size_t declaredParameterCount =
-                closure->parameters ? closure->parameters->parameters.size()
-                                    : 0;
-            if(expectedParameterCount != declaredParameterCount)
-            {
-                reportError(closure->line,
-                            "inline closure parameter count does not match "
-                            "its callback signature");
+            ClosureNode* typedClosure =
+                contextualizeClosure(closure, expectedFunctionType);
+            if(!typedClosure)
                 return nullptr;
-            }
-            for(size_t i = 0; i < expectedParameterCount; ++i)
-            {
-                ParameterNode* original =
-                    closure->parameters->parameters[i];
-                TypeNode* parameterType =
-                    original->type
-                        ? original->type
-                        : expectedFunctionType->parameterTypes->types[i];
-                auto* contextualParameter = new ParameterNode(
-                    cloneTypeNode(parameterType), original->name);
-                contextualParameter->isPack = original->isPack;
-                contextualParameters->parameters.push_back(
-                    contextualParameter);
-            }
-            typedClosure = new ClosureNode(contextualParameters, closure->body);
-            typedClosure->line = closure->line;
-            typedClosure->col = closure->col;
 
             // Function values use the runtime closure ABI (code pointer plus
             // environment pointer). A temporary inline closure borrows its
@@ -368,9 +339,8 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
             if(!getRuntimeClosureCaptures(typedClosure, captures,
                                           inferredReturnType))
                 return nullptr;
-            if(!inferredReturnType || !closureReturnType ||
-               typeMangle(inferredReturnType) !=
-                   typeMangle(closureReturnType))
+            if(!isClosureReturnTypeCompatible(inferredReturnType,
+                                              closureReturnType))
             {
                 reportError(closure->line,
                             "inline closure return type does not match its "

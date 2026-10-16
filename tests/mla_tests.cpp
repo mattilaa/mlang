@@ -4243,6 +4243,19 @@ TEST_F(MLATest, CallableLocalTypeInfersInlineClosureParameter)
     EXPECT_EQ(compileAndRunExitCode(code), 10);
 }
 
+TEST_F(MLATest, ConcreteCallbackSignatureContextualizesInlineClosure)
+{
+    std::string code = R"(
+        fn invoke(callback: fn(i32) -> i32) -> i32 {
+            return callback(0);
+        }
+        fn main() -> i32 {
+            return invoke(|value| { return 7; });
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
 TEST_F(MLATest, RuntimeClosureCanBeCopiedWithinBorrowScope)
 {
     std::string code = R"(

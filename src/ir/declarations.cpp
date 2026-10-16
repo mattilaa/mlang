@@ -238,6 +238,22 @@ ClosureNode* CodeGenerator::contextualizeClosure(
     return result;
 }
 
+bool CodeGenerator::isClosureReturnTypeCompatible(TypeNode* inferredType,
+                                                  TypeNode* expectedType)
+{
+    if(!inferredType || !expectedType)
+        return false;
+    if(typeMangle(inferredType) == typeMangle(expectedType))
+        return true;
+    llvm::Type* inferredLLVM = getLLVMTypeFromNode(inferredType);
+    llvm::Type* expectedLLVM = getLLVMTypeFromNode(expectedType);
+    return inferredLLVM && expectedLLVM &&
+           ((inferredLLVM->isIntegerTy() && expectedLLVM->isIntegerTy()) ||
+            (inferredLLVM->isFloatingPointTy() &&
+             expectedLLVM->isFloatingPointTy()) ||
+            (inferredLLVM->isPointerTy() && expectedLLVM->isPointerTy()));
+}
+
 bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
                                                    ClosureNode* closure,
                                                    int line,
@@ -252,21 +268,8 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
     if(expectedType)
     {
         TypeNode* expectedReturnType = expectedType->returnType;
-        llvm::Type* inferredLLVM =
-            inferredReturnType ? getLLVMTypeFromNode(inferredReturnType)
-                               : nullptr;
-        llvm::Type* expectedLLVM =
-            expectedReturnType ? getLLVMTypeFromNode(expectedReturnType)
-                               : nullptr;
-        const bool compatible =
-            inferredReturnType && expectedReturnType &&
-            (typeMangle(inferredReturnType) == typeMangle(expectedReturnType) ||
-             (inferredLLVM && expectedLLVM &&
-              ((inferredLLVM->isIntegerTy() && expectedLLVM->isIntegerTy()) ||
-               (inferredLLVM->isFloatingPointTy() &&
-                expectedLLVM->isFloatingPointTy()) ||
-               (inferredLLVM->isPointerTy() && expectedLLVM->isPointerTy()))));
-        if(!compatible)
+        if(!isClosureReturnTypeCompatible(inferredReturnType,
+                                          expectedReturnType))
         {
             reportError(line,
                         "closure return type does not match its callable "

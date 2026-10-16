@@ -1053,6 +1053,9 @@ are inferred from that signature, both on initialization and on assignment:
 let add_one: fn(i32) -> i32 = |value| { return value + 1; };
 ```
 
+The same contextual parameter and result typing applies when an inline closure
+is passed directly to a function with a concrete callback signature.
+
 The callable result type also provides context for the closure’s returned
 expression (including numeric conversions). Replacing a mutable callable with
 an inline closure checks its signature and capture lifetimes; it cannot borrow

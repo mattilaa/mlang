@@ -714,6 +714,8 @@ private:
         TypeNode*& returnType);
     ClosureNode* contextualizeClosure(ClosureNode* closure,
                                       FunctionTypeNode* expectedType);
+    bool isClosureReturnTypeCompatible(TypeNode* inferredType,
+                                       TypeNode* expectedType);
     bool tryGenerateRuntimeClosureValue(const std::string& name,
                                         ClosureNode* closure, int line,
                                         FunctionTypeNode* expectedType = nullptr);
