@@ -289,14 +289,98 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         }
     }
 
+    if(auto* inlineClosure = dynamic_cast<ClosureNode*>(node->expression))
+    {
+        auto callableType = functionTypeVariables.find(node->name);
+        if(callableType != functionTypeVariables.end())
+        {
+            FunctionTypeNode* expectedCallableType = callableType->second;
+            auto borrowers = activeBorrowers.find(node->name);
+            if(borrowers != activeBorrowers.end())
+            {
+                for(const auto& borrower : borrowers->second)
+                {
+                    if(borrower != node->name)
+                    {
+                        reportError(node->line, "cannot assign to callable '" +
+                                                      node->name +
+                                                      "' while borrowed by '" +
+                                                      borrower + "'");
+                        return;
+                    }
+                }
+            }
+
+            auto* contextual = contextualizeClosure(
+                inlineClosure,
+                dynamic_cast<FunctionTypeNode*>(expectedCallableType));
+            if(!contextual)
+                return;
+            auto* expectedFunction =
+                dynamic_cast<FunctionTypeNode*>(expectedCallableType);
+            std::vector<std::pair<std::string, TypeNode*>> captures;
+            TypeNode* closureReturnType = nullptr;
+            if(!expectedFunction ||
+               !getRuntimeClosureCaptures(contextual, captures,
+                                          closureReturnType))
+                return;
+            if(!closureReturnType || !expectedFunction->returnType ||
+               typeMangle(closureReturnType) !=
+                   typeMangle(expectedFunction->returnType))
+            {
+                reportError(node->line,
+                            "assigned closure return type does not match "
+                            "callable type of '" + node->name + "'");
+                return;
+            }
+            auto targetDepth = variableScopeDepth.find(node->name);
+            for(const auto& capture : captures)
+            {
+                auto captureDepth = variableScopeDepth.find(capture.first);
+                if(targetDepth != variableScopeDepth.end() &&
+                   captureDepth != variableScopeDepth.end() &&
+                   targetDepth->second < captureDepth->second)
+                {
+                    reportError(node->line,
+                                "cannot assign closure borrowing local '" +
+                                    capture.first + "' to longer-lived '" +
+                                    node->name + "'");
+                    return;
+                }
+            }
+            releaseRuntimeClosureBorrows(node->name);
+            closureVariables[node->name] = contextual;
+            if(!tryGenerateRuntimeClosureValue(node->name, contextual,
+                                               node->line))
+                return;
+            auto actual = functionTypeVariables.find(node->name);
+            if(actual == functionTypeVariables.end() ||
+               typeMangle(actual->second) != typeMangle(expectedCallableType))
+            {
+                reportError(node->line,
+                            "assigned closure does not match callable type of '" +
+                                node->name + "'");
+                return;
+            }
+            functionTypeVariables[node->name] = expectedCallableType;
+            return;
+        }
+    }
+
     std::unique_ptr<TypeNode> expectedSemanticType;
+    auto callableTypeIt = functionTypeVariables.find(node->name);
+    if(callableTypeIt != functionTypeVariables.end())
+    {
+        expectedSemanticType.reset(
+            cloneTypeNode(callableTypeIt->second));
+    }
     auto listTypeIt = listElementTypes.find(node->name);
-    if(listTypeIt != listElementTypes.end())
+    if(!expectedSemanticType && listTypeIt != listElementTypes.end())
     {
         expectedSemanticType =
             std::make_unique<GenericListTypeNode>(listTypeIt->second);
     }
-    else
+    else if(!expectedSemanticType)
     {
         auto mapTypeIt = mapKeyValueTypes.find(node->name);
         if(mapTypeIt != mapKeyValueTypes.end())

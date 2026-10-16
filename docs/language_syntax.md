@@ -1047,11 +1047,15 @@ fn main() -> i32 {
 ```
 
 When a local has an explicit callable type, omitted closure parameter types
-are inferred from that signature:
+are inferred from that signature, both on initialization and on assignment:
 
 ```mla
 let add_one: fn(i32) -> i32 = |value| { return value + 1; };
 ```
+
+Replacing a mutable callable with an inline closure also checks its return
+signature and capture lifetimes; it cannot borrow a local that will go out of
+scope before the callable.
 
 Use a type alias when a callback signature is shared by several functions:
 

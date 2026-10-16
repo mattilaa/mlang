@@ -4633,6 +4633,47 @@ TEST_F(MLATest, ReturnedClosureCanReplaceMutableCallable)
     EXPECT_EQ(compileAndRunExitCode(code), 18);
 }
 
+TEST_F(MLATest, MutableCallableAssignmentInfersInlineClosureParameter)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var count: i32 = 0;
+            var transform: fn(i32) -> i32 = |value| {
+                return value;
+            };
+            transform = |value| {
+                count += value;
+                return count;
+            };
+            let result = transform(9);
+            return result + count;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 18);
+}
+
+TEST_F(MLATest, MutableCallableAssignmentRejectsShorterLivedCapture)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var transform: fn(i32) -> i32 = |value| {
+                return value;
+            };
+            {
+                let offset: i32 = 3;
+                transform = |value| { return value + offset; };
+            }
+            return transform(1);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign closure borrowing local 'offset'"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipCanReturnPointerBorrowingGlobal)
 {
     std::string code = R"(
