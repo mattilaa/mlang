@@ -192,6 +192,52 @@ bool CodeGenerator::getRuntimeClosureCaptures(
     return true;
 }
 
+ClosureNode* CodeGenerator::contextualizeClosure(
+    ClosureNode* closure, FunctionTypeNode* expectedType)
+{
+    if(!closure || !expectedType)
+        return closure;
+    const size_t expectedCount =
+        expectedType->parameterTypes
+            ? expectedType->parameterTypes->types.size()
+            : 0;
+    const size_t actualCount = closure->parameters
+                                   ? closure->parameters->parameters.size()
+                                   : 0;
+    if(expectedCount != actualCount)
+    {
+        reportError(closure->line,
+                    "inline closure parameter count does not match its "
+                    "callable type");
+        return nullptr;
+    }
+
+    auto* parameters = new ParameterListNode();
+    for(size_t i = 0; i < expectedCount; ++i)
+    {
+        ParameterNode* original = closure->parameters->parameters[i];
+        TypeNode* expected = expectedType->parameterTypes->types[i];
+        if(!original || !expected ||
+           (original->type &&
+            typeMangle(original->type) != typeMangle(expected)))
+        {
+            reportError(closure->line,
+                        "inline closure parameter type does not match its "
+                        "callable type");
+            return nullptr;
+        }
+        auto* parameter = new ParameterNode(
+            cloneTypeNode(original->type ? original->type : expected),
+            original->name);
+        parameter->isPack = original->isPack;
+        parameters->parameters.push_back(parameter);
+    }
+    auto* result = new ClosureNode(parameters, closure->body);
+    result->line = closure->line;
+    result->col = closure->col;
+    return result;
+}
+
 bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
                                                    ClosureNode* closure,
                                                    int line)
@@ -494,9 +540,13 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     // Inline closure: let inc = || { ... }
     if(auto* closureInit = dynamic_cast<ClosureNode*>(node->expression))
     {
-        closureVariables[node->name] = closureInit;
+        auto* effectiveClosure = contextualizeClosure(
+            closureInit, dynamic_cast<FunctionTypeNode*>(declaredType));
+        if(!effectiveClosure)
+            return;
+        closureVariables[node->name] = effectiveClosure;
         recordVariableScopeDepth(node->name);
-        if(tryGenerateRuntimeClosureValue(node->name, closureInit,
+        if(tryGenerateRuntimeClosureValue(node->name, effectiveClosure,
                                           node->line))
         {
             if(auto* expected =
@@ -1803,8 +1853,12 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     {
         if(auto* closureInit = dynamic_cast<ClosureNode*>(node->initExpr))
         {
-            closureVariables[node->name] = closureInit;
-            if(tryGenerateRuntimeClosureValue(node->name, closureInit,
+            auto* effectiveClosure = contextualizeClosure(
+                closureInit, dynamic_cast<FunctionTypeNode*>(declaredType));
+            if(!effectiveClosure)
+                return;
+            closureVariables[node->name] = effectiveClosure;
+            if(tryGenerateRuntimeClosureValue(node->name, effectiveClosure,
                                               node->line))
             {
                 if(auto* expected =

@@ -1046,6 +1046,13 @@ fn main() -> i32 {
 }
 ```
 
+When a local has an explicit callable type, omitted closure parameter types
+are inferred from that signature:
+
+```mla
+let add_one: fn(i32) -> i32 = |value| { return value + 1; };
+```
+
 Use a type alias when a callback signature is shared by several functions:
 
 ```mla

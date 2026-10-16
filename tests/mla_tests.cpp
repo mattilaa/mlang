@@ -4231,6 +4231,17 @@ TEST_F(MLATest, RuntimeClosureAcceptsTypedArguments)
     EXPECT_EQ(compileAndRunExitCode(code), 7);
 }
 
+TEST_F(MLATest, CallableLocalTypeInfersInlineClosureParameter)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let add_one: fn(i32) -> i32 = |value| { return value + 1; };
+            return add_one(8);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
 TEST_F(MLATest, RuntimeClosureCanBeCopiedWithinBorrowScope)
 {
     std::string code = R"(

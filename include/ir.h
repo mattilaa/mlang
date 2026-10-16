@@ -712,6 +712,8 @@ private:
         ClosureNode* closure,
         std::vector<std::pair<std::string, TypeNode*>>& captures,
         TypeNode*& returnType);
+    ClosureNode* contextualizeClosure(ClosureNode* closure,
+                                      FunctionTypeNode* expectedType);
     bool tryGenerateRuntimeClosureValue(const std::string& name,
                                         ClosureNode* closure, int line);
     bool tryCopyRuntimeClosureValue(const std::string& name,
