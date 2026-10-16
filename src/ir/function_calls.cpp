@@ -417,40 +417,41 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
             }
             if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
             {
-                std::string objectName = field->structName;
-                if(auto* object = dynamic_cast<IdentifierNode*>(field->object))
-                    objectName = object->name;
-                if(!objectName.empty())
+                TypeNode* objectType = nullptr;
+                if(field->object)
+                    objectType = inferClosureExpr(field->object);
+                else
                 {
-                    auto parameter = parametersByName.find(objectName);
+                    auto parameter =
+                        parametersByName.find(field->structName);
                     if(parameter != parametersByName.end())
-                    {
-                        TypeNode* objectType = parameter->second;
-                        if(auto* reference =
-                               dynamic_cast<ReferenceTypeNode*>(objectType))
-                            objectType = reference->elementType;
-                        std::string structName;
-                        if(auto* structRef =
-                               dynamic_cast<StructTypeRefNode*>(objectType))
-                        {
-                            structName =
-                                resolveVisibleStructName(structRef->structName);
-                            if(structName.empty())
-                                structName = structRef->structName;
-                        }
-                        else if(auto* genericStruct =
-                                    dynamic_cast<GenericStructTypeRefNode*>(
-                                        objectType))
-                            structName = getOrCreateMonomorphizedStruct(
-                                genericStruct->structName,
-                                genericStruct->typeArgs);
-                        auto members = structMembers.find(structName);
-                        if(members != structMembers.end())
-                            for(const auto& member : members->second)
-                                if(member.first == field->fieldName)
-                                    return cloneTypeNode(member.second);
-                    }
+                        objectType = cloneTypeNode(parameter->second);
+                    else
+                        objectType = inferExpressionTypeNode(
+                            new IdentifierNode(field->structName),
+                            functionTemplate->line);
                 }
+                if(auto* reference =
+                       dynamic_cast<ReferenceTypeNode*>(objectType))
+                    objectType = reference->elementType;
+                std::string structName;
+                if(auto* structRef =
+                       dynamic_cast<StructTypeRefNode*>(objectType))
+                {
+                    structName =
+                        resolveVisibleStructName(structRef->structName);
+                    if(structName.empty())
+                        structName = structRef->structName;
+                }
+                else if(auto* genericStruct =
+                            dynamic_cast<GenericStructTypeRefNode*>(objectType))
+                    structName = getOrCreateMonomorphizedStruct(
+                        genericStruct->structName, genericStruct->typeArgs);
+                auto members = structMembers.find(structName);
+                if(members != structMembers.end())
+                    for(const auto& member : members->second)
+                        if(member.first == field->fieldName)
+                            return cloneTypeNode(member.second);
                 return inferExpressionTypeNode(expr, functionTemplate->line);
             }
             if(auto* tuple = dynamic_cast<TupleLiteralNode*>(expr))

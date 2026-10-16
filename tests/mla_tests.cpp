@@ -4500,6 +4500,22 @@ TEST_F(MLATest, GenericFunctionInfersInlineClosureParameterType)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromNestedFields)
+{
+    std::string code = R"(
+        struct Point { var x: i32; };
+        struct Entity { var point: Point; };
+        generic<T, U> fn project(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let entity: Entity = Entity { point: Point { x: 73 } };
+            return project(|item| { return item.point.x; }, entity);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 73);
+}
+
 TEST_F(MLATest, GenericFunctionNeedsInputTypeForUnannotatedClosureParameter)
 {
     std::string code = R"(
