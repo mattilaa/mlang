@@ -4431,6 +4431,53 @@ TEST_F(MLATest, GenericFunctionCanInvokeInlineClosureParameter)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+TEST_F(MLATest, GenericFunctionCanInvokeInlineClosureWithBorrowedCapture)
+{
+    std::string code = R"(
+        generic<T> fn apply(mapper: fn(T) -> T, value: T) -> T {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            var offset: i64 = 3;
+            let result = apply(|value: i64| {
+                offset = offset + value;
+                return offset;
+            }, 8);
+            return result + offset;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 22);
+}
+
+TEST_F(MLATest, CapturingInlineCallbackCannotEscape)
+{
+    std::string code = R"(
+        fn retain(mapper: fn(i64) -> i64) -> fn(i64) -> i64 {
+            return mapper;
+        }
+        fn main() -> i32 {
+            var offset: i64 = 3;
+            let retained = retain(|value: i64| { return value + offset; });
+            return retained(8);
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, CapturingInlineCallbackCannotAliasMutableArgument)
+{
+    std::string code = R"(
+        fn invoke(mapper: fn(i64) -> i64, value: &mut i64) -> i64 {
+            return mapper(8);
+        }
+        fn main() -> i32 {
+            var value: i64 = 8;
+            return invoke(|input: i64| { return input + value; }, &mut value);
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, UniqueNamedFunctionInfersCallableLocalType)
 {
     std::string code = R"(

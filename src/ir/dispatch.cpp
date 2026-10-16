@@ -326,12 +326,25 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
         if(expectedFunctionType)
         {
             // Function values use the runtime closure ABI (code pointer plus
-            // environment pointer), even for captureless closures. Keep the
-            // environment null here; captured inline callbacks require
-            // environment construction and are diagnosed during body codegen.
-            std::vector<std::pair<std::string, TypeNode*>> noCaptures;
+            // environment pointer). A temporary inline closure borrows its
+            // local captures for this call; the call-site escape check ensures
+            // the callback cannot outlive that environment.
+            std::vector<std::pair<std::string, TypeNode*>> captures;
+            TypeNode* inferredReturnType = nullptr;
+            if(!getRuntimeClosureCaptures(closure, captures,
+                                          inferredReturnType))
+                return nullptr;
+            if(!inferredReturnType || !closureReturnType ||
+               typeMangle(inferredReturnType) !=
+                   typeMangle(closureReturnType))
+            {
+                reportError(closure->line,
+                            "inline closure return type does not match its "
+                            "callback signature");
+                return nullptr;
+            }
             llvm::Function* fn = generateClosureFn(
-                closure, &noCaptures, nullptr, closureReturnType);
+                closure, &captures, &constantVariables, closureReturnType);
             if(!fn)
                 return nullptr;
             auto* closureStruct = llvm::dyn_cast_or_null<llvm::StructType>(
@@ -358,10 +371,43 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
                             "unsupported inline closure environment type");
                 return nullptr;
             }
-            return builder.CreateInsertValue(
-                value,
-                llvm::ConstantPointerNull::get(environmentPointer), 1,
-                "closure.value.environment");
+            llvm::Value* environment =
+                llvm::ConstantPointerNull::get(environmentPointer);
+            if(!captures.empty())
+            {
+                std::vector<llvm::Type*> environmentFields(captures.size(),
+                                                            environmentPointer);
+                auto* environmentType =
+                    llvm::StructType::get(context, environmentFields);
+                llvm::Function* currentFunction =
+                    builder.GetInsertBlock()->getParent();
+                auto* environmentStorage = createEntryBlockAlloca(
+                    currentFunction, environmentType, "inline.closure.env");
+                for(size_t i = 0; i < captures.size(); ++i)
+                {
+                    auto captured = namedValues.find(captures[i].first);
+                    if(captured == namedValues.end())
+                    {
+                        reportError(closure->line,
+                                    "captured variable is unavailable: '" +
+                                        captures[i].first + "'");
+                        return nullptr;
+                    }
+                    llvm::Value* address = builder.CreatePointerCast(
+                        captured->second, environmentPointer,
+                        captures[i].first + ".capture.address");
+                    llvm::Value* field = builder.CreateStructGEP(
+                        environmentType, environmentStorage,
+                        static_cast<unsigned>(i),
+                        captures[i].first + ".capture.field");
+                    builder.CreateStore(address, field);
+                }
+                environment = builder.CreatePointerCast(
+                    environmentStorage, environmentPointer,
+                    "inline.closure.env.ptr");
+            }
+            return builder.CreateInsertValue(value, environment, 1,
+                                             "closure.value.environment");
         }
         llvm::Function* fn =
             generateClosureFn(closure, nullptr, nullptr, closureReturnType);

@@ -1090,15 +1090,17 @@ typed parameters:
 
 ```mla
 fn main() -> i32 {
-    let inline_result = apply(|value: i64| { return value * value; }, 8);
+    var offset: i64 = 3;
+    let inline_result = apply(|value: i64| { return value + offset; }, 8);
     let square = |value: i64| { return value * value; };
     return inline_result + apply(square, 8);
 }
 ```
 
-Inline lambda parameters need explicit types, and inline lambdas passed through
-this function-type callback ABI cannot capture local variables. Capturing
-closures require environment-aware callback lowering.
+Inline lambda parameters need explicit types. An inline lambda may borrow local
+captures for the call, but the callback parameter must be proven not to escape:
+the callee may invoke it directly, but may not store or return it. The captured
+variable also cannot be passed by reference elsewhere in the same call.
 
 An unambiguous named function also infers its callable type in a local. If the
 name is overloaded, add an explicit function type to select its signature:

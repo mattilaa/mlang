@@ -2747,6 +2747,77 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(!validateTemporaryBorrowArguments(node->arguments, node->name, ""))
         return nullptr;
 
+    // Validate temporary closure borrows before generating their bodies. This
+    // keeps an aliasing diagnostic from being obscured by later LLVM lowering
+    // (for example, attempting an unsafe dereference in another argument).
+    for(size_t argumentIndex = 0;
+        argumentIndex < node->arguments.size(); ++argumentIndex)
+    {
+        auto* closure =
+            dynamic_cast<ClosureNode*>(node->arguments[argumentIndex]);
+        if(!closure)
+            continue;
+        bool isCallableArgument = false;
+        for(const auto& candidate : overloadIt->second)
+        {
+            if(!candidate.node || !candidate.node->parameters ||
+               argumentIndex >=
+                   candidate.node->parameters->parameters.size())
+                continue;
+            if(dynamic_cast<FunctionTypeNode*>(
+                   candidate.node->parameters->parameters[argumentIndex]
+                       ->type))
+            {
+                isCallableArgument = true;
+                break;
+            }
+        }
+        if(!isCallableArgument)
+            continue;
+
+        std::vector<std::pair<std::string, TypeNode*>> captures;
+        TypeNode* closureReturnType = nullptr;
+        if(!getRuntimeClosureCaptures(closure, captures, closureReturnType))
+            return nullptr;
+        for(const auto& capture : captures)
+        {
+            auto exclusive = activeMutBorrower.find(capture.first);
+            auto shared = activeBorrowers.find(capture.first);
+            if(exclusive != activeMutBorrower.end() ||
+               (shared != activeBorrowers.end() &&
+                !shared->second.empty()))
+            {
+                reportError(node->line,
+                            "cannot pass inline closure because captured "
+                            "variable '" +
+                                capture.first + "' is already borrowed");
+                return nullptr;
+            }
+            for(size_t otherIndex = 0;
+                otherIndex < node->arguments.size(); ++otherIndex)
+            {
+                if(otherIndex == argumentIndex)
+                    continue;
+                auto* borrow = dynamic_cast<UnaryOpNode*>(
+                    node->arguments[otherIndex]);
+                auto* borrowedName =
+                    borrow ? dynamic_cast<IdentifierNode*>(borrow->operand)
+                           : nullptr;
+                if(borrowedName && borrowedName->name == capture.first &&
+                   (borrow->op == UnaryOpNode::OP_ADDR ||
+                    borrow->op == UnaryOpNode::OP_ADDR_MUT))
+                {
+                    reportError(
+                        node->line,
+                        "cannot pass inline closure and a reference to "
+                        "captured variable '" +
+                            capture.first + "' in the same call");
+                    return nullptr;
+                }
+            }
+        }
+    }
+
     const bool isFreeLikeCall =
         isFreeLikeFunctionName(node->name) && node->arguments.size() == 1;
     if(isFreeLikeCall &&
@@ -3305,6 +3376,19 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     for(size_t argumentIndex = 0;
         argumentIndex < node->arguments.size(); ++argumentIndex)
     {
+        if(dynamic_cast<ClosureNode*>(node->arguments[argumentIndex]))
+        {
+            if(!callableParameterIsNoEscape(argumentIndex))
+            {
+                reportError(node->line,
+                            "cannot pass an inline closure to function '" +
+                                node->name +
+                                "' because that callback parameter may escape");
+                return nullptr;
+            }
+
+            continue;
+        }
         auto* identifier =
             dynamic_cast<IdentifierNode*>(node->arguments[argumentIndex]);
         if(!identifier)
