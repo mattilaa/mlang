@@ -1138,7 +1138,8 @@ a list or map, methods with known signatures (including user-defined methods
 on structs), and basic unary operators are also supported in inferred results.
 Ternary expressions are supported when both branches have the same type.
 The inferred result may also be returned through a local binding inside the
-closure body (for example, `let result = value * value; return result;`).
+closure body, including one declared in a nested block (for example,
+`let result = value * value; return result;`).
 
 An unambiguous named function also infers its callable type in a local. If the
 name is overloaded, add an explicit function type to select its signature:

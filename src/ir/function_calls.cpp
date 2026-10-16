@@ -398,7 +398,7 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         if(!closure || !closure->body)
             return nullptr;
         std::map<std::string, TypeNode*> parametersByName;
-        std::map<std::string, TypeNode*> localsByName;
+        std::vector<std::map<std::string, TypeNode*>> localScopes(1);
         if(closure->parameters)
             for(auto* parameter : closure->parameters->parameters)
                 if(parameter && parameter->type)
@@ -411,12 +411,16 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                 return nullptr;
             if(auto* identifier = dynamic_cast<IdentifierNode*>(expr))
             {
+                for(auto scope = localScopes.rbegin();
+                    scope != localScopes.rend(); ++scope)
+                {
+                    auto local = scope->find(identifier->name);
+                    if(local != scope->end())
+                        return cloneTypeNode(local->second);
+                }
                 auto found = parametersByName.find(identifier->name);
                 if(found != parametersByName.end())
                     return cloneTypeNode(found->second);
-                auto local = localsByName.find(identifier->name);
-                if(local != localsByName.end())
-                    return cloneTypeNode(local->second);
                 return inferExpressionTypeNode(expr, functionTemplate->line);
             }
             if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
@@ -594,7 +598,7 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                                           ? cloneTypeNode(let->type)
                                           : inferClosureExpr(let->expression);
                 if(localType)
-                    localsByName[let->name] = localType;
+                    localScopes.back()[let->name] = localType;
                 return;
             }
             if(auto* variable = dynamic_cast<VarDeclNode*>(statement))
@@ -603,7 +607,7 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                                           ? cloneTypeNode(variable->type)
                                           : inferClosureExpr(variable->initExpr);
                 if(localType)
-                    localsByName[variable->name] = localType;
+                    localScopes.back()[variable->name] = localType;
                 return;
             }
             if(auto* ret = dynamic_cast<ReturnNode*>(statement))
@@ -623,8 +627,12 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
             auto inferList = [&](StatementListNode* statements)
             {
                 if(statements)
+                {
+                    localScopes.emplace_back();
                     for(auto* nested : statements->statements)
                         inferReturns(nested);
+                    localScopes.pop_back();
+                }
             };
             if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                 inferList(block->statements);

@@ -92,7 +92,7 @@ bool CodeGenerator::getRuntimeClosureCaptures(
     bool sawValueReturn = false;
     bool sawVoidReturn = false;
     bool returnTypesValid = parameterTypesValid;
-    std::map<std::string, TypeNode*> inferredLocals;
+    std::vector<std::map<std::string, TypeNode*>> inferredLocalScopes(1);
     std::function<void(StatementNode*)> inferReturns =
         [&](StatementNode* statement)
     {
@@ -103,7 +103,7 @@ bool CodeGenerator::getRuntimeClosureCaptures(
                                       : inferExpressionTypeNode(let->expression,
                                                                 closure->line);
             if(localType)
-                inferredLocals[let->name] = localType;
+                inferredLocalScopes.back()[let->name] = localType;
             return;
         }
         if(auto* variable = dynamic_cast<VarDeclNode*>(statement))
@@ -113,7 +113,7 @@ bool CodeGenerator::getRuntimeClosureCaptures(
                                       : inferExpressionTypeNode(
                                             variable->initExpr, closure->line);
             if(localType)
-                inferredLocals[variable->name] = localType;
+                inferredLocalScopes.back()[variable->name] = localType;
             return;
         }
         if(auto* ret = dynamic_cast<ReturnNode*>(statement))
@@ -127,9 +127,16 @@ bool CodeGenerator::getRuntimeClosureCaptures(
             if(auto* identifier =
                    dynamic_cast<IdentifierNode*>(ret->expression))
             {
-                auto local = inferredLocals.find(identifier->name);
-                if(local != inferredLocals.end())
-                    inferred = cloneTypeNode(local->second);
+                for(auto scope = inferredLocalScopes.rbegin();
+                    scope != inferredLocalScopes.rend(); ++scope)
+                {
+                    auto local = scope->find(identifier->name);
+                    if(local != scope->end())
+                    {
+                        inferred = cloneTypeNode(local->second);
+                        break;
+                    }
+                }
             }
             if(!inferred)
                 inferred = inferExpressionTypeNode(ret->expression,
@@ -153,30 +160,50 @@ bool CodeGenerator::getRuntimeClosureCaptures(
         if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
         {
             if(block->statements)
+            {
+                inferredLocalScopes.emplace_back();
                 for(auto* nested : block->statements->statements)
                     inferReturns(nested);
+                inferredLocalScopes.pop_back();
+            }
         }
         if(auto* branch = dynamic_cast<IfNode*>(statement))
         {
             if(branch->thenBranch)
+            {
+                inferredLocalScopes.emplace_back();
                 for(auto* nested : branch->thenBranch->statements)
                     inferReturns(nested);
+                inferredLocalScopes.pop_back();
+            }
             if(branch->elseBranch)
+            {
+                inferredLocalScopes.emplace_back();
                 for(auto* nested : branch->elseBranch->statements)
                     inferReturns(nested);
+                inferredLocalScopes.pop_back();
+            }
             inferReturns(branch->elseIfBranch);
         }
         if(auto* loop = dynamic_cast<ForNode*>(statement))
         {
             if(loop->body)
+            {
+                inferredLocalScopes.emplace_back();
                 for(auto* nested : loop->body->statements)
                     inferReturns(nested);
+                inferredLocalScopes.pop_back();
+            }
         }
         if(auto* loop = dynamic_cast<WhileNode*>(statement))
         {
             if(loop->body)
+            {
+                inferredLocalScopes.emplace_back();
                 for(auto* nested : loop->body->statements)
                     inferReturns(nested);
+                inferredLocalScopes.pop_back();
+            }
         }
     };
     if(closure->body)
