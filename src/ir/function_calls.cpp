@@ -467,6 +467,24 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                     }
                 return new TupleTypeNode(elementTypes);
             }
+            if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
+            {
+                TypeNode* baseType = inferClosureExpr(index->base);
+                if(auto* list =
+                       dynamic_cast<GenericListTypeNode*>(baseType))
+                    return cloneTypeNode(list->elementType);
+                if(auto* map = dynamic_cast<MapTypeNode*>(baseType))
+                    return cloneTypeNode(map->valueType);
+                return nullptr;
+            }
+            if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+            {
+                if(unary->op == UnaryOpNode::OP_NOT)
+                    return new TypeNode(TypeNode::TYPE_BOOL);
+                if(unary->op == UnaryOpNode::OP_NEG ||
+                   unary->op == UnaryOpNode::OP_BITNOT)
+                    return inferClosureExpr(unary->operand);
+            }
             if(auto* binary = dynamic_cast<BinaryOpNode*>(expr))
             {
                 switch(binary->op)

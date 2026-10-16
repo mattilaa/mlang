@@ -1133,7 +1133,8 @@ let result = provide(|| {
 
 When another argument determines a generic callback's input type, an
 unannotated closure can also infer a result from chained struct fields such as
-`item.point.x`, including fields whose types come from generic structs.
+`item.point.x`, including fields whose types come from generic structs. Indexing
+a list or map and basic unary operators are also supported in inferred results.
 
 An unambiguous named function also infers its callable type in a local. If the
 name is overloaded, add an explicit function type to select its signature:

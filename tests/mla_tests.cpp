@@ -4531,6 +4531,22 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultFromGenericStructField)
     EXPECT_EQ(compileAndRunExitCode(code), 83);
 }
 
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromIndexAndUnaryOps)
+{
+    std::string code = R"(
+        generic<T, U> fn project(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let selected = project(|items| { return items[1]; }, [12, 42]);
+            let negated = project(|number| { return -number; }, selected);
+            let inverted = project(|flag| { return !flag; }, true);
+            return selected == 42 && negated == -42 && !inverted ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, GenericFunctionNeedsInputTypeForUnannotatedClosureParameter)
 {
     std::string code = R"(

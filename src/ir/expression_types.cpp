@@ -526,6 +526,11 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
 
     if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
     {
+        if(unary->op == UnaryOpNode::OP_NOT)
+            return new TypeNode(TypeNode::TYPE_BOOL);
+        if(unary->op == UnaryOpNode::OP_NEG ||
+           unary->op == UnaryOpNode::OP_BITNOT)
+            return inferExpressionTypeNode(unary->operand, line);
         if(unary->op == UnaryOpNode::OP_ADDR ||
            unary->op == UnaryOpNode::OP_ADDR_MUT)
         {
