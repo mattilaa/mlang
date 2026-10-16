@@ -527,14 +527,17 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
 
     auto inferClosureCallableType = [&](ClosureNode* closure) -> TypeNode*
     {
-        if(!closure || !closure->parameters)
+        if(!closure)
             return nullptr;
         auto* parameters = new TypeListNode();
-        for(auto* parameter : closure->parameters->parameters)
+        if(closure->parameters)
         {
-            if(!parameter || !parameter->type)
-                return nullptr;
-            parameters->addType(cloneTypeNode(parameter->type));
+            for(auto* parameter : closure->parameters->parameters)
+            {
+                if(!parameter || !parameter->type)
+                    return nullptr;
+                parameters->addType(cloneTypeNode(parameter->type));
+            }
         }
         TypeNode* result = inferClosureResult(closure);
         if(!result)
@@ -3045,8 +3048,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
                         bool signatureMatches = true;
                         for(size_t parameterIndex = 0;
+                            closure->parameters &&
                             parameterIndex <
-                            closure->parameters->parameters.size();
+                                closure->parameters->parameters.size();
                             ++parameterIndex)
                         {
                             auto* actualParameter =

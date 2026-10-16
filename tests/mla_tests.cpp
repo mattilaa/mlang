@@ -4456,6 +4456,19 @@ TEST_F(MLATest, GenericFunctionCanInvokeInlineClosureParameter)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+TEST_F(MLATest, GenericFunctionInfersResultFromZeroArgumentClosure)
+{
+    std::string code = R"(
+        generic<T> fn provide(make: fn() -> T) -> T {
+            return make();
+        }
+        fn main() -> i32 {
+            return provide(|| { return 7; });
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
 TEST_F(MLATest, GenericFunctionInfersInlineClosureParameterType)
 {
     std::string code = R"(

@@ -1125,6 +1125,14 @@ callback parameter must be proven not to escape: the callee may invoke it
 directly, but may not store or return it. The captured variable also cannot be
 passed by reference elsewhere in the same call.
 
+Zero-argument generic callbacks can infer their result type from the closure
+body:
+
+```mla
+generic<T> fn provide(make: fn() -> T) -> T { return make(); }
+let result = provide(|| { return 7; });
+```
+
 An unambiguous named function also infers its callable type in a local. If the
 name is overloaded, add an explicit function type to select its signature:
 
