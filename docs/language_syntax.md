@@ -1134,8 +1134,9 @@ let result = provide(|| {
 When another argument determines a generic callback's input type, an
 unannotated closure can also infer a result from chained struct fields such as
 `item.point.x`, including fields whose types come from generic structs. Indexing
-a list or map and basic unary operators are also supported in inferred results.
-Ternary expressions are supported when both branches have the same type.
+a list or map, common result-typed methods such as `len()` and `is_empty()`,
+and basic unary operators are also supported in inferred results. Ternary
+expressions are supported when both branches have the same type.
 
 An unambiguous named function also infers its callable type in a local. If the
 name is overloaded, add an explicit function type to select its signature:

@@ -477,6 +477,19 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                     return cloneTypeNode(map->valueType);
                 return nullptr;
             }
+            if(auto* method = dynamic_cast<MethodCallNode*>(expr))
+            {
+                if(method->methodName == "len")
+                    return new TypeNode(TypeNode::TYPE_I64);
+                if(method->methodName == "is_empty" ||
+                   method->methodName == "is_ok" ||
+                   method->methodName == "is_err" ||
+                   method->methodName == "is_some" ||
+                   method->methodName == "is_none")
+                    return new TypeNode(TypeNode::TYPE_BOOL);
+                if(method->methodName == "clone")
+                    return inferClosureExpr(method->object);
+            }
             if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
             {
                 if(unary->op == UnaryOpNode::OP_NOT)

@@ -4562,6 +4562,33 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultFromTernary)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromCollectionMethods)
+{
+    std::string code = R"(
+        generic<T, U> fn project(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let count = project(|items| { return items.len(); }, [3, 5, 8]);
+            return count == 3 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromCollectionPredicate)
+{
+    std::string code = R"(
+        generic<T, U> fn project(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            return project(|items| { return items.is_empty(); }, [3]) ? 1 : 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, GenericFunctionNeedsInputTypeForUnannotatedClosureParameter)
 {
     std::string code = R"(
