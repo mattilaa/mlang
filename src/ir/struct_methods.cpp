@@ -2710,15 +2710,20 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                                       : place->second;
         };
         auto activeIt = activeBorrowers.find(receiverOwner);
-        auto activeMutIt = activeMutBorrower.find(receiverOwner);
         bool hasMutableBorrow = false;
         std::string mutableBorrower;
-        if(activeMutIt != activeMutBorrower.end() &&
-           borrowPlacesOverlap(borrowPlaceFor(activeMutIt->second),
-                               receiverPlace))
+        for(const auto& mutBorrow : activeMutBorrower)
         {
-            hasMutableBorrow = true;
-            mutableBorrower = activeMutIt->second;
+            auto owner = pointerBorrowTarget.find(mutBorrow.second);
+            if(owner != pointerBorrowTarget.end() &&
+               owner->second == receiverOwner &&
+               borrowPlacesOverlap(borrowPlaceFor(mutBorrow.second),
+                                   receiverPlace))
+            {
+                hasMutableBorrow = true;
+                mutableBorrower = mutBorrow.second;
+                break;
+            }
         }
         bool hasSharedBorrow = false;
         std::string sharedBorrower;
@@ -2738,7 +2743,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         for(const auto& borrow : pointerBorrowTarget)
         {
             if(borrow.second != receiverOwner ||
-               (hasMutableBorrow && mutableBorrower == borrow.first))
+               isMutBorrower(borrow.first))
                 continue;
             if(borrowPlacesOverlap(borrowPlaceFor(borrow.first),
                                    receiverPlace))
@@ -6288,7 +6293,6 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                                       : place->second;
         };
         auto activeIt = activeBorrowers.find(receiverOwner);
-        const auto activeMutIt = activeMutBorrower.find(receiverOwner);
         bool hasSharedBorrow = false;
         std::string sharedBorrower;
         if(activeIt != activeBorrowers.end())
@@ -6306,12 +6310,18 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         }
         bool hasMutableBorrow = false;
         std::string mutableBorrower;
-        if(activeMutIt != activeMutBorrower.end() &&
-           borrowPlacesOverlap(borrowPlaceFor(activeMutIt->second),
-                               receiverPlace))
+        for(const auto& mutBorrow : activeMutBorrower)
         {
-            hasMutableBorrow = true;
-            mutableBorrower = activeMutIt->second;
+            auto owner = pointerBorrowTarget.find(mutBorrow.second);
+            if(owner != pointerBorrowTarget.end() &&
+               owner->second == receiverOwner &&
+               borrowPlacesOverlap(borrowPlaceFor(mutBorrow.second),
+                                   receiverPlace))
+            {
+                hasMutableBorrow = true;
+                mutableBorrower = mutBorrow.second;
+                break;
+            }
         }
         if((hasSharedBorrow && !methodHasSharedReceiver) ||
            (hasMutableBorrow && methodHasSharedReceiver))

@@ -85,7 +85,24 @@ void CodeGenerator::exitCleanupScope()
             pointerBorrowTarget[it->pointerVar] = it->previousOwner;
             if(!it->previousPlace.empty())
                 pointerBorrowPlace[it->pointerVar] = it->previousPlace;
-            activeBorrowers[it->previousOwner].insert(it->pointerVar);
+            if(it->previousWasMutable)
+            {
+                std::string borrowKey = it->previousBorrowKey.empty()
+                                            ? it->previousOwner
+                                            : it->previousBorrowKey;
+                auto rootBorrow = activeMutBorrower.find(it->previousOwner);
+                if(borrowKey == it->previousOwner &&
+                   rootBorrow != activeMutBorrower.end() &&
+                   rootBorrow->second != it->pointerVar)
+                    borrowKey = it->previousPlace.empty()
+                                    ? it->previousOwner
+                                    : it->previousPlace;
+                activeMutBorrower[borrowKey] = it->pointerVar;
+            }
+            else
+            {
+                activeBorrowers[it->previousOwner].insert(it->pointerVar);
+            }
         }
     }
     for(auto it = depthEntries.rbegin(); it != depthEntries.rend(); ++it)

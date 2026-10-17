@@ -270,22 +270,48 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
 
         if(isMutable)
         {
-            // &mut: reject if any shared borrowers exist
+            // &mut: reject overlapping shared borrowers. The root owner is
+            // still used for lifetime bookkeeping, but sibling fields may be
+            // borrowed independently.
             auto sharedIt = activeBorrowers.find(ownerName);
-            if(sharedIt != activeBorrowers.end() && !sharedIt->second.empty())
+            if(sharedIt != activeBorrowers.end())
             {
-                reportError(line,
-                            "cannot borrow '" + ownerName +
-                                "' as mutable because it is already borrowed");
-                return false;
+                for(const auto& borrower : sharedIt->second)
+                {
+                    auto place = pointerBorrowPlace.find(borrower);
+                    const std::string existingPlace =
+                        place == pointerBorrowPlace.end() ? ownerName
+                                                          : place->second;
+                    if(borrowPlacesOverlap(existingPlace, borrowPlace))
+                    {
+                        reportError(
+                            line, "cannot borrow '" + ownerName +
+                                      "' as mutable because it is already "
+                                      "borrowed");
+                        return false;
+                    }
+                }
             }
-            // &mut: reject if another &mut borrow exists
-            auto mutIt = activeMutBorrower.find(ownerName);
-            if(mutIt != activeMutBorrower.end() && mutIt->second != pointerVar)
+            bool hasRootMutableBorrow = false;
+            for(const auto& mutBorrow : activeMutBorrower)
             {
-                reportError(line, "cannot borrow '" + ownerName +
-                                      "' as mutable more than once at a time");
-                return false;
+                auto existingOwner = pointerBorrowTarget.find(mutBorrow.second);
+                if(existingOwner == pointerBorrowTarget.end() ||
+                   existingOwner->second != ownerName)
+                    continue;
+                hasRootMutableBorrow |= mutBorrow.first == ownerName;
+                auto place = pointerBorrowPlace.find(mutBorrow.second);
+                const std::string existingPlace =
+                    place == pointerBorrowPlace.end() ? ownerName
+                                                      : place->second;
+                if(mutBorrow.second != pointerVar &&
+                   borrowPlacesOverlap(existingPlace, borrowPlace))
+                {
+                    reportError(line, "cannot borrow '" + ownerName +
+                                          "' as mutable more than once at "
+                                          "a time");
+                    return false;
+                }
             }
             // Owner must be var (mutable)
             if(constantVariables.count(ownerName))
@@ -297,20 +323,30 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             pointerBorrowTarget[pointerVar] = ownerName;
             pointerBorrowPlace[pointerVar] = borrowPlace;
             pointerKnownNull[pointerVar] = false;
-            activeMutBorrower[ownerName] = pointerVar;
+            const std::string borrowKey =
+                !hasRootMutableBorrow ? ownerName : borrowPlace;
+            activeMutBorrower[borrowKey] = pointerVar;
             return true;
         }
 
-        // Shared borrow: reject if a &mut borrow is active
-        auto mutIt = activeMutBorrower.find(ownerName);
-        if(mutIt != activeMutBorrower.end())
+        // Shared borrow: reject only an overlapping mutable borrow.
+        for(const auto& mutBorrow : activeMutBorrower)
         {
-            reportError(line,
-                        "cannot borrow '" + ownerName +
-                            "' as immutable because it is also borrowed as "
-                            "mutable by '" +
-                            mutIt->second + "'");
-            return false;
+            auto existingOwner = pointerBorrowTarget.find(mutBorrow.second);
+            if(existingOwner == pointerBorrowTarget.end() ||
+               existingOwner->second != ownerName)
+                continue;
+            auto place = pointerBorrowPlace.find(mutBorrow.second);
+            const std::string existingPlace =
+                place == pointerBorrowPlace.end() ? ownerName : place->second;
+            if(borrowPlacesOverlap(existingPlace, borrowPlace))
+            {
+                reportError(line,
+                            "cannot borrow '" + ownerName +
+                                "' as immutable because it is also borrowed "
+                                "as mutable by '" + mutBorrow.second + "'");
+                return false;
+            }
         }
 
         auto activeIt = activeBorrowers.find(ownerName);
@@ -318,7 +354,12 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         {
             for(const auto& borrower : activeIt->second)
             {
-                if(borrower != pointerVar)
+                auto place = pointerBorrowPlace.find(borrower);
+                const std::string existingPlace =
+                    place == pointerBorrowPlace.end() ? ownerName
+                                                      : place->second;
+                if(borrower != pointerVar &&
+                   borrowPlacesOverlap(existingPlace, borrowPlace))
                 {
                     reportError(line, "cannot borrow '" + ownerName +
                                           "' while already borrowed by '" +

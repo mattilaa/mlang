@@ -248,9 +248,9 @@ private:
     // still use the root owner; receiver checks can distinguish sibling fields.
     std::map<std::string, std::string> pointerBorrowPlace;
     std::map<std::string, std::set<std::string>> activeBorrowers;
-    // Tracks the single exclusive mutable borrower per owner variable.
-    // Invariant: activeMutBorrower[owner] is set iff a &mut borrow is live;
-    // activeBorrowers[owner] must be empty while this is set, and vice-versa.
+    // The root-owner key retains a primary mutable borrower for legacy
+    // whole-object checks; additional disjoint field borrowers use their place
+    // path as the key. Conflicts are determined by place overlap.
     std::map<std::string, std::string> activeMutBorrower;
     std::map<std::string, int> variableScopeDepth;
     std::map<std::string, TypeNode::TypeKind> variableTypes;
@@ -513,6 +513,8 @@ private:
         bool hadPreviousBorrow = false;
         std::string previousOwner;
         std::string previousPlace;
+        bool previousWasMutable = false;
+        std::string previousBorrowKey;
     };
     std::vector<std::vector<PointerBorrowScopeEntry>> pointerBorrowScopes;
     struct VariableScopeDepthEntry

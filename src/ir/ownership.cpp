@@ -1,5 +1,6 @@
 #include "ir.h"
 
+#include <algorithm>
 #include <functional>
 #include <set>
 
@@ -237,6 +238,27 @@ void CodeGenerator::clearPointerBorrow(const std::string& pointerVar)
         else
             ++it;
     }
+    // Keep the legacy root-owner entry populated while any field borrow of
+    // that owner remains active, so whole-object checks stay conservative.
+    for(const auto& borrow : pointerBorrowTarget)
+    {
+        if(borrow.first == pointerVar ||
+           activeMutBorrower.find(borrow.second) != activeMutBorrower.end())
+            continue;
+        auto candidate = std::find_if(
+            activeMutBorrower.begin(), activeMutBorrower.end(),
+            [&](const auto& active) {
+                auto owner = pointerBorrowTarget.find(active.second);
+                return owner != pointerBorrowTarget.end() &&
+                       owner->second == borrow.second;
+            });
+        if(candidate != activeMutBorrower.end())
+        {
+            activeMutBorrower[borrow.second] = candidate->second;
+            if(candidate->first != borrow.second)
+                activeMutBorrower.erase(candidate);
+        }
+    }
     pointerBorrowTarget.erase(pointerVar);
     pointerBorrowPlace.erase(pointerVar);
 }
@@ -286,6 +308,15 @@ void CodeGenerator::recordScopedPointerVariable(const std::string& pointerVar)
         auto place = pointerBorrowPlace.find(pointerVar);
         if(place != pointerBorrowPlace.end())
             entry.previousPlace = place->second;
+        for(const auto& borrow : activeMutBorrower)
+        {
+            if(borrow.second == pointerVar)
+            {
+                entry.previousWasMutable = true;
+                entry.previousBorrowKey = borrow.first;
+                break;
+            }
+        }
     }
     pointerBorrowScopes.back().push_back(std::move(entry));
 }

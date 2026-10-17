@@ -3288,6 +3288,79 @@ TEST_F(MLATest, FieldAssignmentRejectsOverlappingLiveBorrow)
         << out;
 }
 
+TEST_F(MLATest, OwnershipCanHoldMutableBorrowsToDisjointFields)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn sum(a: ptr<i32>, b: ptr<i32>) -> i32 {
+            unsafe { return *a + *b; }
+        }
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 4, right: 5 };
+            var left = &mut pair.left;
+            let right = &mut pair.right;
+            left = &mut pair.left;
+            return sum(left, right);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
+TEST_F(MLATest, OwnershipRejectsOverlappingMutableFieldBorrows)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn sum(a: ptr<i32>, b: ptr<i32>) -> i32 { return 0; }
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 4, right: 5 };
+            let first = &mut pair.left;
+            let second = &mut pair.left;
+            return sum(first, second);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow 'pair' as mutable more than once"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, SecondaryMutableFieldBorrowBlocksMethodOnThatField)
+{
+    std::string code = R"(
+        trait CounterOps { fn get(&self) -> i32; }
+        struct Counter { var value: i32; };
+        struct Holder {
+            var item: dyn CounterOps;
+            var count: i32;
+        };
+        impl CounterOps for Counter {
+            fn get(&self) -> i32 { return self.value; }
+        }
+        fn observe_count(value: ptr<i32>) -> void { return; }
+        fn observe_item(value: ptr<dyn CounterOps>) -> void { return; }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 9 };
+            var holder: Holder = Holder { item: counter, count: 2 };
+            let held_count = &mut holder.count;
+            let held_item = &mut holder.item;
+            let value = holder.item.get();
+            observe_count(held_count);
+            observe_item(held_item);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot call method on 'holder' while borrowed by 'held_item'"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, TraitObjectFieldVoidMutatingMethodRuns)
 {
     std::string code = R"(

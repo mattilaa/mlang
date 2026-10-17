@@ -831,11 +831,15 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
             }
         }
 
-        auto mutBorrow = activeMutBorrower.find(ownerName);
-        if(mutBorrow != activeMutBorrower.end() &&
-           allowedBorrowers.find(mutBorrow->second) == allowedBorrowers.end())
+        for(const auto& mutBorrow : activeMutBorrower)
         {
-            auto borrowPlace = pointerBorrowPlace.find(mutBorrow->second);
+            auto borrowOwner = pointerBorrowTarget.find(mutBorrow.second);
+            if(borrowOwner == pointerBorrowTarget.end() ||
+               borrowOwner->second != ownerName ||
+               allowedBorrowers.find(mutBorrow.second) !=
+                   allowedBorrowers.end())
+                continue;
+            auto borrowPlace = pointerBorrowPlace.find(mutBorrow.second);
             const std::string place = borrowPlace == pointerBorrowPlace.end()
                                           ? ownerName
                                           : borrowPlace->second;
@@ -843,7 +847,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
             {
                 reportError(node->line,
                             "cannot assign to field of '" + ownerName +
-                                "' while borrowed by '" + mutBorrow->second +
+                                "' while borrowed by '" + mutBorrow.second +
                                 "'");
                 return;
             }
