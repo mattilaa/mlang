@@ -10929,6 +10929,32 @@ TEST_F(MLATest, OwnershipListForwardedDynamicIndexExcludesUnstoredOrigins)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// Mutating a tracked pointer list must not discard newly inserted origins.
+TEST_F(MLATest, OwnershipListForwardedPointerMutationKeepsNewOrigin)
+{
+    std::string code = R"(
+        fn relay(index: i32, first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+            var pointers: list<ptr<i32>> = [first];
+            pointers.push(second);
+            return pointers[index];
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded = relay(1, &first, &second);
+            second = 3;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'second' while borrowed by 'forwarded'"),
+              std::string::npos)
+        << out;
+}
+
 // Pointer provenance must propagate through multiple visible forwarding calls.
 TEST_F(MLATest, OwnershipNestedFunctionReturnedPointerKeepsBorrowLive)
 {

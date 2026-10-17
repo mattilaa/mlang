@@ -545,6 +545,28 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 else
                     hasUnknownReturnOrigin = true;
             }
+            if(auto* expressionStatement =
+                   dynamic_cast<ExpressionStatementNode*>(statement))
+                if(auto* method = dynamic_cast<MethodCallNode*>(
+                       expressionStatement->expression))
+                {
+                    std::string receiverPath;
+                    if(getFieldPath(method->object, receiverPath) &&
+                       std::any_of(
+                           pointerFieldAliases.begin(),
+                           pointerFieldAliases.end(), [&](const auto& alias) {
+                               return alias.first == receiverPath ||
+                                      isPointerFieldAliasWithin(
+                                          receiverPath, alias.first);
+                           }))
+                    {
+                        // Methods may change aggregate contents (for example,
+                        // list::push). Until method effects are summarized,
+                        // don't publish a return-origin summary based on the
+                        // pre-call field map.
+                        hasUnknownReturnOrigin = true;
+                    }
+                }
             if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                 return scanList(block->statements);
             else if(auto* branch = dynamic_cast<IfNode*>(statement))
