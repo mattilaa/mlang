@@ -1477,6 +1477,7 @@ public:
     TypeNode* type;
     std::string name;
     bool isPack = false;
+    bool isSharedSelf = false;
 
     ParameterNode(TypeNode* t, const std::string& n) : type(t), name(n) {}
     std::string toString() const override;

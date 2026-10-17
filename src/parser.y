@@ -2828,7 +2828,12 @@ parameter
             $$ = param;
         }
     | AMP IDENTIFIER
-        { $$ = mla_ast_parameter(mla_ast_struct_type_ref(strdup("Self")), $2); }
+        {
+            auto* param = static_cast<ParameterNode*>(mla_ast_parameter(
+                mla_ast_struct_type_ref(strdup("Self")), $2));
+            param->isSharedSelf = true;
+            $$ = param;
+        }
     ;
 
 closure_parameters

@@ -246,6 +246,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     unsafeDepth = 0;
     auto savedNamedValues = namedValues;
     auto savedConstantVariables = constantVariables;
+    auto savedImmutableReferenceVariables = immutableReferenceVariables;
     auto savedMovedVariables = movedVariables;
     auto savedPointerBorrowTarget = pointerBorrowTarget;
     auto savedActiveBorrowers = activeBorrowers;
@@ -282,6 +283,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         unsafeDepth = savedUnsafeDepth;
         namedValues = savedNamedValues;
         constantVariables = savedConstantVariables;
+        immutableReferenceVariables = savedImmutableReferenceVariables;
         movedVariables = savedMovedVariables;
         pointerBorrowTarget = savedPointerBorrowTarget;
         activeBorrowers = savedActiveBorrowers;
@@ -315,6 +317,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     // Clear scope
     namedValues.clear();
     constantVariables.clear();
+    immutableReferenceVariables.clear();
     movedVariables.clear();
     pointerBorrowTarget.clear();
     activeBorrowers.clear();
@@ -401,6 +404,19 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
             // 'self' is a pointer to the struct
             structVariableTypes["self"] = structName;
             variableTypes["self"] = TypeNode::TYPE_STRUCT;
+            for(auto* parameter : method->parameters->parameters)
+            {
+                if(!parameter || parameter->name != "self")
+                    continue;
+                auto* reference =
+                    dynamic_cast<ReferenceTypeNode*>(parameter->type);
+                if(parameter->isSharedSelf ||
+                   (reference && !reference->isMutable))
+                {
+                    constantVariables.insert("self");
+                    immutableReferenceVariables.insert("self");
+                }
+            }
             StructTypeRefNode selfStruct(structName);
             PointerTypeNode selfPointer(&selfStruct);
             debugDeclareVariable("self", alloca, &selfPointer, method, 1);
@@ -421,6 +437,11 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
                 if(auto* refType =
                        dynamic_cast<ReferenceTypeNode*>(paramNode->type))
                 {
+                    if(!refType->isMutable)
+                    {
+                        constantVariables.insert(paramNode->name);
+                        immutableReferenceVariables.insert(paramNode->name);
+                    }
                     variableTypes[std::string(arg.getName())] =
                         refType->elementType->kind;
                     if(auto* genListInner = dynamic_cast<GenericListTypeNode*>(
