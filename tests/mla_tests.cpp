@@ -7900,6 +7900,27 @@ TEST_F(MLATest, AggregateBorrowStillRejectsMutationOfBorrowedOwnerField)
         << out;
 }
 
+TEST_F(MLATest, AggregateBorrowPlaceRestoresAfterShadowedScope)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct PointerBox { var value: ptr<i32>; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            let boxed: PointerBox = PointerBox { value: &pair.left };
+            {
+                var other: i32 = 3;
+                let boxed: PointerBox = PointerBox { value: &other };
+                unsafe { if *boxed.value != 3 { return 1; } }
+            }
+            pair.right = 9;
+            return pair.right;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
 TEST_F(MLATest, AggregateFieldAssignmentTracksBorrowOrigin)
 {
     std::string code = R"(

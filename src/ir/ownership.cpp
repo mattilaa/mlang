@@ -295,6 +295,12 @@ void CodeGenerator::recordVariableScopeDepth(const std::string& varName)
         entry.hadPreviousAggregateBorrowOrigins = true;
         entry.previousAggregateBorrowOrigins = aggregate->second;
     }
+    auto place = pointerBorrowPlace.find(varName);
+    if(place != pointerBorrowPlace.end())
+    {
+        entry.hadPreviousAggregateBorrowPlace = true;
+        entry.previousAggregateBorrowPlace = place->second;
+    }
     variableScopeDepth[varName] = currentScopeDepth();
     variableScopeDepthScopes.back().push_back(std::move(entry));
 }

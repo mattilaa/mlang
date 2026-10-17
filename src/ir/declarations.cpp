@@ -619,13 +619,13 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 llvm::AllocaInst* alloca = createEntryBlockAlloca(
                     builder.GetInsertBlock()->getParent(), storageType,
                     node->name);
+                recordVariableScopeDepth(node->name);
                 builder.CreateStore(initValue, alloca);
                 namedValues[node->name] = alloca;
                 clearMovedVariable(node->name);
                 clearPointerBorrow(node->name);
                 variableTypes[node->name] = TypeNode::TYPE_FUNCTION;
                 functionTypeVariables[node->name] = inferredType;
-                recordVariableScopeDepth(node->name);
                 constantVariables.insert(node->name);
                 return;
             }
@@ -729,6 +729,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         }
 
         storedValue = applyStructCopySemantics(storedValue);
+        recordVariableScopeDepth(node->name);
         builder.CreateStore(storedValue, alloca);
         if(node->expression)
             consumeMoveFromExpression(node->expression, node->line,
@@ -736,7 +737,6 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         clearMovedVariable(node->name);
         clearPointerBorrow(node->name);
         namedValues[node->name] = alloca;
-        recordVariableScopeDepth(node->name);
         variableTypes[node->name] = TypeNode::TYPE_TRAIT_OBJECT;
         traitObjectVariableTypes[node->name] = traitObj->traitName;
         constantVariables.insert(node->name);
@@ -787,9 +787,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     }
     consumeMoveFromExpression(node->expression, node->line,
                               "initializing '" + node->name + "'");
+    recordVariableScopeDepth(node->name);
     clearMovedVariable(node->name);
     clearPointerBorrow(node->name);
-    recordVariableScopeDepth(node->name);
 
     if(!declaredType)
     {
