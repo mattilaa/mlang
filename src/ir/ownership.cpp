@@ -365,6 +365,8 @@ void CodeGenerator::recordVariableScopeDepth(const std::string& varName)
             entry.previousStructVariableType = structType->second;
         }
         entry.previousWasConstant = constantVariables.count(varName) != 0;
+        entry.previousWasImmutableReference =
+            immutableReferenceVariables.count(varName) != 0;
         auto capture = [&](auto& mapping, auto& previous) {
             auto value = mapping.find(varName);
             if(value != mapping.end())
@@ -455,6 +457,7 @@ void CodeGenerator::recordVariableScopeDepth(const std::string& varName)
         entry.previousFunctionItemTargets = functionItem->second;
     }
     variableScopeDepth[varName] = currentScopeDepth();
+    immutableReferenceVariables.erase(varName);
     variableScopeDepthScopes.back().push_back(std::move(entry));
 }
 

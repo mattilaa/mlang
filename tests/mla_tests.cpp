@@ -5173,6 +5173,57 @@ TEST_F(MLATest, OwnershipListElementTypeRestoresAfterShadowScope)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// A mutable local shadow must not inherit an immutable-reference parameter's restriction.
+TEST_F(MLATest, OwnershipMutableShadowOfImmutableReferenceCanBeMutated)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+
+        fn use_pair(pair: &Pair) -> i32 {
+            {
+                var pair: Pair = Pair { left: 3, right: 4 };
+                pair.left = 9;
+            }
+            return pair.left - 1;
+        }
+
+        fn main() -> i32 {
+            let pair: Pair = Pair { left: 1, right: 2 };
+            return use_pair(&pair);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// Shadowing an immutable reference must restore its restriction after scope exit.
+TEST_F(MLATest, OwnershipImmutableReferenceRestrictionRestoredAfterShadow)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+
+        fn use_pair(pair: &Pair) -> i32 {
+            {
+                var pair: Pair = Pair { left: 3, right: 4 };
+                pair.left = 9;
+            }
+            pair.left = 11;
+            return 0;
+        }
+
+        fn main() -> i32 {
+            let pair: Pair = Pair { left: 1, right: 2 };
+            return use_pair(&pair);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot mutate through immutable reference 'pair'"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, OwnershipUseOutsideBlockReportsUnknownVariable)
 {
     std::string code = R"(

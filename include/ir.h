@@ -599,6 +599,7 @@ private:
         bool hadPreviousStructVariableType = false;
         std::string previousStructVariableType;
         bool previousWasConstant = false;
+        bool previousWasImmutableReference = false;
         std::map<std::string, std::set<std::string>>
             previousActiveBorrowers;
         std::map<std::string, std::string> previousActiveMutBorrowers;

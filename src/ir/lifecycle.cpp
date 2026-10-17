@@ -140,6 +140,10 @@ void CodeGenerator::exitCleanupScope()
             constantVariables.insert(it->varName);
         else
             constantVariables.erase(it->varName);
+        if(it->previousWasImmutableReference)
+            immutableReferenceVariables.insert(it->varName);
+        else
+            immutableReferenceVariables.erase(it->varName);
         auto restore = [&](auto& mapping, const auto& previous) {
             if(previous.existed)
                 mapping[it->varName] = previous.value;
