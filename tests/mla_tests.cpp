@@ -10562,6 +10562,31 @@ TEST_F(MLATest, OwnershipFunctionReturnedPointerMergesBranchOrigins)
         << out;
 }
 
+// Definite assignments in every branch eliminate the initial pointer origin.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerDropsDefiniteBranchOrigin)
+{
+    std::string code = R"(
+        fn choose(flag: bool, a: ptr<i32>, b: ptr<i32>, c: ptr<i32>) -> ptr<i32> {
+            var pointer: ptr<i32> = a;
+            if flag {
+                pointer = b;
+            } else {
+                pointer = c;
+            }
+            return pointer;
+        }
+        fn main() -> i32 {
+            var initial: i32 = 1;
+            var first: i32 = 2;
+            var second: i32 = 3;
+            let selected: ptr<i32> = choose(true, &initial, &first, &second);
+            initial = 4;
+            unsafe { return *selected + initial - 6; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 // A local pointer shadow must not replace the outer return provenance.
 TEST_F(MLATest, OwnershipFunctionReturnedPointerRestoresShadowedAlias)
 {
