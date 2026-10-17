@@ -387,6 +387,102 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 return hasPointerFieldAliases(sourcePath);
             return false;
         };
+        auto hasTrackedPointerAggregateAtOrBelow =
+            [&](const std::string& path) {
+                return std::any_of(
+                    pointerFieldAliases.begin(), pointerFieldAliases.end(),
+                    [&](const auto& alias) {
+                        return alias.first == path ||
+                               isPointerFieldAliasWithin(path, alias.first);
+                    });
+            };
+        std::function<void(ExpressionNode*)> scanCallEffects;
+        scanCallEffects = [&](ExpressionNode* expression) {
+            if(!expression)
+                return;
+            auto invalidateMutableAggregateArgument =
+                [&](ExpressionNode* argument) {
+                    auto* address = dynamic_cast<UnaryOpNode*>(argument);
+                    if(!address || address->op != UnaryOpNode::OP_ADDR_MUT)
+                        return;
+                    std::string path;
+                    if(getFieldPath(address->operand, path) &&
+                       hasTrackedPointerAggregateAtOrBelow(path))
+                        hasUnknownReturnOrigin = true;
+                };
+            if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
+            {
+                for(auto* argument : call->arguments)
+                {
+                    invalidateMutableAggregateArgument(argument);
+                    scanCallEffects(argument);
+                }
+                return;
+            }
+            if(auto* method = dynamic_cast<MethodCallNode*>(expression))
+            {
+                std::string receiverPath;
+                if(getFieldPath(method->object, receiverPath) &&
+                   hasTrackedPointerAggregateAtOrBelow(receiverPath))
+                    hasUnknownReturnOrigin = true;
+                scanCallEffects(method->object);
+                for(auto* argument : method->arguments)
+                    scanCallEffects(argument);
+                return;
+            }
+            if(auto* invoke = dynamic_cast<CallableInvokeNode*>(expression))
+            {
+                for(auto* argument : invoke->arguments)
+                {
+                    invalidateMutableAggregateArgument(argument);
+                    scanCallEffects(argument);
+                }
+                scanCallEffects(invoke->callable);
+                return;
+            }
+            if(auto* unary = dynamic_cast<UnaryOpNode*>(expression))
+                scanCallEffects(unary->operand);
+            else if(auto* binary = dynamic_cast<BinaryOpNode*>(expression))
+            {
+                scanCallEffects(binary->left);
+                scanCallEffects(binary->right);
+            }
+            else if(auto* ternary = dynamic_cast<TernaryNode*>(expression))
+            {
+                scanCallEffects(ternary->condition);
+                scanCallEffects(ternary->trueExpr);
+                scanCallEffects(ternary->falseExpr);
+            }
+            else if(auto* field = dynamic_cast<FieldAccessNode*>(expression))
+                scanCallEffects(field->object);
+            else if(auto* index = dynamic_cast<IndexExpressionNode*>(expression))
+            {
+                scanCallEffects(index->base);
+                scanCallEffects(index->index);
+            }
+            else if(auto* tuple = dynamic_cast<TupleAccessNode*>(expression))
+                scanCallEffects(tuple->tuple);
+            else if(auto* cast = dynamic_cast<CastExpressionNode*>(expression))
+                scanCallEffects(cast->expression);
+            else if(auto* attempt = dynamic_cast<TryExpressionNode*>(expression))
+                scanCallEffects(attempt->expression);
+            else if(auto* structure =
+                        dynamic_cast<StructLiteralNode*>(expression))
+                for(const auto& field : structure->fields)
+                    scanCallEffects(field.second);
+            else if(auto* list = dynamic_cast<ListLiteralNode*>(expression))
+            {
+                if(list->elements)
+                    for(auto* element : list->elements->elements)
+                        scanCallEffects(element);
+            }
+            else if(auto* tuple = dynamic_cast<TupleLiteralNode*>(expression))
+            {
+                if(tuple->elements)
+                    for(auto* element : tuple->elements->elements)
+                        scanCallEffects(element);
+            }
+        };
 
         std::function<bool(StatementNode*)> scanStatement;
         std::function<bool(StatementListNode*)> scanList;
@@ -479,6 +575,49 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             if(!statement)
                 return true;
             if(auto* returned = dynamic_cast<ReturnNode*>(statement))
+                scanCallEffects(returned->expression);
+            else if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
+                scanCallEffects(declaration->expression);
+            else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
+                scanCallEffects(declaration->initExpr);
+            else if(auto* assignment =
+                        dynamic_cast<AssignmentNode*>(statement))
+                scanCallEffects(assignment->expression);
+            else if(auto* assignment =
+                        dynamic_cast<FieldAssignmentNode*>(statement))
+                scanCallEffects(assignment->expression);
+            else if(auto* assignment =
+                        dynamic_cast<DerefAssignmentNode*>(statement))
+            {
+                scanCallEffects(assignment->pointerExpr);
+                scanCallEffects(assignment->value);
+            }
+            else if(auto* expressionStatement =
+                        dynamic_cast<ExpressionStatementNode*>(statement))
+                scanCallEffects(expressionStatement->expression);
+            else if(auto* branch = dynamic_cast<IfNode*>(statement))
+                scanCallEffects(branch->condition);
+            else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+                scanCallEffects(branch->condition);
+            else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+                scanCallEffects(loop->condition);
+            else if(auto* loop = dynamic_cast<ForNode*>(statement))
+                scanCallEffects(loop->iterable);
+            else if(auto* print = dynamic_cast<PrintNode*>(statement))
+            {
+                for(auto* argument : print->arguments)
+                    scanCallEffects(argument);
+                for(const auto& argument : print->namedArguments)
+                    scanCallEffects(argument.second);
+            }
+            else if(auto* assertion = dynamic_cast<AssertNode*>(statement))
+                scanCallEffects(assertion->condition);
+            else if(auto* assertion = dynamic_cast<AssertEqNode*>(statement))
+            {
+                scanCallEffects(assertion->left);
+                scanCallEffects(assertion->right);
+            }
+            if(auto* returned = dynamic_cast<ReturnNode*>(statement))
             {
                 auto returnedOrigins = origins(returned->expression);
                 auto& summary = functionPointerReturnParameters[symbol];
@@ -541,28 +680,6 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 else
                     hasUnknownReturnOrigin = true;
             }
-            if(auto* expressionStatement =
-                   dynamic_cast<ExpressionStatementNode*>(statement))
-                if(auto* method = dynamic_cast<MethodCallNode*>(
-                       expressionStatement->expression))
-                {
-                    std::string receiverPath;
-                    if(getFieldPath(method->object, receiverPath) &&
-                       std::any_of(
-                           pointerFieldAliases.begin(),
-                           pointerFieldAliases.end(), [&](const auto& alias) {
-                               return alias.first == receiverPath ||
-                                      isPointerFieldAliasWithin(
-                                          receiverPath, alias.first);
-                           }))
-                    {
-                        // Methods may change aggregate contents (for example,
-                        // list::push). Until method effects are summarized,
-                        // don't publish a return-origin summary based on the
-                        // pre-call field map.
-                        hasUnknownReturnOrigin = true;
-                    }
-                }
             if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                 return scanList(block->statements);
             else if(auto* branch = dynamic_cast<IfNode*>(statement))
