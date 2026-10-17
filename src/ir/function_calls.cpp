@@ -522,6 +522,158 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                     return cloneTypeNode(map->valueType);
                 return nullptr;
             }
+            if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+            {
+                auto overloads = functionOverloads.find(call->name);
+                if(overloads == functionOverloads.end())
+                    return nullptr;
+
+                TypeNode* selectedResult = nullptr;
+                size_t matches = 0;
+                for(const auto& overload : overloads->second)
+                {
+                    FunctionDefNode* candidate = overload.node;
+                    if(!isOverloadVisible(overload) || !candidate ||
+                       !candidate->parameters ||
+                       candidate->parameters->isVarArg ||
+                       candidate->parameters->parameters.size() !=
+                           call->arguments.size() ||
+                       !candidate->returnType || candidate->isCexpr)
+                        continue;
+
+                    TypeNode* resultType = nullptr;
+                    if(candidate->typeParams.empty())
+                    {
+                        bool argumentsMatch = true;
+                        for(size_t i = 0; i < call->arguments.size(); ++i)
+                        {
+                            TypeNode* actual = inferClosureExpr(
+                                call->arguments[i]);
+                            TypeNode* expected =
+                                candidate->parameters->parameters[i]->type;
+                            if(!actual || !expected ||
+                               typeMangle(actual) != typeMangle(expected))
+                            {
+                                argumentsMatch = false;
+                                break;
+                            }
+                        }
+                        if(argumentsMatch)
+                            resultType = cloneTypeNode(candidate->returnType);
+                    }
+                    else
+                    {
+                        std::map<std::string, TypeNode*> callBindings;
+                        std::set<std::string> callTypeParams(
+                            candidate->typeParams.begin(),
+                            candidate->typeParams.end());
+                        std::function<bool(TypeNode*, TypeNode*)> bindCallType =
+                            [&](TypeNode* pattern, TypeNode* actual)
+                        {
+                            if(!pattern || !actual)
+                                return false;
+                            if(auto* reference =
+                                   dynamic_cast<ReferenceTypeNode*>(pattern))
+                            {
+                                if(auto* actualReference =
+                                       dynamic_cast<ReferenceTypeNode*>(actual))
+                                    actual = actualReference->elementType;
+                                return bindCallType(reference->elementType,
+                                                    actual);
+                            }
+                            if(auto* name =
+                                   dynamic_cast<StructTypeRefNode*>(pattern))
+                            {
+                                if(callTypeParams.count(name->structName))
+                                {
+                                    auto inserted = callBindings.emplace(
+                                        name->structName,
+                                        cloneTypeNode(actual));
+                                    return inserted.second ||
+                                        typeMangle(inserted.first->second) ==
+                                            typeMangle(actual);
+                                }
+                            }
+                            if(auto* patternList =
+                                   dynamic_cast<GenericListTypeNode*>(pattern))
+                            {
+                                auto* actualList =
+                                    dynamic_cast<GenericListTypeNode*>(actual);
+                                return actualList && bindCallType(
+                                    patternList->elementType,
+                                    actualList->elementType);
+                            }
+                            if(auto* patternMap =
+                                   dynamic_cast<MapTypeNode*>(pattern))
+                            {
+                                auto* actualMap =
+                                    dynamic_cast<MapTypeNode*>(actual);
+                                return actualMap && bindCallType(
+                                    patternMap->keyType, actualMap->keyType) &&
+                                    bindCallType(patternMap->valueType,
+                                                 actualMap->valueType);
+                            }
+                            if(auto* patternTuple =
+                                   dynamic_cast<TupleTypeNode*>(pattern))
+                            {
+                                auto* actualTuple =
+                                    dynamic_cast<TupleTypeNode*>(actual);
+                                if(!actualTuple || !patternTuple->elementTypes ||
+                                   !actualTuple->elementTypes ||
+                                   patternTuple->elementTypes->types.size() !=
+                                       actualTuple->elementTypes->types.size())
+                                    return false;
+                                for(size_t n = 0;
+                                    n < patternTuple->elementTypes->types.size();
+                                    ++n)
+                                    if(!bindCallType(
+                                           patternTuple->elementTypes->types[n],
+                                           actualTuple->elementTypes->types[n]))
+                                        return false;
+                                return true;
+                            }
+                            return typeMangle(pattern) == typeMangle(actual);
+                        };
+                        bool matched = true;
+                        for(size_t i = 0; i < call->arguments.size(); ++i)
+                        {
+                            TypeNode* actual =
+                                inferClosureExpr(call->arguments[i]);
+                            if(!actual || !bindCallType(
+                                              candidate->parameters
+                                                  ->parameters[i]->type,
+                                              actual))
+                            {
+                                matched = false;
+                                break;
+                            }
+                        }
+                        std::vector<TypeNode*> typeArgs;
+                        if(matched)
+                            for(const auto& name : candidate->typeParams)
+                            {
+                                auto binding = callBindings.find(name);
+                                if(binding == callBindings.end())
+                                {
+                                    matched = false;
+                                    break;
+                                }
+                                typeArgs.push_back(binding->second);
+                            }
+                        if(matched)
+                            resultType = substituteTypeParams(
+                                candidate->returnType,
+                                candidate->typeParams, typeArgs);
+                    }
+
+                    if(resultType)
+                    {
+                        ++matches;
+                        selectedResult = resultType;
+                    }
+                }
+                return matches == 1 ? selectedResult : nullptr;
+            }
             if(auto* method = dynamic_cast<MethodCallNode*>(expr))
             {
                 TypeNode* receiverType = inferClosureExpr(method->object);

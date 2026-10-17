@@ -4551,6 +4551,22 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultFromListLiteral)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromGenericCall)
+{
+    std::string code = R"(
+        generic<T> fn identity(value: T) -> T {
+            return value;
+        }
+        generic<T, U> fn apply(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            return apply(|value| { return identity(value + 1); }, 63);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 64);
+}
+
 TEST_F(MLATest, GenericFunctionInfersClosureResultFromArrayFill)
 {
     std::string code = R"(
