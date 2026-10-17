@@ -575,6 +575,29 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             else if(auto* assignment =
                         dynamic_cast<DerefAssignmentNode*>(statement))
             {
+                std::set<std::string> targetPaths;
+                if(auto* address = dynamic_cast<UnaryOpNode*>(
+                       assignment->pointerExpr);
+                   address && address->op == UnaryOpNode::OP_ADDR_MUT)
+                {
+                    std::string path;
+                    if(getFieldPath(address->operand, path))
+                        targetPaths.insert(path);
+                    else
+                        targetPaths.insert("");
+                }
+                else if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                            assignment->pointerExpr))
+                {
+                    auto slot = pointerLocalSlots.find(identifier->name);
+                    if(slot != pointerLocalSlots.end())
+                        targetPaths = slot->second;
+                }
+                for(const auto& path : targetPaths)
+                    if(path.empty() || pointerAliases.count(path) ||
+                       pointerFieldAliases.count(path) ||
+                       hasTrackedPointerAggregateAtOrBelow(path))
+                        hasUnknownReturnOrigin = true;
                 scanCallEffects(assignment->pointerExpr);
                 scanCallEffects(assignment->value);
             }
