@@ -3025,6 +3025,34 @@ TEST_F(MLATest, TraitObjectSharedMethodRejectsLiveMutableBorrow)
         << out;
 }
 
+TEST_F(MLATest, TraitObjectCanMutateAfterSharedBorrowScopeEnds)
+{
+    std::string code = R"(
+        trait CounterOps {
+            fn bump(self: &mut Self) -> void;
+            fn get(&self) -> i32;
+        }
+        struct Counter { var value: i32; };
+        impl CounterOps for Counter {
+            fn bump(self: &mut Counter) -> void { self.value += 1; }
+            fn get(&self) -> i32 { return self.value; }
+        }
+        fn observe(item: ptr<dyn CounterOps>) -> void { return; }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 8 };
+            var item: dyn CounterOps = counter;
+            {
+                let held = &item;
+                let current = item.get();
+                observe(held);
+            }
+            item.bump();
+            return item.get();
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
 TEST_F(MLATest, TraitObjectFieldVoidMutatingMethodRuns)
 {
     std::string code = R"(
