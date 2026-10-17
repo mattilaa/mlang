@@ -64,10 +64,11 @@
  * and keep each borrowed place exclusively reserved while the aggregate is
  * live. Multiple disjoint struct fields may retain separate mutable borrows;
  * overlapping borrows are rejected. Copying or extracting a mutable borrow
- * from an aggregate is rejected. Dynamic aggregate updates such as appending
- * multiple mutable borrows to a list remain conservative. Shared aggregate
- * borrows retain their tracked source places, including disjoint fields where
- * the compiler can identify them.
+ * from an aggregate is rejected. Dynamic updates such as appending multiple
+ * mutable borrows to a list are supported when their source places are known
+ * to be disjoint; unknown or overlapping places are conservatively rejected.
+ * Shared aggregate borrows retain their tracked source places, including
+ * disjoint fields where the compiler can identify them.
  *
  * Callable values, runtime closure environments, function-type annotations,
  * and named-function items are implemented. A closure that borrows locals

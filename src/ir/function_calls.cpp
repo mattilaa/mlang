@@ -1651,6 +1651,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 if(auto* identifier =
                        dynamic_cast<IdentifierNode*>(expression))
                 {
+                    if(isMutBorrower(identifier->name))
+                        return true;
                     auto pointer = pointerBorrowTarget.find(identifier->name);
                     if(pointer != pointerBorrowTarget.end() &&
                        variableScopeDepth.count(pointer->second))

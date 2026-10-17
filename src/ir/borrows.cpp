@@ -702,6 +702,74 @@ void CodeGenerator::clearAggregateBorrowOrigins(const std::string& variable)
     pointerBorrowPlace.erase(variable);
 }
 
+bool CodeGenerator::mergeAggregateBorrowStateAfterUpdate(
+    const std::string& variable,
+    const std::set<std::string>& previousOrigins,
+    const std::map<std::string, std::set<std::string>>& previousPlaces,
+    const std::vector<std::pair<std::string, std::string>>&
+        previousExclusivePlaces,
+    const std::vector<std::string>& previousExclusiveKeys,
+    const std::string& previousExclusiveOwner,
+    const std::string& previousExclusivePlace, int line)
+{
+    auto currentPlaces = aggregateBorrowPlaces.find(variable);
+    for(const auto& previous : previousExclusivePlaces)
+    {
+        if(currentPlaces == aggregateBorrowPlaces.end())
+            break;
+        auto currentOwnerPlaces = currentPlaces->second.find(previous.first);
+        if(currentOwnerPlaces == currentPlaces->second.end())
+            continue;
+        for(const auto& currentPlace : currentOwnerPlaces->second)
+            if(borrowPlacesOverlap(previous.second, currentPlace))
+            {
+                reportError(
+                    line,
+                    "cannot retain overlapping mutable borrows of '" +
+                        previous.first + "' in aggregate '" + variable + "'");
+                return false;
+            }
+    }
+
+    if(!previousOrigins.empty())
+    {
+        auto& origins = aggregateBorrowOrigins[variable];
+        origins.insert(previousOrigins.begin(), previousOrigins.end());
+        for(const auto& origin : previousOrigins)
+            activeBorrowers[origin].insert(variable);
+    }
+    for(const auto& ownerPlaces : previousPlaces)
+    {
+        auto& current = aggregateBorrowPlaces[variable][ownerPlaces.first];
+        current.insert(ownerPlaces.second.begin(), ownerPlaces.second.end());
+    }
+
+    for(const auto& previousKey : previousExclusiveKeys)
+    {
+        auto existing = activeMutBorrower.find(previousKey);
+        if(existing != activeMutBorrower.end() &&
+           existing->second == variable)
+            continue;
+        std::string restoredKey = previousKey;
+        size_t suffix = 0;
+        while(existing != activeMutBorrower.end())
+        {
+            restoredKey = variable + std::string(1, '\x1f') +
+                          "retained_mut_" + std::to_string(suffix++);
+            existing = activeMutBorrower.find(restoredKey);
+        }
+        activeMutBorrower[restoredKey] = variable;
+    }
+    if(!previousExclusiveOwner.empty() &&
+       pointerBorrowTarget.find(variable) == pointerBorrowTarget.end())
+    {
+        pointerBorrowTarget[variable] = previousExclusiveOwner;
+        if(!previousExclusivePlace.empty())
+            pointerBorrowPlace[variable] = previousExclusivePlace;
+    }
+    return true;
+}
+
 void CodeGenerator::trackAggregateBorrowOrigins(
     const std::string& variable, ExpressionNode* expression)
 {
@@ -1227,8 +1295,6 @@ void CodeGenerator::trackAggregateBorrowOrigins(
                 for(auto& active : activeMutBorrower)
                     if(active.second == temporaryBorrower)
                         active.second = variable;
-                aggregateBorrowOrigins[variable].insert(
-                    registeredOwner->second);
                 aggregateBorrowPlaces[variable][registeredOwner->second]
                     .insert(place);
                 pointerBorrowTarget.erase(temporaryBorrower);
@@ -1245,7 +1311,6 @@ void CodeGenerator::trackAggregateBorrowOrigins(
             movedVariables.insert(borrow.source);
             pointerBorrowTarget.erase(borrow.source);
             pointerBorrowPlace.erase(borrow.source);
-            aggregateBorrowOrigins[variable].insert(borrow.owner);
             aggregateBorrowPlaces[variable][borrow.owner].insert(borrow.place);
             if(pointerBorrowTarget.find(variable) == pointerBorrowTarget.end())
             {

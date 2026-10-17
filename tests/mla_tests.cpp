@@ -8274,7 +8274,7 @@ TEST_F(MLATest, StructRetainsExclusiveBorrowUntilItsLastUse)
               std::string::npos) << out;
 }
 
-TEST_F(MLATest, ListCannotRetainMultipleExclusiveBorrows)
+TEST_F(MLATest, ListCanRetainDisjointExclusiveBorrows)
 {
     std::string code = R"(
         fn main() -> i32 {
@@ -8283,16 +8283,87 @@ TEST_F(MLATest, ListCannotRetainMultipleExclusiveBorrows)
             var pointers: list<ptr<i32>> = [];
             pointers.push(&mut first);
             pointers.push(&mut second);
-            return 0;
+            return pointers.len() == 2 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ListCannotRetainOverlappingExclusiveBorrows)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 1;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&mut value);
+            pointers.push(&mut value);
+            return pointers.len() == 2 ? 0 : 1;
         }
     )";
     writeSource(code);
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot store multiple mutable borrows in one "
-                       "aggregate"),
+    EXPECT_NE(out.find("cannot retain overlapping mutable borrows of 'value'"),
               std::string::npos) << out;
+}
+
+TEST_F(MLATest, ListTreatsDynamicExclusiveBorrowIndexesAsOverlapping)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: array<i32, 2> = { 4, 8 };
+            var pointers: list<ptr<i32>> = [];
+            let first: i64 = 0;
+            let second: i64 = 1;
+            pointers.push(&mut values[first]);
+            pointers.push(&mut values[second]);
+            return pointers.len() == 2 ? 0 : 1;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot retain overlapping mutable borrows"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, ListCanRetainDisjointBorrowsOfOneStruct)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; var spare: i32; };
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 4, right: 8, spare: 3 };
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&mut pair.left);
+            pointers.push(&mut pair.right);
+            pair.spare = 9;
+            return pointers.len() == 2 ? pair.spare - 9 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ListRetainsEachDisjointExclusiveBorrow)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 4, right: 8 };
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&mut pair.left);
+            pointers.push(&mut pair.right);
+            pair.left = 9;
+            return pointers.len() == 2 ? 0 : 1;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'pointers'"), std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, StructBorrowsProtectOnlyBorrowedFields)

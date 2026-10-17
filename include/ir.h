@@ -694,6 +694,15 @@ private:
                                   const std::string& action);
     void trackAggregateBorrowOrigins(const std::string& variable,
                                      ExpressionNode* expression);
+    bool mergeAggregateBorrowStateAfterUpdate(
+        const std::string& variable,
+        const std::set<std::string>& previousOrigins,
+        const std::map<std::string, std::set<std::string>>& previousPlaces,
+        const std::vector<std::pair<std::string, std::string>>&
+            previousExclusivePlaces,
+        const std::vector<std::string>& previousExclusiveKeys,
+        const std::string& previousExclusiveOwner,
+        const std::string& previousExclusivePlace, int line);
     void clearAggregateBorrowOrigins(const std::string& variable);
     void consumeMoveFromExpression(ExpressionNode* expr, int line,
                                    const std::string& context);

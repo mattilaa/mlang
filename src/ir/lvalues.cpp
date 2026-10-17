@@ -585,7 +585,9 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         const bool hadExclusiveBorrow = isMutBorrower(owner);
         std::string previousExclusiveOwner;
         std::string previousExclusivePlace;
-        std::string previousExclusiveKey;
+        std::vector<std::string> previousExclusiveKeys;
+        std::vector<std::pair<std::string, std::string>>
+            previousExclusivePlaces;
         if(hadExclusiveBorrow)
         {
             auto target = pointerBorrowTarget.find(owner);
@@ -596,54 +598,50 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                 previousExclusivePlace = place->second;
             for(const auto& active : activeMutBorrower)
                 if(active.second == owner)
+                    previousExclusiveKeys.push_back(active.first);
+
+            auto sharedFields = aggregateBorrowFieldPlaces.find(owner);
+            for(const auto& byOwner : previousPlaces)
+                for(const auto& sourcePlace : byOwner.second)
                 {
-                    previousExclusiveKey = active.first;
-                    break;
+                    bool isShared = false;
+                    if(sharedFields != aggregateBorrowFieldPlaces.end())
+                        for(const auto& field : sharedFields->second)
+                        {
+                            auto fieldOwner = field.second.find(byOwner.first);
+                            if(fieldOwner != field.second.end() &&
+                               fieldOwner->second.count(sourcePlace) != 0)
+                            {
+                                isShared = true;
+                                break;
+                            }
+                        }
+                    if(!isShared)
+                        previousExclusivePlaces.emplace_back(byOwner.first,
+                                                             sourcePlace);
                 }
         }
 
         trackAggregateBorrowOrigins(owner, node->expression);
-        if(hadExclusiveBorrow)
-        {
-            if(isMutBorrower(owner))
-            {
-                reportError(node->line,
-                            "cannot store multiple mutable borrows in one "
-                            "aggregate; use separate aggregates so each "
-                            "exclusive borrow has an independent lifetime");
-                return;
-            }
-            pointerBorrowTarget[owner] = previousExclusiveOwner;
-            if(!previousExclusivePlace.empty())
-                pointerBorrowPlace[owner] = previousExclusivePlace;
-            const std::string key =
-                previousExclusiveKey.empty() ? previousExclusiveOwner
-                                             : previousExclusiveKey;
-            activeMutBorrower[key] = owner;
-        }
-        auto& currentOrigins = aggregateBorrowOrigins[owner];
-        currentOrigins.insert(previousOrigins.begin(), previousOrigins.end());
+        if(!mergeAggregateBorrowStateAfterUpdate(
+               owner, previousOrigins, previousPlaces,
+               previousExclusivePlaces, previousExclusiveKeys,
+               previousExclusiveOwner, previousExclusivePlace, node->line))
+            return;
         if(!previousOrigins.empty())
         {
-            pointerBorrowPlace.erase(owner);
             aggregateBorrowFieldPlaces.erase(owner);
         }
-        auto& currentPlaces = aggregateBorrowPlaces[owner];
-        for(const auto& origin : previousOrigins)
+        auto currentOrigins = aggregateBorrowOrigins.find(owner);
+        if(currentOrigins == aggregateBorrowOrigins.end() ||
+           currentOrigins->second.empty())
         {
-            auto oldPlaces = previousPlaces.find(origin);
-            if(oldPlaces == previousPlaces.end() || oldPlaces->second.empty())
-                currentPlaces.erase(origin);
-            else
-                currentPlaces[origin].insert(oldPlaces->second.begin(),
-                                              oldPlaces->second.end());
-        }
-        for(const auto& origin : previousOrigins)
-            activeBorrowers[origin].insert(owner);
-        if(currentOrigins.empty())
-        {
-            aggregateBorrowOrigins.erase(owner);
-            aggregateBorrowPlaces.erase(owner);
+            if(currentOrigins != aggregateBorrowOrigins.end())
+                aggregateBorrowOrigins.erase(currentOrigins);
+            auto currentPlaces = aggregateBorrowPlaces.find(owner);
+            if(currentPlaces != aggregateBorrowPlaces.end() &&
+               currentPlaces->second.empty())
+                aggregateBorrowPlaces.erase(currentPlaces);
         }
     };
 
