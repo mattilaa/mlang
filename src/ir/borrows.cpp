@@ -231,6 +231,37 @@ bool CodeGenerator::borrowPlacesOverlap(const std::string& left,
     return true;
 }
 
+bool CodeGenerator::borrowerPlaceOverlaps(const std::string& borrower,
+                                         const std::string& owner,
+                                         const std::string& place) const
+{
+    auto aggregate = aggregateBorrowPlaces.find(borrower);
+    if(aggregate != aggregateBorrowPlaces.end())
+    {
+        auto ownerPlaces = aggregate->second.find(owner);
+        if(ownerPlaces != aggregate->second.end() &&
+           !ownerPlaces->second.empty())
+        {
+            for(const auto& borrowedPlace : ownerPlaces->second)
+            {
+                if(borrowPlacesOverlap(borrowedPlace, place))
+                    return true;
+            }
+            return false;
+        }
+    }
+
+    auto borrowedOwner = pointerBorrowTarget.find(borrower);
+    if(borrowedOwner != pointerBorrowTarget.end() &&
+       borrowedOwner->second != owner)
+        return borrowPlacesOverlap(owner, place);
+    auto borrowedPlace = pointerBorrowPlace.find(borrower);
+    return borrowPlacesOverlap(
+        borrowedPlace == pointerBorrowPlace.end() ? owner
+                                                  : borrowedPlace->second,
+        place);
+}
+
 bool CodeGenerator::validateBorrowRead(ExpressionNode* expr, int line)
 {
     if(suppressBorrowReadValidation)
@@ -309,12 +340,7 @@ bool CodeGenerator::validateBorrowWriteThroughPointer(ExpressionNode* expr,
         auto conflictsWith = [&](const std::string& borrower) {
             if(borrower == pointer->name)
                 return false;
-            auto borrowedPlaceIt = pointerBorrowPlace.find(borrower);
-            const std::string borrowedPlace =
-                borrowedPlaceIt == pointerBorrowPlace.end()
-                    ? owner
-                    : borrowedPlaceIt->second;
-            if(!borrowPlacesOverlap(targetPlace, borrowedPlace))
+            if(!borrowerPlaceOverlaps(borrower, owner, targetPlace))
                 return false;
             reportError(line, "cannot write overlapping part of '" + owner +
                                   "' through '" + pointer->name +
@@ -650,6 +676,7 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
 
 void CodeGenerator::clearAggregateBorrowOrigins(const std::string& variable)
 {
+    aggregateBorrowPlaces.erase(variable);
     auto origins = aggregateBorrowOrigins.find(variable);
     if(origins == aggregateBorrowOrigins.end())
     {
@@ -708,7 +735,9 @@ void CodeGenerator::trackAggregateBorrowOrigins(
                               : place->second);
             }
             for(const auto& active : activeBorrowers)
-                if(active.second.count(identifier->name) != 0)
+                if(active.second.count(identifier->name) != 0 &&
+                   aggregateBorrowOrigins.find(identifier->name) ==
+                       aggregateBorrowOrigins.end())
                 {
                     auto place = pointerBorrowPlace.find(identifier->name);
                     addOrigin(active.first,
@@ -721,13 +750,31 @@ void CodeGenerator::trackAggregateBorrowOrigins(
             auto aggregate = aggregateBorrowOrigins.find(identifier->name);
             if(aggregate != aggregateBorrowOrigins.end())
             {
-                auto place = pointerBorrowPlace.find(identifier->name);
                 for(const auto& owner : aggregate->second)
-                    addOrigin(owner,
-                              aggregate->second.size() == 1 &&
-                                      place != pointerBorrowPlace.end()
-                                  ? place->second
-                                  : owner);
+                {
+                    auto places = aggregateBorrowPlaces.find(identifier->name);
+                    bool hasPrecisePlaces = false;
+                    if(places != aggregateBorrowPlaces.end())
+                    {
+                        auto ownerPlaces = places->second.find(owner);
+                        if(ownerPlaces != places->second.end() &&
+                           !ownerPlaces->second.empty())
+                        {
+                            hasPrecisePlaces = true;
+                            for(const auto& place : ownerPlaces->second)
+                                addOrigin(owner, place);
+                        }
+                    }
+                    if(!hasPrecisePlaces)
+                    {
+                        auto place = pointerBorrowPlace.find(identifier->name);
+                        addOrigin(owner,
+                                  aggregate->second.size() == 1 &&
+                                          place != pointerBorrowPlace.end()
+                                      ? place->second
+                                      : owner);
+                    }
+                }
             }
             return;
         }
@@ -754,13 +801,8 @@ void CodeGenerator::trackAggregateBorrowOrigins(
                         return;
                     }
                     auto conflicts = [&](const std::string& borrower) {
-                        auto borrowerPlace = pointerBorrowPlace.find(borrower);
-                        const std::string existingPlace =
-                            borrowerPlace == pointerBorrowPlace.end()
-                                ? owner
-                                : borrowerPlace->second;
-                        return borrowPlacesOverlap(existingPlace,
-                                                   place.empty() ? owner : place);
+                        return borrowerPlaceOverlaps(
+                            borrower, owner, place.empty() ? owner : place);
                     };
                     for(const auto& mutableBorrow : activeMutBorrower)
                     {
@@ -876,6 +918,13 @@ void CodeGenerator::trackAggregateBorrowOrigins(
     if(origins.empty())
         return;
     aggregateBorrowOrigins[variable] = origins;
+    auto& trackedPlaces = aggregateBorrowPlaces[variable];
+    for(const auto& owner : origins)
+    {
+        auto places = originPlaces.find(owner);
+        if(places != originPlaces.end())
+            trackedPlaces[owner] = places->second;
+    }
     for(const auto& owner : origins)
         activeBorrowers[owner].insert(variable);
     if(origins.size() == 1 && originPlaces.begin()->second.size() == 1)
@@ -921,11 +970,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             {
                 for(const auto& borrower : sharedIt->second)
                 {
-                    auto place = pointerBorrowPlace.find(borrower);
-                    const std::string existingPlace =
-                        place == pointerBorrowPlace.end() ? ownerName
-                                                          : place->second;
-                    if(borrowPlacesOverlap(existingPlace, borrowPlace))
+                    if(borrowerPlaceOverlaps(borrower, ownerName, borrowPlace))
                     {
                         reportError(
                             line, "cannot borrow '" + ownerName +
@@ -997,12 +1042,8 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         {
             for(const auto& borrower : activeIt->second)
             {
-                auto place = pointerBorrowPlace.find(borrower);
-                const std::string existingPlace =
-                    place == pointerBorrowPlace.end() ? ownerName
-                                                      : place->second;
                 if(borrower != pointerVar &&
-                   borrowPlacesOverlap(existingPlace, borrowPlace))
+                   borrowerPlaceOverlaps(borrower, ownerName, borrowPlace))
                 {
                     reportError(line, "cannot borrow '" + ownerName +
                                           "' while already borrowed by '" +

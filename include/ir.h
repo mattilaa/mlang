@@ -246,6 +246,10 @@ private:
     std::map<std::string, std::string> pointerBorrowTarget;
     // Borrow owners carried indirectly by aggregate-valued locals.
     std::map<std::string, std::set<std::string>> aggregateBorrowOrigins;
+    // Precise borrowed places carried by each aggregate, grouped by root owner.
+    std::map<std::string,
+             std::map<std::string, std::set<std::string>>>
+        aggregateBorrowPlaces;
     // Precise source place for local references. Ownership/lifetime checks
     // still use the root owner; receiver checks can distinguish sibling fields.
     std::map<std::string, std::string> pointerBorrowPlace;
@@ -527,6 +531,9 @@ private:
         int previousDepth = 0;
         bool hadPreviousAggregateBorrowOrigins = false;
         std::set<std::string> previousAggregateBorrowOrigins;
+        bool hadPreviousAggregateBorrowPlaces = false;
+        std::map<std::string, std::set<std::string>>
+            previousAggregateBorrowPlaces;
         bool hadPreviousAggregateBorrowPlace = false;
         std::string previousAggregateBorrowPlace;
     };
@@ -654,6 +661,9 @@ private:
                                            int line);
     bool borrowPlacesOverlap(const std::string& left,
                              const std::string& right) const;
+    bool borrowerPlaceOverlaps(const std::string& borrower,
+                               const std::string& owner,
+                               const std::string& place) const;
     std::string getBorrowedOwnerForPointerExpression(
         ExpressionNode* expr) const;
     bool validatePointerDereference(ExpressionNode* pointerExpr, int line);

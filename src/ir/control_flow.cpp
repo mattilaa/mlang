@@ -656,6 +656,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
     auto incomingAggregateBorrowOrigins = aggregateBorrowOrigins;
+    auto incomingAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto incomingPointerBorrowPlace = pointerBorrowPlace;
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingActiveMutBorrower = activeMutBorrower;
@@ -672,6 +673,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         movedVariables = incomingMoved;
         pointerBorrowTarget = incomingPointerBorrowTarget;
         aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
+        aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
         pointerBorrowPlace = incomingPointerBorrowPlace;
         activeBorrowers = incomingActiveBorrowers;
         activeMutBorrower = incomingActiveMutBorrower;
@@ -698,6 +700,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto condMapKeyValueTypes = mapKeyValueTypes;
     auto condPointerElementTypes = pointerElementTypes;
     auto condAggregateBorrowOrigins = aggregateBorrowOrigins;
+    auto condAggregateBorrowPlaces = aggregateBorrowPlaces;
 
     // Check that condition is a valid boolean type
     llvm::Type* condType = condValue->getType();
@@ -773,6 +776,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
     aggregateBorrowOrigins = condAggregateBorrowOrigins;
+    aggregateBorrowPlaces = condAggregateBorrowPlaces;
     pointerBorrowPlace = incomingPointerBorrowPlace;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
@@ -785,6 +789,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto thenMoved = movedVariables;
     auto thenPointerBorrowTarget = pointerBorrowTarget;
     auto thenAggregateBorrowOrigins = aggregateBorrowOrigins;
+    auto thenAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto thenPointerBorrowPlace = pointerBorrowPlace;
     auto thenActiveBorrowers = activeBorrowers;
     auto thenActiveMutBorrower = activeMutBorrower;
@@ -811,6 +816,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
     aggregateBorrowOrigins = condAggregateBorrowOrigins;
+    aggregateBorrowPlaces = condAggregateBorrowPlaces;
     pointerBorrowPlace = incomingPointerBorrowPlace;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
@@ -843,6 +849,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto elseMoved = movedVariables;
     auto elsePointerBorrowTarget = pointerBorrowTarget;
     auto elseAggregateBorrowOrigins = aggregateBorrowOrigins;
+    auto elseAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto elsePointerBorrowPlace = pointerBorrowPlace;
     auto elseActiveBorrowers = activeBorrowers;
     auto elseActiveMutBorrower = activeMutBorrower;
@@ -915,6 +922,71 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         movedVariables = std::move(mergedMoved);
         pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
         aggregateBorrowOrigins = std::move(mergedAggregateBorrowOrigins);
+        aggregateBorrowPlaces.clear();
+        auto mergeAggregatePlaces = [&](
+            const auto& branchOrigins, const auto& branchPlaces) {
+            for(const auto& aggregate : mergedAggregateBorrowOrigins)
+            {
+                auto branchAggregate = branchOrigins.find(aggregate.first);
+                if(branchAggregate == branchOrigins.end())
+                    continue;
+                for(const auto& owner : aggregate.second)
+                {
+                    if(branchAggregate->second.count(owner) == 0)
+                        continue;
+                    auto places = branchPlaces.find(aggregate.first);
+                    if(places == branchPlaces.end())
+                        continue;
+                    auto ownerPlaces = places->second.find(owner);
+                    if(ownerPlaces == places->second.end() ||
+                       ownerPlaces->second.empty())
+                        continue;
+                    aggregateBorrowPlaces[aggregate.first][owner].insert(
+                        ownerPlaces->second.begin(),
+                        ownerPlaces->second.end());
+                }
+            }
+        };
+        if(thenFallsThrough)
+            mergeAggregatePlaces(thenAggregateBorrowOrigins,
+                                 thenAggregateBorrowPlaces);
+        if(elseFallsThrough)
+            mergeAggregatePlaces(elseAggregateBorrowOrigins,
+                                 elseAggregateBorrowPlaces);
+        // Any branch with an origin but no precise place makes that owner's
+        // merged borrow conservative. (The per-owner erase above may be
+        // superseded by a later branch, so explicitly remove unknown owners.)
+        for(const auto& aggregate : mergedAggregateBorrowOrigins)
+            for(const auto& owner : aggregate.second)
+            {
+                bool hasUnknownPath = false;
+                auto checkBranch = [&](const auto& branchOrigins,
+                                       const auto& branchPlaces) {
+                    auto branchAggregate =
+                        branchOrigins.find(aggregate.first);
+                    if(branchAggregate == branchOrigins.end() ||
+                       branchAggregate->second.count(owner) == 0)
+                        return;
+                    auto places = branchPlaces.find(aggregate.first);
+                    if(places == branchPlaces.end())
+                    {
+                        hasUnknownPath = true;
+                        return;
+                    }
+                    auto ownerPlaces = places->second.find(owner);
+                    if(ownerPlaces == places->second.end() ||
+                       ownerPlaces->second.empty())
+                        hasUnknownPath = true;
+                };
+                if(thenFallsThrough)
+                    checkBranch(thenAggregateBorrowOrigins,
+                                thenAggregateBorrowPlaces);
+                if(elseFallsThrough)
+                    checkBranch(elseAggregateBorrowOrigins,
+                                elseAggregateBorrowPlaces);
+                if(hasUnknownPath)
+                    aggregateBorrowPlaces[aggregate.first].erase(owner);
+            }
         for(const auto& borrow : pointerBorrowTarget)
         {
             std::string commonPlace;
@@ -952,6 +1024,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         movedVariables = incomingMoved;
         pointerBorrowTarget = incomingPointerBorrowTarget;
         aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
+        aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
         pointerBorrowPlace = incomingPointerBorrowPlace;
         activeBorrowers = incomingActiveBorrowers;
         activeMutBorrower = incomingActiveMutBorrower;
@@ -1047,6 +1120,7 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
     auto incomingAggregateBorrowOrigins = aggregateBorrowOrigins;
+    auto incomingAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto incomingPointerBorrowPlace = pointerBorrowPlace;
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingActiveMutBorrower = activeMutBorrower;
@@ -1150,6 +1224,7 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
     aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
+    aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
     pointerBorrowPlace = incomingPointerBorrowPlace;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
@@ -1191,6 +1266,9 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
                 activeMutBorrower[kv.first] = kv.second;
             }
         }
+        // The loop may execute zero or multiple times; aggregate path sets
+        // from a single body pass are not a sound summary of the final value.
+        aggregateBorrowPlaces.clear();
     }
 }
 
@@ -1297,6 +1375,7 @@ void CodeGenerator::generateForStatement(ForNode* node)
         auto stateBeforeLoopMoved = movedVariables;
         auto stateBeforeLoopPointerBorrowTarget = pointerBorrowTarget;
         auto stateBeforeLoopAggregateBorrowOrigins = aggregateBorrowOrigins;
+        auto stateBeforeLoopAggregateBorrowPlaces = aggregateBorrowPlaces;
         auto stateBeforeLoopActiveBorrowers = activeBorrowers;
 
         namedValues[node->varName] = loopVar;
@@ -1422,6 +1501,8 @@ void CodeGenerator::generateForStatement(ForNode* node)
             pointerBorrowTarget = std::move(stateBeforeLoopPointerBorrowTarget);
             aggregateBorrowOrigins =
                 std::move(stateBeforeLoopAggregateBorrowOrigins);
+            aggregateBorrowPlaces =
+                std::move(stateBeforeLoopAggregateBorrowPlaces);
             activeBorrowers = std::move(stateBeforeLoopActiveBorrowers);
         }
         else
@@ -1435,6 +1516,7 @@ void CodeGenerator::generateForStatement(ForNode* node)
             }
             aggregateBorrowOrigins =
                 std::move(stateBeforeLoopAggregateBorrowOrigins);
+            aggregateBorrowPlaces.clear();
             for(const auto& owner : activeBorrowers)
             {
                 auto& borrowers = stateBeforeLoopActiveBorrowers[owner.first];

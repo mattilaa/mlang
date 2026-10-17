@@ -7921,6 +7921,86 @@ TEST_F(MLATest, AggregateBorrowPlaceRestoresAfterShadowedScope)
     EXPECT_EQ(compileAndRunExitCode(code), 9);
 }
 
+TEST_F(MLATest, AggregateBorrowsMultipleDisjointFieldsPrecisely)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var middle: i32; var right: i32; };
+        struct PointerPair { var first: ptr<i32>; var second: ptr<i32>; };
+
+        fn set_value(value: ptr<i32>) -> void {
+            unsafe { *value = 9; }
+            return;
+        }
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, middle: 2, right: 3 };
+            let refs: PointerPair = PointerPair {
+                first: &pair.left,
+                second: &pair.right
+            };
+            let refs_copy: PointerPair = refs;
+            set_value(&mut pair.middle);
+            unsafe { return *refs_copy.first + pair.middle + *refs_copy.second; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 13);
+}
+
+TEST_F(MLATest, AggregateBorrowsMultipleFieldsStillRejectOverlap)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var middle: i32; var right: i32; };
+        struct PointerPair { var first: ptr<i32>; var second: ptr<i32>; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, middle: 2, right: 3 };
+            let refs: PointerPair = PointerPair {
+                first: &pair.left,
+                second: &pair.right
+            };
+            pair.left = 9;
+            unsafe { return *refs.first + *refs.second; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'refs'"), std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, AggregateBorrowPlaceSetsMergeAcrossBranches)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var middle: i32; var right: i32; };
+        struct PointerPair { var first: ptr<i32>; var second: ptr<i32>; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, middle: 2, right: 3 };
+            var refs: PointerPair = PointerPair {
+                first: &pair.left,
+                second: &pair.right
+            };
+            var choose: bool = true;
+            if choose {
+                refs = PointerPair {
+                    first: &pair.middle,
+                    second: &pair.right
+                };
+            }
+            pair.left = 9;
+            unsafe { return *refs.first; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'refs'"), std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, AggregateFieldAssignmentTracksBorrowOrigin)
 {
     std::string code = R"(

@@ -578,16 +578,33 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         auto previous = aggregateBorrowOrigins.find(owner);
         if(previous != aggregateBorrowOrigins.end())
             previousOrigins = previous->second;
+        std::map<std::string, std::set<std::string>> previousPlaces;
+        auto previousPlaceInfo = aggregateBorrowPlaces.find(owner);
+        if(previousPlaceInfo != aggregateBorrowPlaces.end())
+            previousPlaces = previousPlaceInfo->second;
 
         trackAggregateBorrowOrigins(owner, node->expression);
         auto& currentOrigins = aggregateBorrowOrigins[owner];
         currentOrigins.insert(previousOrigins.begin(), previousOrigins.end());
         if(!previousOrigins.empty())
             pointerBorrowPlace.erase(owner);
+        auto& currentPlaces = aggregateBorrowPlaces[owner];
+        for(const auto& origin : previousOrigins)
+        {
+            auto oldPlaces = previousPlaces.find(origin);
+            if(oldPlaces == previousPlaces.end() || oldPlaces->second.empty())
+                currentPlaces.erase(origin);
+            else
+                currentPlaces[origin].insert(oldPlaces->second.begin(),
+                                              oldPlaces->second.end());
+        }
         for(const auto& origin : previousOrigins)
             activeBorrowers[origin].insert(owner);
         if(currentOrigins.empty())
+        {
             aggregateBorrowOrigins.erase(owner);
+            aggregateBorrowPlaces.erase(owner);
+        }
     };
 
     if(auto* tupleTarget = dynamic_cast<TupleAccessNode*>(node->target))
@@ -610,10 +627,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         }
 
         auto rejectOverlappingBorrow = [&](const std::string& borrower) {
-            auto place = pointerBorrowPlace.find(borrower);
-            const std::string borrowedPlace =
-                place == pointerBorrowPlace.end() ? owner : place->second;
-            if(!borrowPlacesOverlap(borrowedPlace, targetPlace))
+            if(!borrowerPlaceOverlaps(borrower, owner, targetPlace))
                 return false;
             reportError(node->line,
                         "cannot assign to tuple element of '" + owner +
@@ -723,11 +737,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         {
             for(const auto& borrower : sharedBorrowers->second)
             {
-                auto place = pointerBorrowPlace.find(borrower);
-                const std::string borrowedPlace =
-                    place == pointerBorrowPlace.end() ? ownerName
-                                                      : place->second;
-                if(borrowPlacesOverlap(borrowedPlace, targetPlace))
+                if(borrowerPlaceOverlaps(borrower, ownerName, targetPlace))
                 {
                     reportError(node->line,
                                 "cannot mutate indexed element of '" +
@@ -991,12 +1001,8 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
             for(const auto& by : borIt->second)
             {
-                auto borrowPlace = pointerBorrowPlace.find(by);
-                const std::string place = borrowPlace == pointerBorrowPlace.end()
-                                              ? ownerName
-                                              : borrowPlace->second;
                 if(allowedBorrowers.find(by) == allowedBorrowers.end() &&
-                   borrowPlacesOverlap(place, targetPlace))
+                   borrowerPlaceOverlaps(by, ownerName, targetPlace))
                 {
                     reportError(node->line,
                                 "cannot assign to field of '" + ownerName +

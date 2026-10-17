@@ -2068,6 +2068,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingAggregateBorrowOrigins = aggregateBorrowOrigins;
+    auto incomingAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto incomingActiveMutBorrower = activeMutBorrower;
 
     bool hasOk = false;
@@ -2239,6 +2240,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         auto savedPointerBorrowTarget = pointerBorrowTarget;
         auto savedActiveBorrowers = activeBorrowers;
         auto savedAggregateBorrowOrigins = aggregateBorrowOrigins;
+        auto savedAggregateBorrowPlaces = aggregateBorrowPlaces;
         auto savedActiveMutBorrower = activeMutBorrower;
         auto savedCleanupScopes = cleanupScopes;
         auto savedVariableScopeDepth = variableScopeDepth;
@@ -2276,6 +2278,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         pointerBorrowTarget = savedPointerBorrowTarget;
         activeBorrowers = savedActiveBorrowers;
         aggregateBorrowOrigins = savedAggregateBorrowOrigins;
+        aggregateBorrowPlaces = savedAggregateBorrowPlaces;
         activeMutBorrower = savedActiveMutBorrower;
         cleanupScopes = savedCleanupScopes;
         variableScopeDepth = savedVariableScopeDepth;
@@ -2540,6 +2543,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
         activeBorrowers = std::move(mergedActiveBorrowers);
         aggregateBorrowOrigins = std::move(mergedAggregateOrigins);
+        aggregateBorrowPlaces.clear();
         return phi;
     }
 
@@ -2793,6 +2797,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
         activeBorrowers = std::move(mergedActiveBorrowers);
         aggregateBorrowOrigins = std::move(mergedAggregateOrigins);
+        aggregateBorrowPlaces.clear();
         return phi;
     }
 
@@ -2903,6 +2908,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         pointerBorrowTarget = incomingPointerBorrowTarget;
         activeBorrowers = incomingActiveBorrowers;
         aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
+        aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
         activeMutBorrower = incomingActiveMutBorrower;
         llvm::Value* armVal = generateExpression(arm->expression);
         if(!armVal)
@@ -2922,6 +2928,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         pointerBorrowTarget = incomingPointerBorrowTarget;
         activeBorrowers = incomingActiveBorrowers;
         aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
+        aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
         activeMutBorrower = incomingActiveMutBorrower;
 
         builder.SetInsertPoint(fallBB);
@@ -2935,6 +2942,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         pointerBorrowTarget = incomingPointerBorrowTarget;
         activeBorrowers = incomingActiveBorrowers;
         aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
+        aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
         activeMutBorrower = incomingActiveMutBorrower;
         llvm::Value* armVal = generateExpression(wildcardArm->expression);
         if(!armVal)
@@ -2953,6 +2961,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         pointerBorrowTarget = incomingPointerBorrowTarget;
         activeBorrowers = incomingActiveBorrowers;
         aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
+        aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
         activeMutBorrower = incomingActiveMutBorrower;
     }
     else
@@ -3126,5 +3135,6 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
     activeBorrowers = std::move(mergedActiveBorrowers);
     aggregateBorrowOrigins = std::move(mergedAggregateOrigins);
+    aggregateBorrowPlaces.clear();
     return phi;
 }

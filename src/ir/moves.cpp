@@ -24,13 +24,7 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
             if(borrowerOwner != pointerBorrowTarget.end() &&
                borrowerOwner->second != owner)
                 return false;
-            auto place = pointerBorrowPlace.find(borrower);
-            const std::string borrowedPlace =
-                borrowerOwner == pointerBorrowTarget.end() ||
-                        place == pointerBorrowPlace.end()
-                    ? owner
-                    : place->second;
-            if(!borrowPlacesOverlap(targetPlace, borrowedPlace))
+            if(!borrowerPlaceOverlaps(borrower, owner, targetPlace))
                 return false;
             reportError(line, "cannot move '" + targetPlace +
                                   "' while borrowed by '" + borrower + "'");

@@ -115,6 +115,9 @@ void CodeGenerator::exitCleanupScope()
             for(const auto& owner : it->previousAggregateBorrowOrigins)
                 activeBorrowers[owner].insert(it->varName);
         }
+        if(it->hadPreviousAggregateBorrowPlaces)
+            aggregateBorrowPlaces[it->varName] =
+                it->previousAggregateBorrowPlaces;
         if(it->hadPreviousAggregateBorrowPlace)
             pointerBorrowPlace[it->varName] =
                 it->previousAggregateBorrowPlace;
