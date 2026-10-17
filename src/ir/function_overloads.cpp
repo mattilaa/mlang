@@ -111,6 +111,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
         functionPointerReturnSummaryComplete.erase(symbol);
         bool hasUnknownReturnOrigin = false;
         std::map<std::string, std::set<size_t>> pointerAliases;
+        std::map<std::string, std::set<std::string>> pointerLocalSlots;
         std::map<std::string, std::set<size_t>> pointerFieldAliases;
         for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
         {
@@ -396,6 +397,35 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                isPointerFieldAliasWithin(path, alias.first);
                     });
             };
+        auto recordPointerLocalSlot = [&](const std::string& name,
+                                          ExpressionNode* expression,
+                                          bool declaration) {
+            if(auto* address = dynamic_cast<UnaryOpNode*>(expression))
+            {
+                if(address->op != UnaryOpNode::OP_ADDR_MUT)
+                {
+                    if(!declaration && pointerLocalSlots.count(name))
+                        pointerLocalSlots[name] = {""};
+                    return;
+                }
+                std::string targetPath;
+                if(!getFieldPath(address->operand, targetPath))
+                    targetPath.clear();
+                pointerLocalSlots[name] = {std::move(targetPath)};
+                return;
+            }
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
+            {
+                auto source = pointerLocalSlots.find(identifier->name);
+                if(source != pointerLocalSlots.end())
+                {
+                    pointerLocalSlots[name] = source->second;
+                    return;
+                }
+            }
+            if(!declaration && pointerLocalSlots.count(name))
+                pointerLocalSlots[name] = {""};
+        };
         std::map<std::string, bool> closureMayMutatePointerAggregate;
         std::function<void(ExpressionNode*)> scanCallEffects;
         std::function<void(StatementNode*)> scanClosureEffects;
@@ -716,6 +746,16 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                                alias.second.end());
             return merged;
         };
+        auto mergePointerSlots = [](const std::vector<std::map<
+                                        std::string,
+                                        std::set<std::string>>>& branches) {
+            std::map<std::string, std::set<std::string>> merged;
+            for(const auto& branch : branches)
+                for(const auto& slot : branch)
+                    merged[slot.first].insert(slot.second.begin(),
+                                              slot.second.end());
+            return merged;
+        };
         scanList = [&](StatementListNode* statements) {
             if(!statements)
                 return true;
@@ -726,6 +766,9 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 previousFieldAliases;
             std::map<std::string, bool> previousClosureEffects;
             std::set<std::string> closureNamesNotPreviouslyPresent;
+            std::map<std::string, std::set<std::string>>
+                previousPointerLocalSlots;
+            std::set<std::string> pointerSlotNamesNotPreviouslyPresent;
             std::set<std::string> shadowedNames;
             auto rememberShadow = [&](const std::string& name) {
                 if(!shadowedNames.insert(name).second)
@@ -747,6 +790,12 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 else
                     previousClosureEffects.emplace(name,
                                                    previousClosure->second);
+                auto previousSlot = pointerLocalSlots.find(name);
+                if(previousSlot == pointerLocalSlots.end())
+                    pointerSlotNamesNotPreviouslyPresent.insert(name);
+                else
+                    previousPointerLocalSlots.emplace(name,
+                                                      previousSlot->second);
             };
             bool fallsThrough = true;
             for(auto* statement : statements->statements)
@@ -791,6 +840,10 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             for(const auto& previous : previousClosureEffects)
                 closureMayMutatePointerAggregate[previous.first] =
                     previous.second;
+            for(const auto& name : pointerSlotNamesNotPreviouslyPresent)
+                pointerLocalSlots.erase(name);
+            for(const auto& previous : previousPointerLocalSlots)
+                pointerLocalSlots[previous.first] = previous.second;
             for(const auto& name : shadowedNames)
             {
                 for(auto alias = pointerFieldAliases.begin();
@@ -861,6 +914,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             }
             if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
             {
+                recordPointerLocalSlot(declaration->name,
+                                       declaration->expression, true);
                 recordClosureEffect(declaration->name,
                                     declaration->expression, true);
                 auto values = origins(declaration->expression);
@@ -875,6 +930,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             }
             else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
             {
+                recordPointerLocalSlot(declaration->name,
+                                       declaration->initExpr, true);
                 recordClosureEffect(declaration->name, declaration->initExpr,
                                     true);
                 auto values = origins(declaration->initExpr);
@@ -890,6 +947,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             else if(auto* assignment =
                         dynamic_cast<AssignmentNode*>(statement))
             {
+                recordPointerLocalSlot(assignment->name,
+                                       assignment->expression, false);
                 recordClosureEffect(assignment->name, assignment->expression,
                                     false);
                 auto values = origins(assignment->expression);
@@ -921,123 +980,199 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 else
                     hasUnknownReturnOrigin = true;
             }
+            else if(auto* assignment =
+                        dynamic_cast<DerefAssignmentNode*>(statement))
+            {
+                std::set<std::string> targetPaths;
+                if(auto* address = dynamic_cast<UnaryOpNode*>(
+                       assignment->pointerExpr);
+                   address && address->op == UnaryOpNode::OP_ADDR_MUT)
+                {
+                    std::string path;
+                    if(getFieldPath(address->operand, path))
+                        targetPaths.insert(path);
+                    else
+                        targetPaths.insert("");
+                }
+                else if(auto* identifier =
+                            dynamic_cast<IdentifierNode*>(
+                                assignment->pointerExpr))
+                {
+                    auto slot = pointerLocalSlots.find(identifier->name);
+                    if(slot != pointerLocalSlots.end())
+                        targetPaths = slot->second;
+                }
+                if(targetPaths.empty())
+                    hasUnknownReturnOrigin = true;
+                else if(targetPaths.size() != 1 ||
+                        targetPaths.count("") != 0)
+                    hasUnknownReturnOrigin = true;
+                else
+                {
+                    const auto& targetPath = *targetPaths.begin();
+                    auto values = origins(assignment->value);
+                    if(pointerAliases.count(targetPath))
+                    {
+                        if(values.empty())
+                            pointerAliases.erase(targetPath);
+                        else
+                            pointerAliases[targetPath] = std::move(values);
+                    }
+                    else if(pointerFieldAliases.count(targetPath) ||
+                            hasTrackedPointerAggregateAtOrBelow(targetPath))
+                        replacePointerFieldAliases(targetPath,
+                                                   assignment->value);
+                }
+            }
             if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                 return scanList(block->statements);
             else if(auto* branch = dynamic_cast<IfNode*>(statement))
             {
                 const auto baseAliases = pointerAliases;
                 const auto baseFieldAliases = pointerFieldAliases;
+                const auto basePointerSlots = pointerLocalSlots;
                 std::vector<std::map<std::string, std::set<size_t>>> branches;
                 std::vector<std::map<std::string, std::set<size_t>>>
                     fieldBranches;
+                std::vector<std::map<std::string, std::set<std::string>>>
+                    pointerSlotBranches;
                 pointerAliases = baseAliases;
                 pointerFieldAliases = baseFieldAliases;
+                pointerLocalSlots = basePointerSlots;
                 if(scanList(branch->thenBranch))
                 {
                     branches.push_back(pointerAliases);
                     fieldBranches.push_back(pointerFieldAliases);
+                    pointerSlotBranches.push_back(pointerLocalSlots);
                 }
                 pointerAliases = baseAliases;
                 pointerFieldAliases = baseFieldAliases;
+                pointerLocalSlots = basePointerSlots;
                 const bool elseIfFallsThrough =
                     scanStatement(branch->elseIfBranch);
                 if(branch->elseIfBranch && elseIfFallsThrough)
                 {
                     branches.push_back(pointerAliases);
                     fieldBranches.push_back(pointerFieldAliases);
+                    pointerSlotBranches.push_back(pointerLocalSlots);
                 }
                 else if(!branch->elseBranch)
                 {
                     branches.push_back(baseAliases);
                     fieldBranches.push_back(baseFieldAliases);
+                    pointerSlotBranches.push_back(basePointerSlots);
                 }
                 pointerAliases = baseAliases;
                 pointerFieldAliases = baseFieldAliases;
+                pointerLocalSlots = basePointerSlots;
                 const bool elseFallsThrough = scanList(branch->elseBranch);
                 if(branch->elseBranch && elseFallsThrough)
                 {
                     branches.push_back(pointerAliases);
                     fieldBranches.push_back(pointerFieldAliases);
+                    pointerSlotBranches.push_back(pointerLocalSlots);
                 }
                 if(branches.empty())
                     return false;
                 pointerAliases = mergeAliases(branches);
                 pointerFieldAliases = mergeAliases(fieldBranches);
+                pointerLocalSlots = mergePointerSlots(pointerSlotBranches);
                 return true;
             }
             else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
             {
                 const auto baseAliases = pointerAliases;
                 const auto baseFieldAliases = pointerFieldAliases;
+                const auto basePointerSlots = pointerLocalSlots;
                 std::vector<std::map<std::string, std::set<size_t>>> branches;
                 std::vector<std::map<std::string, std::set<size_t>>>
                     fieldBranches;
+                std::vector<std::map<std::string, std::set<std::string>>>
+                    pointerSlotBranches;
                 pointerAliases = baseAliases;
                 pointerFieldAliases = baseFieldAliases;
+                pointerLocalSlots = basePointerSlots;
                 if(scanList(branch->thenBranch))
                 {
                     branches.push_back(pointerAliases);
                     fieldBranches.push_back(pointerFieldAliases);
+                    pointerSlotBranches.push_back(pointerLocalSlots);
                 }
                 pointerAliases = baseAliases;
                 pointerFieldAliases = baseFieldAliases;
+                pointerLocalSlots = basePointerSlots;
                 const bool elseIfFallsThrough =
                     scanStatement(branch->elseIfBranch);
                 if(branch->elseIfBranch && elseIfFallsThrough)
                 {
                     branches.push_back(pointerAliases);
                     fieldBranches.push_back(pointerFieldAliases);
+                    pointerSlotBranches.push_back(pointerLocalSlots);
                 }
                 else if(!branch->elseBranch)
                 {
                     branches.push_back(baseAliases);
                     fieldBranches.push_back(baseFieldAliases);
+                    pointerSlotBranches.push_back(basePointerSlots);
                 }
                 pointerAliases = baseAliases;
                 pointerFieldAliases = baseFieldAliases;
+                pointerLocalSlots = basePointerSlots;
                 const bool elseFallsThrough = scanList(branch->elseBranch);
                 if(branch->elseBranch && elseFallsThrough)
                 {
                     branches.push_back(pointerAliases);
                     fieldBranches.push_back(pointerFieldAliases);
+                    pointerSlotBranches.push_back(pointerLocalSlots);
                 }
                 if(branches.empty())
                     return false;
                 pointerAliases = mergeAliases(branches);
                 pointerFieldAliases = mergeAliases(fieldBranches);
+                pointerLocalSlots = mergePointerSlots(pointerSlotBranches);
                 return true;
             }
             else if(auto* loop = dynamic_cast<WhileNode*>(statement))
             {
                 const auto baseAliases = pointerAliases;
                 const auto baseFieldAliases = pointerFieldAliases;
+                const auto basePointerSlots = pointerLocalSlots;
                 pointerAliases = baseAliases;
                 pointerFieldAliases = baseFieldAliases;
+                pointerLocalSlots = basePointerSlots;
                 const bool bodyFallsThrough = scanList(loop->body);
                 if(!bodyFallsThrough)
                 {
                     pointerAliases = baseAliases;
                     pointerFieldAliases = baseFieldAliases;
+                    pointerLocalSlots = basePointerSlots;
                 }
                 pointerAliases = mergeAliases({baseAliases, pointerAliases});
                 pointerFieldAliases = mergeAliases(
                     {baseFieldAliases, pointerFieldAliases});
+                pointerLocalSlots = mergePointerSlots(
+                    {basePointerSlots, pointerLocalSlots});
             }
             else if(auto* loop = dynamic_cast<ForNode*>(statement))
             {
                 const auto baseAliases = pointerAliases;
                 const auto baseFieldAliases = pointerFieldAliases;
+                const auto basePointerSlots = pointerLocalSlots;
                 pointerAliases = baseAliases;
                 pointerFieldAliases = baseFieldAliases;
+                pointerLocalSlots = basePointerSlots;
                 const bool bodyFallsThrough = scanList(loop->body);
                 if(!bodyFallsThrough)
                 {
                     pointerAliases = baseAliases;
                     pointerFieldAliases = baseFieldAliases;
+                    pointerLocalSlots = basePointerSlots;
                 }
                 pointerAliases = mergeAliases({baseAliases, pointerAliases});
                 pointerFieldAliases = mergeAliases(
                     {baseFieldAliases, pointerFieldAliases});
+                pointerLocalSlots = mergePointerSlots(
+                    {basePointerSlots, pointerLocalSlots});
             }
             else if(dynamic_cast<TryCatchNode*>(statement))
             {
