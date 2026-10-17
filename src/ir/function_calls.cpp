@@ -4687,6 +4687,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     currentFunctionExceptionFrame = nullptr;
     auto savedNamedValues = namedValues;
     auto savedConstantVars = constantVariables;
+    auto savedImmutableReferenceVars = immutableReferenceVariables;
     auto savedMovedVars = movedVariables;
     auto savedPtrBorrowTarget = pointerBorrowTarget;
     auto savedActiveBorrowers = activeBorrowers;
@@ -4726,6 +4727,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     // Initialise a fresh scope for the closure body
     namedValues.clear();
     constantVariables.clear();
+    immutableReferenceVariables.clear();
     movedVariables.clear();
     closureVariables.clear();
     runtimeClosureVariables.clear();
@@ -4876,7 +4878,10 @@ llvm::Function* CodeGenerator::generateClosureFn(
                 {
                     semanticType = reference->elementType;
                     if(!reference->isMutable)
+                    {
                         constantVariables.insert(parameter->name);
+                        immutableReferenceVariables.insert(parameter->name);
+                    }
                 }
                 variableTypes[parameter->name] = semanticType->kind;
                 if(auto* functionType =
@@ -4961,6 +4966,8 @@ llvm::Function* CodeGenerator::generateClosureFn(
     // Restore caller state
     namedValues = std::move(savedNamedValues);
     constantVariables = std::move(savedConstantVars);
+    immutableReferenceVariables =
+        std::move(savedImmutableReferenceVars);
     movedVariables = std::move(savedMovedVars);
     pointerBorrowTarget = std::move(savedPtrBorrowTarget);
     activeBorrowers = std::move(savedActiveBorrowers);
