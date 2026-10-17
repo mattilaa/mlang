@@ -525,6 +525,8 @@ private:
         std::string varName;
         bool hadPreviousDepth = false;
         int previousDepth = 0;
+        bool hadPreviousAggregateBorrowOrigins = false;
+        std::set<std::string> previousAggregateBorrowOrigins;
     };
     std::vector<std::vector<VariableScopeDepthEntry>> variableScopeDepthScopes;
 

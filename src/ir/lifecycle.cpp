@@ -108,6 +108,13 @@ void CodeGenerator::exitCleanupScope()
     for(auto it = depthEntries.rbegin(); it != depthEntries.rend(); ++it)
     {
         clearAggregateBorrowOrigins(it->varName);
+        if(it->hadPreviousAggregateBorrowOrigins)
+        {
+            aggregateBorrowOrigins[it->varName] =
+                it->previousAggregateBorrowOrigins;
+            for(const auto& owner : it->previousAggregateBorrowOrigins)
+                activeBorrowers[owner].insert(it->varName);
+        }
         if(it->hadPreviousDepth)
             variableScopeDepth[it->varName] = it->previousDepth;
         else
