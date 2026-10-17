@@ -10751,6 +10751,27 @@ TEST_F(MLATest, OwnershipAggregateForwardedPointerKeepsBorrowLive)
         << out;
 }
 
+// Field-specific return provenance should not borrow unrelated pointer args.
+TEST_F(MLATest, OwnershipAggregateForwardedPointerTracksSelectedFieldOrigin)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        fn relay(unused: ptr<i32>, selected: ptr<i32>) -> ptr<i32> {
+            var box: PointerBox = PointerBox {};
+            box.value = selected;
+            return box.value;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded: ptr<i32> = relay(&first, &second);
+            first = 3;
+            unsafe { return *forwarded + first - 5; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 // Pointer provenance must propagate through multiple visible forwarding calls.
 TEST_F(MLATest, OwnershipNestedFunctionReturnedPointerKeepsBorrowLive)
 {

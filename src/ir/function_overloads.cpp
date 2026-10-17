@@ -111,12 +111,35 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
         functionPointerReturnSummaryComplete.erase(symbol);
         bool hasUnknownReturnOrigin = false;
         std::map<std::string, std::set<size_t>> pointerAliases;
+        std::map<std::string, std::set<size_t>> pointerFieldAliases;
         for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
         {
             auto* parameter = node->parameters->parameters[i];
             if(parameter && dynamic_cast<PointerTypeNode*>(parameter->type))
                 pointerAliases[parameter->name].insert(i);
         }
+        std::function<bool(ExpressionNode*, std::string&)> getFieldPath =
+            [&](ExpressionNode* current, std::string& path) {
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(current))
+            {
+                path = identifier->name;
+                return true;
+            }
+            auto* field = dynamic_cast<FieldAccessNode*>(current);
+            if(!field)
+                return false;
+            if(field->object)
+            {
+                if(!getFieldPath(field->object, path))
+                    return false;
+            }
+            else
+                path = field->structName;
+            if(path.empty())
+                return false;
+            path += "." + field->fieldName;
+            return true;
+        };
 
         std::function<std::set<size_t>(ExpressionNode*)> origins =
             [&](ExpressionNode* expression) -> std::set<size_t> {
@@ -128,6 +151,18 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 return alias == pointerAliases.end()
                            ? std::set<size_t>{}
                            : alias->second;
+            }
+            if(auto* field = dynamic_cast<FieldAccessNode*>(expression))
+            {
+                std::string path;
+                if(getFieldPath(field, path))
+                {
+                    auto alias = pointerFieldAliases.find(path);
+                    if(alias != pointerFieldAliases.end())
+                        return alias->second;
+                }
+                hasUnknownReturnOrigin = true;
+                return {};
             }
             if(auto* cast = dynamic_cast<CastExpressionNode*>(expression))
                 return origins(cast->expression);
@@ -187,8 +222,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     hasUnknownReturnOrigin = true;
                 return arguments;
             }
-            if(dynamic_cast<FieldAccessNode*>(expression) ||
-               dynamic_cast<IndexExpressionNode*>(expression) ||
+            if(dynamic_cast<IndexExpressionNode*>(expression) ||
                dynamic_cast<TupleAccessNode*>(expression))
             {
                 // A pointer loaded from aggregate storage is not yet tracked
@@ -231,15 +265,23 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 return true;
             std::map<std::string, std::set<size_t>> previousAliases;
             std::set<std::string> aliasesNotPreviouslyPresent;
+            std::map<std::string,
+                     std::map<std::string, std::set<size_t>>>
+                previousFieldAliases;
+            std::set<std::string> shadowedNames;
             auto rememberShadow = [&](const std::string& name) {
-                if(previousAliases.count(name) != 0 ||
-                   aliasesNotPreviouslyPresent.count(name) != 0)
+                if(!shadowedNames.insert(name).second)
                     return;
                 auto previous = pointerAliases.find(name);
                 if(previous == pointerAliases.end())
                     aliasesNotPreviouslyPresent.insert(name);
                 else
                     previousAliases.emplace(name, previous->second);
+                const std::string prefix = name + ".";
+                auto& saved = previousFieldAliases[name];
+                for(const auto& fieldAlias : pointerFieldAliases)
+                    if(fieldAlias.first.compare(0, prefix.size(), prefix) == 0)
+                        saved.insert(fieldAlias);
             };
             bool fallsThrough = true;
             for(auto* statement : statements->statements)
@@ -247,10 +289,28 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 // Snapshot a shadow at its declaration point so earlier
                 // assignments in this block still update the outer binding.
                 if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
+                {
                     rememberShadow(declaration->name);
+                    const std::string prefix = declaration->name + ".";
+                    for(auto alias = pointerFieldAliases.begin();
+                        alias != pointerFieldAliases.end();)
+                        if(alias->first.compare(0, prefix.size(), prefix) == 0)
+                            alias = pointerFieldAliases.erase(alias);
+                        else
+                            ++alias;
+                }
                 else if(auto* declaration =
                             dynamic_cast<VarDeclNode*>(statement))
+                {
                     rememberShadow(declaration->name);
+                    const std::string prefix = declaration->name + ".";
+                    for(auto alias = pointerFieldAliases.begin();
+                        alias != pointerFieldAliases.end();)
+                        if(alias->first.compare(0, prefix.size(), prefix) == 0)
+                            alias = pointerFieldAliases.erase(alias);
+                        else
+                            ++alias;
+                }
                 if(!scanStatement(statement))
                 {
                     fallsThrough = false;
@@ -261,6 +321,20 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 pointerAliases.erase(name);
             for(auto& previous : previousAliases)
                 pointerAliases[previous.first] = std::move(previous.second);
+            for(const auto& name : shadowedNames)
+            {
+                const std::string prefix = name + ".";
+                for(auto alias = pointerFieldAliases.begin();
+                    alias != pointerFieldAliases.end();)
+                    if(alias->first.compare(0, prefix.size(), prefix) == 0)
+                        alias = pointerFieldAliases.erase(alias);
+                    else
+                        ++alias;
+                const auto saved = previousFieldAliases.find(name);
+                if(saved != previousFieldAliases.end())
+                    pointerFieldAliases.insert(saved->second.begin(),
+                                               saved->second.end());
+            }
             return fallsThrough;
         };
         scanStatement = [&](StatementNode* statement) {
@@ -298,71 +372,146 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 else
                     pointerAliases[assignment->name] = std::move(values);
             }
+            else if(auto* assignment =
+                        dynamic_cast<FieldAssignmentNode*>(statement))
+            {
+                std::string path;
+                bool hasPath = false;
+                if(assignment->target)
+                {
+                    hasPath = getFieldPath(assignment->target, path);
+                    if(hasPath)
+                        path += "." + assignment->fieldName;
+                }
+                else if(!assignment->structName.empty() &&
+                        !assignment->fieldName.empty())
+                {
+                    path = assignment->structName + "." +
+                           assignment->fieldName;
+                    hasPath = true;
+                }
+                if(hasPath)
+                    pointerFieldAliases[path] = origins(assignment->expression);
+                else
+                    hasUnknownReturnOrigin = true;
+            }
             if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                 return scanList(block->statements);
             else if(auto* branch = dynamic_cast<IfNode*>(statement))
             {
                 const auto baseAliases = pointerAliases;
+                const auto baseFieldAliases = pointerFieldAliases;
                 std::vector<std::map<std::string, std::set<size_t>>> branches;
+                std::vector<std::map<std::string, std::set<size_t>>>
+                    fieldBranches;
                 pointerAliases = baseAliases;
+                pointerFieldAliases = baseFieldAliases;
                 if(scanList(branch->thenBranch))
+                {
                     branches.push_back(pointerAliases);
+                    fieldBranches.push_back(pointerFieldAliases);
+                }
                 pointerAliases = baseAliases;
+                pointerFieldAliases = baseFieldAliases;
                 const bool elseIfFallsThrough =
                     scanStatement(branch->elseIfBranch);
                 if(branch->elseIfBranch && elseIfFallsThrough)
+                {
                     branches.push_back(pointerAliases);
+                    fieldBranches.push_back(pointerFieldAliases);
+                }
                 else if(!branch->elseBranch)
+                {
                     branches.push_back(baseAliases);
+                    fieldBranches.push_back(baseFieldAliases);
+                }
                 pointerAliases = baseAliases;
+                pointerFieldAliases = baseFieldAliases;
                 const bool elseFallsThrough = scanList(branch->elseBranch);
                 if(branch->elseBranch && elseFallsThrough)
+                {
                     branches.push_back(pointerAliases);
+                    fieldBranches.push_back(pointerFieldAliases);
+                }
                 if(branches.empty())
                     return false;
                 pointerAliases = mergeAliases(branches);
+                pointerFieldAliases = mergeAliases(fieldBranches);
                 return true;
             }
             else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
             {
                 const auto baseAliases = pointerAliases;
+                const auto baseFieldAliases = pointerFieldAliases;
                 std::vector<std::map<std::string, std::set<size_t>>> branches;
+                std::vector<std::map<std::string, std::set<size_t>>>
+                    fieldBranches;
                 pointerAliases = baseAliases;
+                pointerFieldAliases = baseFieldAliases;
                 if(scanList(branch->thenBranch))
+                {
                     branches.push_back(pointerAliases);
+                    fieldBranches.push_back(pointerFieldAliases);
+                }
                 pointerAliases = baseAliases;
+                pointerFieldAliases = baseFieldAliases;
                 const bool elseIfFallsThrough =
                     scanStatement(branch->elseIfBranch);
                 if(branch->elseIfBranch && elseIfFallsThrough)
+                {
                     branches.push_back(pointerAliases);
+                    fieldBranches.push_back(pointerFieldAliases);
+                }
                 else if(!branch->elseBranch)
+                {
                     branches.push_back(baseAliases);
+                    fieldBranches.push_back(baseFieldAliases);
+                }
                 pointerAliases = baseAliases;
+                pointerFieldAliases = baseFieldAliases;
                 const bool elseFallsThrough = scanList(branch->elseBranch);
                 if(branch->elseBranch && elseFallsThrough)
+                {
                     branches.push_back(pointerAliases);
+                    fieldBranches.push_back(pointerFieldAliases);
+                }
                 if(branches.empty())
                     return false;
                 pointerAliases = mergeAliases(branches);
+                pointerFieldAliases = mergeAliases(fieldBranches);
                 return true;
             }
             else if(auto* loop = dynamic_cast<WhileNode*>(statement))
             {
                 const auto baseAliases = pointerAliases;
+                const auto baseFieldAliases = pointerFieldAliases;
                 pointerAliases = baseAliases;
+                pointerFieldAliases = baseFieldAliases;
                 const bool bodyFallsThrough = scanList(loop->body);
                 if(!bodyFallsThrough)
+                {
                     pointerAliases = baseAliases;
+                    pointerFieldAliases = baseFieldAliases;
+                }
                 pointerAliases = mergeAliases({baseAliases, pointerAliases});
+                pointerFieldAliases = mergeAliases(
+                    {baseFieldAliases, pointerFieldAliases});
             }
             else if(auto* loop = dynamic_cast<ForNode*>(statement))
             {
                 const auto baseAliases = pointerAliases;
+                const auto baseFieldAliases = pointerFieldAliases;
                 pointerAliases = baseAliases;
+                pointerFieldAliases = baseFieldAliases;
                 const bool bodyFallsThrough = scanList(loop->body);
                 if(!bodyFallsThrough)
+                {
                     pointerAliases = baseAliases;
+                    pointerFieldAliases = baseFieldAliases;
+                }
                 pointerAliases = mergeAliases({baseAliases, pointerAliases});
+                pointerFieldAliases = mergeAliases(
+                    {baseFieldAliases, pointerFieldAliases});
             }
             else if(dynamic_cast<TryCatchNode*>(statement))
             {
