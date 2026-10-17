@@ -1641,6 +1641,60 @@ llvm::Value* CodeGenerator::generateCallableInvocation(
 
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
+    if(auto overloads = functionOverloads.find(node->name);
+       overloads != functionOverloads.end())
+    {
+        for(size_t argumentIndex = 0;
+            argumentIndex < node->arguments.size(); ++argumentIndex)
+        {
+            auto* identifier =
+                dynamic_cast<IdentifierNode*>(node->arguments[argumentIndex]);
+            auto closure = identifier
+                               ? closureVariables.find(identifier->name)
+                               : closureVariables.end();
+            if(closure == closureVariables.end() || !closure->second)
+                continue;
+
+            bool callableCandidate = false;
+            for(const auto& candidate : overloads->second)
+            {
+                if(!candidate.node || !candidate.node->parameters ||
+                   candidate.node->parameters->isVarArg ||
+                   candidate.node->parameters->parameters.size() !=
+                       node->arguments.size() ||
+                   argumentIndex >=
+                       candidate.node->parameters->parameters.size())
+                    continue;
+                if(dynamic_cast<FunctionTypeNode*>(
+                       candidate.node->parameters->parameters[argumentIndex]
+                           ->type))
+                    callableCandidate = true;
+            }
+            if(callableCandidate)
+                continue;
+
+            std::vector<std::pair<std::string, TypeNode*>> captures;
+            TypeNode* closureReturnType = nullptr;
+            if(getRuntimeClosureCaptures(closure->second, captures,
+                                         closureReturnType))
+                for(const auto& capture : captures)
+                    if(variableScopeDepth.count(capture.first))
+                    {
+                        reportError(
+                            node->line,
+                            "cannot pass closure '" + identifier->name +
+                                "' to function '" + node->name +
+                                "' because it borrows local variable '" +
+                                capture.first + "'");
+                        return nullptr;
+                    }
+            reportError(node->line,
+                        "closure '" + identifier->name +
+                            "' can only be passed to a callable parameter");
+            return nullptr;
+        }
+    }
+
     // Explicit value copy. This is deliberately opt-in: ordinary by-value
     // ownership transfers continue to move move-only values.
     if(node->name == "std::copy")

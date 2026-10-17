@@ -226,6 +226,31 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
                !globalNamedValues.count(id->name))
                 return generateFunctionItemValue(id, callableType);
         }
+        else if(expectedType && closureVariables.count(id->name))
+        {
+            auto closure = closureVariables.find(id->name);
+            std::vector<std::pair<std::string, TypeNode*>> captures;
+            TypeNode* returnType = nullptr;
+            if(closure->second &&
+               getRuntimeClosureCaptures(closure->second, captures,
+                                         returnType))
+            {
+                for(const auto& capture : captures)
+                    if(variableScopeDepth.count(capture.first))
+                    {
+                        reportError(node->line,
+                                    "cannot pass closure '" + id->name +
+                                        "' because it borrows local variable '" +
+                                        capture.first +
+                                        "' to a non-callable parameter");
+                        return nullptr;
+                    }
+            }
+            reportError(node->line, "closure '" + id->name +
+                                        "' requires a callable fn(...) -> ... "
+                                        "parameter");
+            return nullptr;
+        }
         return generateIdentifier(id);
     }
     else if(auto* callableInvoke = dynamic_cast<CallableInvokeNode*>(node))
