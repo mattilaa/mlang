@@ -628,6 +628,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
     std::string structTypeName;
     std::string fieldName;
     std::string ownerName;
+    std::string targetPlace;
     bool targetGlobalStorage = false;
 
     std::function<bool(ExpressionNode*)> isGlobalBackedStructExpr =
@@ -666,6 +667,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
         fieldName = fieldAccess->fieldName;
         ownerName = resolveBorrowOwnerFromLValue(fieldAccess);
+        targetPlace = resolveBorrowPlaceFromLValue(fieldAccess);
 
         // Get the struct pointer for the object part (everything except the
         // last field)
@@ -717,6 +719,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         // Simple assignment: a.b = x
         fieldName = node->fieldName;
         ownerName = node->structName;
+        targetPlace = ownerName + "." + fieldName;
 
         structPtr = namedValues[node->structName];
         if(!structPtr)
@@ -758,10 +761,10 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
     if(!ownerName.empty())
     {
+        std::set<std::string> allowedBorrowers;
         auto borIt = activeBorrowers.find(ownerName);
         if(borIt != activeBorrowers.end() && !borIt->second.empty())
         {
-            std::set<std::string> allowedBorrowers;
             if(node->target)
             {
                 std::function<void(ExpressionNode*)> collectAllowedBorrowers =
@@ -813,13 +816,36 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
             for(const auto& by : borIt->second)
             {
-                if(allowedBorrowers.find(by) == allowedBorrowers.end())
+                auto borrowPlace = pointerBorrowPlace.find(by);
+                const std::string place = borrowPlace == pointerBorrowPlace.end()
+                                              ? ownerName
+                                              : borrowPlace->second;
+                if(allowedBorrowers.find(by) == allowedBorrowers.end() &&
+                   borrowPlacesOverlap(place, targetPlace))
                 {
                     reportError(node->line,
                                 "cannot assign to field of '" + ownerName +
                                     "' while borrowed by '" + by + "'");
                     return;
                 }
+            }
+        }
+
+        auto mutBorrow = activeMutBorrower.find(ownerName);
+        if(mutBorrow != activeMutBorrower.end() &&
+           allowedBorrowers.find(mutBorrow->second) == allowedBorrowers.end())
+        {
+            auto borrowPlace = pointerBorrowPlace.find(mutBorrow->second);
+            const std::string place = borrowPlace == pointerBorrowPlace.end()
+                                          ? ownerName
+                                          : borrowPlace->second;
+            if(borrowPlacesOverlap(place, targetPlace))
+            {
+                reportError(node->line,
+                            "cannot assign to field of '" + ownerName +
+                                "' while borrowed by '" + mutBorrow->second +
+                                "'");
+                return;
             }
         }
     }

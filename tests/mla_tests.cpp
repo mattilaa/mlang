@@ -3250,6 +3250,44 @@ TEST_F(MLATest, FieldBorrowPlaceRestoresAfterShadowedPointerScope)
     EXPECT_EQ(compileAndRunExitCode(code), 9);
 }
 
+TEST_F(MLATest, FieldAssignmentAllowsDisjointLiveBorrow)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn observe(value: ptr<i32>) -> void { return; }
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            let held = &mut pair.left;
+            pair.right = 7;
+            observe(held);
+            return pair.right;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
+TEST_F(MLATest, FieldAssignmentRejectsOverlappingLiveBorrow)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn observe(value: ptr<i32>) -> void { return; }
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            let held = &pair.left;
+            pair.left = 7;
+            observe(held);
+            return pair.left;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'pair' while borrowed by 'held'"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, TraitObjectFieldVoidMutatingMethodRuns)
 {
     std::string code = R"(
