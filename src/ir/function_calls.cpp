@@ -5986,22 +5986,48 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
            !dynamic_cast<FunctionTypeNode*>(parameter->type))
             return false;
 
-        auto isDirectInvocation = [&](ExpressionNode* expression)
-        {
-            auto* call = dynamic_cast<FunctionCallNode*>(expression);
-            if(!call || call->name != parameter->name)
-                return false;
-            std::set<std::string> usedIdentifiers;
-            for(auto* argument : call->arguments)
-                collect_used_idents(argument, usedIdentifiers);
-            return usedIdentifiers.find(parameter->name) ==
-                   usedIdentifiers.end();
-        };
-
         auto conditionUsesParameter = [&](ExpressionNode* expression) {
             std::set<std::string> usedIdentifiers;
             collect_used_idents(expression, usedIdentifiers);
             return usedIdentifiers.count(parameter->name) != 0;
+        };
+        std::function<bool(ExpressionNode*)> expressionIsNoEscape;
+        expressionIsNoEscape = [&](ExpressionNode* expression) {
+            if(!expression || !conditionUsesParameter(expression))
+                return true;
+            if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
+            {
+                for(auto* argument : call->arguments)
+                    if(!expressionIsNoEscape(argument))
+                        return false;
+                // Any callback occurrence in the callee or arguments must
+                // itself be an invocation; passing the callback value is not
+                // a proof.
+                return true;
+            }
+            if(auto* binary = dynamic_cast<BinaryOpNode*>(expression))
+                return expressionIsNoEscape(binary->left) &&
+                       expressionIsNoEscape(binary->right);
+            if(auto* unary = dynamic_cast<UnaryOpNode*>(expression))
+                return expressionIsNoEscape(unary->operand);
+            if(auto* ternary = dynamic_cast<TernaryNode*>(expression))
+                return expressionIsNoEscape(ternary->condition) &&
+                       expressionIsNoEscape(ternary->trueExpr) &&
+                       expressionIsNoEscape(ternary->falseExpr);
+            if(auto* cast = dynamic_cast<CastExpressionNode*>(expression))
+                return expressionIsNoEscape(cast->expression);
+            if(auto* attempt = dynamic_cast<TryExpressionNode*>(expression))
+                return expressionIsNoEscape(attempt->expression);
+            return false;
+        };
+        auto isDirectInvocation = [&](ExpressionNode* expression) {
+            auto* call = dynamic_cast<FunctionCallNode*>(expression);
+            if(!call || call->name != parameter->name)
+                return false;
+            for(auto* argument : call->arguments)
+                if(!expressionIsNoEscape(argument))
+                    return false;
+            return true;
         };
         std::function<bool(StatementNode*)> statementIsNoEscape;
         std::function<bool(StatementListNode*)> statementsAreNoEscape;
@@ -6020,29 +6046,27 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                    dynamic_cast<ExpressionStatementNode*>(statement))
                 return isDirectInvocation(expressionStatement->expression);
             if(auto* returnStatement = dynamic_cast<ReturnNode*>(statement))
-                return !returnStatement->expression ||
-                       isDirectInvocation(returnStatement->expression) ||
-                       !conditionUsesParameter(returnStatement->expression);
+                return expressionIsNoEscape(returnStatement->expression);
             if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                 return statementsAreNoEscape(block->statements);
             if(auto* branch = dynamic_cast<IfNode*>(statement))
                 return !branch->conditionInit &&
-                       !conditionUsesParameter(branch->condition) &&
+                       expressionIsNoEscape(branch->condition) &&
                        statementsAreNoEscape(branch->thenBranch) &&
                        statementIsNoEscape(branch->elseIfBranch) &&
                        statementsAreNoEscape(branch->elseBranch);
             if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
-                return !conditionUsesParameter(branch->condition) &&
+                return expressionIsNoEscape(branch->condition) &&
                        statementsAreNoEscape(branch->thenBranch) &&
                        statementIsNoEscape(branch->elseIfBranch) &&
                        statementsAreNoEscape(branch->elseBranch);
             if(auto* loop = dynamic_cast<WhileNode*>(statement))
-                return !conditionUsesParameter(loop->condition) &&
+                return expressionIsNoEscape(loop->condition) &&
                        statementsAreNoEscape(loop->body);
             if(auto* loop = dynamic_cast<ForNode*>(statement))
                 return loop->varName != parameter->name &&
                        loop->indexVarName != parameter->name &&
-                       !conditionUsesParameter(loop->iterable) &&
+                       expressionIsNoEscape(loop->iterable) &&
                        statementsAreNoEscape(loop->body);
             if(auto* attempt = dynamic_cast<TryCatchNode*>(statement))
                 return attempt->catchName != parameter->name &&
@@ -6051,8 +6075,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             if(auto* print = dynamic_cast<PrintNode*>(statement))
             {
                 auto argumentIsSafe = [&](ExpressionNode* expression) {
-                    return isDirectInvocation(expression) ||
-                           !conditionUsesParameter(expression);
+                    return expressionIsNoEscape(expression);
                 };
                 for(auto* argument : print->arguments)
                     if(!argumentIsSafe(argument))
@@ -6063,13 +6086,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 return true;
             }
             if(auto* assertion = dynamic_cast<AssertNode*>(statement))
-                return isDirectInvocation(assertion->condition) ||
-                       !conditionUsesParameter(assertion->condition);
+                return expressionIsNoEscape(assertion->condition);
             if(auto* assertion = dynamic_cast<AssertEqNode*>(statement))
             {
                 auto expressionIsSafe = [&](ExpressionNode* expression) {
-                    return isDirectInvocation(expression) ||
-                           !conditionUsesParameter(expression);
+                    return expressionIsNoEscape(expression);
                 };
                 return expressionIsSafe(assertion->left) &&
                        expressionIsSafe(assertion->right);

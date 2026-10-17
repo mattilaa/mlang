@@ -102,8 +102,10 @@
  * and named-function items are implemented. A closure that borrows locals
  * across a boundary is conservatively rejected unless the compiler can prove
  * the callee does not let it escape. This proof currently covers direct
- * invocations in straight-line code, blocks, conditionals, loops, try/catch,
- * and print/assert expressions; other statement forms remain conservative.
+ * invocations, including invocations nested inside unary, binary, ternary,
+ * cast, or try expressions, in straight-line code, blocks, conditionals,
+ * loops, try/catch, and print/assert expressions; other statement forms
+ * remain conservative.
  * General closure copying and explicit owned/move captures are not part of
  * the current ownership model.
  */

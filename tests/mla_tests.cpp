@@ -8253,6 +8253,22 @@ TEST_F(MLATest, BorrowedClosureCanPassToProvenNoEscapeParameter)
     EXPECT_EQ(compileAndRunExitCode(code), 13);
 }
 
+// A callback invocation nested in a return expression is still non-escaping.
+TEST_F(MLATest, BorrowedClosureCanPassToNoEscapeParameterInExpression)
+{
+    std::string code = R"(
+        fn invoke(callback: fn() -> i32) -> i32 {
+            return callback() + 5;
+        }
+        fn main() -> i32 {
+            var local: i32 = 13;
+            let read = || { return local; };
+            return invoke(read);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 18);
+}
+
 // A callback remains non-escaping when invoked only inside conditional branches.
 TEST_F(MLATest, BorrowedClosureCanPassToNoEscapeParameterWithBranches)
 {

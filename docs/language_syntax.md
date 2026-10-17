@@ -1276,9 +1276,10 @@ function-typed parameter when the compiler can prove the callee only invokes
 or ignores that parameter; storing it, returning it, forwarding it, or passing
 it to an opaque/external function is rejected. This no-escape analysis is
 intentionally conservative. The current proof recognizes direct invocations
-in straight-line code, nested blocks, `if`/`else` branches, `while`/`for`
-loops, `try`/`catch` blocks, and print/assert expressions; other statement
-forms remain rejected until they can be analyzed safely.
+including calls nested inside unary, binary, ternary, cast, or `try` expressions,
+in straight-line code, nested blocks, `if`/`else` branches, `while`/`for` loops,
+`try`/`catch` blocks, and print/assert expressions; other statement forms
+remain rejected until they can be analyzed safely.
 
 Inline typed lambda (captures outer variables, callable via bound name):
 
