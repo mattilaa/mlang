@@ -4863,6 +4863,100 @@ TEST_F(MLATest, OwnershipScopeExitFreeMethodConsumesValue)
     EXPECT_NE(out.find("use of moved value"), std::string::npos);
 }
 
+// A cleanup still runs on a branch where an outer value was not moved.
+TEST_F(MLATest, OwnershipConditionalMoveCleansUpUnmovedPath)
+{
+    std::string code = R"(
+        struct Owned {
+            var marker: i32;
+            var items: list<i32>;
+        };
+
+        impl Owned {
+            fn free(self: Owned) -> i32 {
+                println!("free {}", self.marker);
+                return 0;
+            }
+        }
+
+        fn choose() -> bool { return false; }
+
+        fn main() -> i32 {
+            var owned: Owned = Owned { marker: 7, items: [1] };
+            if choose() {
+                let moved: Owned = owned;
+            }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    ASSERT_TRUE(compile());
+    EXPECT_EQ(run(), "free 7\n");
+}
+
+// Moving a value in the taken branch cleans it once through the destination.
+TEST_F(MLATest, OwnershipConditionalMoveCleansUpMovedPathExactlyOnce)
+{
+    std::string code = R"(
+        struct Owned {
+            var marker: i32;
+            var items: list<i32>;
+        };
+
+        impl Owned {
+            fn free(self: Owned) -> i32 {
+                println!("free {}", self.marker);
+                return 0;
+            }
+        }
+
+        fn choose() -> bool { return true; }
+
+        fn main() -> i32 {
+            var owned: Owned = Owned { marker: 7, items: [1] };
+            if choose() {
+                let moved: Owned = owned;
+            }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    ASSERT_TRUE(compile());
+    EXPECT_EQ(run(), "free 7\n");
+}
+
+// Reinitializing a moved cleanup type enables cleanup for the new value.
+TEST_F(MLATest, OwnershipConditionalMoveThenReinitializeCleansBothValues)
+{
+    std::string code = R"(
+        struct Owned {
+            var marker: i32;
+            var items: list<i32>;
+        };
+
+        impl Owned {
+            fn free(self: Owned) -> i32 {
+                println!("free {}", self.marker);
+                return 0;
+            }
+        }
+
+        fn choose() -> bool { return true; }
+
+        fn main() -> i32 {
+            var owned: Owned = Owned { marker: 7, items: [1] };
+            if choose() {
+                let moved: Owned = owned;
+                owned = Owned { marker: 8, items: [2] };
+            }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    ASSERT_TRUE(compile());
+    EXPECT_EQ(run(), "free 7\nfree 8\n");
+}
+
 TEST_F(MLATest, OwnershipUseOutsideBlockReportsUnknownVariable)
 {
     std::string code = R"(

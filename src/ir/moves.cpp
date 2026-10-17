@@ -80,6 +80,7 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
             {
                 if(!validateMoveFromBorrowedPlace(e))
                     return;
+                setActiveDropFlag(id->name, false);
                 movedVariables.insert(id->name);
             }
             return;

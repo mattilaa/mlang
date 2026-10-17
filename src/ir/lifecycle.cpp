@@ -142,33 +142,9 @@ void CodeGenerator::exitCleanupScope()
 
     for(auto it = actions.rbegin(); it != actions.rend(); ++it)
     {
-        if(movedVariables.count(it->varName))
+        if(movedVariables.count(it->varName) && !it->dropFlag)
             continue;
-        if(!it->function)
-            continue;
-        auto nv = namedValues.find(it->varName);
-        if(nv == namedValues.end() || !nv->second)
-            continue;
-        auto sv = structVariableTypes.find(it->varName);
-        if(sv == structVariableTypes.end() || sv->second != it->structTypeName)
-            continue;
-
-        auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(nv->second);
-        if(!alloca)
-            continue;
-        llvm::Type* allocaType = alloca->getAllocatedType();
-        if(!allocaType || !allocaType->isStructTy())
-            continue;
-
-        if(it->callKind == ScopeCleanup::CallKind::ByPointerMethod)
-        {
-            builder.CreateCall(it->function, {alloca});
-            continue;
-        }
-
-        llvm::Value* value =
-            builder.CreateLoad(allocaType, alloca, it->varName + ".dropval");
-        builder.CreateCall(it->function, {value});
+        emitScopeCleanup(*it, "scope");
     }
 }
 
@@ -183,34 +159,9 @@ void CodeGenerator::emitAllActiveCleanups()
         auto& actions = *scopeIt;
         for(auto it = actions.rbegin(); it != actions.rend(); ++it)
         {
-            if(movedVariables.count(it->varName))
+            if(movedVariables.count(it->varName) && !it->dropFlag)
                 continue;
-            if(!it->function)
-                continue;
-            auto nv = namedValues.find(it->varName);
-            if(nv == namedValues.end() || !nv->second)
-                continue;
-            auto sv = structVariableTypes.find(it->varName);
-            if(sv == structVariableTypes.end() ||
-               sv->second != it->structTypeName)
-                continue;
-
-            auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(nv->second);
-            if(!alloca)
-                continue;
-            llvm::Type* allocaType = alloca->getAllocatedType();
-            if(!allocaType || !allocaType->isStructTy())
-                continue;
-
-            if(it->callKind == ScopeCleanup::CallKind::ByPointerMethod)
-            {
-                builder.CreateCall(it->function, {alloca});
-                continue;
-            }
-
-            llvm::Value* value = builder.CreateLoad(
-                allocaType, alloca, it->varName + ".dropval.ret");
-            builder.CreateCall(it->function, {value});
+            emitScopeCleanup(*it, "return");
         }
     }
 }
@@ -226,36 +177,89 @@ void CodeGenerator::emitActiveCleanupsDeeperThan(int scopeDepth)
         auto& actions = cleanupScopes[static_cast<size_t>(depth - 1)];
         for(auto it = actions.rbegin(); it != actions.rend(); ++it)
         {
-            if(movedVariables.count(it->varName))
+            if(movedVariables.count(it->varName) && !it->dropFlag)
                 continue;
-            if(!it->function)
-                continue;
-            auto nv = namedValues.find(it->varName);
-            if(nv == namedValues.end() || !nv->second)
-                continue;
-            auto sv = structVariableTypes.find(it->varName);
-            if(sv == structVariableTypes.end() ||
-               sv->second != it->structTypeName)
-                continue;
-
-            auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(nv->second);
-            if(!alloca)
-                continue;
-            llvm::Type* allocaType = alloca->getAllocatedType();
-            if(!allocaType || !allocaType->isStructTy())
-                continue;
-
-            if(it->callKind == ScopeCleanup::CallKind::ByPointerMethod)
-            {
-                builder.CreateCall(it->function, {alloca});
-                continue;
-            }
-
-            llvm::Value* value = builder.CreateLoad(
-                allocaType, alloca, it->varName + ".dropval.exc");
-            builder.CreateCall(it->function, {value});
+            emitScopeCleanup(*it, "unwind");
         }
     }
+}
+
+void CodeGenerator::emitScopeCleanup(const ScopeCleanup& cleanup,
+                                     const std::string& suffix)
+{
+    if(!cleanup.function || !builder.GetInsertBlock() ||
+       mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
+        return;
+
+    auto value = namedValues.find(cleanup.varName);
+    if(value == namedValues.end() || !value->second)
+        return;
+    auto type = structVariableTypes.find(cleanup.varName);
+    if(type == structVariableTypes.end() || type->second != cleanup.structTypeName)
+        return;
+
+    auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(value->second);
+    if(!alloca)
+        return;
+    llvm::Type* allocaType = alloca->getAllocatedType();
+    if(!allocaType || !allocaType->isStructTy())
+        return;
+
+    auto emitCall = [&]() {
+        if(cleanup.callKind == ScopeCleanup::CallKind::ByPointerMethod)
+        {
+            builder.CreateCall(cleanup.function, {alloca});
+            return;
+        }
+
+        llvm::Value* aggregate = builder.CreateLoad(
+            allocaType, alloca, cleanup.varName + ".dropval." + suffix);
+        builder.CreateCall(cleanup.function, {aggregate});
+    };
+
+    if(!cleanup.dropFlag)
+    {
+        emitCall();
+        return;
+    }
+
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* runBlock = llvm::BasicBlock::Create(
+        context, cleanup.varName + ".drop." + suffix, function);
+    llvm::BasicBlock* continueBlock = llvm::BasicBlock::Create(
+        context, cleanup.varName + ".drop.cont." + suffix, function);
+    llvm::Value* initialized = builder.CreateLoad(
+        llvm::Type::getInt1Ty(context), cleanup.dropFlag,
+        cleanup.varName + ".initialized");
+    builder.CreateCondBr(initialized, runBlock, continueBlock);
+
+    builder.SetInsertPoint(runBlock);
+    builder.CreateStore(llvm::ConstantInt::getFalse(context),
+                        cleanup.dropFlag);
+    emitCall();
+    if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
+        builder.CreateBr(continueBlock);
+    builder.SetInsertPoint(continueBlock);
+}
+
+llvm::AllocaInst* CodeGenerator::findActiveDropFlag(
+    const std::string& varName) const
+{
+    for(auto scope = cleanupScopes.rbegin(); scope != cleanupScopes.rend();
+        ++scope)
+        for(auto cleanup = scope->rbegin(); cleanup != scope->rend(); ++cleanup)
+            if(cleanup->varName == varName && cleanup->dropFlag)
+                return cleanup->dropFlag;
+    return nullptr;
+}
+
+void CodeGenerator::setActiveDropFlag(const std::string& varName,
+                                     bool initialized)
+{
+    if(auto* flag = findActiveDropFlag(varName))
+        builder.CreateStore(llvm::ConstantInt::get(
+                                llvm::Type::getInt1Ty(context), initialized),
+                            flag);
 }
 
 CodeGenerator::ScopeCleanup
@@ -345,6 +349,17 @@ void CodeGenerator::registerStructCleanupIfNeeded(
     if(cleanup.function)
     {
         cleanup.varName = varName;
+        llvm::Function* function = builder.GetInsertBlock()
+                                       ? builder.GetInsertBlock()->getParent()
+                                       : nullptr;
+        if(function)
+        {
+            cleanup.dropFlag = createEntryBlockAlloca(
+                function, llvm::Type::getInt1Ty(context),
+                varName + ".initialized");
+            builder.CreateStore(llvm::ConstantInt::getTrue(context),
+                                cleanup.dropFlag);
+        }
         cleanupScopes.back().push_back(std::move(cleanup));
     }
 }

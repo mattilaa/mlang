@@ -548,6 +548,7 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
 
     value = applyStructCopySemantics(value);
     builder.CreateStore(value, variable);
+    setActiveDropFlag(node->name, true);
     clearMovedVariable(node->name);
     if(functionTypeVariables.count(node->name) != 0)
     {

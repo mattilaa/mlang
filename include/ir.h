@@ -566,6 +566,7 @@ private:
         std::string varName;
         std::string structTypeName;
         llvm::Function* function = nullptr;
+        llvm::AllocaInst* dropFlag = nullptr;
         CallKind callKind = CallKind::ByValueFunction;
     };
     std::vector<std::vector<ScopeCleanup>> cleanupScopes;
@@ -879,6 +880,10 @@ private:
     void releaseRuntimeClosureBorrows(const std::string& closureName);
     void emitAllActiveCleanups();
     void emitActiveCleanupsDeeperThan(int scopeDepth);
+    void emitScopeCleanup(const ScopeCleanup& cleanup,
+                          const std::string& suffix);
+    llvm::AllocaInst* findActiveDropFlag(const std::string& varName) const;
+    void setActiveDropFlag(const std::string& varName, bool initialized);
     ScopeCleanup resolveDropFunctionForStruct(const std::string& structTypeName);
     void registerStructCleanupIfNeeded(const std::string& varName,
                                        const std::string& structTypeName);
