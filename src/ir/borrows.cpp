@@ -2294,11 +2294,18 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
     auto registerOwnerBorrow = [&](const std::string& ownerName,
                                    bool enforceExclusive) -> bool
     {
-        if(globalNamedValues.find(ownerName) == globalNamedValues.end() &&
-           isVariableMoved(ownerName))
+        if(globalNamedValues.find(ownerName) == globalNamedValues.end())
         {
-            reportError(line, "cannot borrow moved value: '" + ownerName + "'");
-            return false;
+            const std::string requestedPlace =
+                borrowPlace.empty() ? ownerName : borrowPlace;
+            for(const auto& movedPlace : movedVariables)
+                if(borrowPlacesOverlap(requestedPlace, movedPlace))
+                {
+                    reportError(line,
+                                "cannot borrow moved value: '" + movedPlace +
+                                    "'");
+                    return false;
+                }
         }
 
         auto pointerDepthIt = variableScopeDepth.find(pointerVar);

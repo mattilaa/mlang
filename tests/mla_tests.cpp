@@ -8829,6 +8829,72 @@ TEST_F(MLATest, OwnershipRejectsUseAfterMovingStructField)
         << out;
 }
 
+// A partially moved field cannot be borrowed again through its old storage.
+TEST_F(MLATest, OwnershipRejectsBorrowOfPartiallyMovedField)
+{
+    std::string code = R"(
+        struct Holder { var items: list<i32>; };
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var holder: Holder = Holder { items: [1, 2] };
+            let moved = consume(holder.items);
+            let borrowed: ptr<list<i32>> = &holder.items;
+            return moved;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow moved value: 'holder.items'"),
+              std::string::npos)
+        << out;
+}
+
+// A disjoint field can still be borrowed after a sibling field was moved.
+TEST_F(MLATest, OwnershipAllowsBorrowOfDisjointFieldAfterPartialMove)
+{
+    std::string code = R"(
+        struct Holder {
+            var items: list<i32>;
+            var marker: i32;
+        };
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var holder: Holder = Holder { items: [1, 2], marker: 3 };
+            let moved = consume(holder.items);
+            let borrowed: ptr<i32> = &holder.marker;
+            unsafe { return *borrowed + moved - 5; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// Borrowing the whole aggregate overlaps every partially moved field.
+TEST_F(MLATest, OwnershipRejectsWholeAggregateBorrowAfterPartialMove)
+{
+    std::string code = R"(
+        struct Holder { var items: list<i32>; };
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var holder: Holder = Holder { items: [1, 2] };
+            let moved = consume(holder.items);
+            let borrowed: ptr<Holder> = &holder;
+            return moved;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow moved value: 'holder.items'"),
+              std::string::npos)
+        << out;
+}
+
 // A partial move leaves disjoint fields usable and permits field reinitialization.
 TEST_F(MLATest, OwnershipPartialStructMoveAllowsSiblingAndReinitialization)
 {
