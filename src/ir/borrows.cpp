@@ -685,6 +685,9 @@ void CodeGenerator::trackAggregateBorrowOrigins(
             auto pointer = pointerBorrowTarget.find(identifier->name);
             if(pointer != pointerBorrowTarget.end())
                 origins.insert(pointer->second);
+            for(const auto& active : activeBorrowers)
+                if(active.second.count(identifier->name) != 0)
+                    origins.insert(active.first);
             auto aggregate = aggregateBorrowOrigins.find(identifier->name);
             if(aggregate != aggregateBorrowOrigins.end())
                 origins.insert(aggregate->second.begin(),

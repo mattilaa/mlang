@@ -8013,6 +8013,30 @@ TEST_F(MLATest, PointerAliasPreservesAllAggregateBorrowOrigins)
     EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
 }
 
+TEST_F(MLATest, AggregateCopyPreservesAllPointerBorrowOrigins)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&first);
+            pointers.push(&second);
+            let pointer = pointers[0];
+            let boxed = PointerBox { value: pointer };
+            second = 3;
+            unsafe { return *boxed.value; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
+}
+
 TEST_F(MLATest, StructFieldListPushTracksBorrowOrigin)
 {
     std::string code = R"(
