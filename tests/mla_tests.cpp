@@ -5700,6 +5700,28 @@ TEST_F(MLATest, EnumWithI64BackingCompilesAndMatches)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, RuntimeClosurePreservesEnumParameterIdentity)
+{
+    std::string code = R"(
+        enum Status : u8 {
+            Idle = 1,
+            Ready = 2
+        };
+        fn main() -> i32 {
+            let describe: fn(Status) -> i32 = |status| {
+                println!("{}", status);
+                return match status {
+                    Status::Idle => 3,
+                    Status::Ready => 7,
+                    _ => 0
+                };
+            };
+            return describe(Status::Ready) - 7;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "Status::Ready\n");
+}
+
 TEST_F(MLATest, EnumWithU8BackingCompiles)
 {
     std::string code = R"(

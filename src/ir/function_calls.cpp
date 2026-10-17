@@ -4679,8 +4679,18 @@ llvm::Function* CodeGenerator::generateClosureFn(
                     functionTypeVariables[parameter->name] = functionType;
                 if(auto* structType =
                        dynamic_cast<StructTypeRefNode*>(parameter->type))
-                    structVariableTypes[parameter->name] =
-                        structType->structName;
+                {
+                    std::string enumName =
+                        resolveVisibleEnumName(structType->structName);
+                    if(!enumName.empty())
+                    {
+                        variableTypes[parameter->name] = TypeNode::TYPE_INT;
+                        enumVariableTypes[parameter->name] = enumName;
+                    }
+                    else
+                        structVariableTypes[parameter->name] =
+                            structType->structName;
+                }
                 else if(auto* genericStruct =
                             dynamic_cast<GenericStructTypeRefNode*>(
                                 parameter->type))
