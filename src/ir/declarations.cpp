@@ -254,6 +254,16 @@ bool CodeGenerator::getRuntimeClosureCaptures(
         if(value == namedValues.end() ||
            llvm::isa<llvm::GlobalVariable>(value->second))
             continue;
+
+        for(const auto& movedPlace : movedVariables)
+            if(borrowPlacesOverlap(name, movedPlace))
+            {
+                reportError(closure->line,
+                            "cannot capture moved value: '" + movedPlace +
+                                "'");
+                return false;
+            }
+
         if(closureVariables.find(name) != closureVariables.end())
             return false;
         if(!llvm::isa<llvm::AllocaInst>(value->second))

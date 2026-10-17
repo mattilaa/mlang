@@ -8858,6 +8858,29 @@ TEST_F(MLATest, OwnershipRejectsPartialMoveFromTypeWithDropMethod)
         << out;
 }
 
+// A runtime closure cannot capture aggregate storage after one field moved.
+TEST_F(MLATest, OwnershipRejectsClosureCaptureOfPartiallyMovedAggregate)
+{
+    std::string code = R"(
+        struct Holder { var items: list<i32>; };
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var holder: Holder = Holder { items: [1, 2] };
+            let moved = consume(holder.items);
+            let read: fn() -> i32 = || { return holder.items.len(); };
+            return read() + moved;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot capture moved value: 'holder.items'"),
+              std::string::npos)
+        << out;
+}
+
 // A partially moved field cannot be borrowed again through its old storage.
 TEST_F(MLATest, OwnershipRejectsBorrowOfPartiallyMovedField)
 {
