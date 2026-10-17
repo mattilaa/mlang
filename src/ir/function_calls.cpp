@@ -2167,13 +2167,15 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             auto activeIt = activeBorrowers.find(owner);
             auto overlapsActiveBorrower = [&](const std::string& borrower) {
                 auto ownerIt = pointerBorrowTarget.find(borrower);
-                if(ownerIt == pointerBorrowTarget.end() ||
+                if(ownerIt != pointerBorrowTarget.end() &&
                    ownerIt->second != owner)
                     return false;
                 auto placeIt = pointerBorrowPlace.find(borrower);
                 std::string activePath =
-                    placeIt == pointerBorrowPlace.end() ? owner
-                                                        : placeIt->second;
+                    ownerIt == pointerBorrowTarget.end() ||
+                            placeIt == pointerBorrowPlace.end()
+                        ? owner
+                        : placeIt->second;
                 if(activePath.compare(0, owner.size(), owner) == 0)
                 {
                     activePath.erase(0, owner.size());

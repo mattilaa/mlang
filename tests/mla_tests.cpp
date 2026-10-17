@@ -6013,6 +6013,74 @@ TEST_F(MLATest, RuntimeClosureCaptureBorrowEndsAfterLastUse)
     EXPECT_EQ(compileAndRunExitCode(code), 9);
 }
 
+TEST_F(MLATest, RuntimeClosurePointerCaptureKeepsBorrowedOwnerLive)
+{
+    std::string code = R"(
+        struct Holder { var items: list<i32>; };
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+        fn inspect(items: ptr<list<i32>>) -> i32 { return 0; }
+
+        fn main() -> i32 {
+            let holder: Holder = Holder { items: [1, 2] };
+            let pointer = &holder.items;
+            let read = || { return inspect(pointer); };
+            let moved = consume(holder.items);
+            return read() + moved;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot move"), std::string::npos);
+}
+
+TEST_F(MLATest, RuntimeClosurePointerCaptureKeepsFieldSensitiveBorrow)
+{
+    std::string code = R"(
+        struct Holder {
+            var items: list<i32>;
+            var spare: list<i32>;
+        };
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+        fn inspect(items: ptr<list<i32>>) -> i32 { return 0; }
+
+        fn main() -> i32 {
+            let holder: Holder = Holder { items: [1, 2], spare: [3] };
+            let pointer = &holder.items;
+            let read = || { return inspect(pointer); };
+            let moved = consume(holder.spare);
+            return read() + moved;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 1);
+}
+
+TEST_F(MLATest, RuntimeClosurePointerCaptureBorrowSurvivesBlockScope)
+{
+    std::string code = R"(
+        struct Holder { var items: list<i32>; };
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+        fn inspect(items: ptr<list<i32>>) -> i32 { return 0; }
+
+        fn main() -> i32 {
+            let holder: Holder = Holder { items: [1, 2] };
+            {
+                let pointer = &holder.items;
+                let read = || { return inspect(pointer); };
+                let moved = consume(holder.items);
+                return read() + moved;
+            }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot move"), std::string::npos);
+}
+
 TEST_F(MLATest, RuntimeClosureCanBeReassignedWithMatchingSignature)
 {
     std::string code = R"(

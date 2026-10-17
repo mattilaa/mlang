@@ -1,9 +1,6 @@
 #include "ir.h"
-#include "ir/ast_analysis.h"
 
 #include <llvm/Config/llvm-config.h>
-
-using mlang::ir_detail::ast_analysis::collect_used_idents;
 
 void CodeGenerator::generateStatement(StatementNode* node)
 {
@@ -107,32 +104,7 @@ void CodeGenerator::generateStatement(StatementNode* node)
         for(size_t si = 0; si < blkStmts.size(); si++)
         {
             generateStatement(blkStmts[si]);
-            // NLL: expire borrow variables not referenced in remaining stmts
-            if(!pointerBorrowTarget.empty() ||
-               !runtimeClosureBorrowOwners.empty())
-            {
-                std::set<std::string> futureIdents;
-                for(size_t sj = si + 1; sj < blkStmts.size(); sj++)
-                    collect_used_idents(blkStmts[sj], futureIdents);
-                std::vector<std::string> toClear;
-                for(const auto& kv : pointerBorrowTarget)
-                {
-                    if(futureIdents.count(kv.first))
-                        continue;
-                    toClear.push_back(kv.first);
-                }
-                for(const auto& ptr : toClear)
-                    clearPointerBorrow(ptr);
-
-                for(const auto& closure : runtimeClosureBorrowOwners)
-                {
-                    auto depth = variableScopeDepth.find(closure.first);
-                    if(depth != variableScopeDepth.end() &&
-                       depth->second == currentScopeDepth() &&
-                       !futureIdents.count(closure.first))
-                        releaseRuntimeClosureBorrows(closure.first);
-                }
-            }
+            expireUnusedLocalBorrows(blkStmts, si, currentScopeDepth());
         }
         if(blockNode->isUnsafe)
             unsafeDepth--;

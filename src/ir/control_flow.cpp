@@ -21,12 +21,23 @@ void CodeGenerator::expireUnusedLocalBorrows(
     for(size_t index = statementIndex + 1; index < statements.size(); ++index)
         collect_used_idents(statements[index], futureIdents);
 
+    std::set<std::string> capturedPointersInLiveClosures;
+    for(const auto& closure : runtimeClosureBorrowOwners)
+    {
+        if(!futureIdents.count(closure.first))
+            continue;
+        for(const auto& capture : closure.second)
+            if(pointerBorrowTarget.find(capture) != pointerBorrowTarget.end())
+                capturedPointersInLiveClosures.insert(capture);
+    }
+
     std::vector<std::string> toClear;
     for(const auto& borrow : pointerBorrowTarget)
     {
         auto depth = variableScopeDepth.find(borrow.first);
         if(depth != variableScopeDepth.end() && depth->second == scopeDepth &&
-           !futureIdents.count(borrow.first))
+           !futureIdents.count(borrow.first) &&
+           !capturedPointersInLiveClosures.count(borrow.first))
             toClear.push_back(borrow.first);
     }
     for(const auto& pointer : toClear)

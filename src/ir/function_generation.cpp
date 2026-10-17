@@ -6,7 +6,6 @@
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Verifier.h>
 
-using mlang::ir_detail::ast_analysis::collect_used_idents;
 using mlang::ir_detail::ast_analysis::contains_exception_control_flow;
 using mlang::ir_detail::common::Helpers;
 
@@ -542,32 +541,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         for(size_t si = 0; si < bodyStmts.size(); si++)
         {
             generateStatement(bodyStmts[si]);
-            // NLL: expire borrow variables not referenced in remaining stmts
-            if(!pointerBorrowTarget.empty() ||
-               !runtimeClosureBorrowOwners.empty())
-            {
-                std::set<std::string> futureIdents;
-                for(size_t sj = si + 1; sj < bodyStmts.size(); sj++)
-                    collect_used_idents(bodyStmts[sj], futureIdents);
-                std::vector<std::string> toClear;
-                for(const auto& kv : pointerBorrowTarget)
-                {
-                    if(futureIdents.count(kv.first))
-                        continue;
-                    toClear.push_back(kv.first);
-                }
-                for(const auto& ptr : toClear)
-                    clearPointerBorrow(ptr);
-
-                for(const auto& closure : runtimeClosureBorrowOwners)
-                {
-                    auto depth = variableScopeDepth.find(closure.first);
-                    if(depth != variableScopeDepth.end() &&
-                       depth->second == currentScopeDepth() &&
-                       !futureIdents.count(closure.first))
-                        releaseRuntimeClosureBorrows(closure.first);
-                }
-            }
+            expireUnusedLocalBorrows(bodyStmts, si, currentScopeDepth());
         }
     }
 

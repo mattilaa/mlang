@@ -21,12 +21,15 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
 
         auto conflictsWith = [&](const std::string& borrower) {
             auto borrowerOwner = pointerBorrowTarget.find(borrower);
-            if(borrowerOwner == pointerBorrowTarget.end() ||
+            if(borrowerOwner != pointerBorrowTarget.end() &&
                borrowerOwner->second != owner)
                 return false;
             auto place = pointerBorrowPlace.find(borrower);
             const std::string borrowedPlace =
-                place == pointerBorrowPlace.end() ? owner : place->second;
+                borrowerOwner == pointerBorrowTarget.end() ||
+                        place == pointerBorrowPlace.end()
+                    ? owner
+                    : place->second;
             if(!borrowPlacesOverlap(targetPlace, borrowedPlace))
                 return false;
             reportError(line, "cannot move '" + targetPlace +
