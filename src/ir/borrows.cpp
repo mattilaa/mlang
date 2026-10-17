@@ -56,6 +56,19 @@ CodeGenerator::resolveBorrowPlaceFromLValue(ExpressionNode* expr) const
         [&](ExpressionNode* value) -> std::optional<int64_t> {
         if(auto* literal = dynamic_cast<IntLiteralNode*>(value))
             return literal->value;
+        if(auto* cexpr = dynamic_cast<CexprExpressionNode*>(value))
+            return constantInteger(cexpr->expression);
+        if(auto* identifier = dynamic_cast<IdentifierNode*>(value))
+        {
+            auto constant = constexprValues.find(identifier->name);
+            if(constant == constexprValues.end())
+                return std::nullopt;
+            if(constant->second.kind == ConstexprValue::Kind::Int)
+                return constant->second.intValue;
+            if(constant->second.kind == ConstexprValue::Kind::Bool)
+                return constant->second.boolValue ? 1 : 0;
+            return std::nullopt;
+        }
         if(auto* unary = dynamic_cast<UnaryOpNode*>(value))
         {
             auto operand = constantInteger(unary->operand);
