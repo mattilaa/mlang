@@ -7201,6 +7201,28 @@ TEST_F(MLATest, OwnershipKeepsBorrowLiveForMatchExpressionUse)
     EXPECT_NE(out.find("while borrowed"), std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipKeepsBorrowLiveForListLiteralUse)
+{
+    std::string code = R"(
+        struct Box {
+            var value: i32;
+        };
+
+        fn main() -> i32 {
+            var box: Box = Box { value: 1 };
+            let p: ptr<Box> = &box;
+            box.value = 2;
+            let values: list<i32> = [(*p).value];
+            return values[0];
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipCanAssignFieldAfterBorrowScopeEnds)
 {
     std::string code = R"(

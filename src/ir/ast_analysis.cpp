@@ -23,6 +23,16 @@ void collect_used_idents(ASTNode* node, std::set<std::string>& out)
         collect_used_idents(un->operand, out);
         return;
     }
+    if(auto* update = dynamic_cast<UpdateExpressionNode*>(node))
+    {
+        collect_used_idents(update->operand, out);
+        return;
+    }
+    if(auto* fold = dynamic_cast<FoldExpressionNode*>(node))
+    {
+        collect_used_idents(fold->packExpr, out);
+        return;
+    }
     if(auto* tern = dynamic_cast<TernaryNode*>(node))
     {
         collect_used_idents(tern->condition, out);
@@ -59,6 +69,12 @@ void collect_used_idents(ASTNode* node, std::set<std::string>& out)
             collect_used_idents(arg, out);
         return;
     }
+    if(auto* asmExpr = dynamic_cast<InlineAsmNode*>(node))
+    {
+        for(auto* arg : asmExpr->arguments)
+            collect_used_idents(arg, out);
+        return;
+    }
     if(auto* closure = dynamic_cast<ClosureNode*>(node))
     {
         if(closure->body)
@@ -78,6 +94,60 @@ void collect_used_idents(ASTNode* node, std::set<std::string>& out)
         if(!fa->structName.empty())
             out.insert(fa->structName);
         collect_used_idents(fa->object, out);
+        return;
+    }
+    if(auto* tuple = dynamic_cast<TupleAccessNode*>(node))
+    {
+        collect_used_idents(tuple->tuple, out);
+        return;
+    }
+    if(auto* mapIter = dynamic_cast<MapIteratorNode*>(node))
+    {
+        collect_used_idents(mapIter->mapExpr, out);
+        return;
+    }
+    if(auto* range = dynamic_cast<RangeExpressionNode*>(node))
+    {
+        collect_used_idents(range->start, out);
+        collect_used_idents(range->end, out);
+        return;
+    }
+    if(auto* list = dynamic_cast<ListLiteralNode*>(node))
+    {
+        if(list->elements)
+            for(auto* element : list->elements->elements)
+                collect_used_idents(element, out);
+        return;
+    }
+    if(auto* map = dynamic_cast<MapLiteralNode*>(node))
+    {
+        if(map->entries)
+            for(auto* entry : map->entries->entries)
+            {
+                if(!entry)
+                    continue;
+                collect_used_idents(entry->key, out);
+                collect_used_idents(entry->value, out);
+            }
+        return;
+    }
+    if(auto* array = dynamic_cast<ArrayFillNode*>(node))
+    {
+        collect_used_idents(array->value, out);
+        collect_used_idents(array->count, out);
+        return;
+    }
+    if(auto* tuple = dynamic_cast<TupleLiteralNode*>(node))
+    {
+        if(tuple->elements)
+            for(auto* element : tuple->elements->elements)
+                collect_used_idents(element, out);
+        return;
+    }
+    if(auto* structLit = dynamic_cast<StructLiteralNode*>(node))
+    {
+        for(const auto& field : structLit->fields)
+            collect_used_idents(field.second, out);
         return;
     }
     if(auto* idx = dynamic_cast<IndexExpressionNode*>(node))
@@ -104,6 +174,14 @@ void collect_used_idents(ASTNode* node, std::set<std::string>& out)
     if(auto* cexprExpr = dynamic_cast<CexprExpressionNode*>(node))
     {
         collect_used_idents(cexprExpr->expression, out);
+        return;
+    }
+    if(auto* format = dynamic_cast<FormatNode*>(node))
+    {
+        for(auto* arg : format->arguments)
+            collect_used_idents(arg, out);
+        for(const auto& namedArg : format->namedArguments)
+            collect_used_idents(namedArg.second, out);
         return;
     }
     if(auto* es = dynamic_cast<ExpressionStatementNode*>(node))
