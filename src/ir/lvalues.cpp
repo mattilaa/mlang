@@ -1312,6 +1312,28 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
         }
     }
 
+    // Indexing a list of structs yields an addressable struct element. This
+    // lets chained field lvalues (and field borrows) retain their element
+    // address instead of going through a temporary struct value.
+    if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
+    {
+        TypeNode* elementType = nullptr;
+        llvm::Value* elementPtr =
+            generateListIndexPointer(index, elementType);
+        if(!elementPtr || !elementType)
+            return {nullptr, ""};
+
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(elementType))
+            return {elementPtr, resolveStructAliasName(structRef->structName)};
+        if(auto* genericRef =
+               dynamic_cast<GenericStructTypeRefNode*>(elementType))
+            return {elementPtr,
+                    getOrCreateMonomorphizedStruct(genericRef->structName,
+                                                   genericRef->typeArgs)};
+        reportError(line, "indexed element is not a struct");
+        return {nullptr, ""};
+    }
+
     // Case 3: Dereference of a pointer to struct (e.g., "*p")
     if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
     {

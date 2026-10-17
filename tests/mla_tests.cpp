@@ -3416,6 +3416,44 @@ TEST_F(MLATest, IndexedAssignmentRejectsOverlappingLiveElementBorrow)
         << out;
 }
 
+TEST_F(MLATest, StructListBorrowAllowsDisjointFieldsAndElements)
+{
+    std::string code = R"(
+        struct Cell { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var cells: list<Cell> = [
+                Cell { left: 4, right: 5 },
+                Cell { left: 6, right: 7 }
+            ];
+            let held = &mut cells[0].left;
+            cells[0].right = 8;
+            cells[1].left = 9;
+            unsafe { return *held + cells[0].right + cells[1].left; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 21);
+}
+
+TEST_F(MLATest, StructListBorrowRejectsAssignmentToBorrowedField)
+{
+    std::string code = R"(
+        struct Cell { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var cells: list<Cell> = [Cell { left: 4, right: 5 }];
+            let held = &mut cells[0].left;
+            cells[0].left = 8;
+            unsafe { return *held; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'cells'"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, SecondaryMutableFieldBorrowBlocksMethodOnThatField)
 {
     std::string code = R"(
