@@ -1046,6 +1046,7 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
 
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
+    auto incomingAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto incomingPointerBorrowPlace = pointerBorrowPlace;
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingActiveMutBorrower = activeMutBorrower;
@@ -1130,6 +1131,7 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     bool bodyFallsThrough = bodyEnd && !mlang::llvm_compat::terminatorOrNull(bodyEnd);
     auto bodyMoved = movedVariables;
     auto bodyPointerBorrowTarget = pointerBorrowTarget;
+    auto bodyAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto bodyPointerBorrowPlace = pointerBorrowPlace;
     auto bodyActiveBorrowers = activeBorrowers;
     auto bodyActiveMutBorrower = activeMutBorrower;
@@ -1147,6 +1149,7 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
 
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
+    aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
     pointerBorrowPlace = incomingPointerBorrowPlace;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
@@ -1154,6 +1157,11 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     if(bodyFallsThrough)
     {
         movedVariables.insert(bodyMoved.begin(), bodyMoved.end());
+        for(const auto& aggregate : bodyAggregateBorrowOrigins)
+        {
+            auto& origins = aggregateBorrowOrigins[aggregate.first];
+            origins.insert(aggregate.second.begin(), aggregate.second.end());
+        }
         for(auto place = pointerBorrowPlace.begin();
             place != pointerBorrowPlace.end();)
         {
@@ -1288,6 +1296,7 @@ void CodeGenerator::generateForStatement(ForNode* node)
         int oldDepth = hadOldDepth ? oldDepthIt->second : 0;
         auto stateBeforeLoopMoved = movedVariables;
         auto stateBeforeLoopPointerBorrowTarget = pointerBorrowTarget;
+        auto stateBeforeLoopAggregateBorrowOrigins = aggregateBorrowOrigins;
         auto stateBeforeLoopActiveBorrowers = activeBorrowers;
 
         namedValues[node->varName] = loopVar;
@@ -1411,6 +1420,8 @@ void CodeGenerator::generateForStatement(ForNode* node)
         {
             movedVariables = std::move(stateBeforeLoopMoved);
             pointerBorrowTarget = std::move(stateBeforeLoopPointerBorrowTarget);
+            aggregateBorrowOrigins =
+                std::move(stateBeforeLoopAggregateBorrowOrigins);
             activeBorrowers = std::move(stateBeforeLoopActiveBorrowers);
         }
     }
