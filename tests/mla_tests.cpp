@@ -2877,6 +2877,80 @@ TEST_F(MLATest, TraitObjectRejectsAliasedSharedAndMutableReferenceArguments)
     EXPECT_NE(out.find("overlapping parts"), std::string::npos);
 }
 
+TEST_F(MLATest, TraitObjectRejectsMutatingMethodOnImmutableReceiver)
+{
+    std::string code = R"(
+        trait CounterOps {
+            fn bump(self: &mut Self) -> i32;
+        }
+        struct Counter { var value: i32; };
+        impl CounterOps for Counter {
+            fn bump(self: &mut Counter) -> i32 {
+                self.value += 1;
+                return self.value;
+            }
+        }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 1 };
+            let item: dyn CounterOps = counter;
+            return item.bump();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot call mutating method on immutable value"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, TraitObjectFieldRejectsMutatingMethodOnImmutableReceiver)
+{
+    std::string code = R"(
+        trait CounterOps {
+            fn bump(self: &mut Self) -> i32;
+        }
+        struct Counter { var value: i32; };
+        struct Holder { var item: dyn CounterOps; };
+        impl CounterOps for Counter {
+            fn bump(self: &mut Counter) -> i32 {
+                self.value += 1;
+                return self.value;
+            }
+        }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 1 };
+            let holder: Holder = Holder { item: counter };
+            return holder.item.bump();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot call mutating method on immutable value"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, TraitObjectSharedMethodWorksOnImmutableReceiver)
+{
+    std::string code = R"(
+        trait CounterOps {
+            fn get(&self) -> i32;
+        }
+        struct Counter { var value: i32; };
+        impl CounterOps for Counter {
+            fn get(&self) -> i32 { return self.value; }
+        }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 9 };
+            let item: dyn CounterOps = counter;
+            return item.get();
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
 // ============================================================================
 // Type Cast Tests
 // ============================================================================

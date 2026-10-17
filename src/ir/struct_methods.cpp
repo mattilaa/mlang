@@ -2676,6 +2676,56 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         return true;
     };
 
+    auto validateTraitReceiverBorrow =
+        [&](const std::string& receiverOwner, bool hasSharedReceiver,
+            bool requiresMutableReceiver) -> bool {
+        if(receiverOwner.empty())
+            return true;
+        if(requiresMutableReceiver)
+        {
+            if(immutableReferenceVariables.count(receiverOwner) != 0)
+            {
+                reportError(node->line,
+                            "cannot call mutating method through immutable "
+                            "reference '" + receiverOwner + "'");
+                return false;
+            }
+            if(constantVariables.count(receiverOwner) != 0)
+            {
+                reportError(node->line,
+                            "cannot call mutating method on immutable value '" +
+                                receiverOwner + "'");
+                return false;
+            }
+        }
+
+        auto activeIt = activeBorrowers.find(receiverOwner);
+        auto activeMutIt = activeMutBorrower.find(receiverOwner);
+        const bool hasMutableBorrow = activeMutIt != activeMutBorrower.end();
+        const bool hasTrackedSharedBorrow =
+            activeIt != activeBorrowers.end() && !activeIt->second.empty();
+        const bool hasPointerSharedBorrow = std::any_of(
+            pointerBorrowTarget.begin(), pointerBorrowTarget.end(),
+            [&](const auto& borrow) {
+                return borrow.second == receiverOwner &&
+                       (!hasMutableBorrow ||
+                        activeMutIt->second != borrow.first);
+            });
+        const bool hasSharedBorrow =
+            hasTrackedSharedBorrow || hasPointerSharedBorrow;
+        if((hasSharedBorrow && !hasSharedReceiver) ||
+           (hasMutableBorrow && hasSharedReceiver))
+        {
+            const std::string by =
+                hasMutableBorrow ? activeMutIt->second
+                                 : *activeIt->second.begin();
+            reportError(node->line, "cannot call method on '" + receiverOwner +
+                                        "' while borrowed by '" + by + "'");
+            return false;
+        }
+        return true;
+    };
+
     // Get the object struct pointer and type
     // This supports both simple (p.method()) and chained (a.b.method()) access
     llvm::Value* objPtr;
@@ -2816,6 +2866,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
             std::vector<bool> sharedReferenceArgs;
             bool traitMethodHasSharedReceiver = false;
+            bool traitMethodRequiresMutableReceiver = false;
             if(traitMethod->parameters)
             {
                 for(auto* parameter : traitMethod->parameters->parameters)
@@ -2828,8 +2879,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             parameter->isSharedSelf;
                         if(auto* reference =
                                dynamic_cast<ReferenceTypeNode*>(parameter->type))
+                        {
                             traitMethodHasSharedReceiver =
                                 !reference->isMutable;
+                            traitMethodRequiresMutableReceiver =
+                                reference->isMutable;
+                        }
                         continue;
                     }
                     auto* reference =
@@ -2840,6 +2895,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
             const std::string receiverOwner =
                 resolveBorrowOwnerFromLValue(node->object);
+            if(!validateTraitReceiverBorrow(
+                   receiverOwner, traitMethodHasSharedReceiver,
+                   traitMethodRequiresMutableReceiver))
+                return nullptr;
             if(!validateTemporaryBorrowArguments(
                    node->arguments, node->methodName, receiverOwner,
                    traitMethodHasSharedReceiver, sharedReferenceArgs))
@@ -3049,6 +3108,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
             std::vector<bool> sharedReferenceArgs;
             bool traitMethodHasSharedReceiver = false;
+            bool traitMethodRequiresMutableReceiver = false;
             if(traitMethod->parameters)
             {
                 for(auto* parameter : traitMethod->parameters->parameters)
@@ -3061,8 +3121,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             parameter->isSharedSelf;
                         if(auto* reference =
                                dynamic_cast<ReferenceTypeNode*>(parameter->type))
+                        {
                             traitMethodHasSharedReceiver =
                                 !reference->isMutable;
+                            traitMethodRequiresMutableReceiver =
+                                reference->isMutable;
+                        }
                         continue;
                     }
                     auto* reference =
@@ -3071,6 +3135,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                                   !reference->isMutable);
                 }
             }
+            if(!validateTraitReceiverBorrow(
+                   objId->name, traitMethodHasSharedReceiver,
+                   traitMethodRequiresMutableReceiver))
+                return nullptr;
             if(!validateTemporaryBorrowArguments(
                    node->arguments, node->methodName, objId->name,
                    traitMethodHasSharedReceiver, sharedReferenceArgs))
