@@ -5949,6 +5949,25 @@ TEST_F(MLATest, SharedBorrowIndexedFromListCannotBeWrittenThrough)
               std::string::npos) << out;
 }
 
+// A shared pointer accessed directly from a tuple field must remain read-only.
+TEST_F(MLATest, SharedBorrowTupleFieldCannotBeWrittenThrough)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let pointers: tuple<ptr<i32>, i32> = (&value, 0);
+            unsafe { *pointers.0 = 9; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
 // Verifies an exclusive borrow live on one branch remains active after merge.
 TEST_F(MLATest, ConditionalExclusiveBorrowBlocksOwnerMutationAfterMerge)
 {
