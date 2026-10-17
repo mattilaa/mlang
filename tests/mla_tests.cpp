@@ -10725,6 +10725,32 @@ TEST_F(MLATest, OwnershipTryCatchReturnedPointerKeepsBorrowLive)
         << out;
 }
 
+// A pointer routed through a local aggregate must keep its parameter origin.
+TEST_F(MLATest, OwnershipAggregateForwardedPointerKeepsBorrowLive)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        fn relay(pointer: ptr<i32>) -> ptr<i32> {
+            var box: PointerBox = PointerBox {};
+            box.value = pointer;
+            return box.value;
+        }
+        fn main() -> i32 {
+            var owner: i32 = 7;
+            let forwarded: ptr<i32> = relay(&owner);
+            owner = 9;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'owner' while borrowed by 'forwarded'"),
+              std::string::npos)
+        << out;
+}
+
 // Pointer provenance must propagate through multiple visible forwarding calls.
 TEST_F(MLATest, OwnershipNestedFunctionReturnedPointerKeepsBorrowLive)
 {

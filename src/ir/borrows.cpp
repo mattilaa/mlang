@@ -632,6 +632,25 @@ bool CodeGenerator::expressionIsPointerParameterBorrow(ExpressionNode* expr) con
         return origin != pointerBorrowTarget.end() &&
                pointerParameterBorrowOrigins.count(origin->second) != 0;
     }
+    if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
+    {
+        const IdentifierNode* root = nullptr;
+        ExpressionNode* base = field->object;
+        while(auto* nestedField = dynamic_cast<FieldAccessNode*>(base))
+            base = nestedField->object;
+        root = dynamic_cast<IdentifierNode*>(base);
+        const std::string rootName =
+            root ? root->name : (field->object ? std::string()
+                                               : field->structName);
+        auto origins = aggregateBorrowOrigins.find(rootName);
+        return !rootName.empty() && origins != aggregateBorrowOrigins.end() &&
+               !origins->second.empty() &&
+               std::all_of(origins->second.begin(), origins->second.end(),
+                           [&](const std::string& owner) {
+                               return pointerParameterBorrowOrigins.count(
+                                          owner) != 0;
+                           });
+    }
     if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
     {
         // Loading a pointer value through another pointer is not a direct

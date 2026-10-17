@@ -187,6 +187,16 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     hasUnknownReturnOrigin = true;
                 return arguments;
             }
+            if(dynamic_cast<FieldAccessNode*>(expression) ||
+               dynamic_cast<IndexExpressionNode*>(expression) ||
+               dynamic_cast<TupleAccessNode*>(expression))
+            {
+                // A pointer loaded from aggregate storage is not yet tracked
+                // by parameter path. Preserve safety at callers by making the
+                // summary incomplete rather than claiming no borrow origin.
+                hasUnknownReturnOrigin = true;
+                return {};
+            }
             if(auto* address = dynamic_cast<UnaryOpNode*>(expression))
             {
                 if((address->op == UnaryOpNode::OP_ADDR ||
