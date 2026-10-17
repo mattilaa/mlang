@@ -4269,6 +4269,100 @@ TEST_F(MLATest, RuntimeClosureWritesBackMutableReferenceBeforeReturn)
     EXPECT_EQ(compileAndRunExitCode(code), 6);
 }
 
+TEST_F(MLATest, RuntimeClosureWritesBackMutableStructReference)
+{
+    std::string code = R"(
+        struct Counter {
+            var value: i32;
+        };
+        fn main() -> i32 {
+            let increment: fn(&mut Counter) -> void = |counter| {
+                counter.value += 1;
+            };
+            var counter: Counter = Counter { value: 4 };
+            increment(&mut counter);
+            return counter.value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 5);
+}
+
+TEST_F(MLATest, RuntimeClosureWritesBackMutableFieldReference)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+        fn main() -> i32 {
+            let increment: fn(&mut i32) -> void = |value| {
+                value += 1;
+            };
+            var pair: Pair = Pair { left: 4, right: 9 };
+            increment(&mut pair.left);
+            return pair.left + pair.right;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 14);
+}
+
+TEST_F(MLATest, RuntimeClosureAllowsDisjointMutableFieldReferences)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+        fn main() -> i32 {
+            let increment_both: fn(&mut i32, &mut i32) -> void = |left, right| {
+                left += 1;
+                right += 1;
+            };
+            var pair: Pair = Pair { left: 4, right: 9 };
+            increment_both(&mut pair.left, &mut pair.right);
+            return pair.left + pair.right;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 15);
+}
+
+TEST_F(MLATest, RuntimeClosureRejectsAliasedMutableReferenceArguments)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let update_both: fn(&mut i32, &mut i32) -> void = |left, right| {
+                left += 1;
+                right += 1;
+            };
+            var value: i32 = 0;
+            update_both(&mut value, &mut value);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow"), std::string::npos);
+}
+
+TEST_F(MLATest, RuntimeClosureRequiresExplicitMutableReferenceArgument)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let update: fn(&mut i32) -> void = |value| { value += 1; };
+            var count: i32 = 0;
+            update(count);
+            return count;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("expects &mut argument"), std::string::npos);
+}
+
 TEST_F(MLATest, RuntimeClosureReadsImmutableReferenceParameter)
 {
     std::string code = R"(
@@ -4277,7 +4371,7 @@ TEST_F(MLATest, RuntimeClosureReadsImmutableReferenceParameter)
                 return value + 1;
             };
             let count: i32 = 4;
-            return increment(count);
+            return increment(&count);
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 5);

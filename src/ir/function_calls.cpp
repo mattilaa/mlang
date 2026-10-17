@@ -2449,6 +2449,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                         std::to_string(node->arguments.size()));
             return nullptr;
         }
+        if(!validateTemporaryBorrowArguments(node->arguments, node->name, ""))
+            return nullptr;
         auto valueIt = namedValues.find(node->name);
         auto* alloca = valueIt == namedValues.end()
                            ? nullptr
@@ -2480,7 +2482,25 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             {
                 TypeNode* parameter = closureType->parameterTypes->types[i];
                 llvm::Type* parameterType = parameterLLVMType(parameter);
-                llvm::Value* argument = generateExpression(node->arguments[i]);
+                auto* reference =
+                    dynamic_cast<ReferenceTypeNode*>(parameter);
+                auto* borrow =
+                    dynamic_cast<UnaryOpNode*>(node->arguments[i]);
+                if(reference && reference->isMutable &&
+                   (!borrow || borrow->op != UnaryOpNode::OP_ADDR_MUT))
+                {
+                    reportError(node->line,
+                                "runtime closure parameter " +
+                                    std::to_string(i + 1) +
+                                    " expects &mut argument");
+                    return nullptr;
+                }
+                ExpressionNode* argumentExpression = node->arguments[i];
+                if(reference && !reference->isMutable && borrow &&
+                   borrow->op == UnaryOpNode::OP_ADDR)
+                    argumentExpression = borrow->operand;
+                llvm::Value* argument =
+                    generateExpression(argumentExpression);
                 if(!parameterType || !argument)
                 {
                     reportError(node->line,
