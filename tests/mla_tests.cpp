@@ -11483,6 +11483,40 @@ TEST_F(MLATest, OwnershipClosureCopiedTuplePointerSlotKeepsNewOrigin)
     EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
 }
 
+// Nested aggregate reassignment must preserve a closure's pointer-slot path.
+TEST_F(MLATest, OwnershipClosureNestedAggregatePointerSlotKeepsNewOrigin)
+{
+    std::string code = R"(
+        struct SlotHolder { var slot: ptr<ptr<i32>>; };
+        struct OuterHolder { var inner: SlotHolder; };
+        fn relay(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+            var selected = first;
+            let holder: OuterHolder = OuterHolder {
+                inner: SlotHolder { slot: &mut selected }
+            };
+            var copied: OuterHolder = OuterHolder {
+                inner: SlotHolder { slot: &mut selected }
+            };
+            copied = holder;
+            let replace = || { unsafe { *copied.inner.slot = second; } };
+            replace();
+            return selected;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded = relay(&mut first, &mut second);
+            second = 3;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
+}
+
 // Returning a pointer extracted from an aggregate argument retains its borrow.
 TEST_F(MLATest, OwnershipAggregateArgumentReturnedPointerKeepsBorrowLive)
 {
