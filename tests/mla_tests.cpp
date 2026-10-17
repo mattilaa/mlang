@@ -11403,6 +11403,33 @@ TEST_F(MLATest, OwnershipClosureFieldPointerSlotWriteKeepsNewOrigin)
     EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
 }
 
+// Writing through a data-pointer field must not widen unrelated return origins.
+TEST_F(MLATest, OwnershipClosureDataPointerFieldPreservesOriginPrecision)
+{
+    std::string code = R"(
+        struct DataPointerHolder { var value: ptr<i32>; };
+        fn relay(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+            var selected = first;
+            {
+                var local: i32 = 4;
+                let holder: DataPointerHolder =
+                    DataPointerHolder { value: &mut local };
+                let update = || { unsafe { *holder.value = 5; } };
+                update();
+            }
+            return selected;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded = relay(&mut first, &mut second);
+            second = 3;
+            unsafe { return *forwarded + second - 4; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 // Returning a pointer extracted from an aggregate argument retains its borrow.
 TEST_F(MLATest, OwnershipAggregateArgumentReturnedPointerKeepsBorrowLive)
 {

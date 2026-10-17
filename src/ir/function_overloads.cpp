@@ -525,6 +525,72 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             if(!declaration && pointerLocalSlots.count(name))
                 pointerLocalSlots[name] = {""};
         };
+        auto recordPointerSlotsInAggregate =
+            [&](const std::string& path, ExpressionNode* expression) {
+                std::map<std::string, std::set<std::string>> replacement;
+                std::function<void(const std::string&, ExpressionNode*)>
+                    collect;
+                collect = [&](const std::string& target,
+                              ExpressionNode* value) {
+                    if(!value)
+                        return;
+                    if(auto* address = dynamic_cast<UnaryOpNode*>(value))
+                    {
+                        if(address->op != UnaryOpNode::OP_ADDR_MUT)
+                            return;
+                        std::string borrowedPath;
+                        if(!getFieldPath(address->operand, borrowedPath))
+                            borrowedPath.clear();
+                        replacement[target] = {std::move(borrowedPath)};
+                    }
+                    else if(auto* literal =
+                                dynamic_cast<StructLiteralNode*>(value))
+                    {
+                        for(const auto& field : literal->fields)
+                            collect(target + "." + field.first, field.second);
+                    }
+                    else if(auto* literal =
+                                dynamic_cast<TupleLiteralNode*>(value))
+                    {
+                        if(literal->elements)
+                            for(size_t i = 0;
+                                i < literal->elements->elements.size(); ++i)
+                                collect(target + "." + std::to_string(i),
+                                        literal->elements->elements[i]);
+                    }
+                    else if(auto* literal =
+                                dynamic_cast<ListLiteralNode*>(value))
+                    {
+                        if(literal->elements)
+                            for(size_t i = 0;
+                                i < literal->elements->elements.size(); ++i)
+                                collect(target + "[" + std::to_string(i) + "]",
+                                        literal->elements->elements[i]);
+                    }
+                    else if(auto* identifier =
+                                dynamic_cast<IdentifierNode*>(value))
+                    {
+                        const std::string source = identifier->name;
+                        for(const auto& slot : pointerLocalSlots)
+                            if(slot.first == source ||
+                               isPointerFieldAliasWithin(source, slot.first))
+                            {
+                                const std::string suffix =
+                                    slot.first.substr(source.size());
+                                replacement[target + suffix] = slot.second;
+                            }
+                    }
+                };
+                collect(path, expression);
+                for(auto slot = pointerLocalSlots.begin();
+                    slot != pointerLocalSlots.end();)
+                    if(isPointerFieldAliasWithin(path, slot->first))
+                        slot = pointerLocalSlots.erase(slot);
+                    else
+                        ++slot;
+                pointerLocalSlots.insert(replacement.begin(),
+                                         replacement.end());
+            };
         std::map<std::string, bool> closureMayMutatePointerAggregate;
         std::function<void(ExpressionNode*)> scanCallEffects;
         std::function<void(StatementNode*)> scanClosureEffects;
@@ -593,6 +659,16 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     auto slot = pointerLocalSlots.find(identifier->name);
                     if(slot != pointerLocalSlots.end())
                         targetPaths = slot->second;
+                }
+                else
+                {
+                    std::string slotPath;
+                    if(getFieldPath(assignment->pointerExpr, slotPath))
+                    {
+                        auto slot = pointerLocalSlots.find(slotPath);
+                        if(slot != pointerLocalSlots.end())
+                            targetPaths = slot->second;
+                    }
                 }
                 if(targetPaths.empty() &&
                    !dynamic_cast<IdentifierNode*>(assignment->pointerExpr))
@@ -950,7 +1026,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 previousFieldAliases;
             std::map<std::string, bool> previousClosureEffects;
             std::set<std::string> closureNamesNotPreviouslyPresent;
-            std::map<std::string, std::set<std::string>>
+            std::map<std::string,
+                     std::map<std::string, std::set<std::string>>>
                 previousPointerLocalSlots;
             std::set<std::string> pointerSlotNamesNotPreviouslyPresent;
             std::set<std::string> shadowedNames;
@@ -974,12 +1051,12 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 else
                     previousClosureEffects.emplace(name,
                                                    previousClosure->second);
-                auto previousSlot = pointerLocalSlots.find(name);
-                if(previousSlot == pointerLocalSlots.end())
+                auto& savedSlots = previousPointerLocalSlots[name];
+                for(const auto& slot : pointerLocalSlots)
+                    if(isPointerFieldAliasWithin(name, slot.first))
+                        savedSlots.insert(slot);
+                if(savedSlots.empty())
                     pointerSlotNamesNotPreviouslyPresent.insert(name);
-                else
-                    previousPointerLocalSlots.emplace(name,
-                                                      previousSlot->second);
             };
             bool fallsThrough = true;
             for(auto* statement : statements->statements)
@@ -996,6 +1073,13 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                             alias = pointerFieldAliases.erase(alias);
                         else
                             ++alias;
+                    for(auto slot = pointerLocalSlots.begin();
+                        slot != pointerLocalSlots.end();)
+                        if(isPointerFieldAliasWithin(declaration->name,
+                                                     slot->first))
+                            slot = pointerLocalSlots.erase(slot);
+                        else
+                            ++slot;
                 }
                 else if(auto* declaration =
                             dynamic_cast<VarDeclNode*>(statement))
@@ -1008,6 +1092,13 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                             alias = pointerFieldAliases.erase(alias);
                         else
                             ++alias;
+                    for(auto slot = pointerLocalSlots.begin();
+                        slot != pointerLocalSlots.end();)
+                        if(isPointerFieldAliasWithin(declaration->name,
+                                                     slot->first))
+                            slot = pointerLocalSlots.erase(slot);
+                        else
+                            ++slot;
                 }
                 if(!scanStatement(statement))
                 {
@@ -1025,9 +1116,23 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 closureMayMutatePointerAggregate[previous.first] =
                     previous.second;
             for(const auto& name : pointerSlotNamesNotPreviouslyPresent)
-                pointerLocalSlots.erase(name);
+                for(auto slot = pointerLocalSlots.begin();
+                    slot != pointerLocalSlots.end();)
+                    if(isPointerFieldAliasWithin(name, slot->first))
+                        slot = pointerLocalSlots.erase(slot);
+                    else
+                        ++slot;
             for(const auto& previous : previousPointerLocalSlots)
-                pointerLocalSlots[previous.first] = previous.second;
+            {
+                for(auto slot = pointerLocalSlots.begin();
+                    slot != pointerLocalSlots.end();)
+                    if(isPointerFieldAliasWithin(previous.first, slot->first))
+                        slot = pointerLocalSlots.erase(slot);
+                    else
+                        ++slot;
+                pointerLocalSlots.insert(previous.second.begin(),
+                                         previous.second.end());
+            }
             for(const auto& name : shadowedNames)
             {
                 for(auto alias = pointerFieldAliases.begin();
@@ -1100,6 +1205,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             {
                 recordPointerLocalSlot(declaration->name,
                                        declaration->expression, true);
+                recordPointerSlotsInAggregate(declaration->name,
+                                              declaration->expression);
                 recordClosureEffect(declaration->name,
                                     declaration->expression, true);
                 auto values = origins(declaration->expression);
@@ -1116,6 +1223,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             {
                 recordPointerLocalSlot(declaration->name,
                                        declaration->initExpr, true);
+                recordPointerSlotsInAggregate(declaration->name,
+                                              declaration->initExpr);
                 recordClosureEffect(declaration->name, declaration->initExpr,
                                     true);
                 auto values = origins(declaration->initExpr);
@@ -1133,6 +1242,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             {
                 recordPointerLocalSlot(assignment->name,
                                        assignment->expression, false);
+                recordPointerSlotsInAggregate(assignment->name,
+                                              assignment->expression);
                 recordClosureEffect(assignment->name, assignment->expression,
                                     false);
                 auto values = origins(assignment->expression);
@@ -1160,7 +1271,11 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     hasPath = true;
                 }
                 if(hasPath)
+                {
+                    recordPointerSlotsInAggregate(path,
+                                                  assignment->expression);
                     replacePointerFieldAliases(path, assignment->expression);
+                }
                 else
                     hasUnknownReturnOrigin = true;
             }
