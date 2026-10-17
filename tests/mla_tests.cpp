@@ -10772,6 +10772,54 @@ TEST_F(MLATest, OwnershipAggregateForwardedPointerTracksSelectedFieldOrigin)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// Struct literal construction should retain the exact pointer field origin.
+TEST_F(MLATest, OwnershipAggregateLiteralTracksSelectedPointerOrigin)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        fn relay(unused: ptr<i32>, selected: ptr<i32>) -> ptr<i32> {
+            let box: PointerBox = PointerBox { value: selected };
+            return box.value;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded: ptr<i32> = relay(&first, &second);
+            first = 3;
+            unsafe { return *forwarded + first - 5; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// Replacing an aggregate alias must replace its field borrow origins too.
+TEST_F(MLATest, OwnershipAggregateReassignmentReplacesPointerFieldOrigin)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        fn relay(a: ptr<i32>, b: ptr<i32>) -> ptr<i32> {
+            var destination: PointerBox = PointerBox { value: a };
+            let source: PointerBox = PointerBox { value: b };
+            destination = source;
+            return destination.value;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded: ptr<i32> = relay(&first, &second);
+            second = 3;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'second' while borrowed by 'forwarded'"),
+              std::string::npos)
+        << out;
+}
+
 // Pointer provenance must propagate through multiple visible forwarding calls.
 TEST_F(MLATest, OwnershipNestedFunctionReturnedPointerKeepsBorrowLive)
 {

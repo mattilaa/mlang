@@ -248,6 +248,84 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             return {};
         };
 
+        auto clearPointerFieldAliasSubtree = [&](const std::string& path) {
+            const std::string prefix = path + ".";
+            for(auto alias = pointerFieldAliases.begin();
+                alias != pointerFieldAliases.end();)
+                if(alias->first == path ||
+                   alias->first.compare(0, prefix.size(), prefix) == 0)
+                    alias = pointerFieldAliases.erase(alias);
+                else
+                    ++alias;
+        };
+        auto copyPointerFieldAliases = [&](const std::string& source,
+                                           const std::string& destination,
+                                           auto& output) {
+            const std::string sourcePrefix = source + ".";
+            const std::string destinationPrefix = destination + ".";
+            bool copiedAny = false;
+            for(const auto& alias : pointerFieldAliases)
+                if(alias.first.compare(0, sourcePrefix.size(),
+                                       sourcePrefix) == 0)
+                {
+                    output[destinationPrefix +
+                           alias.first.substr(sourcePrefix.size())] =
+                        alias.second;
+                    copiedAny = true;
+                }
+            return copiedAny;
+        };
+        std::function<void(const std::string&, ExpressionNode*,
+                           std::map<std::string, std::set<size_t>>&)>
+            collectPointerFieldAliases =
+                [&](const std::string& path, ExpressionNode* expression,
+                    std::map<std::string, std::set<size_t>>& output) {
+                    if(auto* literal =
+                           dynamic_cast<StructLiteralNode*>(expression))
+                    {
+                        for(const auto& field : literal->fields)
+                            collectPointerFieldAliases(
+                                path + "." + field.first, field.second,
+                                output);
+                        return;
+                    }
+                    std::string sourcePath;
+                    if(getFieldPath(expression, sourcePath) &&
+                       copyPointerFieldAliases(sourcePath, path, output))
+                        return;
+                    if(auto* identifier =
+                           dynamic_cast<IdentifierNode*>(expression))
+                        if(copyPointerFieldAliases(identifier->name, path,
+                                                   output))
+                            return;
+                    output[path] = origins(expression);
+                };
+        auto replacePointerFieldAliases = [&](const std::string& path,
+                                              ExpressionNode* expression) {
+            std::map<std::string, std::set<size_t>> replacement;
+            collectPointerFieldAliases(path, expression, replacement);
+            clearPointerFieldAliasSubtree(path);
+            pointerFieldAliases.insert(replacement.begin(), replacement.end());
+        };
+        auto hasPointerFieldAliases = [&](const std::string& path) {
+            const std::string prefix = path + ".";
+            return std::any_of(
+                pointerFieldAliases.begin(), pointerFieldAliases.end(),
+                [&](const auto& alias) {
+                    return alias.first.compare(0, prefix.size(), prefix) == 0;
+                });
+        };
+        auto shouldTrackAggregateAliases = [&](const std::string& path,
+                                               ExpressionNode* expression) {
+            if(dynamic_cast<StructLiteralNode*>(expression) ||
+               hasPointerFieldAliases(path))
+                return true;
+            std::string sourcePath;
+            if(getFieldPath(expression, sourcePath))
+                return hasPointerFieldAliases(sourcePath);
+            return false;
+        };
+
         std::function<bool(StatementNode*)> scanStatement;
         std::function<bool(StatementListNode*)> scanList;
         auto mergeAliases = [](const std::vector<
@@ -354,6 +432,10 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     pointerAliases[declaration->name] = std::move(values);
                 else
                     pointerAliases.erase(declaration->name);
+                if(shouldTrackAggregateAliases(declaration->name,
+                                               declaration->expression))
+                    replacePointerFieldAliases(declaration->name,
+                                               declaration->expression);
             }
             else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
             {
@@ -362,6 +444,10 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     pointerAliases[declaration->name] = std::move(values);
                 else
                     pointerAliases.erase(declaration->name);
+                if(shouldTrackAggregateAliases(declaration->name,
+                                               declaration->initExpr))
+                    replacePointerFieldAliases(declaration->name,
+                                               declaration->initExpr);
             }
             else if(auto* assignment =
                         dynamic_cast<AssignmentNode*>(statement))
@@ -371,6 +457,10 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     pointerAliases.erase(assignment->name);
                 else
                     pointerAliases[assignment->name] = std::move(values);
+                if(shouldTrackAggregateAliases(assignment->name,
+                                              assignment->expression))
+                    replacePointerFieldAliases(assignment->name,
+                                               assignment->expression);
             }
             else if(auto* assignment =
                         dynamic_cast<FieldAssignmentNode*>(statement))
@@ -391,7 +481,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     hasPath = true;
                 }
                 if(hasPath)
-                    pointerFieldAliases[path] = origins(assignment->expression);
+                    replacePointerFieldAliases(path, assignment->expression);
                 else
                     hasUnknownReturnOrigin = true;
             }
