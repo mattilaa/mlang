@@ -11374,6 +11374,35 @@ TEST_F(MLATest, OwnershipUnusedPointerReassignmentClosurePreservesPrecision)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// A closure writing through a pointer slot stored in a field must retain origins.
+TEST_F(MLATest, OwnershipClosureFieldPointerSlotWriteKeepsNewOrigin)
+{
+    std::string code = R"(
+        struct SlotHolder { var slot: ptr<ptr<i32>>; };
+        fn relay(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+            var selected = first;
+            {
+                let holder: SlotHolder = SlotHolder { slot: &mut selected };
+                let replace = || { unsafe { *holder.slot = second; } };
+                replace();
+            }
+            return selected;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded = relay(&mut first, &mut second);
+            second = 3;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
+}
+
 // Returning a pointer extracted from an aggregate argument retains its borrow.
 TEST_F(MLATest, OwnershipAggregateArgumentReturnedPointerKeepsBorrowLive)
 {

@@ -594,6 +594,9 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     if(slot != pointerLocalSlots.end())
                         targetPaths = slot->second;
                 }
+                if(targetPaths.empty() &&
+                   !dynamic_cast<IdentifierNode*>(assignment->pointerExpr))
+                    hasUnknownReturnOrigin = true;
                 for(const auto& path : targetPaths)
                     if(path.empty() || pointerAliases.count(path) ||
                        pointerFieldAliases.count(path) ||
