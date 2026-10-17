@@ -283,8 +283,9 @@ fn main() -> i32 {
     std::string output = compileCapture(exitCode);
     EXPECT_NE(exitCode, 0);
     EXPECT_NE(output.find("MLANG-E2009"), std::string::npos);
-    EXPECT_NE(output.find("narrow_cast constant value cannot be represented as u32"),
-              std::string::npos);
+    EXPECT_NE(
+        output.find("narrow_cast constant value cannot be represented as u32"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, NarrowCastDebugFailureReportsSourceLine)
@@ -491,8 +492,9 @@ TEST_F(MLATest, StringEscapeHexAndStrTypes)
             return 0;
         }
     )";
-    EXPECT_EQ(compileAndRun(code),
-              "\x1b[38;2;164;255;82m\x1b[48;2;98;0;0mhello\x1b[0m world\nwide\n");
+    EXPECT_EQ(
+        compileAndRun(code),
+        "\x1b[38;2;164;255;82m\x1b[48;2;98;0;0mhello\x1b[0m world\nwide\n");
 }
 
 TEST_F(MLATest, StringConcatenationPlus)
@@ -524,8 +526,10 @@ TEST_F(MLATest, StringConcatenationRejectsMixedNumeric)
     int exitCode = 0;
     std::string out = compileCapture(exitCode);
     EXPECT_NE(exitCode, 0);
-    EXPECT_NE(out.find("string concatenation requires both operands to be string types"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find(
+            "string concatenation requires both operands to be string types"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, StringConcatenationRejectsMismatchedStringKinds)
@@ -1021,8 +1025,7 @@ TEST_F(MLATest, ImmutableListRejectsIndexedAssignment)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot mutate indexed container"),
-              std::string::npos);
+    EXPECT_NE(out.find("cannot mutate indexed container"), std::string::npos);
 }
 
 TEST_F(MLATest, ImmutableMultiarrayRejectsMutatingMethods)
@@ -1389,8 +1392,7 @@ TEST_F(MLATest, FixedArrayRejectsTooManyListElementsFromArrayFirstLast)
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("array initializer has 2 elements"), std::string::npos);
-    EXPECT_NE(out.find("array<list<i32>, 1> capacity is 1"),
-              std::string::npos);
+    EXPECT_NE(out.find("array<list<i32>, 1> capacity is 1"), std::string::npos);
 }
 
 TEST_F(MLATest, FixedArrayRejectsTooLargeFillCount)
@@ -2419,8 +2421,10 @@ TEST_F(MLATest, AtomicOperationsCarryNaturalAlignment)
     EXPECT_EQ(runExitCode(), 0);
 
     const fs::path irFile = fs::path(testDir) / "atomic_align.ll";
-    ASSERT_EQ(system((compilerPath + " -O0 -emit-llvm -o " +
-                      irFile.string() + " " + sourceFile).c_str()), 0);
+    ASSERT_EQ(system((compilerPath + " -O0 -emit-llvm -o " + irFile.string() +
+                      " " + sourceFile)
+                         .c_str()),
+              0);
     std::ifstream input(irFile);
     ASSERT_TRUE(input.is_open());
     std::string line;
@@ -2483,8 +2487,10 @@ TEST_F(MLATest, LoopLocalsHaveBoundedStackAtO0)
     EXPECT_EQ(WEXITSTATUS(status), 0);
 
     const fs::path irFile = fs::path(testDir) / "stack_locals.ll";
-    ASSERT_EQ(system((compilerPath + " -O0 -emit-llvm -o " +
-                      irFile.string() + " " + sourceFile).c_str()), 0);
+    ASSERT_EQ(system((compilerPath + " -O0 -emit-llvm -o " + irFile.string() +
+                      " " + sourceFile)
+                         .c_str()),
+              0);
     std::ifstream input(irFile);
     std::string line, block;
     int allocations = 0;
@@ -2492,7 +2498,8 @@ TEST_F(MLATest, LoopLocalsHaveBoundedStackAtO0)
     {
         if(line.find("define ") == 0)
             block.clear();
-        if(!line.empty() && line[0] != ' ' && line.find(':') != std::string::npos)
+        if(!line.empty() && line[0] != ' ' &&
+           line.find(':') != std::string::npos)
             block = line.substr(0, line.find(':'));
         if(line.find(" = alloca ") != std::string::npos)
         {
@@ -2535,10 +2542,8 @@ TEST_F(MLATest, BranchPredictionHintsEmitLLVMWeights)
     std::stringstream buffer;
     buffer << input.rdbuf();
     const std::string ir = buffer.str();
-    EXPECT_NE(ir.find("branch_weights\", i32 2000, i32 1"),
-              std::string::npos);
-    EXPECT_NE(ir.find("branch_weights\", i32 1, i32 2000"),
-              std::string::npos);
+    EXPECT_NE(ir.find("branch_weights\", i32 2000, i32 1"), std::string::npos);
+    EXPECT_NE(ir.find("branch_weights\", i32 1, i32 2000"), std::string::npos);
     EXPECT_NE(ir.find("@llvm.expect.i1(i1"), std::string::npos);
     EXPECT_NE(ir.find("i1 true)"), std::string::npos);
     EXPECT_NE(ir.find("i1 false)"), std::string::npos);
@@ -2558,8 +2563,9 @@ TEST_F(MLATest, BranchPredictionKeywordRejectsNonIfStatement)
     std::string out = compileCapture(exitCode);
     EXPECT_NE(exitCode, 0);
     EXPECT_NE(out.find("MLANG-E1018"), std::string::npos);
-    EXPECT_NE(out.find("must appear immediately before an if, let, or var statement"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("must appear immediately before an if, let, or var statement"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, BranchPredictionKeywordRejectsExpressionUse)
@@ -2882,7 +2888,8 @@ TEST_F(MLATest, LegacyBuiltinTypeAliasesAreRejected)
     {
         std::string code = std::string(R"(
             fn main() -> i32 {
-                let value: )") + typeName + R"( = 0;
+                let value: )") +
+                           typeName + R"( = 0;
                 return 0;
             }
         )";
@@ -4316,7 +4323,8 @@ TEST_F(MLATest, RuntimeClosureCannotBeAssignedPastCaptureScope)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign closure 'captures_local' to longer-lived 'selected'"),
+    EXPECT_NE(out.find("cannot assign closure 'captures_local' to longer-lived "
+                       "'selected'"),
               std::string::npos);
 }
 
@@ -4910,8 +4918,9 @@ TEST_F(MLATest, OverloadedNamedFunctionNeedsCallableAnnotationForInference)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("is overloaded; add an explicit fn(...) -> ... annotation"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("is overloaded; add an explicit fn(...) -> ... annotation"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, FunctionTypedClosureRejectsBorrowedCaptureEscape)
@@ -4928,7 +4937,8 @@ TEST_F(MLATest, FunctionTypedClosureRejectsBorrowedCaptureEscape)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return closure 'read' because it borrows local variable 'local'"),
+    EXPECT_NE(out.find("cannot return closure 'read' because it borrows local "
+                       "variable 'local'"),
               std::string::npos);
 }
 
@@ -5482,8 +5492,7 @@ TEST_F(MLATest, OwnershipCannotBorrowPointerVarAndAddressSameOwnerInCall)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow 'p'"),
-              std::string::npos);
+    EXPECT_NE(out.find("cannot borrow 'p'"), std::string::npos);
 }
 
 TEST_F(MLATest, OwnershipCannotBorrowMutInCallWhenSharedBorrowActive)
@@ -5507,8 +5516,9 @@ TEST_F(MLATest, OwnershipCannotBorrowMutInCallWhenSharedBorrowActive)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow 'p' as mutable because it is already borrowed"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot borrow 'p' as mutable because it is already borrowed"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, OwnershipCannotAssignFieldWhileOwnerBorrowed)
@@ -5880,15 +5890,13 @@ TEST_F(MLATest, EnumPrintExampleCompilesAndRuns)
     int rc = 0;
     std::string out = compilePathCapture(src, rc);
     EXPECT_EQ(rc, 0) << out;
-    EXPECT_EQ(
-        run(),
-        "literal: Status::Invalid\n"
-        "variable: Status::Success\n"
-        "iterate:\n"
-        "  [0] Status::Invalid\n"
-        "  [1] Status::Busy\n"
-        "  [2] Status::Success\n"
-        "unknown: <Status:unknown>\n");
+    EXPECT_EQ(run(), "literal: Status::Invalid\n"
+                     "variable: Status::Success\n"
+                     "iterate:\n"
+                     "  [0] Status::Invalid\n"
+                     "  [1] Status::Busy\n"
+                     "  [2] Status::Success\n"
+                     "unknown: <Status:unknown>\n");
 }
 
 // ============================================================================
@@ -6040,8 +6048,9 @@ TEST_F(MLATest, StaticAssertNonConstExpressionFails)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("static_assert! requires a compile-time boolean expression"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("static_assert! requires a compile-time boolean expression"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, CexprExpressionInitializesRuntimeValue)
@@ -6311,7 +6320,8 @@ TEST_F(MLATest, CexprStructValueReportsUnsupportedValueEvaluation)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("struct values in cexpr are only supported for generic type dispatch"),
+    EXPECT_NE(out.find("struct values in cexpr are only supported for generic "
+                       "type dispatch"),
               std::string::npos);
 }
 
@@ -6330,8 +6340,9 @@ TEST_F(MLATest, CexprIfRejectsRuntimeCondition)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("runtime variable is not available in cexpr: 'runtime_flag'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("runtime variable is not available in cexpr: 'runtime_flag'"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, StaticAssertAcceptsCexprFunctionCall)
@@ -6415,8 +6426,7 @@ TEST_F(MLATest, CexprReportsUnsupportedExpressionKind)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("unsupported expression in cexpr"),
-              std::string::npos);
+    EXPECT_NE(out.find("unsupported expression in cexpr"), std::string::npos);
 }
 
 TEST_F(MLATest, RawPointerDereferenceOutsideUnsafeFails)
@@ -6746,7 +6756,6 @@ TEST_F(MLATest, NamespaceAliasShortensQualifiedPaths)
 // Main
 // ============================================================================
 
-
 TEST_F(MLATest, DiagnosticsInImportedModuleNameModuleFile)
 {
     // An empty block in an imported module is reported at the module's file,
@@ -6787,25 +6796,24 @@ TEST_F(MLATest, DiagnosticsInImportedModuleNameModuleFile)
     EXPECT_EQ(mainWarnings, 1) << out;
 }
 
-
 // Source for the mlang -g tests; line numbers matter (see the checks).
 static const char* kDebugInfoSource =
-    "struct Point { var x: i32; var y: i32; };\n"          // 1
-    "fn scale(value: i32, factor: i32) -> i32 {\n"         // 2
-    "    let result: i32 = value * factor;\n"              // 3
-    "    return result;\n"                                 // 4
-    "}\n"                                                  // 5
-    "fn main() -> i32 {\n"                                 // 6
-    "    let p: Point = Point { x: 3, y: 4 };\n"           // 7
-    "    var sum: i32 = 0;\n"                              // 8
-    "    for i in 0..3 {\n"                                // 9
-    "        sum = sum + scale(i32(i), p.x);\n"            // 10
-    "    }\n"                                              // 11
-    "    {\n"                                              // 12
-    "        let inner: i32 = sum + p.y;\n"                // 13
-    "        println!(\"{}\", inner);\n"                   // 14
-    "    }\n"                                              // 15
-    "    return 0;\n"                                      // 16
+    "struct Point { var x: i32; var y: i32; };\n"  // 1
+    "fn scale(value: i32, factor: i32) -> i32 {\n" // 2
+    "    let result: i32 = value * factor;\n"      // 3
+    "    return result;\n"                         // 4
+    "}\n"                                          // 5
+    "fn main() -> i32 {\n"                         // 6
+    "    let p: Point = Point { x: 3, y: 4 };\n"   // 7
+    "    var sum: i32 = 0;\n"                      // 8
+    "    for i in 0..3 {\n"                        // 9
+    "        sum = sum + scale(i32(i), p.x);\n"    // 10
+    "    }\n"                                      // 11
+    "    {\n"                                      // 12
+    "        let inner: i32 = sum + p.y;\n"        // 13
+    "        println!(\"{}\", inner);\n"           // 14
+    "    }\n"                                      // 15
+    "    return 0;\n"                              // 16
     "}\n";
 
 static std::string readTextFile(const fs::path& path)
@@ -6820,8 +6828,8 @@ TEST_F(MLATest, DebugInfoDescribesFunctionsLinesAndVariables)
 {
     writeSource(kDebugInfoSource);
     const fs::path irFile = fs::path(testDir) / "debug_info.ll";
-    std::string cmd = compilerPath + " -O0 -g -emit-llvm -o " + irFile.string() +
-                      " " + sourceFile + " 2>&1";
+    std::string cmd = compilerPath + " -O0 -g -emit-llvm -o " +
+                      irFile.string() + " " + sourceFile + " 2>&1";
     ASSERT_EQ(system(cmd.c_str()), 0);
     const std::string ir = readTextFile(irFile);
     EXPECT_NE(ir.find("!DICompileUnit("), std::string::npos) << ir;
@@ -6829,16 +6837,20 @@ TEST_F(MLATest, DebugInfoDescribesFunctionsLinesAndVariables)
     EXPECT_NE(ir.find("!DISubprogram(name: \"scale\""), std::string::npos);
     EXPECT_NE(ir.find("!DISubprogram(name: \"main\""), std::string::npos);
     // Parameters with their numbers, locals, the loop variable.
-    EXPECT_NE(ir.find("!DILocalVariable(name: \"value\", arg: 1"), std::string::npos);
-    EXPECT_NE(ir.find("!DILocalVariable(name: \"factor\", arg: 2"), std::string::npos);
+    EXPECT_NE(ir.find("!DILocalVariable(name: \"value\", arg: 1"),
+              std::string::npos);
+    EXPECT_NE(ir.find("!DILocalVariable(name: \"factor\", arg: 2"),
+              std::string::npos);
     EXPECT_NE(ir.find("!DILocalVariable(name: \"result\""), std::string::npos);
     EXPECT_NE(ir.find("!DILocalVariable(name: \"sum\""), std::string::npos);
     EXPECT_NE(ir.find("!DILocalVariable(name: \"i\""), std::string::npos);
     EXPECT_NE(ir.find("!DILocalVariable(name: \"inner\""), std::string::npos);
     // Struct type with its fields.
     EXPECT_NE(ir.find("name: \"Point\""), std::string::npos);
-    EXPECT_NE(ir.find("!DIDerivedType(tag: DW_TAG_member, name: \"x\""), std::string::npos);
-    EXPECT_NE(ir.find("!DIDerivedType(tag: DW_TAG_member, name: \"y\""), std::string::npos);
+    EXPECT_NE(ir.find("!DIDerivedType(tag: DW_TAG_member, name: \"x\""),
+              std::string::npos);
+    EXPECT_NE(ir.find("!DIDerivedType(tag: DW_TAG_member, name: \"y\""),
+              std::string::npos);
     // Statements at their first token: `let` (after an empty rule in the
     // grammar), `return`, and the first statement of a nested block.
     EXPECT_NE(ir.find("!DILocation(line: 3, column: 5"), std::string::npos);
@@ -6861,8 +6873,8 @@ TEST_F(MLATest, DebugInfoOnlyWithFlag)
 
 TEST_F(MLATest, DebugInfoDescribesComplexContainerAndFieldTypes)
 {
-    const fs::path fixture = fs::path(__FILE__).parent_path() /
-                             "fixtures/mladbg_complex.mla";
+    const fs::path fixture =
+        fs::path(__FILE__).parent_path() / "fixtures/mladbg_complex.mla";
     writeSource(readTextFile(fixture));
     const fs::path irFile = fs::path(testDir) / "complex_debug_info.ll";
     const std::string cmd = compilerPath + " -O0 -g -emit-llvm -o " +
@@ -6871,31 +6883,36 @@ TEST_F(MLATest, DebugInfoDescribesComplexContainerAndFieldTypes)
     const std::string ir = readTextFile(irFile);
     // The emitted types must remain usable after module verification.
     EXPECT_NE(ir.find("!DICompileUnit("), std::string::npos) << ir;
-    for(const char* name : {"Point", "Shape", "Box_Point", "Tagged",
-                            "list<Point>", "array<i32, 3>", "map<str8, Point>",
-                            "tuple<u32, str8>", "str16"})
-        EXPECT_NE(ir.find(std::string("name: \"") + name + "\""), std::string::npos)
-            << name << "\n" << ir;
+    for(const char* name :
+        {"Point", "Shape", "Box_Point", "Tagged", "list<Point>",
+         "array<i32, 3>", "map<str8, Point>", "tuple<u32, str8>", "str16"})
+        EXPECT_NE(ir.find(std::string("name: \"") + name + "\""),
+                  std::string::npos)
+            << name << "\n"
+            << ir;
     for(const char* name : {"len", "data", "keys", "values", "_0", "_1"})
         EXPECT_NE(ir.find(std::string("DW_TAG_member, name: \"") + name + "\""),
-                  std::string::npos) << name;
+                  std::string::npos)
+            << name;
     // A u8 enum must retain its unsigned 8-bit backing type, rather than
     // acquiring the default signed i32 representation during type emission.
     const auto enumAt = ir.find("DW_TAG_enumeration_type, name: \"Color\"");
     ASSERT_NE(enumAt, std::string::npos) << ir;
     EXPECT_NE(ir.substr(enumAt, 200).find("size: 8"), std::string::npos);
-    EXPECT_NE(ir.find("name: \"u8\", size: 8, encoding: DW_ATE_unsigned"), std::string::npos);
+    EXPECT_NE(ir.find("name: \"u8\", size: 8, encoding: DW_ATE_unsigned"),
+              std::string::npos);
     EXPECT_NE(ir.find("DIFlagBitField"), std::string::npos);
     // Inferred map literals must carry their named struct element type too.
     EXPECT_EQ(ir.find("name: \"map<str8, struct>\""), std::string::npos);
-    EXPECT_NE(ir.find("!DILocalVariable(name: \"inferred_mapping\""), std::string::npos);
+    EXPECT_NE(ir.find("!DILocalVariable(name: \"inferred_mapping\""),
+              std::string::npos);
 }
 
 TEST_F(MLATest, DebugInfoProgramRunsTheSame)
 {
     writeSource(kDebugInfoSource);
     ASSERT_TRUE(compile(true, "-O0 -g"));
-    EXPECT_EQ(run(), "13\n");  // 0 + 3 + 6, plus p.y
+    EXPECT_EQ(run(), "13\n"); // 0 + 3 + 6, plus p.y
 }
 
 TEST_F(MLATest, DebugInfoNamesImportedModuleFile)
@@ -6913,12 +6930,14 @@ TEST_F(MLATest, DebugInfoNamesImportedModuleFile)
                 "    return helper_value(0);\n"
                 "}\n");
     const fs::path irFile = fs::path(testDir) / "module_debug_info.ll";
-    std::string cmd = compilerPath + " -O0 -g -emit-llvm -o " + irFile.string() +
-                      " " + sourceFile + " 2>&1";
+    std::string cmd = compilerPath + " -O0 -g -emit-llvm -o " +
+                      irFile.string() + " " + sourceFile + " 2>&1";
     ASSERT_EQ(system(cmd.c_str()), 0);
     const std::string ir = readTextFile(irFile);
-    EXPECT_NE(ir.find("!DIFile(filename: \"helper.mla\""), std::string::npos) << ir;
-    EXPECT_NE(ir.find("!DISubprogram(name: \"helper_value\""), std::string::npos);
+    EXPECT_NE(ir.find("!DIFile(filename: \"helper.mla\""), std::string::npos)
+        << ir;
+    EXPECT_NE(ir.find("!DISubprogram(name: \"helper_value\""),
+              std::string::npos);
     EXPECT_NE(ir.find("!DILocalVariable(name: \"doubled\""), std::string::npos);
 }
 
