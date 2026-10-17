@@ -180,8 +180,33 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     if(alias != pointerFieldAliases.end())
                         return alias->second;
                 }
-                // Untracked aggregate paths, including dynamic indexes, may
-                // carry any pointer argument and must stay conservative.
+                if(auto* index =
+                       dynamic_cast<IndexExpressionNode*>(expression))
+                {
+                    std::string basePath;
+                    if(getFieldPath(index->base, basePath))
+                    {
+                        const std::string elementPrefix = basePath + "[";
+                        std::set<size_t> possibleOrigins;
+                        for(const auto& alias : pointerFieldAliases)
+                        {
+                            if(alias.first.compare(0, elementPrefix.size(),
+                                                   elementPrefix) != 0)
+                                continue;
+                            const auto close = alias.first.find(
+                                ']', elementPrefix.size());
+                            if(close == std::string::npos ||
+                               close + 1 != alias.first.size())
+                                continue;
+                            possibleOrigins.insert(alias.second.begin(),
+                                                   alias.second.end());
+                        }
+                        if(!possibleOrigins.empty())
+                            return possibleOrigins;
+                    }
+                }
+                // Untracked aggregate paths may carry any pointer argument
+                // and must stay conservative.
                 hasUnknownReturnOrigin = true;
                 return {};
             }

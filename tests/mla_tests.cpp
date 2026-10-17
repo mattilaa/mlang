@@ -10883,7 +10883,7 @@ TEST_F(MLATest, OwnershipTupleForwardedPointerTracksSelectedElementOrigin)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// Dynamic list indexes retain every possible pointer argument origin.
+// Dynamic list indexes retain every pointer origin stored in that list.
 TEST_F(MLATest, OwnershipListForwardedPointerDynamicIndexKeepsAllOrigins)
 {
     std::string code = R"(
@@ -10906,6 +10906,27 @@ TEST_F(MLATest, OwnershipListForwardedPointerDynamicIndexKeepsAllOrigins)
     EXPECT_NE(out.find("cannot assign to 'first' while borrowed by 'forwarded'"),
               std::string::npos)
         << out;
+}
+
+// A dynamic list index should not borrow unrelated pointer parameters.
+TEST_F(MLATest, OwnershipListForwardedDynamicIndexExcludesUnstoredOrigins)
+{
+    std::string code = R"(
+        fn relay(index: i32, first: ptr<i32>, second: ptr<i32>,
+                 unrelated: ptr<i32>) -> ptr<i32> {
+            let pointers: list<ptr<i32>> = [first, second];
+            return pointers[index];
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var unrelated: i32 = 3;
+            let forwarded = relay(0, &first, &second, &unrelated);
+            unrelated = 4;
+            unsafe { return *forwarded - 1; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
 // Pointer provenance must propagate through multiple visible forwarding calls.
