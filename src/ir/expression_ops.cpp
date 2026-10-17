@@ -1739,6 +1739,9 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
     }
     case UnaryOpNode::OP_DEREF:
     {
+        if(!validateBorrowRead(node, node->line))
+            return nullptr;
+
         if(!validatePointerDereference(node->operand, node->line))
             return nullptr;
 

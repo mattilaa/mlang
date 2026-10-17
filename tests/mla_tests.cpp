@@ -3654,6 +3654,20 @@ TEST_F(MLATest, MutableStructReferenceCanReadThroughItsOwnBorrow)
     EXPECT_EQ(compileAndRunExitCode(code), 4);
 }
 
+TEST_F(MLATest, DisjointPointerReadsRemainAllowedDuringMutableBorrow)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 4, right: 5 };
+            let left = &mut pair.left;
+            let right = &pair.right;
+            unsafe { return *left + *right; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
 TEST_F(MLATest, SecondaryMutableFieldBorrowBlocksMethodOnThatField)
 {
     std::string code = R"(
