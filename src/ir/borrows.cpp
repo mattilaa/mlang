@@ -48,6 +48,56 @@ CodeGenerator::resolveBorrowOwnerFromLValue(ExpressionNode* expr) const
 }
 
 std::string
+CodeGenerator::resolveBorrowPlaceFromLValue(ExpressionNode* expr) const
+{
+    if(!expr)
+        return "";
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+        return id->name;
+    if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
+    {
+        const std::string base = field->object
+                                     ? resolveBorrowPlaceFromLValue(field->object)
+                                     : field->structName;
+        return base.empty() ? "" : base + "." + field->fieldName;
+    }
+    if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
+        return resolveBorrowPlaceFromLValue(index->base);
+    if(auto* tuple = dynamic_cast<TupleAccessNode*>(expr))
+        return resolveBorrowPlaceFromLValue(tuple->tuple);
+    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        if(unary->op == UnaryOpNode::OP_DEREF)
+        {
+            if(auto* id = dynamic_cast<IdentifierNode*>(unary->operand))
+            {
+                auto place = pointerBorrowPlace.find(id->name);
+                if(place != pointerBorrowPlace.end())
+                    return place->second;
+            }
+        }
+        return resolveBorrowPlaceFromLValue(unary->operand);
+    }
+    return "";
+}
+
+bool CodeGenerator::borrowPlacesOverlap(const std::string& left,
+                                       const std::string& right) const
+{
+    if(left.empty() || right.empty())
+        return true;
+    if(left == right)
+        return true;
+    const auto isParent = [](const std::string& parent,
+                             const std::string& child) {
+        return child.size() > parent.size() &&
+               child.compare(0, parent.size(), parent) == 0 &&
+               child[parent.size()] == '.';
+    };
+    return isParent(left, right) || isParent(right, left);
+}
+
+std::string
 CodeGenerator::getBorrowedOwnerForPointerExpression(ExpressionNode* expr) const
 {
     auto* idExpr = dynamic_cast<IdentifierNode*>(expr);
@@ -194,6 +244,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                                           bool isMutable)
 {
     clearPointerBorrow(pointerVar);
+    std::string borrowPlace;
 
     auto registerOwnerBorrow = [&](const std::string& ownerName,
                                    bool enforceExclusive) -> bool
@@ -244,6 +295,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                 return false;
             }
             pointerBorrowTarget[pointerVar] = ownerName;
+            pointerBorrowPlace[pointerVar] = borrowPlace;
             pointerKnownNull[pointerVar] = false;
             activeMutBorrower[ownerName] = pointerVar;
             return true;
@@ -277,6 +329,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         }
 
         pointerBorrowTarget[pointerVar] = ownerName;
+        pointerBorrowPlace[pointerVar] = borrowPlace;
         pointerKnownNull[pointerVar] = false;
         activeBorrowers[ownerName].insert(pointerVar);
         return true;
@@ -287,6 +340,10 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         auto borrowIt = pointerBorrowTarget.find(idExpr->name);
         if(borrowIt != pointerBorrowTarget.end())
         {
+            auto sourcePlace = pointerBorrowPlace.find(idExpr->name);
+            borrowPlace = sourcePlace == pointerBorrowPlace.end()
+                              ? borrowIt->second
+                              : sourcePlace->second;
             if(idExpr->name != pointerVar)
             {
                 // For Copy types (strings), assigning a borrow variable is
@@ -317,6 +374,9 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
     std::string ownerName = resolveBorrowOwnerFromLValue(unary->operand);
     if(ownerName.empty())
         return;
+    borrowPlace = resolveBorrowPlaceFromLValue(unary->operand);
+    if(borrowPlace.empty())
+        borrowPlace = ownerName;
 
     // Shared borrows allow multiple concurrent borrowers; only typed exclusive
     // pointers (e.g. *T owning pointers) enforce a single active borrow.

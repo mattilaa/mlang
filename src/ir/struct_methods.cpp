@@ -249,6 +249,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     auto savedImmutableReferenceVariables = immutableReferenceVariables;
     auto savedMovedVariables = movedVariables;
     auto savedPointerBorrowTarget = pointerBorrowTarget;
+    auto savedPointerBorrowPlace = pointerBorrowPlace;
     auto savedActiveBorrowers = activeBorrowers;
     auto savedActiveMutBorrower = activeMutBorrower;
     auto savedVariableScopeDepth = variableScopeDepth;
@@ -286,6 +287,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         immutableReferenceVariables = savedImmutableReferenceVariables;
         movedVariables = savedMovedVariables;
         pointerBorrowTarget = savedPointerBorrowTarget;
+        pointerBorrowPlace = savedPointerBorrowPlace;
         activeBorrowers = savedActiveBorrowers;
         activeMutBorrower = savedActiveMutBorrower;
         variableScopeDepth = savedVariableScopeDepth;
@@ -320,6 +322,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     immutableReferenceVariables.clear();
     movedVariables.clear();
     pointerBorrowTarget.clear();
+    pointerBorrowPlace.clear();
     activeBorrowers.clear();
     activeMutBorrower.clear();
     variableScopeDepth.clear();
@@ -2699,26 +2702,58 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
         }
 
+        const std::string receiverPlace =
+            resolveBorrowPlaceFromLValue(node->object);
+        auto borrowPlaceFor = [&](const std::string& borrower) {
+            auto place = pointerBorrowPlace.find(borrower);
+            return place == pointerBorrowPlace.end() ? receiverOwner
+                                                      : place->second;
+        };
         auto activeIt = activeBorrowers.find(receiverOwner);
         auto activeMutIt = activeMutBorrower.find(receiverOwner);
-        const bool hasMutableBorrow = activeMutIt != activeMutBorrower.end();
-        const bool hasTrackedSharedBorrow =
-            activeIt != activeBorrowers.end() && !activeIt->second.empty();
-        const bool hasPointerSharedBorrow = std::any_of(
-            pointerBorrowTarget.begin(), pointerBorrowTarget.end(),
-            [&](const auto& borrow) {
-                return borrow.second == receiverOwner &&
-                       (!hasMutableBorrow ||
-                        activeMutIt->second != borrow.first);
-            });
-        const bool hasSharedBorrow =
-            hasTrackedSharedBorrow || hasPointerSharedBorrow;
+        bool hasMutableBorrow = false;
+        std::string mutableBorrower;
+        if(activeMutIt != activeMutBorrower.end() &&
+           borrowPlacesOverlap(borrowPlaceFor(activeMutIt->second),
+                               receiverPlace))
+        {
+            hasMutableBorrow = true;
+            mutableBorrower = activeMutIt->second;
+        }
+        bool hasSharedBorrow = false;
+        std::string sharedBorrower;
+        if(activeIt != activeBorrowers.end())
+        {
+            for(const auto& borrower : activeIt->second)
+            {
+                if(borrowPlacesOverlap(borrowPlaceFor(borrower),
+                                       receiverPlace))
+                {
+                    hasSharedBorrow = true;
+                    sharedBorrower = borrower;
+                    break;
+                }
+            }
+        }
+        for(const auto& borrow : pointerBorrowTarget)
+        {
+            if(borrow.second != receiverOwner ||
+               (hasMutableBorrow && mutableBorrower == borrow.first))
+                continue;
+            if(borrowPlacesOverlap(borrowPlaceFor(borrow.first),
+                                   receiverPlace))
+            {
+                hasSharedBorrow = true;
+                if(sharedBorrower.empty())
+                    sharedBorrower = borrow.first;
+                break;
+            }
+        }
         if((hasSharedBorrow && !hasSharedReceiver) ||
            (hasMutableBorrow && hasSharedReceiver))
         {
-            const std::string by =
-                hasMutableBorrow ? activeMutIt->second
-                                 : *activeIt->second.begin();
+            const std::string by = hasMutableBorrow ? mutableBorrower
+                                                     : sharedBorrower;
             reportError(node->line, "cannot call method on '" + receiverOwner +
                                         "' while borrowed by '" + by + "'");
             return false;
@@ -6202,6 +6237,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     auto savedPointerElementTypes = pointerElementTypes;
                     auto savedMovedVariables = movedVariables;
                     auto savedPointerBorrowTarget = pointerBorrowTarget;
+                    auto savedPointerBorrowPlace = pointerBorrowPlace;
                     auto savedActiveBorrowers = activeBorrowers;
                     auto savedActiveMutBorrower = activeMutBorrower;
                     auto savedVariableScopeDepth = variableScopeDepth;
@@ -6225,6 +6261,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     pointerElementTypes = savedPointerElementTypes;
                     movedVariables = savedMovedVariables;
                     pointerBorrowTarget = savedPointerBorrowTarget;
+                    pointerBorrowPlace = savedPointerBorrowPlace;
                     activeBorrowers = savedActiveBorrowers;
                     activeMutBorrower = savedActiveMutBorrower;
                     variableScopeDepth = savedVariableScopeDepth;
@@ -6243,17 +6280,44 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
     if(!receiverOwner.empty())
     {
+        const std::string receiverPlace =
+            resolveBorrowPlaceFromLValue(node->object);
+        auto borrowPlaceFor = [&](const std::string& borrower) {
+            auto place = pointerBorrowPlace.find(borrower);
+            return place == pointerBorrowPlace.end() ? receiverOwner
+                                                      : place->second;
+        };
         auto activeIt = activeBorrowers.find(receiverOwner);
         const auto activeMutIt = activeMutBorrower.find(receiverOwner);
-        const bool hasSharedBorrow =
-            activeIt != activeBorrowers.end() && !activeIt->second.empty();
-        const bool hasMutableBorrow = activeMutIt != activeMutBorrower.end();
+        bool hasSharedBorrow = false;
+        std::string sharedBorrower;
+        if(activeIt != activeBorrowers.end())
+        {
+            for(const auto& borrower : activeIt->second)
+            {
+                if(borrowPlacesOverlap(borrowPlaceFor(borrower),
+                                       receiverPlace))
+                {
+                    hasSharedBorrow = true;
+                    sharedBorrower = borrower;
+                    break;
+                }
+            }
+        }
+        bool hasMutableBorrow = false;
+        std::string mutableBorrower;
+        if(activeMutIt != activeMutBorrower.end() &&
+           borrowPlacesOverlap(borrowPlaceFor(activeMutIt->second),
+                               receiverPlace))
+        {
+            hasMutableBorrow = true;
+            mutableBorrower = activeMutIt->second;
+        }
         if((hasSharedBorrow && !methodHasSharedReceiver) ||
            (hasMutableBorrow && methodHasSharedReceiver))
         {
-            std::string by = hasMutableBorrow
-                                 ? activeMutIt->second
-                                 : *activeIt->second.begin();
+            std::string by = hasMutableBorrow ? mutableBorrower
+                                              : sharedBorrower;
             reportError(node->line, "cannot call method on '" + receiverOwner +
                                         "' while borrowed by '" + by + "'");
             return nullptr;

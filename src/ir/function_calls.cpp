@@ -4690,6 +4690,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     auto savedImmutableReferenceVars = immutableReferenceVariables;
     auto savedMovedVars = movedVariables;
     auto savedPtrBorrowTarget = pointerBorrowTarget;
+    auto savedPtrBorrowPlace = pointerBorrowPlace;
     auto savedActiveBorrowers = activeBorrowers;
     auto savedActiveMutBorrow = activeMutBorrower;
     auto savedVarScopeDepth = variableScopeDepth;
@@ -4740,6 +4741,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     closureCaptureReferenceAliases.clear();
     activeInlineClosures.clear();
     pointerBorrowTarget.clear();
+    pointerBorrowPlace.clear();
     pointerKnownNull.clear();
     activeBorrowers.clear();
     activeMutBorrower.clear();
@@ -4970,6 +4972,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
         std::move(savedImmutableReferenceVars);
     movedVariables = std::move(savedMovedVars);
     pointerBorrowTarget = std::move(savedPtrBorrowTarget);
+    pointerBorrowPlace = std::move(savedPtrBorrowPlace);
     activeBorrowers = std::move(savedActiveBorrowers);
     activeMutBorrower = std::move(savedActiveMutBorrow);
     variableScopeDepth = std::move(savedVarScopeDepth);

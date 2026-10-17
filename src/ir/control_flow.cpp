@@ -596,6 +596,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto incomingPointerElementTypes = pointerElementTypes;
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
+    auto incomingPointerBorrowPlace = pointerBorrowPlace;
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingActiveMutBorrower = activeMutBorrower;
     auto restoreIncomingState = [&]()
@@ -610,6 +611,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         pointerElementTypes = incomingPointerElementTypes;
         movedVariables = incomingMoved;
         pointerBorrowTarget = incomingPointerBorrowTarget;
+        pointerBorrowPlace = incomingPointerBorrowPlace;
         activeBorrowers = incomingActiveBorrowers;
         activeMutBorrower = incomingActiveMutBorrower;
     };
@@ -708,6 +710,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     pointerElementTypes = condPointerElementTypes;
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
+    pointerBorrowPlace = incomingPointerBorrowPlace;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
     enterCleanupScope();
@@ -718,6 +721,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     exitCleanupScope();
     auto thenMoved = movedVariables;
     auto thenPointerBorrowTarget = pointerBorrowTarget;
+    auto thenPointerBorrowPlace = pointerBorrowPlace;
     auto thenActiveBorrowers = activeBorrowers;
     auto thenActiveMutBorrower = activeMutBorrower;
     llvm::BasicBlock* thenEnd = builder.GetInsertBlock();
@@ -742,6 +746,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     pointerElementTypes = incomingPointerElementTypes;
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
+    pointerBorrowPlace = incomingPointerBorrowPlace;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
 
@@ -772,6 +777,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     }
     auto elseMoved = movedVariables;
     auto elsePointerBorrowTarget = pointerBorrowTarget;
+    auto elsePointerBorrowPlace = pointerBorrowPlace;
     auto elseActiveBorrowers = activeBorrowers;
     auto elseActiveMutBorrower = activeMutBorrower;
     llvm::BasicBlock* elseEnd = builder.GetInsertBlock();
@@ -800,6 +806,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     {
         std::set<std::string> mergedMoved;
         std::map<std::string, std::string> mergedPointerBorrowTarget;
+        std::map<std::string, std::string> mergedPointerBorrowPlace;
         std::map<std::string, std::set<std::string>> mergedActiveBorrowers;
 
         auto mergeOne = [&](const std::set<std::string>& movedState,
@@ -830,6 +837,30 @@ void CodeGenerator::generateIfStatement(IfNode* node)
 
         movedVariables = std::move(mergedMoved);
         pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
+        for(const auto& borrow : pointerBorrowTarget)
+        {
+            std::string commonPlace;
+            bool hasCommonPlace = true;
+            const auto mergePlaceState = [&](const auto& placeState) {
+                auto place = placeState.find(borrow.first);
+                if(place == placeState.end())
+                {
+                    hasCommonPlace = false;
+                    return;
+                }
+                if(commonPlace.empty())
+                    commonPlace = place->second;
+                else if(commonPlace != place->second)
+                    hasCommonPlace = false;
+            };
+            if(thenFallsThrough)
+                mergePlaceState(thenPointerBorrowPlace);
+            if(elseFallsThrough)
+                mergePlaceState(elsePointerBorrowPlace);
+            if(hasCommonPlace && !commonPlace.empty())
+                mergedPointerBorrowPlace.emplace(borrow.first, commonPlace);
+        }
+        pointerBorrowPlace = std::move(mergedPointerBorrowPlace);
         activeBorrowers = std::move(mergedActiveBorrowers);
         // Merge &mut: conservative — keep only those live in both branches
         std::map<std::string, std::string> mergedMutBorrower;
@@ -842,6 +873,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     {
         movedVariables = incomingMoved;
         pointerBorrowTarget = incomingPointerBorrowTarget;
+        pointerBorrowPlace = incomingPointerBorrowPlace;
         activeBorrowers = incomingActiveBorrowers;
         activeMutBorrower = incomingActiveMutBorrower;
     }
@@ -935,6 +967,7 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
 
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
+    auto incomingPointerBorrowPlace = pointerBorrowPlace;
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingActiveMutBorrower = activeMutBorrower;
 
@@ -1014,6 +1047,7 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     bool bodyFallsThrough = bodyEnd && !mlang::llvm_compat::terminatorOrNull(bodyEnd);
     auto bodyMoved = movedVariables;
     auto bodyPointerBorrowTarget = pointerBorrowTarget;
+    auto bodyPointerBorrowPlace = pointerBorrowPlace;
     auto bodyActiveBorrowers = activeBorrowers;
     auto bodyActiveMutBorrower = activeMutBorrower;
 
@@ -1030,12 +1064,23 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
 
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
+    pointerBorrowPlace = incomingPointerBorrowPlace;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
 
     if(bodyFallsThrough)
     {
         movedVariables.insert(bodyMoved.begin(), bodyMoved.end());
+        for(auto place = pointerBorrowPlace.begin();
+            place != pointerBorrowPlace.end();)
+        {
+            auto bodyPlace = bodyPointerBorrowPlace.find(place->first);
+            if(bodyPlace == bodyPointerBorrowPlace.end() ||
+               bodyPlace->second != place->second)
+                place = pointerBorrowPlace.erase(place);
+            else
+                ++place;
+        }
         for(const auto& kv : bodyPointerBorrowTarget)
         {
             if(pointerBorrowTarget.find(kv.first) == pointerBorrowTarget.end())

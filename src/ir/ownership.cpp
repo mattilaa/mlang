@@ -238,6 +238,7 @@ void CodeGenerator::clearPointerBorrow(const std::string& pointerVar)
             ++it;
     }
     pointerBorrowTarget.erase(pointerVar);
+    pointerBorrowPlace.erase(pointerVar);
 }
 
 bool CodeGenerator::isMutBorrower(const std::string& ptrVar) const
@@ -282,6 +283,9 @@ void CodeGenerator::recordScopedPointerVariable(const std::string& pointerVar)
     {
         entry.hadPreviousBorrow = true;
         entry.previousOwner = it->second;
+        auto place = pointerBorrowPlace.find(pointerVar);
+        if(place != pointerBorrowPlace.end())
+            entry.previousPlace = place->second;
     }
     pointerBorrowScopes.back().push_back(std::move(entry));
 }

@@ -83,6 +83,8 @@ void CodeGenerator::exitCleanupScope()
         if(it->hadPreviousBorrow && !it->previousOwner.empty())
         {
             pointerBorrowTarget[it->pointerVar] = it->previousOwner;
+            if(!it->previousPlace.empty())
+                pointerBorrowPlace[it->pointerVar] = it->previousPlace;
             activeBorrowers[it->previousOwner].insert(it->pointerVar);
         }
     }

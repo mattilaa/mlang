@@ -3134,6 +3134,122 @@ TEST_F(MLATest, TraitObjectFieldSharedMethodRejectsLiveMutableBorrow)
         << out;
 }
 
+TEST_F(MLATest, TraitObjectFieldSharedMethodAllowsDisjointMutableBorrow)
+{
+    std::string code = R"(
+        trait CounterOps {
+            fn get(&self) -> i32;
+        }
+        struct Counter { var value: i32; };
+        struct Holder {
+            var item: dyn CounterOps;
+            var count: i32;
+        };
+        impl CounterOps for Counter {
+            fn get(&self) -> i32 { return self.value; }
+        }
+        fn observe_count(count: ptr<i32>) -> void { return; }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 9 };
+            var holder: Holder = Holder { item: counter, count: 2 };
+            let held_count = &mut holder.count;
+            let value = holder.item.get();
+            observe_count(held_count);
+            return value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
+TEST_F(MLATest, TraitObjectFieldMutatingMethodAllowsDisjointSharedBorrow)
+{
+    std::string code = R"(
+        trait CounterOps {
+            fn bump(self: &mut Self) -> void;
+            fn get(&self) -> i32;
+        }
+        struct Counter { var value: i32; };
+        struct Holder {
+            var item: dyn CounterOps;
+            var count: i32;
+        };
+        impl CounterOps for Counter {
+            fn bump(self: &mut Counter) -> void { self.value += 1; }
+            fn get(&self) -> i32 { return self.value; }
+        }
+        fn observe_count(count: ptr<i32>) -> void { return; }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 8 };
+            var holder: Holder = Holder { item: counter, count: 2 };
+            let held_count = &holder.count;
+            holder.item.bump();
+            observe_count(held_count);
+            return holder.item.get();
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
+TEST_F(MLATest, StructFieldMethodAllowsDisjointMutableBorrow)
+{
+    std::string code = R"(
+        struct Counter { var value: i32; };
+        struct Holder {
+            var counter: Counter;
+            var count: i32;
+        };
+        impl Counter {
+            fn get(&self) -> i32 { return self.value; }
+        }
+        fn observe_count(count: ptr<i32>) -> void { return; }
+        fn main() -> i32 {
+            var holder: Holder = Holder {
+                counter: Counter { value: 9 },
+                count: 2
+            };
+            let held_count = &mut holder.count;
+            let value = holder.counter.get();
+            observe_count(held_count);
+            return value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
+TEST_F(MLATest, FieldBorrowPlaceRestoresAfterShadowedPointerScope)
+{
+    std::string code = R"(
+        trait CounterOps {
+            fn bump(self: &mut Self) -> void;
+            fn get(&self) -> i32;
+        }
+        struct Counter { var value: i32; };
+        struct Holder {
+            var item: dyn CounterOps;
+            var count: i32;
+        };
+        impl CounterOps for Counter {
+            fn bump(self: &mut Counter) -> void { self.value += 1; }
+            fn get(&self) -> i32 { return self.value; }
+        }
+        fn observe_count(count: ptr<i32>) -> void { return; }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 8 };
+            var holder: Holder = Holder { item: counter, count: 2 };
+            let held = &mut holder.count;
+            {
+                let held = &holder.item;
+                let value = holder.item.get();
+                if value != 8 { return 1; }
+            }
+            holder.item.bump();
+            observe_count(held);
+            return holder.item.get();
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
 TEST_F(MLATest, TraitObjectFieldVoidMutatingMethodRuns)
 {
     std::string code = R"(

@@ -244,6 +244,9 @@ private:
     };
     std::vector<InlineClosureReturnState*> inlineClosureReturnStates;
     std::map<std::string, std::string> pointerBorrowTarget;
+    // Precise source place for local references. Ownership/lifetime checks
+    // still use the root owner; receiver checks can distinguish sibling fields.
+    std::map<std::string, std::string> pointerBorrowPlace;
     std::map<std::string, std::set<std::string>> activeBorrowers;
     // Tracks the single exclusive mutable borrower per owner variable.
     // Invariant: activeMutBorrower[owner] is set iff a &mut borrow is live;
@@ -509,6 +512,7 @@ private:
         std::string pointerVar;
         bool hadPreviousBorrow = false;
         std::string previousOwner;
+        std::string previousPlace;
     };
     std::vector<std::vector<PointerBorrowScopeEntry>> pointerBorrowScopes;
     struct VariableScopeDepthEntry
@@ -632,6 +636,9 @@ private:
     void recordVariableScopeDepth(const std::string& varName);
     void recordScopedPointerVariable(const std::string& pointerVar);
     std::string resolveBorrowOwnerFromLValue(ExpressionNode* expr) const;
+    std::string resolveBorrowPlaceFromLValue(ExpressionNode* expr) const;
+    bool borrowPlacesOverlap(const std::string& left,
+                             const std::string& right) const;
     std::string getBorrowedOwnerForPointerExpression(
         ExpressionNode* expr) const;
     bool validatePointerDereference(ExpressionNode* pointerExpr, int line);
