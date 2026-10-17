@@ -82,6 +82,22 @@ void CodeGenerator::exitCleanupScope()
         clearPointerBorrow(it->pointerVar);
         if(it->hadPreviousBorrow && !it->previousOwner.empty())
         {
+            if(!it->shadowAlias.empty())
+            {
+                for(auto& borrowers : activeBorrowers)
+                    if(borrowers.second.erase(it->shadowAlias))
+                        borrowers.second.insert(it->pointerVar);
+                for(auto& borrower : activeMutBorrower)
+                    if(borrower.second == it->shadowAlias)
+                        borrower.second = it->pointerVar;
+                for(auto& parent : pointerBorrowParent)
+                    if(parent.first != it->pointerVar &&
+                       parent.second == it->shadowAlias)
+                        parent.second = it->pointerVar;
+                pointerBorrowTarget.erase(it->shadowAlias);
+                pointerBorrowParent.erase(it->shadowAlias);
+                pointerBorrowPlace.erase(it->shadowAlias);
+            }
             pointerBorrowTarget[it->pointerVar] = it->previousOwner;
             if(!it->previousParent.empty())
                 pointerBorrowParent[it->pointerVar] = it->previousParent;

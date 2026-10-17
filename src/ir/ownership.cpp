@@ -495,6 +495,31 @@ void CodeGenerator::recordScopedPointerVariable(const std::string& pointerVar)
                 break;
             }
         }
+
+        entry.shadowAlias = pointerVar + " (outer shadow " +
+                            std::to_string(currentScopeDepth()) + "." +
+                            std::to_string(pointerBorrowScopes.back().size()) +
+                            ")";
+        pointerBorrowTarget[entry.shadowAlias] = entry.previousOwner;
+        if(!entry.previousParent.empty())
+            pointerBorrowParent[entry.shadowAlias] = entry.previousParent;
+        if(!entry.previousPlace.empty())
+            pointerBorrowPlace[entry.shadowAlias] = entry.previousPlace;
+
+        for(auto& borrowers : activeBorrowers)
+            if(borrowers.second.erase(pointerVar))
+                borrowers.second.insert(entry.shadowAlias);
+        for(auto& borrower : activeMutBorrower)
+            if(borrower.second == pointerVar)
+                borrower.second = entry.shadowAlias;
+        for(auto& parent : pointerBorrowParent)
+            if(parent.first != entry.shadowAlias &&
+               parent.second == pointerVar)
+                parent.second = entry.shadowAlias;
+
+        pointerBorrowTarget.erase(pointerVar);
+        pointerBorrowParent.erase(pointerVar);
+        pointerBorrowPlace.erase(pointerVar);
     }
     pointerBorrowScopes.back().push_back(std::move(entry));
 }

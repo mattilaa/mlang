@@ -580,6 +580,7 @@ private:
         bool previousWasMutable = false;
         std::string previousBorrowKey;
         std::string previousParent;
+        std::string shadowAlias;
     };
     std::vector<std::vector<PointerBorrowScopeEntry>> pointerBorrowScopes;
     template <typename T> struct ScopedBindingValue
