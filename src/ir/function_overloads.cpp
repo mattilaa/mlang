@@ -204,8 +204,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             return {};
         };
 
-        std::function<void(StatementNode*)> scanStatement;
-        std::function<void(StatementListNode*)> scanList;
+        std::function<bool(StatementNode*)> scanStatement;
+        std::function<bool(StatementListNode*)> scanList;
         auto mergeAliases = [](const std::vector<
                                    std::map<std::string, std::set<size_t>>>&
                                    branches) {
@@ -218,7 +218,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
         };
         scanList = [&](StatementListNode* statements) {
             if(!statements)
-                return;
+                return true;
             std::map<std::string, std::set<size_t>> previousAliases;
             std::set<std::string> aliasesNotPreviouslyPresent;
             auto rememberShadow = [&](const std::string& name) {
@@ -231,6 +231,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 else
                     previousAliases.emplace(name, previous->second);
             };
+            bool fallsThrough = true;
             for(auto* statement : statements->statements)
             {
                 // Snapshot a shadow at its declaration point so earlier
@@ -240,20 +241,27 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 else if(auto* declaration =
                             dynamic_cast<VarDeclNode*>(statement))
                     rememberShadow(declaration->name);
-                scanStatement(statement);
+                if(!scanStatement(statement))
+                {
+                    fallsThrough = false;
+                    break;
+                }
             }
             for(const auto& name : aliasesNotPreviouslyPresent)
                 pointerAliases.erase(name);
             for(auto& previous : previousAliases)
                 pointerAliases[previous.first] = std::move(previous.second);
+            return fallsThrough;
         };
         scanStatement = [&](StatementNode* statement) {
+            if(!statement)
+                return true;
             if(auto* returned = dynamic_cast<ReturnNode*>(statement))
             {
                 auto returnedOrigins = origins(returned->expression);
                 auto& summary = functionPointerReturnParameters[symbol];
                 summary.insert(returnedOrigins.begin(), returnedOrigins.end());
-                return;
+                return false;
             }
             if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
             {
@@ -281,59 +289,72 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     pointerAliases[assignment->name] = std::move(values);
             }
             if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
-                scanList(block->statements);
+                return scanList(block->statements);
             else if(auto* branch = dynamic_cast<IfNode*>(statement))
             {
                 const auto baseAliases = pointerAliases;
                 std::vector<std::map<std::string, std::set<size_t>>> branches;
                 pointerAliases = baseAliases;
-                scanList(branch->thenBranch);
-                branches.push_back(pointerAliases);
+                if(scanList(branch->thenBranch))
+                    branches.push_back(pointerAliases);
                 pointerAliases = baseAliases;
-                scanStatement(branch->elseIfBranch);
-                if(branch->elseIfBranch)
+                const bool elseIfFallsThrough =
+                    scanStatement(branch->elseIfBranch);
+                if(branch->elseIfBranch && elseIfFallsThrough)
                     branches.push_back(pointerAliases);
                 else if(!branch->elseBranch)
                     branches.push_back(baseAliases);
                 pointerAliases = baseAliases;
-                scanList(branch->elseBranch);
-                if(branch->elseBranch)
+                const bool elseFallsThrough = scanList(branch->elseBranch);
+                if(branch->elseBranch && elseFallsThrough)
                     branches.push_back(pointerAliases);
+                if(branches.empty())
+                    return false;
                 pointerAliases = mergeAliases(branches);
+                return true;
             }
             else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
             {
                 const auto baseAliases = pointerAliases;
                 std::vector<std::map<std::string, std::set<size_t>>> branches;
                 pointerAliases = baseAliases;
-                scanList(branch->thenBranch);
-                branches.push_back(pointerAliases);
+                if(scanList(branch->thenBranch))
+                    branches.push_back(pointerAliases);
                 pointerAliases = baseAliases;
-                scanStatement(branch->elseIfBranch);
-                if(branch->elseIfBranch)
+                const bool elseIfFallsThrough =
+                    scanStatement(branch->elseIfBranch);
+                if(branch->elseIfBranch && elseIfFallsThrough)
                     branches.push_back(pointerAliases);
                 else if(!branch->elseBranch)
                     branches.push_back(baseAliases);
                 pointerAliases = baseAliases;
-                scanList(branch->elseBranch);
-                if(branch->elseBranch)
+                const bool elseFallsThrough = scanList(branch->elseBranch);
+                if(branch->elseBranch && elseFallsThrough)
                     branches.push_back(pointerAliases);
+                if(branches.empty())
+                    return false;
                 pointerAliases = mergeAliases(branches);
+                return true;
             }
             else if(auto* loop = dynamic_cast<WhileNode*>(statement))
             {
                 const auto baseAliases = pointerAliases;
                 pointerAliases = baseAliases;
-                scanList(loop->body);
+                const bool bodyFallsThrough = scanList(loop->body);
+                if(!bodyFallsThrough)
+                    pointerAliases = baseAliases;
                 pointerAliases = mergeAliases({baseAliases, pointerAliases});
             }
             else if(auto* loop = dynamic_cast<ForNode*>(statement))
             {
                 const auto baseAliases = pointerAliases;
                 pointerAliases = baseAliases;
-                scanList(loop->body);
+                const bool bodyFallsThrough = scanList(loop->body);
+                if(!bodyFallsThrough)
+                    pointerAliases = baseAliases;
                 pointerAliases = mergeAliases({baseAliases, pointerAliases});
             }
+            return true;
         };
         scanList(node->body);
         if(!hasUnknownReturnOrigin)

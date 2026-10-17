@@ -10587,6 +10587,31 @@ TEST_F(MLATest, OwnershipFunctionReturnedPointerDropsDefiniteBranchOrigin)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// Return paths do not leak their alias state into the surviving branch.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerExcludesTerminatedBranchOrigin)
+{
+    std::string code = R"(
+        fn choose(flag: bool, a: ptr<i32>, b: ptr<i32>, c: ptr<i32>) -> ptr<i32> {
+            var pointer: ptr<i32> = a;
+            if flag {
+                return b;
+            } else {
+                pointer = c;
+            }
+            return pointer;
+        }
+        fn main() -> i32 {
+            var initial: i32 = 1;
+            var first: i32 = 2;
+            var second: i32 = 3;
+            let selected: ptr<i32> = choose(true, &initial, &first, &second);
+            initial = 4;
+            unsafe { return *selected + initial - 6; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 // A mutation before a local alias shadow must survive restoration of the outer.
 TEST_F(MLATest, OwnershipFunctionReturnedPointerRestoresUpdatedShadowedAlias)
 {
