@@ -547,6 +547,25 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         return;
 
     value = applyStructCopySemantics(value);
+
+    // Replacing an initialized cleanup-bearing value ends its current
+    // lifetime before the new value is stored. The RHS is evaluated first, so
+    // a move from this same variable has already cleared its drop flag.
+    for(auto scope = cleanupScopes.rbegin(); scope != cleanupScopes.rend();
+        ++scope)
+    {
+        auto cleanup = std::find_if(
+            scope->rbegin(), scope->rend(),
+            [&](const ScopeCleanup& action) {
+                return action.varName == node->name;
+            });
+        if(cleanup != scope->rend())
+        {
+            emitScopeCleanup(*cleanup, "assign");
+            break;
+        }
+    }
+
     builder.CreateStore(value, variable);
     setActiveDropFlag(node->name, true);
     clearMovedVariable(node->name);

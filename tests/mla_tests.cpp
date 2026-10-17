@@ -5030,6 +5030,28 @@ TEST_F(MLATest, OwnershipShadowedCleanupVariablesDropTheirOwnValues)
     EXPECT_EQ(compileAndRun(code), "free 2\nfree 1\n");
 }
 
+// Reassignment drops the old value immediately and the replacement at scope exit.
+TEST_F(MLATest, OwnershipReassignmentDropsReplacedCleanupValue)
+{
+    std::string code = R"(
+        struct Owned { var marker: i32; };
+
+        impl Owned {
+            fn free(self: Owned) -> i32 {
+                println!("free {}", self.marker);
+                return 0;
+            }
+        }
+
+        fn main() -> i32 {
+            var owned: Owned = Owned { marker: 1 };
+            owned = Owned { marker: 2 };
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "free 1\nfree 2\n");
+}
+
 TEST_F(MLATest, OwnershipUseOutsideBlockReportsUnknownVariable)
 {
     std::string code = R"(
