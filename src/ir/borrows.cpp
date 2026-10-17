@@ -652,7 +652,10 @@ void CodeGenerator::clearAggregateBorrowOrigins(const std::string& variable)
 {
     auto origins = aggregateBorrowOrigins.find(variable);
     if(origins == aggregateBorrowOrigins.end())
+    {
+        pointerBorrowPlace.erase(variable);
         return;
+    }
     for(const auto& owner : origins->second)
     {
         auto borrowers = activeBorrowers.find(owner);
@@ -663,6 +666,7 @@ void CodeGenerator::clearAggregateBorrowOrigins(const std::string& variable)
             activeBorrowers.erase(borrowers);
     }
     aggregateBorrowOrigins.erase(origins);
+    pointerBorrowPlace.erase(variable);
 }
 
 void CodeGenerator::trackAggregateBorrowOrigins(
@@ -676,6 +680,13 @@ void CodeGenerator::trackAggregateBorrowOrigins(
         type->second != TypeNode::TYPE_TUPLE))
         return;
     std::set<std::string> origins;
+    std::map<std::string, std::set<std::string>> originPlaces;
+    auto addOrigin = [&](const std::string& owner, const std::string& place) {
+        if(owner.empty())
+            return;
+        origins.insert(owner);
+        originPlaces[owner].insert(place.empty() ? owner : place);
+    };
     std::function<void(ExpressionNode*)> collect = [&](ExpressionNode* current) {
         if(!current)
             return;
@@ -689,14 +700,35 @@ void CodeGenerator::trackAggregateBorrowOrigins(
                         "tracking is not supported yet");
             auto pointer = pointerBorrowTarget.find(identifier->name);
             if(pointer != pointerBorrowTarget.end())
-                origins.insert(pointer->second);
+            {
+                auto place = pointerBorrowPlace.find(identifier->name);
+                addOrigin(pointer->second,
+                          place == pointerBorrowPlace.end()
+                              ? pointer->second
+                              : place->second);
+            }
             for(const auto& active : activeBorrowers)
                 if(active.second.count(identifier->name) != 0)
-                    origins.insert(active.first);
+                {
+                    auto place = pointerBorrowPlace.find(identifier->name);
+                    addOrigin(active.first,
+                              pointer != pointerBorrowTarget.end() &&
+                                      pointer->second == active.first &&
+                                      place != pointerBorrowPlace.end()
+                                  ? place->second
+                                  : active.first);
+                }
             auto aggregate = aggregateBorrowOrigins.find(identifier->name);
             if(aggregate != aggregateBorrowOrigins.end())
-                origins.insert(aggregate->second.begin(),
-                               aggregate->second.end());
+            {
+                auto place = pointerBorrowPlace.find(identifier->name);
+                for(const auto& owner : aggregate->second)
+                    addOrigin(owner,
+                              aggregate->second.size() == 1 &&
+                                      place != pointerBorrowPlace.end()
+                                  ? place->second
+                                  : owner);
+            }
             return;
         }
         if(auto* unary = dynamic_cast<UnaryOpNode*>(current))
@@ -746,7 +778,7 @@ void CodeGenerator::trackAggregateBorrowOrigins(
                             break;
                         }
                     }
-                    origins.insert(owner);
+                    addOrigin(owner, place);
                 }
             }
             else
@@ -835,7 +867,10 @@ void CodeGenerator::trackAggregateBorrowOrigins(
     clearAggregateBorrowOrigins(variable);
     for(auto it = origins.begin(); it != origins.end();)
         if(variableScopeDepth.find(*it) == variableScopeDepth.end())
+        {
+            originPlaces.erase(*it);
             it = origins.erase(it);
+        }
         else
             ++it;
     if(origins.empty())
@@ -843,6 +878,8 @@ void CodeGenerator::trackAggregateBorrowOrigins(
     aggregateBorrowOrigins[variable] = origins;
     for(const auto& owner : origins)
         activeBorrowers[owner].insert(variable);
+    if(origins.size() == 1 && originPlaces.begin()->second.size() == 1)
+        pointerBorrowPlace[variable] = *originPlaces.begin()->second.begin();
 }
 
 void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
@@ -1042,15 +1079,18 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             if(origins->second.empty())
                 return;
             const std::string primaryOwner = *origins->second.begin();
+            auto containerPlace = pointerBorrowPlace.find(container);
+            const bool hasPrecisePlace = origins->second.size() == 1 &&
+                                         containerPlace != pointerBorrowPlace.end();
             for(const auto& owner : origins->second)
             {
-                borrowPlace = owner;
+                borrowPlace = hasPrecisePlace ? containerPlace->second : owner;
                 if(!registerOwnerBorrow(owner, false))
                     return;
             }
-            borrowPlace = primaryOwner;
             pointerBorrowTarget[pointerVar] = primaryOwner;
-            pointerBorrowPlace[pointerVar] = primaryOwner;
+            pointerBorrowPlace[pointerVar] =
+                hasPrecisePlace ? containerPlace->second : primaryOwner;
             return;
         }
     }

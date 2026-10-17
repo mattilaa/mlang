@@ -7863,6 +7863,43 @@ TEST_F(MLATest, AggregateBorrowKeepsOwnerBorrowedUntilLastUse)
         << out;
 }
 
+TEST_F(MLATest, AggregateBorrowAllowsMutationOfDisjointOwnerField)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct PointerBox { var value: ptr<i32>; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            let boxed: PointerBox = PointerBox { value: &pair.left };
+            pair.right = 9;
+            unsafe { return *boxed.value + pair.right; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 10);
+}
+
+TEST_F(MLATest, AggregateBorrowStillRejectsMutationOfBorrowedOwnerField)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct PointerBox { var value: ptr<i32>; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            let boxed: PointerBox = PointerBox { value: &pair.left };
+            pair.left = 9;
+            unsafe { return *boxed.value; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, AggregateFieldAssignmentTracksBorrowOrigin)
 {
     std::string code = R"(

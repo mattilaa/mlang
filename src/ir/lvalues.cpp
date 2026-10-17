@@ -582,6 +582,8 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         trackAggregateBorrowOrigins(owner, node->expression);
         auto& currentOrigins = aggregateBorrowOrigins[owner];
         currentOrigins.insert(previousOrigins.begin(), previousOrigins.end());
+        if(!previousOrigins.empty())
+            pointerBorrowPlace.erase(owner);
         for(const auto& origin : previousOrigins)
             activeBorrowers[origin].insert(owner);
         if(currentOrigins.empty())
