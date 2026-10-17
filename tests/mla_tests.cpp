@@ -5744,6 +5744,32 @@ TEST_F(MLATest, DeferredPointerBorrowEndsWithBorrowedSlotScope)
     EXPECT_EQ(rc, 0) << out;
 }
 
+// Retains pointer provenance until every slot borrowing that pointer has ended.
+TEST_F(MLATest, DeferredPointerBorrowWaitsForEverySlot)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var pointer: ptr<i32> = &first;
+            var first_slot: ptr<ptr<i32>> = &pointer;
+            {
+                var second_slot: ptr<ptr<i32>> = &pointer;
+                let pointer_again: ptr<i32> = *second_slot;
+            }
+            let mutable_slot: ptr<ptr<ptr<i32>>> = &mut first_slot;
+            unsafe { *(*mutable_slot) = &mut second; }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
 // Verifies that a shared borrow remains read-only when stored in an aggregate.
 TEST_F(MLATest, SharedBorrowCannotWriteThroughAggregatePointerField)
 {
