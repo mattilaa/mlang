@@ -11081,6 +11081,39 @@ TEST_F(MLATest, OwnershipListUnusedMutatingClosurePreservesOriginPrecision)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// Selecting a mutating closure across branches preserves its effects.
+TEST_F(MLATest, OwnershipListBranchSelectedClosureMutationKeepsNewOrigin)
+{
+    std::string code = R"(
+        fn relay(choose_replace: bool, first: ptr<i32>,
+                 second: ptr<i32>) -> ptr<i32> {
+            var pointers: list<ptr<i32>> = [first];
+            let replace = || { pointers[0] = second; };
+            let noop = || {};
+            var selected = || {};
+            if choose_replace {
+                selected = replace;
+            } else {
+                selected = noop;
+            }
+            selected();
+            return pointers[0];
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded = relay(true, &mut first, &mut second);
+            second = 3;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
+}
+
 // Returning a pointer extracted from an aggregate argument retains its borrow.
 TEST_F(MLATest, OwnershipAggregateArgumentReturnedPointerKeepsBorrowLive)
 {
