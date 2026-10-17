@@ -8353,6 +8353,30 @@ TEST_F(MLATest, CannotPassAggregateContainingExclusiveBorrowToFunction)
               std::string::npos) << out;
 }
 
+TEST_F(MLATest, CannotPassTemporaryAggregateContainingExclusiveBorrow)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        var saved: PointerBox;
+
+        fn retain(box: PointerBox) -> void {
+            saved = box;
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            retain(PointerBox { value: &mut value });
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass aggregate containing a mutable borrow"),
+              std::string::npos) << out;
+}
+
 TEST_F(MLATest, CannotCopyAggregateContainingExclusiveBorrow)
 {
     std::string code = R"(

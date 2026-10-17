@@ -1644,8 +1644,99 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     // std::copy has a dedicated diagnostic below and must reach that check.
     if(node->name != "std::copy")
     {
+        std::function<bool(ExpressionNode*)> containsMutableBorrow =
+            [&](ExpressionNode* expression) {
+                if(!expression)
+                    return false;
+                if(auto* identifier =
+                       dynamic_cast<IdentifierNode*>(expression))
+                    return isMutBorrower(identifier->name);
+                if(auto* unary = dynamic_cast<UnaryOpNode*>(expression))
+                    return unary->op == UnaryOpNode::OP_ADDR_MUT ||
+                           containsMutableBorrow(unary->operand);
+                if(auto* structure =
+                       dynamic_cast<StructLiteralNode*>(expression))
+                {
+                    for(const auto& field : structure->fields)
+                        if(containsMutableBorrow(field.second))
+                            return true;
+                }
+                else if(auto* tuple =
+                            dynamic_cast<TupleLiteralNode*>(expression))
+                {
+                    if(tuple->elements)
+                        for(auto* element : tuple->elements->elements)
+                            if(containsMutableBorrow(element))
+                                return true;
+                }
+                else if(auto* list =
+                            dynamic_cast<ListLiteralNode*>(expression))
+                {
+                    if(list->elements)
+                        for(auto* element : list->elements->elements)
+                            if(containsMutableBorrow(element))
+                                return true;
+                }
+                else if(auto* map =
+                            dynamic_cast<MapLiteralNode*>(expression))
+                {
+                    if(map->entries)
+                        for(auto* entry : map->entries->entries)
+                            if(containsMutableBorrow(entry->key) ||
+                               containsMutableBorrow(entry->value))
+                                return true;
+                }
+                else if(auto* ternary =
+                            dynamic_cast<TernaryNode*>(expression))
+                    return containsMutableBorrow(ternary->trueExpr) ||
+                           containsMutableBorrow(ternary->falseExpr);
+                else if(auto* match =
+                            dynamic_cast<MatchExpressionNode*>(expression))
+                {
+                    for(auto* arm : match->arms)
+                        if(arm && containsMutableBorrow(arm->expression))
+                            return true;
+                }
+                else if(auto* binary =
+                            dynamic_cast<BinaryOpNode*>(expression))
+                    return containsMutableBorrow(binary->left) ||
+                           containsMutableBorrow(binary->right);
+                else if(auto* array =
+                            dynamic_cast<ArrayFillNode*>(expression))
+                    return containsMutableBorrow(array->value);
+                return false;
+            };
+        auto isAggregateType = [](TypeNode* type) {
+            if(!type)
+                return false;
+            switch(type->kind)
+            {
+            case TypeNode::TYPE_STRUCT:
+            case TypeNode::TYPE_LIST:
+            case TypeNode::TYPE_MAP:
+            case TypeNode::TYPE_TUPLE:
+                return true;
+            default:
+                return false;
+            }
+        };
         for(auto* argument : node->arguments)
         {
+            if(containsMutableBorrow(argument) &&
+               isAggregateType(
+                   inferExpressionTypeNode(argument, node->line)))
+            {
+                const std::string aggregate =
+                    resolveBorrowOwnerFromLValue(argument);
+                reportError(node->line,
+                            "cannot pass aggregate" +
+                                (aggregate.empty()
+                                     ? std::string()
+                                     : " '" + aggregate + "'") +
+                                " containing a mutable borrow because the "
+                                "callee may retain it");
+                return nullptr;
+            }
             const std::string aggregate =
                 resolveBorrowOwnerFromLValue(argument);
             if(aggregate.empty() || !isMutBorrower(aggregate))
