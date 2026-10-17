@@ -2814,12 +2814,68 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             llvm::Value* fn = builder.CreateBitCast(
                 fnPtr, llvm::PointerType::get(context, 0), "traitobj.fn.cast");
 
+            std::vector<bool> sharedReferenceArgs;
+            bool traitMethodHasSharedReceiver = false;
+            if(traitMethod->parameters)
+            {
+                for(auto* parameter : traitMethod->parameters->parameters)
+                {
+                    if(!parameter)
+                        continue;
+                    if(parameter->name == "self")
+                    {
+                        traitMethodHasSharedReceiver =
+                            parameter->isSharedSelf;
+                        if(auto* reference =
+                               dynamic_cast<ReferenceTypeNode*>(parameter->type))
+                            traitMethodHasSharedReceiver =
+                                !reference->isMutable;
+                        continue;
+                    }
+                    auto* reference =
+                        dynamic_cast<ReferenceTypeNode*>(parameter->type);
+                    sharedReferenceArgs.push_back(reference &&
+                                                  !reference->isMutable);
+                }
+            }
+            const std::string receiverOwner =
+                resolveBorrowOwnerFromLValue(node->object);
+            if(!validateTemporaryBorrowArguments(
+                   node->arguments, node->methodName, receiverOwner,
+                   traitMethodHasSharedReceiver, sharedReferenceArgs))
+                return nullptr;
+
             std::vector<llvm::Value*> callArgs;
             callArgs.push_back(dataPtr);
             size_t argIndex = 0;
             for(auto* argExpr : node->arguments)
             {
-                llvm::Value* argVal = generateExpression(argExpr);
+                TypeNode* declaredType = nullptr;
+                size_t parameterIndex = 0;
+                if(traitMethod->parameters)
+                {
+                    for(auto* parameter : traitMethod->parameters->parameters)
+                    {
+                        if(!parameter || parameter->name == "self")
+                            continue;
+                        if(parameterIndex++ == argIndex)
+                        {
+                            declaredType = parameter->type;
+                            break;
+                        }
+                    }
+                }
+                ExpressionNode* valueExpr = argExpr;
+                if(auto* reference =
+                       dynamic_cast<ReferenceTypeNode*>(declaredType))
+                {
+                    auto* borrow = dynamic_cast<UnaryOpNode*>(argExpr);
+                    if(!reference->isMutable && borrow &&
+                       borrow->op == UnaryOpNode::OP_ADDR)
+                        valueExpr = borrow->operand;
+                }
+                llvm::Value* argVal =
+                    generateArgumentValue(valueExpr, declaredType);
                 if(!argVal)
                     return nullptr;
                 if(argIndex + 1 < paramTypes.size())
@@ -2991,8 +3047,33 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 builder.CreateBitCast(fnPtr, llvm::PointerType::get(context, 0),
                                       objId->name + ".traitobj.fn.cast");
 
-            if(!validateTemporaryBorrowArguments(node->arguments,
-                                                 node->methodName, objId->name))
+            std::vector<bool> sharedReferenceArgs;
+            bool traitMethodHasSharedReceiver = false;
+            if(traitMethod->parameters)
+            {
+                for(auto* parameter : traitMethod->parameters->parameters)
+                {
+                    if(!parameter)
+                        continue;
+                    if(parameter->name == "self")
+                    {
+                        traitMethodHasSharedReceiver =
+                            parameter->isSharedSelf;
+                        if(auto* reference =
+                               dynamic_cast<ReferenceTypeNode*>(parameter->type))
+                            traitMethodHasSharedReceiver =
+                                !reference->isMutable;
+                        continue;
+                    }
+                    auto* reference =
+                        dynamic_cast<ReferenceTypeNode*>(parameter->type);
+                    sharedReferenceArgs.push_back(reference &&
+                                                  !reference->isMutable);
+                }
+            }
+            if(!validateTemporaryBorrowArguments(
+                   node->arguments, node->methodName, objId->name,
+                   traitMethodHasSharedReceiver, sharedReferenceArgs))
                 return nullptr;
 
             std::vector<llvm::Value*> callArgs;
@@ -3000,7 +3081,32 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             size_t argIndex = 0;
             for(auto* argExpr : node->arguments)
             {
-                llvm::Value* argVal = generateExpression(argExpr);
+                TypeNode* declaredType = nullptr;
+                size_t parameterIndex = 0;
+                if(traitMethod->parameters)
+                {
+                    for(auto* parameter : traitMethod->parameters->parameters)
+                    {
+                        if(!parameter || parameter->name == "self")
+                            continue;
+                        if(parameterIndex++ == argIndex)
+                        {
+                            declaredType = parameter->type;
+                            break;
+                        }
+                    }
+                }
+                ExpressionNode* valueExpr = argExpr;
+                if(auto* reference =
+                       dynamic_cast<ReferenceTypeNode*>(declaredType))
+                {
+                    auto* borrow = dynamic_cast<UnaryOpNode*>(argExpr);
+                    if(!reference->isMutable && borrow &&
+                       borrow->op == UnaryOpNode::OP_ADDR)
+                        valueExpr = borrow->operand;
+                }
+                llvm::Value* argVal =
+                    generateArgumentValue(valueExpr, declaredType);
                 if(!argVal)
                     return nullptr;
                 if(argIndex + 1 < paramTypes.size())

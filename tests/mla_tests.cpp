@@ -2805,6 +2805,78 @@ TEST_F(MLATest, TraitImplWithRefSelf)
     EXPECT_EQ(compileAndRun(code), "alice: hello\n");
 }
 
+TEST_F(MLATest, TraitObjectAllowsAliasedImmutableReferenceArguments)
+{
+    std::string code = R"(
+        trait Sum {
+            fn sum(&self, left: &i32, right: &i32) -> i32;
+        }
+        struct Counter { var value: i32; };
+        impl Sum for Counter {
+            fn sum(&self, left: &i32, right: &i32) -> i32 {
+                return left + right;
+            }
+        }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 0 };
+            let item: dyn Sum = counter;
+            let value: i32 = 6;
+            return item.sum(&value, &value);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 12);
+}
+
+TEST_F(MLATest, TraitObjectFieldAllowsAliasedImmutableReferenceArguments)
+{
+    std::string code = R"(
+        trait Sum {
+            fn sum(&self, left: &i32, right: &i32) -> i32;
+        }
+        struct Counter { var value: i32; };
+        struct Holder { var item: dyn Sum; };
+        impl Sum for Counter {
+            fn sum(&self, left: &i32, right: &i32) -> i32 {
+                return left + right;
+            }
+        }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 0 };
+            let holder: Holder = Holder { item: counter };
+            let value: i32 = 6;
+            return holder.item.sum(&value, &value);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 12);
+}
+
+TEST_F(MLATest, TraitObjectRejectsAliasedSharedAndMutableReferenceArguments)
+{
+    std::string code = R"(
+        trait Update {
+            fn update(&self, read: &i32, write: &mut i32) -> void;
+        }
+        struct Counter { var value: i32; };
+        impl Update for Counter {
+            fn update(&self, read: &i32, write: &mut i32) -> void {
+                write = read;
+            }
+        }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 0 };
+            let item: dyn Update = counter;
+            var value: i32 = 6;
+            item.update(&value, &mut value);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("overlapping parts"), std::string::npos);
+}
+
 // ============================================================================
 // Type Cast Tests
 // ============================================================================
