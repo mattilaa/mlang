@@ -7909,6 +7909,33 @@ TEST_F(MLATest, AggregateBorrowOriginsMergeAcrossIfBranches)
         << out;
 }
 
+TEST_F(MLATest, AggregateBorrowOriginSurvivesTernaryAlias)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+
+        fn wrap(flag: bool) -> PointerBox {
+            var value: i32 = 7;
+            let boxed: PointerBox = flag
+                ? PointerBox { value: &value }
+                : PointerBox {};
+            return boxed;
+        }
+
+        fn main() -> i32 {
+            let escaped = wrap(true);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return aggregate containing a pointer"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, OwnershipCannotStorePointerBorrowingLocalFieldInGlobalPointer)
 {
     std::string code = R"(

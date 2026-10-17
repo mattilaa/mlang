@@ -418,6 +418,17 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
                     findBorrowOrigins(unary->operand);
                     return;
                 }
+                if(auto* ternary = dynamic_cast<TernaryNode*>(current))
+                {
+                    findBorrowOrigins(ternary->trueExpr);
+                    findBorrowOrigins(ternary->falseExpr);
+                    return;
+                }
+                if(auto* attempt = dynamic_cast<TryExpressionNode*>(current))
+                {
+                    findBorrowOrigins(attempt->expression);
+                    return;
+                }
                 if(auto* structure = dynamic_cast<StructLiteralNode*>(current))
                 {
                     for(const auto& field : structure->fields)
@@ -670,6 +681,17 @@ void CodeGenerator::trackAggregateBorrowOrigins(
                 collect(unary->operand);
             return;
         }
+        if(auto* ternary = dynamic_cast<TernaryNode*>(current))
+        {
+            collect(ternary->trueExpr);
+            collect(ternary->falseExpr);
+            return;
+        }
+        if(auto* attempt = dynamic_cast<TryExpressionNode*>(current))
+        {
+            collect(attempt->expression);
+            return;
+        }
         if(auto* structure = dynamic_cast<StructLiteralNode*>(current))
             for(const auto& field : structure->fields)
                 collect(field.second);
@@ -694,6 +716,8 @@ void CodeGenerator::trackAggregateBorrowOrigins(
                     collect(entry->value);
                 }
         }
+        else if(auto* array = dynamic_cast<ArrayFillNode*>(current))
+            collect(array->value);
         else if(auto* field = dynamic_cast<FieldAccessNode*>(current))
             collect(field->object);
         else if(auto* index = dynamic_cast<IndexExpressionNode*>(current))
@@ -707,6 +731,25 @@ void CodeGenerator::trackAggregateBorrowOrigins(
         {
             collect(binary->left);
             collect(binary->right);
+        }
+        else if(auto* cast = dynamic_cast<CastExpressionNode*>(current))
+            collect(cast->expression);
+        else if(auto* call = dynamic_cast<FunctionCallNode*>(current))
+        {
+            for(auto* argument : call->arguments)
+                collect(argument);
+        }
+        else if(auto* invoke = dynamic_cast<CallableInvokeNode*>(current))
+        {
+            collect(invoke->callable);
+            for(auto* argument : invoke->arguments)
+                collect(argument);
+        }
+        else if(auto* method = dynamic_cast<MethodCallNode*>(current))
+        {
+            collect(method->object);
+            for(auto* argument : method->arguments)
+                collect(argument);
         }
     };
     collect(expression);
