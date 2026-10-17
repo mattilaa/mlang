@@ -3429,10 +3429,55 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
     std::vector<bool> sharedReferenceParameters(node->arguments.size(), false);
     for(size_t i = 0; i < sharedReferenceParameters.size(); ++i)
-        if(auto* reference = dynamic_cast<ReferenceTypeNode*>(
-               overloadParameterType(overloadIt->second,
-                                     node->arguments.size(), i)))
+    {
+        TypeNode* commonType = overloadParameterType(
+            overloadIt->second, node->arguments.size(), i);
+        if(auto* reference = dynamic_cast<ReferenceTypeNode*>(commonType))
+        {
             sharedReferenceParameters[i] = !reference->isMutable;
+            continue;
+        }
+
+        // When overloads disagree at this position, determine whether the
+        // explicit `&value` can only match immutable-reference candidates.
+        // Do not treat a matching raw-pointer/value overload as a shared
+        // borrow, since that would weaken its call-site alias checks.
+        auto* unary = dynamic_cast<UnaryOpNode*>(node->arguments[i]);
+        if(!unary || unary->op != UnaryOpNode::OP_ADDR)
+            continue;
+        TypeNode* operandType = semanticArgumentType(unary->operand);
+        bool hasSharedReferenceCandidate = false;
+        bool hasMatchingNonSharedCandidate = false;
+        for(const auto& candidate : overloadIt->second)
+        {
+            if(!candidate.node || !candidate.node->parameters ||
+               candidate.node->parameters->isVarArg ||
+               candidate.node->parameters->parameters.size() !=
+                   node->arguments.size() ||
+               i >= candidate.node->parameters->parameters.size())
+                continue;
+            TypeNode* parameterType =
+                candidate.node->parameters->parameters[i]->type;
+            if(auto* reference =
+                   dynamic_cast<ReferenceTypeNode*>(parameterType))
+            {
+                if(!reference->isMutable && operandType &&
+                   typeMangle(reference->elementType) ==
+                       typeMangle(operandType))
+                    hasSharedReferenceCandidate = true;
+            }
+            else
+            {
+                TypeNode* argumentType = semanticArgumentType(
+                    node->arguments[i]);
+                if(parameterType && argumentType &&
+                   typeMangle(parameterType) == typeMangle(argumentType))
+                    hasMatchingNonSharedCandidate = true;
+            }
+        }
+        sharedReferenceParameters[i] = hasSharedReferenceCandidate &&
+                                       !hasMatchingNonSharedCandidate;
+    }
     if(!validateTemporaryBorrowArguments(node->arguments, node->name, "",
                                          &sharedReferenceParameters))
         return nullptr;
@@ -3935,6 +3980,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         bool ok = true;
         for(size_t i = 0; i < sourceParameterCount; ++i)
         {
+            bool explicitSharedReferenceArgument = false;
             if(info.node && info.node->parameters &&
                i < info.node->parameters->parameters.size())
             {
@@ -3944,6 +3990,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                        dynamic_cast<ReferenceTypeNode*>(expectedSemantic))
                 {
                     expectedSemantic = refType->elementType;
+                    auto* unary =
+                        dynamic_cast<UnaryOpNode*>(node->arguments[i]);
+                    explicitSharedReferenceArgument =
+                        !refType->isMutable && unary &&
+                        unary->op == UnaryOpNode::OP_ADDR;
                     // `&mut x` must name a value of the parameter's type;
                     // without `&mut` the call-site check reports it.
                     if(refType->isMutable)
@@ -4110,8 +4161,23 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
 
             int cost = 0;
-            if(!canConvertType(argVals[i]->getType(),
-                               callee->getArg(i)->getType(), cost))
+            auto* declaredReference =
+                info.node && info.node->parameters &&
+                        i < info.node->parameters->parameters.size()
+                    ? dynamic_cast<ReferenceTypeNode*>(
+                          info.node->parameters->parameters[i]->type)
+                    : nullptr;
+            if(explicitSharedReferenceArgument && declaredReference &&
+               argVals[i]->getType()->isPointerTy() &&
+               getLLVMTypeFromNode(declaredReference->elementType) ==
+                   callee->getArg(i)->getType())
+            {
+                // The explicit address is used for candidate matching and
+                // borrow validation; immutable references use the value ABI.
+                cost = 0;
+            }
+            else if(!canConvertType(argVals[i]->getType(),
+                                    callee->getArg(i)->getType(), cost))
             {
                 ok = false;
                 break;
@@ -4344,6 +4410,23 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     }
 
     std::vector<llvm::Value*> callArgVals = argVals;
+    if(best->node && best->node->parameters)
+    {
+        for(size_t i = 0; i < node->arguments.size() &&
+                           i < best->node->parameters->parameters.size();
+            ++i)
+        {
+            auto* reference = dynamic_cast<ReferenceTypeNode*>(
+                best->node->parameters->parameters[i]->type);
+            auto* unary = dynamic_cast<UnaryOpNode*>(node->arguments[i]);
+            if(reference && !reference->isMutable && unary &&
+               unary->op == UnaryOpNode::OP_ADDR &&
+               callArgVals[i]->getType()->isPointerTy())
+                callArgVals[i] = builder.CreateLoad(
+                    callee->getArg(i)->getType(), callArgVals[i],
+                    "shared.ref.arg");
+        }
+    }
     if(best->node)
     {
         for(const auto& closureCaptures :
