@@ -7864,6 +7864,58 @@ TEST_F(MLATest, AggregateBorrowKeepsOwnerBorrowedUntilLastUse)
         << out;
 }
 
+TEST_F(MLATest, MethodReturnedAggregateKeepsBorrowOriginAlive)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        impl PointerBox {
+            fn duplicate(self: PointerBox) -> PointerBox {
+                return self;
+            }
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let original = PointerBox { value: &value };
+            let copied = original.duplicate();
+            value = 9;
+            unsafe { return *copied.value; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'copied'"), std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, MethodReturnedAggregateFieldKeepsBorrowOriginAlive)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        impl PointerBox {
+            fn duplicate(self: PointerBox) -> PointerBox {
+                return self;
+            }
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let original = PointerBox { value: &value };
+            let copied = original.duplicate();
+            let pointer: ptr<i32> = copied.value;
+            value = 9;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
+}
+
 TEST_F(MLATest, AggregateBorrowAllowsMutationOfDisjointOwnerField)
 {
     std::string code = R"(
