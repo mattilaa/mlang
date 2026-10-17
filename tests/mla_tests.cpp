@@ -5248,6 +5248,54 @@ TEST_F(MLATest, OwnershipPointerShadowKeepsOuterMutableBorrowLive)
         << out;
 }
 
+// A shadowed shared pointer must keep the outer owner read-only as well.
+TEST_F(MLATest, OwnershipPointerShadowKeepsOuterSharedBorrowLive)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var owner: i32 = 1;
+            var other: i32 = 2;
+            let pointer = &owner;
+            {
+                let pointer = &other;
+                owner = 3;
+            }
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'owner' while borrowed by 'pointer"),
+              std::string::npos)
+        << out;
+}
+
+// A hidden mutable pointer's exclusive borrow must be restored after its shadow exits.
+TEST_F(MLATest, OwnershipPointerShadowRestoresOuterMutableBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var owner: i32 = 1;
+            var other: i32 = 2;
+            let pointer = &mut owner;
+            {
+                let pointer = &mut other;
+            }
+            owner = 3;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'owner' directly while mutably borrowed"),
+              std::string::npos)
+        << out;
+}
+
 // Dropping a same-named closure shadow must not release the outer capture borrow.
 TEST_F(MLATest, RuntimeClosureShadowDoesNotReleaseOuterCaptureBorrow)
 {

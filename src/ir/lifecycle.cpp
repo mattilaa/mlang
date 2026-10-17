@@ -78,53 +78,13 @@ void CodeGenerator::exitCleanupScope()
     variableScopeDepthScopes.pop_back();
 
     for(auto it = pointerEntries.rbegin(); it != pointerEntries.rend(); ++it)
-    {
         clearPointerBorrow(it->pointerVar);
-        if(it->hadPreviousBorrow && !it->previousOwner.empty())
-        {
-            if(!it->shadowAlias.empty())
-            {
-                for(auto& borrowers : activeBorrowers)
-                    if(borrowers.second.erase(it->shadowAlias))
-                        borrowers.second.insert(it->pointerVar);
-                for(auto& borrower : activeMutBorrower)
-                    if(borrower.second == it->shadowAlias)
-                        borrower.second = it->pointerVar;
-                for(auto& parent : pointerBorrowParent)
-                    if(parent.first != it->pointerVar &&
-                       parent.second == it->shadowAlias)
-                        parent.second = it->pointerVar;
-                pointerBorrowTarget.erase(it->shadowAlias);
-                pointerBorrowParent.erase(it->shadowAlias);
-                pointerBorrowPlace.erase(it->shadowAlias);
-            }
-            pointerBorrowTarget[it->pointerVar] = it->previousOwner;
-            if(!it->previousParent.empty())
-                pointerBorrowParent[it->pointerVar] = it->previousParent;
-            if(!it->previousPlace.empty())
-                pointerBorrowPlace[it->pointerVar] = it->previousPlace;
-            if(it->previousWasMutable)
-            {
-                std::string borrowKey = it->previousBorrowKey.empty()
-                                            ? it->previousOwner
-                                            : it->previousBorrowKey;
-                auto rootBorrow = activeMutBorrower.find(it->previousOwner);
-                if(borrowKey == it->previousOwner &&
-                   rootBorrow != activeMutBorrower.end() &&
-                   rootBorrow->second != it->pointerVar)
-                    borrowKey = it->previousPlace.empty()
-                                    ? it->previousOwner
-                                    : it->previousPlace;
-                activeMutBorrower[borrowKey] = it->pointerVar;
-            }
-            else
-            {
-                activeBorrowers[it->previousOwner].insert(it->pointerVar);
-            }
-        }
-    }
+
     for(auto it = depthEntries.rbegin(); it != depthEntries.rend(); ++it)
     {
+        // Restore the binding's shadowed metadata before restoring its borrow.
+        // clearAggregateBorrowOrigins below can clear a same-named pointer, so
+        // restoring the outer borrow earlier would accidentally erase it.
         for(auto moved = movedVariables.begin(); moved != movedVariables.end();)
         {
             const bool belongsToVariable =
@@ -242,6 +202,52 @@ void CodeGenerator::exitCleanupScope()
             variableScopeDepth[it->varName] = it->previousDepth;
         else
             variableScopeDepth.erase(it->varName);
+    }
+
+    for(auto it = pointerEntries.rbegin(); it != pointerEntries.rend(); ++it)
+    {
+        if(it->hadPreviousBorrow && !it->previousOwner.empty())
+        {
+            if(!it->shadowAlias.empty())
+            {
+                for(auto& borrowers : activeBorrowers)
+                    if(borrowers.second.erase(it->shadowAlias))
+                        borrowers.second.insert(it->pointerVar);
+                for(auto& borrower : activeMutBorrower)
+                    if(borrower.second == it->shadowAlias)
+                        borrower.second = it->pointerVar;
+                for(auto& parent : pointerBorrowParent)
+                    if(parent.first != it->pointerVar &&
+                       parent.second == it->shadowAlias)
+                        parent.second = it->pointerVar;
+                pointerBorrowTarget.erase(it->shadowAlias);
+                pointerBorrowParent.erase(it->shadowAlias);
+                pointerBorrowPlace.erase(it->shadowAlias);
+            }
+            pointerBorrowTarget[it->pointerVar] = it->previousOwner;
+            if(!it->previousParent.empty())
+                pointerBorrowParent[it->pointerVar] = it->previousParent;
+            if(!it->previousPlace.empty())
+                pointerBorrowPlace[it->pointerVar] = it->previousPlace;
+            if(it->previousWasMutable)
+            {
+                std::string borrowKey = it->previousBorrowKey.empty()
+                                            ? it->previousOwner
+                                            : it->previousBorrowKey;
+                auto rootBorrow = activeMutBorrower.find(it->previousOwner);
+                if(borrowKey == it->previousOwner &&
+                   rootBorrow != activeMutBorrower.end() &&
+                   rootBorrow->second != it->pointerVar)
+                    borrowKey = it->previousPlace.empty()
+                                    ? it->previousOwner
+                                    : it->previousPlace;
+                activeMutBorrower[borrowKey] = it->pointerVar;
+            }
+            else
+            {
+                activeBorrowers[it->previousOwner].insert(it->pointerVar);
+            }
+        }
     }
 
     if(!builder.GetInsertBlock() || mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
