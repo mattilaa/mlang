@@ -3560,6 +3560,81 @@ TEST_F(MLATest, ListGrowthRejectsLiveSharedElementBorrow)
         << out;
 }
 
+TEST_F(MLATest, ReadFromDisjointListElementAllowedDuringMutableBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<i32> = [4, 5];
+            let first = &mut values[0];
+            unsafe { return *first + values[1]; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
+TEST_F(MLATest, ReadFromBorrowedListElementRejected)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<i32> = [4, 5];
+            let first = &mut values[0];
+            unsafe { return *first + values[0]; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot read overlapping part of 'values'"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, ReadFromDisjointStructFieldAllowedDuringMutableBorrow)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 4, right: 5 };
+            let left = &mut pair.left;
+            unsafe { return *left + pair.right; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
+TEST_F(MLATest, ReadFromBorrowedStructFieldRejected)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 4, right: 5 };
+            let left = &mut pair.left;
+            unsafe { return *left + pair.left; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot read overlapping part of 'pair'"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, MutableStructReferenceCanReadThroughItsOwnBorrow)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 4, right: 5 };
+            let borrowed: ptr<Pair> = &mut pair;
+            unsafe { return (*borrowed).left; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
 TEST_F(MLATest, SecondaryMutableFieldBorrowBlocksMethodOnThatField)
 {
     std::string code = R"(

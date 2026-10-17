@@ -2819,7 +2819,11 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
         if(!traitName.empty())
         {
+            const bool wasSuppressingReadValidation =
+                suppressBorrowReadValidation;
+            suppressBorrowReadValidation = true;
             llvm::Value* receiverValue = generateExpression(node->object);
+            suppressBorrowReadValidation = wasSuppressingReadValidation;
             if(!receiverValue)
                 return nullptr;
 
@@ -3313,7 +3317,11 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             traitName = traitObjType->traitName;
         }
 
+        const bool wasSuppressingReadValidation =
+            suppressBorrowReadValidation;
+        suppressBorrowReadValidation = true;
         llvm::Value* receiverValue = generateExpression(node->object);
+        suppressBorrowReadValidation = wasSuppressingReadValidation;
         if(!traitName.empty() && receiverValue)
         {
             llvm::Type* traitObjectType = getTraitObjectType(traitName);

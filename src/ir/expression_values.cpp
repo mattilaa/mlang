@@ -1044,6 +1044,9 @@ llvm::Value* CodeGenerator::generateListIndexPointer(IndexExpressionNode* node,
 
 llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
 {
+    if(!validateBorrowRead(node, node->line))
+        return nullptr;
+
     if(contains_update_expression(node->index))
     {
         reportError(node->line,
@@ -1429,6 +1432,9 @@ llvm::Value* CodeGenerator::generateTupleLiteral(TupleLiteralNode* node)
 
 llvm::Value* CodeGenerator::generateTupleAccess(TupleAccessNode* node)
 {
+    if(!validateBorrowRead(node, node->line))
+        return nullptr;
+
     // Get the tuple variable
     auto* baseId = dynamic_cast<IdentifierNode*>(node->tuple);
     if(!baseId)

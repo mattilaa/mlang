@@ -287,6 +287,7 @@ private:
     bool hasError;
     bool debugEnabled;
     bool checkedNarrowCasts = false;
+    bool suppressBorrowReadValidation = false;
     bool testMode = false;             ///< Compile and run \c #[test] functions.
     bool benchmarkMode = false;        ///< Generate benchmark harness instead of test harness.
     int benchmarkIterations = 100000;  ///< Number of timed benchmark iterations.
@@ -639,6 +640,7 @@ private:
     void recordScopedPointerVariable(const std::string& pointerVar);
     std::string resolveBorrowOwnerFromLValue(ExpressionNode* expr) const;
     std::string resolveBorrowPlaceFromLValue(ExpressionNode* expr) const;
+    bool validateBorrowRead(ExpressionNode* expr, int line);
     bool borrowPlacesOverlap(const std::string& left,
                              const std::string& right) const;
     std::string getBorrowedOwnerForPointerExpression(

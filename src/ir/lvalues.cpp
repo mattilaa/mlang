@@ -1538,6 +1538,9 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
 
 llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
 {
+    if(!validateBorrowRead(node, node->line))
+        return nullptr;
+
     if(node->fieldName == "name")
     {
         bool hasRealNameField = false;

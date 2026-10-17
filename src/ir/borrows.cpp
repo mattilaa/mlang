@@ -159,6 +159,57 @@ bool CodeGenerator::borrowPlacesOverlap(const std::string& left,
     return true;
 }
 
+bool CodeGenerator::validateBorrowRead(ExpressionNode* expr, int line)
+{
+    if(suppressBorrowReadValidation)
+        return true;
+
+    const std::string owner = resolveBorrowOwnerFromLValue(expr);
+    const std::string place = resolveBorrowPlaceFromLValue(expr);
+    if(owner.empty() || place.empty())
+        return true;
+
+    std::function<bool(ExpressionNode*, const std::string&)> accessedThrough =
+        [&](ExpressionNode* current, const std::string& pointer) -> bool {
+        if(auto* unary = dynamic_cast<UnaryOpNode*>(current))
+        {
+            if(unary->op == UnaryOpNode::OP_DEREF)
+                if(auto* id = dynamic_cast<IdentifierNode*>(unary->operand))
+                    return id->name == pointer;
+            return accessedThrough(unary->operand, pointer);
+        }
+        if(auto* field = dynamic_cast<FieldAccessNode*>(current))
+            return accessedThrough(field->object, pointer);
+        if(auto* index = dynamic_cast<IndexExpressionNode*>(current))
+            return accessedThrough(index->base, pointer);
+        if(auto* tuple = dynamic_cast<TupleAccessNode*>(current))
+            return accessedThrough(tuple->tuple, pointer);
+        return false;
+    };
+
+    for(const auto& mutableBorrow : activeMutBorrower)
+    {
+        if(accessedThrough(expr, mutableBorrow.second))
+            continue;
+        auto borrowOwner = pointerBorrowTarget.find(mutableBorrow.second);
+        if(borrowOwner == pointerBorrowTarget.end() ||
+           borrowOwner->second != owner)
+            continue;
+        auto borrowPlace = pointerBorrowPlace.find(mutableBorrow.second);
+        const std::string borrowedPlace =
+            borrowPlace == pointerBorrowPlace.end() ? owner
+                                                    : borrowPlace->second;
+        if(borrowPlacesOverlap(borrowedPlace, place))
+        {
+            reportError(line, "cannot read overlapping part of '" + owner +
+                                  "' while mutably borrowed by '" +
+                                  mutableBorrow.second + "'");
+            return false;
+        }
+    }
+    return true;
+}
+
 std::string
 CodeGenerator::getBorrowedOwnerForPointerExpression(ExpressionNode* expr) const
 {
