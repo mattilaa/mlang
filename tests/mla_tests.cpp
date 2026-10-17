@@ -7930,6 +7930,46 @@ TEST_F(MLATest, ListPushTracksBorrowOrigin)
         << out;
 }
 
+TEST_F(MLATest, ListPushRejectsSharedBorrowWhileOwnerIsMutablyBorrowed)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let exclusive: ptr<i32> = &mut value;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&value);
+            unsafe { return *exclusive; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while mutably borrowed by 'exclusive'"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, ListPushRejectsStoringMutableBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let exclusive: ptr<i32> = &mut value;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(exclusive);
+            unsafe { return *exclusive; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("aggregate exclusive-borrow tracking is not supported"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, PointerExtractedFromListRetainsBorrowOrigin)
 {
     std::string code = R"(

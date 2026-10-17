@@ -668,7 +668,6 @@ void CodeGenerator::clearAggregateBorrowOrigins(const std::string& variable)
 void CodeGenerator::trackAggregateBorrowOrigins(
     const std::string& variable, ExpressionNode* expression)
 {
-    clearAggregateBorrowOrigins(variable);
     auto type = variableTypes.find(variable);
     if(type == variableTypes.end() ||
        (type->second != TypeNode::TYPE_STRUCT &&
@@ -682,6 +681,12 @@ void CodeGenerator::trackAggregateBorrowOrigins(
             return;
         if(auto* identifier = dynamic_cast<IdentifierNode*>(current))
         {
+            if(isMutBorrower(identifier->name))
+                reportError(
+                    current->line,
+                    "cannot store mutable borrow '" + identifier->name +
+                        "' inside an aggregate; aggregate exclusive-borrow "
+                        "tracking is not supported yet");
             auto pointer = pointerBorrowTarget.find(identifier->name);
             if(pointer != pointerBorrowTarget.end())
                 origins.insert(pointer->second);
@@ -702,7 +707,47 @@ void CodeGenerator::trackAggregateBorrowOrigins(
                 const std::string owner =
                     resolveBorrowOwnerFromLValue(unary->operand);
                 if(!owner.empty())
+                {
+                    const std::string place =
+                        resolveBorrowPlaceFromLValue(unary->operand);
+                    const bool isMutable =
+                        unary->op == UnaryOpNode::OP_ADDR_MUT;
+                    if(isMutable)
+                    {
+                        reportError(
+                            current->line,
+                            "cannot store a mutable borrow inside an "
+                            "aggregate; aggregate exclusive-borrow tracking "
+                            "is not supported yet");
+                        return;
+                    }
+                    auto conflicts = [&](const std::string& borrower) {
+                        auto borrowerPlace = pointerBorrowPlace.find(borrower);
+                        const std::string existingPlace =
+                            borrowerPlace == pointerBorrowPlace.end()
+                                ? owner
+                                : borrowerPlace->second;
+                        return borrowPlacesOverlap(existingPlace,
+                                                   place.empty() ? owner : place);
+                    };
+                    for(const auto& mutableBorrow : activeMutBorrower)
+                    {
+                        auto activeOwner =
+                            pointerBorrowTarget.find(mutableBorrow.second);
+                        if(activeOwner != pointerBorrowTarget.end() &&
+                           activeOwner->second == owner &&
+                           conflicts(mutableBorrow.second))
+                        {
+                            reportError(
+                                current->line,
+                                "cannot borrow '" + owner +
+                                    "' as immutable while mutably borrowed by '" +
+                                    mutableBorrow.second + "'");
+                            break;
+                        }
+                    }
                     origins.insert(owner);
+                }
             }
             else
                 collect(unary->operand);
@@ -787,6 +832,7 @@ void CodeGenerator::trackAggregateBorrowOrigins(
         }
     };
     collect(expression);
+    clearAggregateBorrowOrigins(variable);
     for(auto it = origins.begin(); it != origins.end();)
         if(variableScopeDepth.find(*it) == variableScopeDepth.end())
             it = origins.erase(it);
