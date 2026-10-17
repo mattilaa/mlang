@@ -7724,6 +7724,76 @@ TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocalField)
               std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipCannotReturnPointerParameterBorrow)
+{
+    std::string code = R"(
+        fn relay(pointer: ptr<i32>) -> ptr<i32> {
+            let forwarded = pointer;
+            return forwarded;
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let escaped = relay(&value);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, OwnershipCannotStorePointerParameterBorrowGlobally)
+{
+    std::string code = R"(
+        var saved: ptr<i32>;
+
+        fn save(pointer: ptr<i32>) -> void {
+            saved = pointer;
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            save(&value);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot store in global/static"), std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, OwnershipCannotReturnPointerLoadedThroughBorrowedPointer)
+{
+    std::string code = R"(
+        fn relay(pointer: ptr<ptr<i32>>) -> ptr<i32> {
+            return *pointer;
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let inner = &value;
+            let outer = &inner;
+            let escaped = relay(outer);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, OwnershipCannotStorePointerBorrowingLocalFieldInGlobalPointer)
 {
     std::string code = R"(

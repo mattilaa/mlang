@@ -445,9 +445,17 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
     }
 
     if(ownerName.empty())
+    {
+        TypeNode* expressionType = getLValueType(expr, line);
+        if(expressionType && expressionType->kind == TypeNode::TYPE_PTR)
+            ownerName = resolveBorrowOwnerFromLValue(expr);
+    }
+
+    if(ownerName.empty())
         return true;
 
-    if(globalNamedValues.find(ownerName) != globalNamedValues.end())
+    if(variableScopeDepth.find(ownerName) == variableScopeDepth.end() &&
+       globalNamedValues.find(ownerName) != globalNamedValues.end())
         return true;
 
     if(namedValues.find(ownerName) != namedValues.end())

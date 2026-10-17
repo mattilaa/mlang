@@ -512,6 +512,13 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             {
                 pointerElementTypes[std::string(arg.getName())] =
                     ptrType->elementType;
+                // Pointer parameters may originate from caller-owned stack
+                // storage. Track the parameter as a local borrow origin so
+                // returning it or storing an alias globally is rejected
+                // until Mlang has explicit lifetime relationships.
+                const std::string parameterName(arg.getName());
+                pointerBorrowTarget[parameterName] = parameterName;
+                pointerBorrowPlace[parameterName] = parameterName;
             }
             if(auto* traitObjType =
                    dynamic_cast<TraitObjectTypeNode*>(paramNode->type))
