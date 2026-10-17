@@ -629,9 +629,14 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                 {
                     return; // plain char* copy, no borrow alias
                 }
-                reportError(line, "cannot alias exclusive borrow from '" +
-                                      idExpr->name + "' into '" + pointerVar +
-                                      "'");
+                if(isMutBorrower(idExpr->name))
+                {
+                    reportError(line, "cannot alias mutable borrow from '" +
+                                          idExpr->name + "' into '" +
+                                          pointerVar + "'");
+                    return;
+                }
+                (void)registerOwnerBorrow(borrowIt->second, false);
                 return;
             }
             (void)registerOwnerBorrow(borrowIt->second, true);

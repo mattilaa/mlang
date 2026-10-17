@@ -4982,7 +4982,7 @@ TEST_F(MLATest, OwnershipRebindingSamePointerBorrowAllowed)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-TEST_F(MLATest, OwnershipCannotAliasBorrowFromPointerVariable)
+TEST_F(MLATest, OwnershipCanAliasSharedBorrowFromPointerVariable)
 {
     std::string code = R"(
         struct Post {
@@ -4995,14 +4995,31 @@ TEST_F(MLATest, OwnershipCannotAliasBorrowFromPointerVariable)
             var p: ptr<Post> = &a;
             var q: ptr<Post> = &b;
             q = p;
-            return 0;
+            unsafe { return (*p).content[0] + (*q).content[0]; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 2);
+}
+
+TEST_F(MLATest, OwnershipCannotAliasMutableBorrowFromPointerVariable)
+{
+    std::string code = R"(
+        struct Post {
+            var content: list<i32>;
+        };
+
+        fn main() -> i32 {
+            var a: Post = Post { content: [1] };
+            let p: ptr<Post> = &mut a;
+            let q: ptr<Post> = p;
+            unsafe { return (*q).content[0]; }
         }
     )";
     writeSource(code);
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot alias exclusive borrow"), std::string::npos);
+    EXPECT_NE(out.find("cannot alias mutable borrow"), std::string::npos);
 }
 
 TEST_F(MLATest, OwnershipBorrowEndsWhenPointerGoesOutOfScope)
