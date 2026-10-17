@@ -655,6 +655,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto incomingPointerElementTypes = pointerElementTypes;
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
+    auto incomingAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto incomingPointerBorrowPlace = pointerBorrowPlace;
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingActiveMutBorrower = activeMutBorrower;
@@ -670,6 +671,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         pointerElementTypes = incomingPointerElementTypes;
         movedVariables = incomingMoved;
         pointerBorrowTarget = incomingPointerBorrowTarget;
+        aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
         pointerBorrowPlace = incomingPointerBorrowPlace;
         activeBorrowers = incomingActiveBorrowers;
         activeMutBorrower = incomingActiveMutBorrower;
@@ -695,6 +697,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto condListElementTypes = listElementTypes;
     auto condMapKeyValueTypes = mapKeyValueTypes;
     auto condPointerElementTypes = pointerElementTypes;
+    auto condAggregateBorrowOrigins = aggregateBorrowOrigins;
 
     // Check that condition is a valid boolean type
     llvm::Type* condType = condValue->getType();
@@ -769,6 +772,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     pointerElementTypes = condPointerElementTypes;
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
+    aggregateBorrowOrigins = condAggregateBorrowOrigins;
     pointerBorrowPlace = incomingPointerBorrowPlace;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
@@ -780,6 +784,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     exitCleanupScope();
     auto thenMoved = movedVariables;
     auto thenPointerBorrowTarget = pointerBorrowTarget;
+    auto thenAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto thenPointerBorrowPlace = pointerBorrowPlace;
     auto thenActiveBorrowers = activeBorrowers;
     auto thenActiveMutBorrower = activeMutBorrower;
@@ -805,6 +810,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     pointerElementTypes = incomingPointerElementTypes;
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
+    aggregateBorrowOrigins = condAggregateBorrowOrigins;
     pointerBorrowPlace = incomingPointerBorrowPlace;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
@@ -836,6 +842,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     }
     auto elseMoved = movedVariables;
     auto elsePointerBorrowTarget = pointerBorrowTarget;
+    auto elseAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto elsePointerBorrowPlace = pointerBorrowPlace;
     auto elseActiveBorrowers = activeBorrowers;
     auto elseActiveMutBorrower = activeMutBorrower;
@@ -865,11 +872,15 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     {
         std::set<std::string> mergedMoved;
         std::map<std::string, std::string> mergedPointerBorrowTarget;
+        std::map<std::string, std::set<std::string>>
+            mergedAggregateBorrowOrigins;
         std::map<std::string, std::string> mergedPointerBorrowPlace;
         std::map<std::string, std::set<std::string>> mergedActiveBorrowers;
 
         auto mergeOne = [&](const std::set<std::string>& movedState,
                             const std::map<std::string, std::string>& ptrState,
+                            const std::map<std::string, std::set<std::string>>&
+                                aggregateState,
                             const std::map<std::string, std::set<std::string>>&
                                 borrowersState)
         {
@@ -882,6 +893,11 @@ void CodeGenerator::generateIfStatement(IfNode* node)
                     mergedPointerBorrowTarget[kv.first] = kv.second;
                 }
             }
+            for(const auto& kv : aggregateState)
+            {
+                auto& dst = mergedAggregateBorrowOrigins[kv.first];
+                dst.insert(kv.second.begin(), kv.second.end());
+            }
             for(const auto& kv : borrowersState)
             {
                 auto& dst = mergedActiveBorrowers[kv.first];
@@ -890,12 +906,15 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         };
 
         if(thenFallsThrough)
-            mergeOne(thenMoved, thenPointerBorrowTarget, thenActiveBorrowers);
+            mergeOne(thenMoved, thenPointerBorrowTarget,
+                     thenAggregateBorrowOrigins, thenActiveBorrowers);
         if(elseFallsThrough)
-            mergeOne(elseMoved, elsePointerBorrowTarget, elseActiveBorrowers);
+            mergeOne(elseMoved, elsePointerBorrowTarget,
+                     elseAggregateBorrowOrigins, elseActiveBorrowers);
 
         movedVariables = std::move(mergedMoved);
         pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
+        aggregateBorrowOrigins = std::move(mergedAggregateBorrowOrigins);
         for(const auto& borrow : pointerBorrowTarget)
         {
             std::string commonPlace;
@@ -932,6 +951,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     {
         movedVariables = incomingMoved;
         pointerBorrowTarget = incomingPointerBorrowTarget;
+        aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
         pointerBorrowPlace = incomingPointerBorrowPlace;
         activeBorrowers = incomingActiveBorrowers;
         activeMutBorrower = incomingActiveMutBorrower;

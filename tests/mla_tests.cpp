@@ -7884,6 +7884,31 @@ TEST_F(MLATest, OwnershipCannotStoreBorrowingAggregateInGlobal)
         << out;
 }
 
+TEST_F(MLATest, AggregateBorrowOriginsMergeAcrossIfBranches)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var boxed: PointerBox = PointerBox { value: null };
+            let flag: bool = true;
+            if flag {
+                boxed = PointerBox { value: &value };
+            }
+            value = 9;
+            let pointer = boxed.value;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, OwnershipCannotStorePointerBorrowingLocalFieldInGlobalPointer)
 {
     std::string code = R"(
