@@ -5296,6 +5296,63 @@ TEST_F(MLATest, OwnershipPointerShadowRestoresOuterMutableBorrow)
         << out;
 }
 
+// Exiting a deeper same-name pointer shadow restores the enclosing borrow.
+TEST_F(MLATest, OwnershipNestedPointerShadowRestoresIntermediateBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var outer: i32 = 1;
+            var middle: i32 = 2;
+            var inner: i32 = 3;
+            let pointer = &mut outer;
+            {
+                let pointer = &mut middle;
+                {
+                    let pointer = &mut inner;
+                }
+                middle = 4;
+                unsafe { return *pointer; }
+            }
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'middle' directly while mutably borrowed"),
+              std::string::npos)
+        << out;
+}
+
+// Restoring a nested shadow chain must eventually revive the outermost borrow.
+TEST_F(MLATest, OwnershipNestedPointerShadowRestoresOutermostBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var outer: i32 = 1;
+            var middle: i32 = 2;
+            var inner: i32 = 3;
+            let pointer = &mut outer;
+            {
+                let pointer = &mut middle;
+                {
+                    let pointer = &mut inner;
+                }
+            }
+            outer = 4;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'outer' directly while mutably borrowed"),
+              std::string::npos)
+        << out;
+}
+
 // Dropping a same-named closure shadow must not release the outer capture borrow.
 TEST_F(MLATest, RuntimeClosureShadowDoesNotReleaseOuterCaptureBorrow)
 {
