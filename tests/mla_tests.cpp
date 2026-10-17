@@ -5722,6 +5722,28 @@ TEST_F(MLATest, MutableSlotCannotUpgradeStoredSharedPointerAfterLastDirectUse)
               std::string::npos) << out;
 }
 
+// Releases a pointer's deferred borrow when the last borrowed slot leaves scope.
+TEST_F(MLATest, DeferredPointerBorrowEndsWithBorrowedSlotScope)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 1;
+            var pointer: ptr<i32> = &value;
+            {
+                var slot: ptr<ptr<i32>> = &pointer;
+                let pointer_again: ptr<i32> = *slot;
+            }
+            let exclusive: ptr<i32> = &mut value;
+            unsafe { *exclusive = 2; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 0) << out;
+}
+
 // Verifies that a shared borrow remains read-only when stored in an aggregate.
 TEST_F(MLATest, SharedBorrowCannotWriteThroughAggregatePointerField)
 {
