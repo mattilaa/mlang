@@ -1641,24 +1641,50 @@ llvm::Value* CodeGenerator::generateCallableInvocation(
 
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
-    for(auto* argument : node->arguments)
+    // std::copy has a dedicated diagnostic below and must reach that check.
+    if(node->name != "std::copy")
     {
-        // Passing the borrow variable itself is covered by the normal pointer
-        // borrow escape checks. This guard is specifically for extracting a
-        // pointer from an aggregate that still owns the borrow.
-        if(dynamic_cast<IdentifierNode*>(argument))
-            continue;
-        const std::string aggregate =
-            resolveBorrowOwnerFromLValue(argument);
-        if(aggregate.empty() || !isMutBorrower(aggregate))
-            continue;
-        if(dynamic_cast<PointerTypeNode*>(
-               inferExpressionTypeNode(argument, node->line)))
+        for(auto* argument : node->arguments)
         {
-            reportError(node->line,
-                        "cannot pass a mutable borrow out of aggregate '" +
-                            aggregate + "' because the callee may retain it");
-            return nullptr;
+            const std::string aggregate =
+                resolveBorrowOwnerFromLValue(argument);
+            if(aggregate.empty() || !isMutBorrower(aggregate))
+                continue;
+            const bool isBorrowingAggregate = [&] {
+                auto* identifier = dynamic_cast<IdentifierNode*>(argument);
+                if(!identifier || identifier->name != aggregate)
+                    return false;
+                auto type = variableTypes.find(identifier->name);
+                if(type == variableTypes.end())
+                    return false;
+                switch(type->second)
+                {
+                case TypeNode::TYPE_STRUCT:
+                case TypeNode::TYPE_LIST:
+                case TypeNode::TYPE_MAP:
+                case TypeNode::TYPE_TUPLE:
+                    return true;
+                default:
+                    return false;
+                }
+            }();
+            const bool extractsPointer =
+                !dynamic_cast<IdentifierNode*>(argument) &&
+                dynamic_cast<PointerTypeNode*>(
+                    inferExpressionTypeNode(argument, node->line));
+            if(isBorrowingAggregate || extractsPointer)
+            {
+                reportError(
+                    node->line,
+                    isBorrowingAggregate
+                        ? "cannot pass aggregate '" + aggregate +
+                              "' containing a mutable borrow because the "
+                              "callee may retain it"
+                        : "cannot pass a mutable borrow out of aggregate '" +
+                              aggregate +
+                              "' because the callee may retain it");
+                return nullptr;
+            }
         }
     }
 
