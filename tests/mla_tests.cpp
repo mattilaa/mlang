@@ -7987,6 +7987,30 @@ TEST_F(MLATest, AggregateBorrowOriginsMergeAcrossWhileLoop)
         << out;
 }
 
+TEST_F(MLATest, AggregateBorrowOriginsMergeAcrossRangeFor)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var boxed: PointerBox = PointerBox {};
+            for i in 0..1 {
+                boxed = PointerBox { value: &value };
+            }
+            value = 9;
+            let pointer = boxed.value;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, AggregateBorrowOriginsTrackMatchResult)
 {
     std::string code = R"(

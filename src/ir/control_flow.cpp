@@ -1424,6 +1424,24 @@ void CodeGenerator::generateForStatement(ForNode* node)
                 std::move(stateBeforeLoopAggregateBorrowOrigins);
             activeBorrowers = std::move(stateBeforeLoopActiveBorrowers);
         }
+        else
+        {
+            for(const auto& aggregate : aggregateBorrowOrigins)
+            {
+                auto& origins =
+                    stateBeforeLoopAggregateBorrowOrigins[aggregate.first];
+                origins.insert(aggregate.second.begin(),
+                               aggregate.second.end());
+            }
+            aggregateBorrowOrigins =
+                std::move(stateBeforeLoopAggregateBorrowOrigins);
+            for(const auto& owner : activeBorrowers)
+            {
+                auto& borrowers = stateBeforeLoopActiveBorrowers[owner.first];
+                borrowers.insert(owner.second.begin(), owner.second.end());
+            }
+            activeBorrowers = std::move(stateBeforeLoopActiveBorrowers);
+        }
     }
     else if(auto* listLit = dynamic_cast<ListLiteralNode*>(iterableExpr))
     {
