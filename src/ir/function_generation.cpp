@@ -274,6 +274,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedPointerBorrowTarget = pointerBorrowTarget;
     auto savedAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto savedAggregateBorrowPlaces = aggregateBorrowPlaces;
+    auto savedAggregateBorrowFieldPlaces = aggregateBorrowFieldPlaces;
     auto savedPointerBorrowPlace = pointerBorrowPlace;
     auto savedActiveBorrowers = activeBorrowers;
     auto savedActiveMutBorrower = activeMutBorrower;
@@ -335,6 +336,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     pointerBorrowTarget.clear();
     aggregateBorrowOrigins.clear();
     aggregateBorrowPlaces.clear();
+    aggregateBorrowFieldPlaces.clear();
     pointerBorrowPlace.clear();
     pointerKnownNull.clear();
     activeBorrowers.clear();
@@ -616,6 +618,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     pointerBorrowTarget = std::move(savedPointerBorrowTarget);
     aggregateBorrowOrigins = std::move(savedAggregateBorrowOrigins);
     aggregateBorrowPlaces = std::move(savedAggregateBorrowPlaces);
+    aggregateBorrowFieldPlaces =
+        std::move(savedAggregateBorrowFieldPlaces);
     pointerBorrowPlace = std::move(savedPointerBorrowPlace);
     activeBorrowers = std::move(savedActiveBorrowers);
     activeMutBorrower = std::move(savedActiveMutBorrower);

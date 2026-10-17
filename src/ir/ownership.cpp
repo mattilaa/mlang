@@ -301,6 +301,12 @@ void CodeGenerator::recordVariableScopeDepth(const std::string& varName)
         entry.hadPreviousAggregateBorrowPlaces = true;
         entry.previousAggregateBorrowPlaces = places->second;
     }
+    auto fieldPlaces = aggregateBorrowFieldPlaces.find(varName);
+    if(fieldPlaces != aggregateBorrowFieldPlaces.end())
+    {
+        entry.hadPreviousAggregateBorrowFieldPlaces = true;
+        entry.previousAggregateBorrowFieldPlaces = fieldPlaces->second;
+    }
     auto place = pointerBorrowPlace.find(varName);
     if(place != pointerBorrowPlace.end())
     {

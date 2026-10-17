@@ -2069,6 +2069,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto incomingAggregateBorrowPlaces = aggregateBorrowPlaces;
+    auto incomingAggregateBorrowFieldPlaces = aggregateBorrowFieldPlaces;
     auto incomingActiveMutBorrower = activeMutBorrower;
 
     bool hasOk = false;
@@ -2241,6 +2242,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         auto savedActiveBorrowers = activeBorrowers;
         auto savedAggregateBorrowOrigins = aggregateBorrowOrigins;
         auto savedAggregateBorrowPlaces = aggregateBorrowPlaces;
+        auto savedAggregateBorrowFieldPlaces = aggregateBorrowFieldPlaces;
         auto savedActiveMutBorrower = activeMutBorrower;
         auto savedCleanupScopes = cleanupScopes;
         auto savedVariableScopeDepth = variableScopeDepth;
@@ -2279,6 +2281,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         activeBorrowers = savedActiveBorrowers;
         aggregateBorrowOrigins = savedAggregateBorrowOrigins;
         aggregateBorrowPlaces = savedAggregateBorrowPlaces;
+        aggregateBorrowFieldPlaces = savedAggregateBorrowFieldPlaces;
         activeMutBorrower = savedActiveMutBorrower;
         cleanupScopes = savedCleanupScopes;
         variableScopeDepth = savedVariableScopeDepth;
@@ -2544,6 +2547,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         activeBorrowers = std::move(mergedActiveBorrowers);
         aggregateBorrowOrigins = std::move(mergedAggregateOrigins);
         aggregateBorrowPlaces.clear();
+        aggregateBorrowFieldPlaces.clear();
         return phi;
     }
 
@@ -2798,6 +2802,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         activeBorrowers = std::move(mergedActiveBorrowers);
         aggregateBorrowOrigins = std::move(mergedAggregateOrigins);
         aggregateBorrowPlaces.clear();
+        aggregateBorrowFieldPlaces.clear();
         return phi;
     }
 
@@ -2909,6 +2914,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         activeBorrowers = incomingActiveBorrowers;
         aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
         aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
+        aggregateBorrowFieldPlaces = incomingAggregateBorrowFieldPlaces;
         activeMutBorrower = incomingActiveMutBorrower;
         llvm::Value* armVal = generateExpression(arm->expression);
         if(!armVal)
@@ -2929,6 +2935,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         activeBorrowers = incomingActiveBorrowers;
         aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
         aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
+        aggregateBorrowFieldPlaces = incomingAggregateBorrowFieldPlaces;
         activeMutBorrower = incomingActiveMutBorrower;
 
         builder.SetInsertPoint(fallBB);
@@ -2943,6 +2950,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         activeBorrowers = incomingActiveBorrowers;
         aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
         aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
+        aggregateBorrowFieldPlaces = incomingAggregateBorrowFieldPlaces;
         activeMutBorrower = incomingActiveMutBorrower;
         llvm::Value* armVal = generateExpression(wildcardArm->expression);
         if(!armVal)
@@ -2962,6 +2970,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         activeBorrowers = incomingActiveBorrowers;
         aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
         aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
+        aggregateBorrowFieldPlaces = incomingAggregateBorrowFieldPlaces;
         activeMutBorrower = incomingActiveMutBorrower;
     }
     else
@@ -3136,5 +3145,6 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     activeBorrowers = std::move(mergedActiveBorrowers);
     aggregateBorrowOrigins = std::move(mergedAggregateOrigins);
     aggregateBorrowPlaces.clear();
+    aggregateBorrowFieldPlaces.clear();
     return phi;
 }

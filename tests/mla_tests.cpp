@@ -7970,6 +7970,57 @@ TEST_F(MLATest, AggregateBorrowsMultipleFieldsStillRejectOverlap)
         << out;
 }
 
+TEST_F(MLATest, ExtractedPointerRetainsItsAggregateFieldBorrowPath)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct PointerPair { var first: ptr<i32>; var second: ptr<i32>; };
+        struct PointerPairWrapper { var inner: PointerPair; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            let refs: PointerPair = PointerPair {
+                first: &pair.left,
+                second: &pair.right
+            };
+            let refs_copy: PointerPair = refs;
+            let wrapped = PointerPairWrapper { inner: refs_copy };
+            let first = wrapped.inner.first;
+            pair.right = 9;
+            unsafe { return *first + pair.right; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 10);
+}
+
+TEST_F(MLATest, ExtractedPointerStillProtectsItsBorrowedAggregateField)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct PointerPair { var first: ptr<i32>; var second: ptr<i32>; };
+        struct PointerPairWrapper { var inner: PointerPair; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            let refs: PointerPair = PointerPair {
+                first: &pair.left,
+                second: &pair.right
+            };
+            let refs_copy: PointerPair = refs;
+            let wrapped = PointerPairWrapper { inner: refs_copy };
+            let first = wrapped.inner.first;
+            pair.left = 9;
+            unsafe { return *first; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'first'"), std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, AggregateBorrowPlaceSetsMergeAcrossBranches)
 {
     std::string code = R"(

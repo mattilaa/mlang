@@ -708,6 +708,9 @@ void CodeGenerator::trackAggregateBorrowOrigins(
         return;
     std::set<std::string> origins;
     std::map<std::string, std::set<std::string>> originPlaces;
+    std::map<std::string,
+             std::map<std::string, std::set<std::string>>>
+        fieldOriginPlaces;
     auto addOrigin = [&](const std::string& owner, const std::string& place) {
         if(owner.empty())
             return;
@@ -906,6 +909,195 @@ void CodeGenerator::trackAggregateBorrowOrigins(
         }
     };
     collect(expression);
+    auto joinFieldPath = [](const std::string& parent,
+                            const std::string& child) {
+        if(parent.empty())
+            return child;
+        if(child.empty())
+            return parent;
+        return child.front() == '[' ? parent + child
+                                    : parent + "." + child;
+    };
+    std::function<void(ExpressionNode*, const std::string&)> collectFields =
+        [&](ExpressionNode* current, const std::string& destinationPath) {
+        if(!current)
+            return;
+        auto addFieldOrigin = [&](const std::string& owner,
+                                  const std::string& place) {
+            if(!owner.empty())
+                fieldOriginPlaces[destinationPath][owner].insert(
+                    place.empty() ? owner : place);
+        };
+        if(auto* identifier = dynamic_cast<IdentifierNode*>(current))
+        {
+            auto pointer = pointerBorrowTarget.find(identifier->name);
+            if(pointer != pointerBorrowTarget.end())
+            {
+                auto place = pointerBorrowPlace.find(identifier->name);
+                addFieldOrigin(pointer->second,
+                               place == pointerBorrowPlace.end()
+                                   ? pointer->second
+                                   : place->second);
+            }
+            auto aggregate = aggregateBorrowFieldPlaces.find(identifier->name);
+            if(aggregate != aggregateBorrowFieldPlaces.end())
+                for(const auto& field : aggregate->second)
+                    for(const auto& owner : field.second)
+                        for(const auto& place : owner.second)
+                            fieldOriginPlaces[joinFieldPath(
+                                destinationPath, field.first)][owner.first]
+                                .insert(place);
+            return;
+        }
+        if(auto* unary = dynamic_cast<UnaryOpNode*>(current))
+        {
+            if(unary->op == UnaryOpNode::OP_ADDR ||
+               unary->op == UnaryOpNode::OP_ADDR_MUT)
+            {
+                const auto owner =
+                    resolveBorrowOwnerFromLValue(unary->operand);
+                addFieldOrigin(owner,
+                               resolveBorrowPlaceFromLValue(unary->operand));
+            }
+            else
+                collectFields(unary->operand, destinationPath);
+            return;
+        }
+        if(auto* ternary = dynamic_cast<TernaryNode*>(current))
+        {
+            collectFields(ternary->trueExpr, destinationPath);
+            collectFields(ternary->falseExpr, destinationPath);
+            return;
+        }
+        if(auto* match = dynamic_cast<MatchExpressionNode*>(current))
+        {
+            for(auto* arm : match->arms)
+                if(arm)
+                    collectFields(arm->expression, destinationPath);
+            return;
+        }
+        if(auto* attempt = dynamic_cast<TryExpressionNode*>(current))
+        {
+            collectFields(attempt->expression, destinationPath);
+            return;
+        }
+        if(auto* structure = dynamic_cast<StructLiteralNode*>(current))
+        {
+            for(const auto& field : structure->fields)
+                collectFields(field.second,
+                              joinFieldPath(destinationPath, field.first));
+            return;
+        }
+        if(auto* tuple = dynamic_cast<TupleLiteralNode*>(current))
+        {
+            if(tuple->elements)
+                for(size_t i = 0; i < tuple->elements->elements.size(); ++i)
+                    collectFields(tuple->elements->elements[i],
+                                  joinFieldPath(destinationPath,
+                                                std::to_string(i)));
+            return;
+        }
+        if(auto* list = dynamic_cast<ListLiteralNode*>(current))
+        {
+            if(list->elements)
+                for(size_t i = 0; i < list->elements->elements.size(); ++i)
+                    collectFields(
+                        list->elements->elements[i],
+                        joinFieldPath(destinationPath,
+                                      "[" + std::to_string(i) + "]"));
+            return;
+        }
+        if(auto* field = dynamic_cast<FieldAccessNode*>(current))
+        {
+            const auto owner = resolveBorrowOwnerFromLValue(field);
+            const auto sourcePath = resolveBorrowPlaceFromLValue(field);
+            std::string relativePath;
+            if(!owner.empty() && sourcePath.compare(0, owner.size(), owner) == 0)
+            {
+                relativePath = sourcePath.substr(owner.size());
+                if(!relativePath.empty() && relativePath.front() == '.')
+                    relativePath.erase(0, 1);
+            }
+            auto aggregate = aggregateBorrowFieldPlaces.find(owner);
+            if(aggregate != aggregateBorrowFieldPlaces.end())
+            {
+                auto source = aggregate->second.find(relativePath);
+                if(source != aggregate->second.end())
+                {
+                    for(const auto& sourceOwner : source->second)
+                        for(const auto& place : sourceOwner.second)
+                            addFieldOrigin(sourceOwner.first, place);
+                    return;
+                }
+            }
+            collectFields(field->object, destinationPath);
+            return;
+        }
+        if(auto* tuple = dynamic_cast<TupleAccessNode*>(current))
+        {
+            const auto owner = resolveBorrowOwnerFromLValue(tuple);
+            const auto sourcePath = resolveBorrowPlaceFromLValue(tuple);
+            std::string relativePath;
+            if(!owner.empty() && sourcePath.compare(0, owner.size(), owner) == 0)
+            {
+                relativePath = sourcePath.substr(owner.size());
+                if(!relativePath.empty() && relativePath.front() == '.')
+                    relativePath.erase(0, 1);
+            }
+            auto aggregate = aggregateBorrowFieldPlaces.find(owner);
+            if(aggregate != aggregateBorrowFieldPlaces.end())
+            {
+                auto source = aggregate->second.find(relativePath);
+                if(source != aggregate->second.end())
+                {
+                    for(const auto& sourceOwner : source->second)
+                        for(const auto& place : sourceOwner.second)
+                            addFieldOrigin(sourceOwner.first, place);
+                    return;
+                }
+            }
+            collectFields(tuple->tuple, destinationPath);
+            return;
+        }
+        if(auto* index = dynamic_cast<IndexExpressionNode*>(current))
+        {
+            collectFields(index->base, destinationPath);
+            return;
+        }
+        if(auto* array = dynamic_cast<ArrayFillNode*>(current))
+        {
+            collectFields(array->value,
+                          joinFieldPath(destinationPath, "[*]"));
+            return;
+        }
+        if(auto* binary = dynamic_cast<BinaryOpNode*>(current))
+        {
+            collectFields(binary->left, destinationPath);
+            collectFields(binary->right, destinationPath);
+            return;
+        }
+        if(auto* cast = dynamic_cast<CastExpressionNode*>(current))
+        {
+            collectFields(cast->expression, destinationPath);
+            return;
+        }
+        if(auto* call = dynamic_cast<FunctionCallNode*>(current))
+            for(auto* argument : call->arguments)
+                collectFields(argument, destinationPath);
+        else if(auto* invoke = dynamic_cast<CallableInvokeNode*>(current))
+        {
+            collectFields(invoke->callable, destinationPath);
+            for(auto* argument : invoke->arguments)
+                collectFields(argument, destinationPath);
+        }
+        else if(auto* method = dynamic_cast<MethodCallNode*>(current))
+        {
+            collectFields(method->object, destinationPath);
+            for(auto* argument : method->arguments)
+                collectFields(argument, destinationPath);
+        }
+    };
+    collectFields(expression, "");
     clearAggregateBorrowOrigins(variable);
     for(auto it = origins.begin(); it != origins.end();)
         if(variableScopeDepth.find(*it) == variableScopeDepth.end())
@@ -925,6 +1117,20 @@ void CodeGenerator::trackAggregateBorrowOrigins(
         if(places != originPlaces.end())
             trackedPlaces[owner] = places->second;
     }
+    for(auto field = fieldOriginPlaces.begin();
+        field != fieldOriginPlaces.end();)
+    {
+        for(auto owner = field->second.begin(); owner != field->second.end();)
+            if(origins.count(owner->first) == 0)
+                owner = field->second.erase(owner);
+            else
+                ++owner;
+        if(field->second.empty())
+            field = fieldOriginPlaces.erase(field);
+        else
+            ++field;
+    }
+    aggregateBorrowFieldPlaces[variable] = std::move(fieldOriginPlaces);
     for(const auto& owner : origins)
         activeBorrowers[owner].insert(variable);
     if(origins.size() == 1 && originPlaces.begin()->second.size() == 1)
@@ -1114,6 +1320,30 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
        !dynamic_cast<UnaryOpNode*>(expr))
     {
         const std::string container = resolveBorrowOwnerFromLValue(expr);
+        const std::string sourcePath = resolveBorrowPlaceFromLValue(expr);
+        if(!container.empty() &&
+           sourcePath.compare(0, container.size(), container) == 0)
+        {
+            std::string relativePath = sourcePath.substr(container.size());
+            if(!relativePath.empty() && relativePath.front() == '.')
+                relativePath.erase(0, 1);
+            auto aggregateFields =
+                aggregateBorrowFieldPlaces.find(container);
+            if(aggregateFields != aggregateBorrowFieldPlaces.end())
+            {
+                auto field = aggregateFields->second.find(relativePath);
+                if(field != aggregateFields->second.end() &&
+                   field->second.size() == 1 &&
+                   field->second.begin()->second.size() == 1)
+                {
+                    const auto& owner = field->second.begin()->first;
+                    borrowPlace =
+                        *field->second.begin()->second.begin();
+                    (void)registerOwnerBorrow(owner, false);
+                    return;
+                }
+            }
+        }
         auto origins = aggregateBorrowOrigins.find(container);
         if(origins != aggregateBorrowOrigins.end())
         {

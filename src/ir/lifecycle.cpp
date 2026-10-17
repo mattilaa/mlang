@@ -118,6 +118,9 @@ void CodeGenerator::exitCleanupScope()
         if(it->hadPreviousAggregateBorrowPlaces)
             aggregateBorrowPlaces[it->varName] =
                 it->previousAggregateBorrowPlaces;
+        if(it->hadPreviousAggregateBorrowFieldPlaces)
+            aggregateBorrowFieldPlaces[it->varName] =
+                it->previousAggregateBorrowFieldPlaces;
         if(it->hadPreviousAggregateBorrowPlace)
             pointerBorrowPlace[it->varName] =
                 it->previousAggregateBorrowPlace;

@@ -250,6 +250,12 @@ private:
     std::map<std::string,
              std::map<std::string, std::set<std::string>>>
         aggregateBorrowPlaces;
+    // Per-field paths let pointer extraction preserve the field's own origin
+    // when its containing aggregate carries borrows to several places.
+    std::map<std::string,
+             std::map<std::string,
+                      std::map<std::string, std::set<std::string>>>>
+        aggregateBorrowFieldPlaces;
     // Precise source place for local references. Ownership/lifetime checks
     // still use the root owner; receiver checks can distinguish sibling fields.
     std::map<std::string, std::string> pointerBorrowPlace;
@@ -534,6 +540,10 @@ private:
         bool hadPreviousAggregateBorrowPlaces = false;
         std::map<std::string, std::set<std::string>>
             previousAggregateBorrowPlaces;
+        bool hadPreviousAggregateBorrowFieldPlaces = false;
+        std::map<std::string,
+                 std::map<std::string, std::set<std::string>>>
+            previousAggregateBorrowFieldPlaces;
         bool hadPreviousAggregateBorrowPlace = false;
         std::string previousAggregateBorrowPlace;
     };
