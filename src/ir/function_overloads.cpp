@@ -104,6 +104,105 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
         overloads.push_back(info);
     }
 
+    if(function && node->body && node->parameters)
+    {
+        const std::string symbol = function->getName().str();
+        auto& mutatingParameters =
+            functionPointerSlotMutationParameters[symbol];
+        mutatingParameters.clear();
+        std::map<std::string, std::set<size_t>> pointerSlotAliases;
+        for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
+        {
+            auto* parameter = node->parameters->parameters[i];
+            auto* pointer = parameter
+                                ? dynamic_cast<PointerTypeNode*>(parameter->type)
+                                : nullptr;
+            if(pointer && dynamic_cast<PointerTypeNode*>(pointer->elementType))
+                pointerSlotAliases[parameter->name].insert(i);
+        }
+        std::function<void(StatementListNode*)> scanPointerSlotWrites;
+        std::function<void(StatementNode*)> scanPointerSlotStatement;
+        scanPointerSlotWrites = [&](StatementListNode* statements) {
+            if(statements)
+                for(auto* statement : statements->statements)
+                    scanPointerSlotStatement(statement);
+        };
+        scanPointerSlotStatement = [&](StatementNode* statement) {
+            if(!statement)
+                return;
+            if(auto* assignment =
+                   dynamic_cast<DerefAssignmentNode*>(statement))
+            {
+                if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                       assignment->pointerExpr))
+                {
+                    auto aliases = pointerSlotAliases.find(identifier->name);
+                    if(aliases != pointerSlotAliases.end())
+                        mutatingParameters.insert(aliases->second.begin(),
+                                                  aliases->second.end());
+                }
+            }
+            else if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
+            {
+                if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                       declaration->expression))
+                {
+                    auto aliases = pointerSlotAliases.find(identifier->name);
+                    if(aliases != pointerSlotAliases.end())
+                        pointerSlotAliases[declaration->name] = aliases->second;
+                }
+            }
+            else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
+            {
+                if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                       declaration->initExpr))
+                {
+                    auto aliases = pointerSlotAliases.find(identifier->name);
+                    if(aliases != pointerSlotAliases.end())
+                        pointerSlotAliases[declaration->name] = aliases->second;
+                }
+            }
+            else if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
+            {
+                if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                       assignment->expression))
+                {
+                    auto aliases = pointerSlotAliases.find(identifier->name);
+                    if(aliases != pointerSlotAliases.end())
+                        pointerSlotAliases[assignment->name] = aliases->second;
+                }
+            }
+            if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+                scanPointerSlotWrites(block->statements);
+            else if(auto* branch = dynamic_cast<IfNode*>(statement))
+            {
+                scanPointerSlotWrites(branch->thenBranch);
+                scanPointerSlotStatement(branch->elseIfBranch);
+                scanPointerSlotWrites(branch->elseBranch);
+            }
+            else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+            {
+                scanPointerSlotWrites(branch->thenBranch);
+                scanPointerSlotStatement(branch->elseIfBranch);
+                scanPointerSlotWrites(branch->elseBranch);
+            }
+            else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+                scanPointerSlotWrites(loop->body);
+            else if(auto* loop = dynamic_cast<ForNode*>(statement))
+                scanPointerSlotWrites(loop->body);
+            else if(auto* attempt = dynamic_cast<TryCatchNode*>(statement))
+            {
+                scanPointerSlotWrites(attempt->tryBlock
+                                          ? attempt->tryBlock->statements
+                                          : nullptr);
+                scanPointerSlotWrites(attempt->catchBlock
+                                          ? attempt->catchBlock->statements
+                                          : nullptr);
+            }
+        };
+        scanPointerSlotWrites(node->body);
+    }
+
     if(function && node->body && node->returnType &&
        node->returnType->kind == TypeNode::TYPE_PTR && node->parameters)
     {
@@ -579,14 +678,46 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                        hasTrackedPointerAggregateAtOrBelow(path))
                         hasUnknownReturnOrigin = true;
                 };
+            auto callMayMutatePointerSlot = [&](const std::string& name,
+                                               size_t argumentIndex) {
+                auto named = functionOverloads.find(name);
+                if(named == functionOverloads.end())
+                    return false;
+                for(const auto& overload : named->second)
+                {
+                    auto summary = functionPointerSlotMutationParameters.find(
+                        overload.symbolName);
+                    if(summary != functionPointerSlotMutationParameters.end() &&
+                       summary->second.count(argumentIndex))
+                        return true;
+                }
+                return false;
+            };
             auto invalidateIndirectPointerArgument =
-                [&](ExpressionNode* argument) {
-                    auto* identifier =
-                        dynamic_cast<IdentifierNode*>(argument);
-                    if(!identifier)
+                [&](ExpressionNode* argument, bool mayMutate) {
+                    if(!mayMutate)
                         return;
-                    auto slot = pointerLocalSlots.find(identifier->name);
-                    if(slot == pointerLocalSlots.end())
+                    bool pointsAtTrackedPointer = false;
+                    if(auto* identifier =
+                           dynamic_cast<IdentifierNode*>(argument))
+                    {
+                        pointsAtTrackedPointer =
+                            pointerLocalSlots.count(identifier->name) != 0;
+                    }
+                    else if(auto* address =
+                                dynamic_cast<UnaryOpNode*>(argument);
+                            address &&
+                            address->op == UnaryOpNode::OP_ADDR_MUT)
+                    {
+                        std::string targetPath;
+                        if(!getFieldPath(address->operand, targetPath))
+                            pointsAtTrackedPointer = true;
+                        else
+                            pointsAtTrackedPointer =
+                                pointerAliases.count(targetPath) != 0 ||
+                                hasTrackedPointerAggregateAtOrBelow(targetPath);
+                    }
+                    if(!pointsAtTrackedPointer)
                         return;
                     // A callee receiving a pointer-to-pointer may replace a
                     // local alias. Until interprocedural write effects are
@@ -601,10 +732,12 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 if(closureEffect != closureMayMutatePointerAggregate.end() &&
                    closureEffect->second)
                     hasUnknownReturnOrigin = true;
-                for(auto* argument : call->arguments)
+                for(size_t i = 0; i < call->arguments.size(); ++i)
                 {
+                    auto* argument = call->arguments[i];
                     invalidateMutableAggregateArgument(argument);
-                    invalidateIndirectPointerArgument(argument);
+                    invalidateIndirectPointerArgument(
+                        argument, callMayMutatePointerSlot(call->name, i));
                     if(argumentMayInvokeMutatingClosure(argument))
                         hasUnknownReturnOrigin = true;
                     scanCallEffects(argument);
@@ -618,8 +751,12 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                    hasTrackedPointerAggregateAtOrBelow(receiverPath))
                     hasUnknownReturnOrigin = true;
                 scanCallEffects(method->object);
-                for(auto* argument : method->arguments)
+                for(size_t i = 0; i < method->arguments.size(); ++i)
                 {
+                    auto* argument = method->arguments[i];
+                    invalidateIndirectPointerArgument(
+                        argument,
+                        callMayMutatePointerSlot(method->methodName, i));
                     if(argumentMayInvokeMutatingClosure(argument))
                         hasUnknownReturnOrigin = true;
                     scanCallEffects(argument);
@@ -639,10 +776,13 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                        closureEffect->second)
                         hasUnknownReturnOrigin = true;
                 }
-                for(auto* argument : invoke->arguments)
+                for(size_t i = 0; i < invoke->arguments.size(); ++i)
                 {
+                    auto* argument = invoke->arguments[i];
                     invalidateMutableAggregateArgument(argument);
-                    invalidateIndirectPointerArgument(argument);
+                    // A callable value does not yet carry parameter effect
+                    // metadata, so pointer-slot arguments remain unknown.
+                    invalidateIndirectPointerArgument(argument, true);
                     if(argumentMayInvokeMutatingClosure(argument))
                         hasUnknownReturnOrigin = true;
                     scanCallEffects(argument);

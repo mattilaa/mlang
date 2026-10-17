@@ -11198,6 +11198,90 @@ TEST_F(MLATest, OwnershipHelperIndirectPointerAssignmentKeepsNewOrigin)
     EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
 }
 
+// A mutating helper called with a direct mutable address must update origins.
+TEST_F(MLATest, OwnershipHelperIndirectPointerAddressKeepsNewOrigin)
+{
+    std::string code = R"(
+        fn replace(slot: ptr<ptr<i32>>, replacement: ptr<i32>) -> void {
+            unsafe { *slot = replacement; }
+        }
+        fn relay(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+            var selected = first;
+            replace(&mut selected, second);
+            return selected;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded = relay(&mut first, &mut second);
+            second = 3;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
+}
+
+// A method receiving a tracked pointer slot must not leave a stale origin.
+TEST_F(MLATest, OwnershipMethodIndirectPointerAssignmentKeepsNewOrigin)
+{
+    std::string code = R"(
+        struct Replacer { var value: i32; };
+        impl Replacer {
+            fn replace(self: &mut Replacer, slot: ptr<ptr<i32>>,
+                       replacement: ptr<i32>) -> void {
+                unsafe { *slot = replacement; }
+            }
+        }
+        fn relay(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+            var selected = first;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            var replacer: Replacer = Replacer { value: 0 };
+            replacer.replace(slot, second);
+            return selected;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded = relay(&mut first, &mut second);
+            second = 3;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
+}
+
+// Reading through a pointer slot must not make unrelated origins escape.
+TEST_F(MLATest, OwnershipReadOnlyPointerSlotHelperPreservesOriginPrecision)
+{
+    std::string code = R"(
+        fn read(slot: ptr<ptr<i32>>) -> i32 {
+            unsafe { return **slot; }
+        }
+        fn relay(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+            var selected = first;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            let snapshot = read(slot);
+            return selected;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded = relay(&mut first, &mut second);
+            second = 3;
+            unsafe { return *forwarded + second - 4; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 // Returning a pointer extracted from an aggregate argument retains its borrow.
 TEST_F(MLATest, OwnershipAggregateArgumentReturnedPointerKeepsBorrowLive)
 {

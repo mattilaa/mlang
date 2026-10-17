@@ -249,6 +249,10 @@ private:
     std::map<std::string, std::set<size_t>> functionPointerReturnParameters;
     // Only complete summaries may conclude that an argument cannot flow out.
     std::set<std::string> functionPointerReturnSummaryComplete;
+    // Function symbols map pointer-to-pointer parameters that may be written
+    // through, allowing callers to distinguish read-only helpers from escapes.
+    std::map<std::string, std::set<size_t>>
+        functionPointerSlotMutationParameters;
     // Owner variables borrowed by each runtime closure's stack environment.
     std::map<std::string, std::set<std::string>> runtimeClosureBorrowOwners;
     // Generic closure parameter -> captured local name -> hidden parameter
