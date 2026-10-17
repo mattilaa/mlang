@@ -10666,6 +10666,65 @@ TEST_F(MLATest, OwnershipFunctionReturnedPointerRestoresShadowedAlias)
         << out;
 }
 
+// Returning a pointer field must not let a by-value borrowing aggregate escape.
+TEST_F(MLATest, OwnershipCannotReturnBorrowFromByValueAggregateParameter)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        fn extract(box: PointerBox) -> ptr<i32> {
+            return box.value;
+        }
+        fn main() -> i32 {
+            var owner: i32 = 7;
+            let box: PointerBox = PointerBox { value: &owner };
+            let pointer: ptr<i32> = extract(box);
+            owner = 9;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass aggregate 'box' containing a borrow"),
+              std::string::npos)
+        << out;
+}
+
+// Pointer provenance from try/catch returns must reach the caller summary.
+TEST_F(MLATest, OwnershipTryCatchReturnedPointerKeepsBorrowLive)
+{
+    std::string code = R"(
+        struct BorrowError {
+            var type_name: str8;
+            var message: str8;
+            var source_line: i32;
+        };
+        fn relay(pointer: ptr<i32>) -> ptr<i32> {
+            var result: ptr<i32>;
+            try {
+                result = pointer;
+            } catch error: BorrowError {
+                result = pointer;
+            }
+            return result;
+        }
+        fn main() -> i32 {
+            var owner: i32 = 7;
+            let forwarded: ptr<i32> = relay(&owner);
+            owner = 9;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'owner' while borrowed by 'forwarded'"),
+              std::string::npos)
+        << out;
+}
+
 // Pointer provenance must propagate through multiple visible forwarding calls.
 TEST_F(MLATest, OwnershipNestedFunctionReturnedPointerKeepsBorrowLive)
 {

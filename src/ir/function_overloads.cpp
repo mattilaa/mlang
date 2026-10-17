@@ -354,6 +354,13 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     pointerAliases = baseAliases;
                 pointerAliases = mergeAliases({baseAliases, pointerAliases});
             }
+            else if(dynamic_cast<TryCatchNode*>(statement))
+            {
+                // Exceptions can enter catch from any point in the try body;
+                // until that exceptional flow is modeled, callers must retain
+                // every pointer argument for this function's pointer result.
+                hasUnknownReturnOrigin = true;
+            }
             return true;
         };
         scanList(node->body);
