@@ -3105,6 +3105,35 @@ TEST_F(MLATest, TraitObjectFieldSharedMethodAllowsSharedBorrows)
     EXPECT_EQ(compileAndRunExitCode(code), 9);
 }
 
+TEST_F(MLATest, TraitObjectFieldSharedMethodRejectsLiveMutableBorrow)
+{
+    std::string code = R"(
+        trait CounterOps {
+            fn get(&self) -> i32;
+        }
+        struct Counter { var value: i32; };
+        struct Holder { var item: dyn CounterOps; };
+        impl CounterOps for Counter {
+            fn get(&self) -> i32 { return self.value; }
+        }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 9 };
+            var holder: Holder = Holder { item: counter };
+            let held = &mut holder.item;
+            let value = holder.item.get();
+            return held == held ? value : 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_TRUE(out.find("while borrowed") != std::string::npos ||
+                out.find("use of moved value") != std::string::npos ||
+                out.find("cannot borrow moved value") != std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, TraitObjectFieldVoidMutatingMethodRuns)
 {
     std::string code = R"(
