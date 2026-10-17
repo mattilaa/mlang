@@ -8269,6 +8269,30 @@ TEST_F(MLATest, BorrowedClosureCanPassToNoEscapeParameterInExpression)
     EXPECT_EQ(compileAndRunExitCode(code), 18);
 }
 
+// A callback's pointer result cannot escape when its capture lifetime is
+// unknown.
+TEST_F(MLATest, CallableParameterCannotReturnUnknownBorrowedPointer)
+{
+    std::string code = R"(
+        fn forward(callback: fn() -> ptr<i32>) -> ptr<i32> {
+            return callback();
+        }
+        fn bad() -> ptr<i32> {
+            var local: i32 = 13;
+            let address: fn() -> ptr<i32> = || { return &local; };
+            return forward(address);
+        }
+        fn main() -> i32 { return 0; }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("pointer returned by callable parameter 'callback'"),
+              std::string::npos)
+        << out;
+}
+
 // A callback remains non-escaping when invoked only inside conditional branches.
 TEST_F(MLATest, BorrowedClosureCanPassToNoEscapeParameterWithBranches)
 {
