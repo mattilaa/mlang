@@ -625,10 +625,34 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             }
             else if(auto* tuple = dynamic_cast<TupleAccessNode*>(expression))
                 scanCallEffects(tuple->tuple);
+            else if(auto* match =
+                        dynamic_cast<MatchExpressionNode*>(expression))
+            {
+                scanCallEffects(match->target);
+                for(auto* arm : match->arms)
+                    if(arm)
+                    {
+                        if(arm->pattern)
+                            scanCallEffects(arm->pattern->literal);
+                        scanCallEffects(arm->expression);
+                    }
+            }
             else if(auto* cast = dynamic_cast<CastExpressionNode*>(expression))
                 scanCallEffects(cast->expression);
             else if(auto* attempt = dynamic_cast<TryExpressionNode*>(expression))
                 scanCallEffects(attempt->expression);
+            else if(auto* cexpr = dynamic_cast<CexprExpressionNode*>(expression))
+                scanCallEffects(cexpr->expression);
+            else if(auto* fold = dynamic_cast<FoldExpressionNode*>(expression))
+                scanCallEffects(fold->packExpr);
+            else if(auto* update =
+                        dynamic_cast<UpdateExpressionNode*>(expression))
+                scanCallEffects(update->operand);
+            else if(auto* range = dynamic_cast<RangeExpressionNode*>(expression))
+            {
+                scanCallEffects(range->start);
+                scanCallEffects(range->end);
+            }
             else if(auto* structure =
                         dynamic_cast<StructLiteralNode*>(expression))
                 for(const auto& field : structure->fields)
@@ -645,6 +669,39 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     for(auto* element : tuple->elements->elements)
                         scanCallEffects(element);
             }
+            else if(auto* map = dynamic_cast<MapLiteralNode*>(expression))
+            {
+                if(map->entries)
+                    for(auto* entry : map->entries->entries)
+                        if(entry)
+                        {
+                            scanCallEffects(entry->key);
+                            scanCallEffects(entry->value);
+                        }
+            }
+            else if(auto* array = dynamic_cast<ArrayFillNode*>(expression))
+            {
+                scanCallEffects(array->value);
+                scanCallEffects(array->count);
+            }
+            else if(auto* iterator = dynamic_cast<MapIteratorNode*>(expression))
+                scanCallEffects(iterator->mapExpr);
+            else if(auto* assembly = dynamic_cast<InlineAsmNode*>(expression))
+                for(auto* argument : assembly->arguments)
+                {
+                    invalidateMutableAggregateArgument(argument);
+                    scanCallEffects(argument);
+                }
+            else if(auto* format = dynamic_cast<FormatNode*>(expression))
+            {
+                for(auto* argument : format->arguments)
+                    scanCallEffects(argument);
+                for(const auto& argument : format->namedArguments)
+                    scanCallEffects(argument.second);
+            }
+            else if(auto* size =
+                        dynamic_cast<SizeofExpressionNode*>(expression))
+                scanCallEffects(size->expressionTarget);
         };
 
         std::function<bool(StatementNode*)> scanStatement;

@@ -11114,6 +11114,37 @@ TEST_F(MLATest, OwnershipListBranchSelectedClosureMutationKeepsNewOrigin)
     EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
 }
 
+// A mutating helper inside a match arm must invalidate aggregate summaries.
+TEST_F(MLATest, OwnershipListMatchArmHelperMutationKeepsNewOrigin)
+{
+    std::string code = R"(
+        fn replace_at(values: &mut list<ptr<i32>>, replacement: ptr<i32>) -> i32 {
+            values[0] = replacement;
+            return 0;
+        }
+        fn relay(replace: bool, first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+            var pointers: list<ptr<i32>> = [first];
+            let ignored = match replace {
+                true => replace_at(&mut pointers, second),
+                _ => 0
+            };
+            return pointers[0];
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded = relay(true, &mut first, &mut second);
+            second = 3;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
+}
+
 // Returning a pointer extracted from an aggregate argument retains its borrow.
 TEST_F(MLATest, OwnershipAggregateArgumentReturnedPointerKeepsBorrowLive)
 {
