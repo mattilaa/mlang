@@ -3807,7 +3807,22 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     return nullptr;
                 }
             }
-            argVal = generateArgumentValue(arg, expectedArgumentType);
+            // Immutable reference parameters use the value ABI, like runtime
+            // closures. Accept an explicit `&value` at the call site, but
+            // pass the referenced value rather than the address expression.
+            if(auto* reference =
+                   dynamic_cast<ReferenceTypeNode*>(expectedArgumentType))
+            {
+                auto* unary = dynamic_cast<UnaryOpNode*>(arg);
+                if(!reference->isMutable && unary &&
+                   unary->op == UnaryOpNode::OP_ADDR)
+                    argVal = generateArgumentValue(unary->operand,
+                                                   reference->elementType);
+                else
+                    argVal = generateArgumentValue(arg, expectedArgumentType);
+            }
+            else
+                argVal = generateArgumentValue(arg, expectedArgumentType);
         }
         if(!argVal)
             return nullptr;
@@ -3957,6 +3972,16 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 }
 
                 TypeNode* actualSemantic = semanticArgumentTypes[i];
+                if(auto* reference =
+                       dynamic_cast<ReferenceTypeNode*>(
+                           info.node->parameters->parameters[i]->type))
+                {
+                    auto* unary =
+                        dynamic_cast<UnaryOpNode*>(node->arguments[i]);
+                    if(!reference->isMutable && unary &&
+                       unary->op == UnaryOpNode::OP_ADDR)
+                        actualSemantic = semanticArgumentType(unary->operand);
+                }
                 if(auto* expectedFunction =
                        dynamic_cast<FunctionTypeNode*>(expectedSemantic))
                 {

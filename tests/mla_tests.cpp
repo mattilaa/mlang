@@ -4434,6 +4434,18 @@ TEST_F(MLATest, RuntimeClosureReadsImmutableReferenceParameter)
     EXPECT_EQ(compileAndRunExitCode(code), 5);
 }
 
+TEST_F(MLATest, FunctionAcceptsExplicitImmutableReferenceArgument)
+{
+    std::string code = R"(
+        fn increment(value: &i32) -> i32 { return value + 1; }
+        fn main() -> i32 {
+            let count: i32 = 4;
+            return increment(&count);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 5);
+}
+
 TEST_F(MLATest, RuntimeClosureAllowsAliasedImmutableReferences)
 {
     std::string code = R"(
