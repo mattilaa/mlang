@@ -5,6 +5,46 @@
 void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
                                               const std::string& context)
 {
+    auto validateMoveFromBorrowedPlace = [&](ExpressionNode* placeExpr) {
+        TypeNode* placeType = getLValueType(placeExpr, line);
+        if(!placeType)
+            placeType = inferExpressionTypeNode(placeExpr, line);
+        if(!placeType || isCopyType(placeType))
+            return true;
+
+        const std::string owner = resolveBorrowOwnerFromLValue(placeExpr);
+        if(owner.empty())
+            return true;
+        std::string targetPlace = resolveBorrowPlaceFromLValue(placeExpr);
+        if(targetPlace.empty())
+            targetPlace = owner;
+
+        auto conflictsWith = [&](const std::string& borrower) {
+            auto borrowerOwner = pointerBorrowTarget.find(borrower);
+            if(borrowerOwner == pointerBorrowTarget.end() ||
+               borrowerOwner->second != owner)
+                return false;
+            auto place = pointerBorrowPlace.find(borrower);
+            const std::string borrowedPlace =
+                place == pointerBorrowPlace.end() ? owner : place->second;
+            if(!borrowPlacesOverlap(targetPlace, borrowedPlace))
+                return false;
+            reportError(line, "cannot move '" + targetPlace +
+                                  "' while borrowed by '" + borrower + "'");
+            return true;
+        };
+
+        auto sharedBorrowers = activeBorrowers.find(owner);
+        if(sharedBorrowers != activeBorrowers.end())
+            for(const auto& borrower : sharedBorrowers->second)
+                if(conflictsWith(borrower))
+                    return false;
+        for(const auto& mutableBorrow : activeMutBorrower)
+            if(conflictsWith(mutableBorrow.second))
+                return false;
+        return true;
+    };
+
     std::function<void(ExpressionNode*, bool)> consume =
         [&](ExpressionNode* e, bool borrowed) -> void
     {
@@ -25,14 +65,8 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
 
             if(!borrowed && isMoveOnlyVariable(id->name))
             {
-                auto borIt = activeBorrowers.find(id->name);
-                if(borIt != activeBorrowers.end() && !borIt->second.empty())
-                {
-                    std::string by = *borIt->second.begin();
-                    reportError(line, "cannot move '" + id->name +
-                                          "' while borrowed by '" + by + "'");
+                if(!validateMoveFromBorrowedPlace(e))
                     return;
-                }
                 movedVariables.insert(id->name);
             }
             return;
@@ -47,6 +81,9 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
             }
             else
             {
+                if(unary->op == UnaryOpNode::OP_DEREF && !borrowed &&
+                   !validateMoveFromBorrowedPlace(e))
+                    return;
                 consume(unary->operand, borrowed);
             }
             return;
@@ -73,6 +110,8 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
 
         if(auto* field = dynamic_cast<FieldAccessNode*>(e))
         {
+            if(!borrowed && !validateMoveFromBorrowedPlace(e))
+                return;
             if(field->object)
             {
                 consume(field->object, true);
@@ -92,8 +131,18 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
 
         if(auto* index = dynamic_cast<IndexExpressionNode*>(e))
         {
+            if(!borrowed && !validateMoveFromBorrowedPlace(e))
+                return;
             consume(index->base, true);
             consume(index->index, false);
+            return;
+        }
+
+        if(auto* tuple = dynamic_cast<TupleAccessNode*>(e))
+        {
+            if(!borrowed && !validateMoveFromBorrowedPlace(e))
+                return;
+            consume(tuple->tuple, true);
             return;
         }
 
