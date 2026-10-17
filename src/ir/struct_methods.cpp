@@ -2253,6 +2253,40 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             "'");
             return nullptr;
         }
+        if(!owner.empty())
+        {
+            const std::string receiverPlace =
+                resolveBorrowPlaceFromLValue(node->object);
+            auto borrowedPlaceFor = [&](const std::string& borrower) {
+                auto place = pointerBorrowPlace.find(borrower);
+                return place == pointerBorrowPlace.end() ? owner
+                                                          : place->second;
+            };
+            auto rejectOverlappingBorrow = [&](const std::string& borrower) {
+                if(!borrowPlacesOverlap(borrowedPlaceFor(borrower),
+                                        receiverPlace))
+                    return false;
+                reportError(node->line,
+                            "cannot mutate container '" + owner +
+                                "' while borrowed by '" + borrower + "'");
+                return true;
+            };
+
+            auto shared = activeBorrowers.find(owner);
+            if(shared != activeBorrowers.end())
+                for(const auto& borrower : shared->second)
+                    if(rejectOverlappingBorrow(borrower))
+                        return nullptr;
+            for(const auto& mutableBorrow : activeMutBorrower)
+            {
+                auto borrowOwner =
+                    pointerBorrowTarget.find(mutableBorrow.second);
+                if(borrowOwner != pointerBorrowTarget.end() &&
+                   borrowOwner->second == owner &&
+                   rejectOverlappingBorrow(mutableBorrow.second))
+                    return nullptr;
+            }
+        }
     }
     const bool matrixMethod =
         method == "sum" || method == "add" || method == "subtract" ||

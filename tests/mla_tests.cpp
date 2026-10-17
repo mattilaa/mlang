@@ -3522,6 +3522,44 @@ TEST_F(MLATest, TupleAssignmentRejectsOverlappingLiveElementBorrow)
         << out;
 }
 
+TEST_F(MLATest, ListGrowthRejectsLiveElementBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<i32> = [4, 5];
+            let first = &mut values[0];
+            values.push(6);
+            unsafe { return *first; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot mutate container 'values' while borrowed by 'first'"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, ListGrowthRejectsLiveSharedElementBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<i32> = [4, 5];
+            let first = &values[0];
+            values.push(6);
+            return *first;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot mutate container 'values' while borrowed by 'first'"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, SecondaryMutableFieldBorrowBlocksMethodOnThatField)
 {
     std::string code = R"(
