@@ -191,14 +191,7 @@ void CodeGenerator::emitScopeCleanup(const ScopeCleanup& cleanup,
        mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         return;
 
-    auto value = namedValues.find(cleanup.varName);
-    if(value == namedValues.end() || !value->second)
-        return;
-    auto type = structVariableTypes.find(cleanup.varName);
-    if(type == structVariableTypes.end() || type->second != cleanup.structTypeName)
-        return;
-
-    auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(value->second);
+    auto* alloca = cleanup.storage;
     if(!alloca)
         return;
     llvm::Type* allocaType = alloca->getAllocatedType();
@@ -349,6 +342,9 @@ void CodeGenerator::registerStructCleanupIfNeeded(
     if(cleanup.function)
     {
         cleanup.varName = varName;
+        auto value = namedValues.find(varName);
+        if(value != namedValues.end())
+            cleanup.storage = llvm::dyn_cast<llvm::AllocaInst>(value->second);
         llvm::Function* function = builder.GetInsertBlock()
                                        ? builder.GetInsertBlock()->getParent()
                                        : nullptr;

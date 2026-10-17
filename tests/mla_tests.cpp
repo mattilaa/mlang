@@ -5006,6 +5006,30 @@ TEST_F(MLATest, OwnershipCleanupTypeMoveTransfersCleanupResponsibility)
     EXPECT_EQ(compileAndRun(code), "free 7\n");
 }
 
+// Shadowed cleanup variables each drop their own value in reverse scope order.
+TEST_F(MLATest, OwnershipShadowedCleanupVariablesDropTheirOwnValues)
+{
+    std::string code = R"(
+        struct Owned { var marker: i32; };
+
+        impl Owned {
+            fn free(self: Owned) -> i32 {
+                println!("free {}", self.marker);
+                return 0;
+            }
+        }
+
+        fn main() -> i32 {
+            let owned: Owned = Owned { marker: 1 };
+            {
+                let owned: Owned = Owned { marker: 2 };
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "free 2\nfree 1\n");
+}
+
 TEST_F(MLATest, OwnershipUseOutsideBlockReportsUnknownVariable)
 {
     std::string code = R"(

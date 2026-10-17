@@ -566,6 +566,7 @@ private:
         std::string varName;
         std::string structTypeName;
         llvm::Function* function = nullptr;
+        llvm::AllocaInst* storage = nullptr;
         llvm::AllocaInst* dropFlag = nullptr;
         CallKind callKind = CallKind::ByValueFunction;
     };
