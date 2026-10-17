@@ -42,6 +42,22 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
         return true;
     };
 
+    auto validatePartialMoveFromOwner = [&](const std::string& owner,
+                                            const std::string& place) {
+        auto ownerType = structVariableTypes.find(owner);
+        if(ownerType == structVariableTypes.end())
+            return true;
+
+        ScopeCleanup cleanup = resolveDropFunctionForStruct(ownerType->second);
+        if(!cleanup.function)
+            return true;
+
+        reportError(line, "cannot partially move '" + place +
+                              "' from type '" + ownerType->second +
+                              "' because it has an automatic cleanup method");
+        return false;
+    };
+
     std::function<void(ExpressionNode*, bool)> consume =
         [&](ExpressionNode* e, bool borrowed) -> void
     {
@@ -116,7 +132,11 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
                 const std::string place = resolveBorrowPlaceFromLValue(e);
                 if(fieldType && !isCopyType(fieldType) && !place.empty() &&
                    globalNamedValues.find(owner) == globalNamedValues.end())
+                {
+                    if(!validatePartialMoveFromOwner(owner, place))
+                        return;
                     movedVariables.insert(place);
+                }
             }
             if(field->object)
             {
@@ -147,7 +167,11 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
                 if(elementType && !isCopyType(elementType) &&
                    !place.empty() &&
                    globalNamedValues.find(owner) == globalNamedValues.end())
+                {
+                    if(!validatePartialMoveFromOwner(owner, place))
+                        return;
                     movedVariables.insert(place);
+                }
             }
             consume(index->base, true);
             consume(index->index, false);
@@ -166,7 +190,11 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
                 if(elementType && !isCopyType(elementType) &&
                    !place.empty() &&
                    globalNamedValues.find(owner) == globalNamedValues.end())
+                {
+                    if(!validatePartialMoveFromOwner(owner, place))
+                        return;
                     movedVariables.insert(place);
+                }
             }
             consume(tuple->tuple, true);
             return;

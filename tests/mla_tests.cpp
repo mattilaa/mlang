@@ -8829,6 +8829,35 @@ TEST_F(MLATest, OwnershipRejectsUseAfterMovingStructField)
         << out;
 }
 
+// A type with automatic cleanup cannot be partially moved before its cleanup.
+TEST_F(MLATest, OwnershipRejectsPartialMoveFromTypeWithDropMethod)
+{
+    std::string code = R"(
+        struct Holder {
+            var items: list<i32>;
+            var marker: i32;
+        };
+
+        impl Holder {
+            fn free(self: Holder) -> i32 { return 0; }
+        }
+
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var holder: Holder = Holder { items: [1, 2], marker: 3 };
+            return consume(holder.items);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot partially move 'holder.items'"),
+              std::string::npos)
+        << out;
+}
+
 // A partially moved field cannot be borrowed again through its old storage.
 TEST_F(MLATest, OwnershipRejectsBorrowOfPartiallyMovedField)
 {
