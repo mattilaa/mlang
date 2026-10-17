@@ -5923,6 +5923,29 @@ TEST_F(MLATest, OwnershipCanShareBorrowMethodReceiverAndFieldArg)
     EXPECT_EQ(compileAndRunExitCode(code), 5);
 }
 
+TEST_F(MLATest, OwnershipCanPassAlreadySharedFieldToSharedMethod)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+
+        impl Pair {
+            fn add_with(&self, x: &i32) -> i32 {
+                return self.left + x;
+            }
+        }
+
+        fn main() -> i32 {
+            let p: Pair = Pair { left: 2, right: 3 };
+            let held = &p.right;
+            return p.add_with(&p.right) + *held;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 8);
+}
+
 TEST_F(MLATest, OwnershipCanBorrowMethodReceiverAndArgFromDifferentObject)
 {
     std::string code = R"(

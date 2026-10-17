@@ -2620,7 +2620,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             if(wantsMutable)
             {
                 if(activeIt != activeBorrowers.end() &&
-                   !activeIt->second.empty())
+                   !activeIt->second.empty() && !sharedReferenceArg)
                 {
                     reportError(
                         node->line,
@@ -2649,7 +2649,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     return false;
                 }
                 if(activeIt != activeBorrowers.end() &&
-                   !activeIt->second.empty())
+                   !activeIt->second.empty() && !sharedReferenceArg)
                 {
                     std::string by = *activeIt->second.begin();
                     reportError(node->line,
