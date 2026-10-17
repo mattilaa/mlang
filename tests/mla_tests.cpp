@@ -4602,6 +4602,38 @@ TEST_F(MLATest, ClosureWithFixedArrayParameterInfersResult)
     EXPECT_EQ(compileAndRunExitCode(code), 103);
 }
 
+TEST_F(MLATest, GenericFunctionAcceptsFixedArrayArgument)
+{
+    std::string code = R"(
+        generic<T> fn head(values: array<T, 2>) -> T {
+            return values[0];
+        }
+        fn main() -> i32 {
+            let values: array<i32, 2> = { 105, 106 };
+            return head(values);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 105);
+}
+
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromGenericMapCall)
+{
+    std::string code = R"(
+        generic<K, V> fn lookup(values: map<K, V>, key: K) -> V {
+            return values[key];
+        }
+        generic<T, U> fn apply(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let scores: map<str8, i32> = {"mlang": 107};
+            return apply(|values| { return lookup(values, "mlang"); },
+                         scores);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 107);
+}
+
 TEST_F(MLATest, GenericFunctionInfersClosureResultFromArrayFill)
 {
     std::string code = R"(
