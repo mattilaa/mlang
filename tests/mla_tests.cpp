@@ -4238,6 +4238,35 @@ TEST_F(MLATest, RuntimeClosureAcceptsTypedArguments)
     EXPECT_EQ(compileAndRunExitCode(code), 7);
 }
 
+TEST_F(MLATest, RuntimeClosurePreservesFixedArrayParameterMetadata)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let second: fn(array<i32, 2>) -> i32 = |items| {
+                return items.len() + items[1];
+            };
+            let values: array<i32, 2> = {4, 10};
+            return second(values);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 12);
+}
+
+TEST_F(MLATest, RuntimeClosurePreservesMutableMultiarrayParameterMetadata)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let update: fn(mutmultiarray<i32, 1, 2>) -> i32 = |matrix| {
+                matrix[0][1] = 9;
+                return matrix[0][1];
+            };
+            let matrix: mutmultiarray<i32, 1, 2> = {{1, 2}};
+            return update(matrix) - 9;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, CallableLocalTypeInfersInlineClosureParameter)
 {
     std::string code = R"(
@@ -4669,7 +4698,7 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultFromPointerCall)
         }
         fn main() -> i32 {
             var value: i32 = 109;
-            return apply(|pointer: ptr<i32>| { return read(pointer); }, &value);
+            return apply(|pointer| { return read(pointer); }, &value);
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 109);

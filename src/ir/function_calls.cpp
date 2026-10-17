@@ -4688,7 +4688,17 @@ llvm::Function* CodeGenerator::generateClosureFn(
                         genericStruct->getMangledName();
                 else if(auto* listType =
                             dynamic_cast<GenericListTypeNode*>(parameter->type))
+                {
                     listElementTypes[parameter->name] = listType->elementType;
+                    if(auto* arrayType =
+                           dynamic_cast<ArrayTypeNode*>(listType))
+                        arrayCapacities[parameter->name] =
+                            arrayType->capacity;
+                    if(auto* multiarrayType =
+                           dynamic_cast<MultiArrayTypeNode*>(listType))
+                        multiarrayMutability[parameter->name] =
+                            multiarrayType->elementsMutable;
+                }
                 else if(auto* mapType =
                             dynamic_cast<MapTypeNode*>(parameter->type))
                     mapKeyValueTypes[parameter->name] = {
