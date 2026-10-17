@@ -687,6 +687,13 @@ void CodeGenerator::trackAggregateBorrowOrigins(
             collect(ternary->falseExpr);
             return;
         }
+        if(auto* match = dynamic_cast<MatchExpressionNode*>(current))
+        {
+            for(auto* arm : match->arms)
+                if(arm)
+                    collect(arm->expression);
+            return;
+        }
         if(auto* attempt = dynamic_cast<TryExpressionNode*>(current))
         {
             collect(attempt->expression);
