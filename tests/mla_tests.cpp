@@ -5224,6 +5224,47 @@ TEST_F(MLATest, OwnershipImmutableReferenceRestrictionRestoredAfterShadow)
         << out;
 }
 
+// Dropping a same-named closure shadow must not release the outer capture borrow.
+TEST_F(MLATest, RuntimeClosureShadowDoesNotReleaseOuterCaptureBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 1;
+            let read: fn() -> i32 = || { return value; };
+            {
+                let read: fn() -> i32 = || { return value; };
+            }
+            value = 2;
+            return read();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'read'"), std::string::npos)
+        << out;
+}
+
+// A shadowed closure's capture metadata must not keep the outer borrow past last use.
+TEST_F(MLATest, RuntimeClosureShadowRestoresOuterLastUse)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 1;
+            let read: fn() -> i32 = || { return value; };
+            {
+                var other: i32 = 3;
+                let read: fn() -> i32 = || { return other; };
+            }
+            let result: i32 = read();
+            value = 2;
+            return result;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 1);
+}
+
 TEST_F(MLATest, OwnershipUseOutsideBlockReportsUnknownVariable)
 {
     std::string code = R"(

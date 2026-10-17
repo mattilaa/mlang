@@ -1033,6 +1033,8 @@ bool CodeGenerator::tryCopyRuntimeClosureValue(const std::string& name,
        source == namedValues.end())
         return false;
 
+    recordVariableScopeDepth(name);
+
     auto* sourceSlot = llvm::dyn_cast<llvm::AllocaInst>(source->second);
     if(!sourceSlot)
     {
@@ -1231,8 +1233,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             closureInit, dynamic_cast<FunctionTypeNode*>(declaredType));
         if(!effectiveClosure)
             return;
-        closureVariables[node->name] = effectiveClosure;
         recordVariableScopeDepth(node->name);
+        closureVariables[node->name] = effectiveClosure;
         functionItemVariables[node->name] = {};
         if(tryGenerateRuntimeClosureValue(
                node->name, effectiveClosure, node->line,

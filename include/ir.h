@@ -616,6 +616,11 @@ private:
         ScopedBindingValue<std::string> previousEnumVariableType;
         ScopedBindingValue<std::string> previousTraitObjectVariableType;
         ScopedBindingValue<FunctionTypeNode*> previousFunctionTypeVariable;
+        ScopedBindingValue<ClosureNode*> previousClosureVariable;
+        ScopedBindingValue<ClosureNode*> previousRuntimeClosureVariable;
+        ScopedBindingValue<TypeNode*> previousRuntimeClosureReturnType;
+        ScopedBindingValue<std::set<std::string>>
+            previousRuntimeClosureBorrowOwners;
         bool hadPreviousAggregateBorrowOrigins = false;
         std::set<std::string> previousAggregateBorrowOrigins;
         bool hadPreviousAggregateBorrowPlaces = false;

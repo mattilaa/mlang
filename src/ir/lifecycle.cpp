@@ -162,6 +162,17 @@ void CodeGenerator::exitCleanupScope()
         restore(traitObjectVariableTypes,
                 it->previousTraitObjectVariableType);
         restore(functionTypeVariables, it->previousFunctionTypeVariable);
+        restore(closureVariables, it->previousClosureVariable);
+        restore(runtimeClosureVariables,
+                it->previousRuntimeClosureVariable);
+        restore(runtimeClosureReturnTypes,
+                it->previousRuntimeClosureReturnType);
+        restore(runtimeClosureBorrowOwners,
+                it->previousRuntimeClosureBorrowOwners);
+        if(it->previousRuntimeClosureBorrowOwners.existed)
+            for(const auto& owner :
+                it->previousRuntimeClosureBorrowOwners.value)
+                activeBorrowers[owner].insert(it->varName);
         auto belongsToVariable = [&](const std::string& place) {
             return place == it->varName ||
                    (place.size() > it->varName.size() &&

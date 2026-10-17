@@ -387,6 +387,13 @@ void CodeGenerator::recordVariableScopeDepth(const std::string& varName)
         capture(traitObjectVariableTypes,
                 entry.previousTraitObjectVariableType);
         capture(functionTypeVariables, entry.previousFunctionTypeVariable);
+        capture(closureVariables, entry.previousClosureVariable);
+        capture(runtimeClosureVariables,
+                entry.previousRuntimeClosureVariable);
+        capture(runtimeClosureReturnTypes,
+                entry.previousRuntimeClosureReturnType);
+        capture(runtimeClosureBorrowOwners,
+                entry.previousRuntimeClosureBorrowOwners);
         auto belongsToVariable = [&](const std::string& place) {
             return place == varName ||
                    (place.size() > varName.size() &&
