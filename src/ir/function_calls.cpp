@@ -674,6 +674,19 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                 }
                 return matches == 1 ? selectedResult : nullptr;
             }
+            if(auto* invoke = dynamic_cast<CallableInvokeNode*>(expr))
+            {
+                auto* callableType = dynamic_cast<FunctionTypeNode*>(
+                    inferClosureExpr(invoke->callable));
+                if(!callableType)
+                    return nullptr;
+                const size_t parameterCount = callableType->parameterTypes
+                    ? callableType->parameterTypes->types.size()
+                    : 0;
+                if(parameterCount != invoke->arguments.size())
+                    return nullptr;
+                return cloneTypeNode(callableType->returnType);
+            }
             if(auto* method = dynamic_cast<MethodCallNode*>(expr))
             {
                 TypeNode* receiverType = inferClosureExpr(method->object);
