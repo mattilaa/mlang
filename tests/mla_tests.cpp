@@ -7816,6 +7816,53 @@ TEST_F(MLATest, OwnershipCannotReturnAggregateContainingBorrowedPointer)
     EXPECT_NE(out.find("cannot return"), std::string::npos) << out;
 }
 
+TEST_F(MLATest, OwnershipCannotReturnLocalAggregateAliasContainingBorrow)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+
+        fn wrap() -> PointerBox {
+            var value: i32 = 7;
+            let pointer = &value;
+            let boxed = PointerBox { value: pointer };
+            return boxed;
+        }
+
+        fn main() -> i32 {
+            let escaped = wrap();
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return aggregate containing a pointer"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, AggregateBorrowKeepsOwnerBorrowedUntilLastUse)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let boxed = PointerBox { value: &value };
+            value = 9;
+            let pointer = boxed.value;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, OwnershipCannotStorePointerBorrowingLocalFieldInGlobalPointer)
 {
     std::string code = R"(

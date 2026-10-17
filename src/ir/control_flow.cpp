@@ -27,7 +27,9 @@ void CodeGenerator::expireUnusedLocalBorrows(
         if(!futureIdents.count(closure.first))
             continue;
         for(const auto& capture : closure.second)
-            if(pointerBorrowTarget.find(capture) != pointerBorrowTarget.end())
+            if(pointerBorrowTarget.find(capture) != pointerBorrowTarget.end() ||
+               aggregateBorrowOrigins.find(capture) !=
+                   aggregateBorrowOrigins.end())
                 capturedPointersInLiveClosures.insert(capture);
     }
 
@@ -42,6 +44,18 @@ void CodeGenerator::expireUnusedLocalBorrows(
     }
     for(const auto& pointer : toClear)
         clearPointerBorrow(pointer);
+
+    std::vector<std::string> aggregatesToClear;
+    for(const auto& aggregate : aggregateBorrowOrigins)
+    {
+        auto depth = variableScopeDepth.find(aggregate.first);
+        if(depth != variableScopeDepth.end() && depth->second == scopeDepth &&
+           !futureIdents.count(aggregate.first) &&
+           !capturedPointersInLiveClosures.count(aggregate.first))
+            aggregatesToClear.push_back(aggregate.first);
+    }
+    for(const auto& aggregate : aggregatesToClear)
+        clearAggregateBorrowOrigins(aggregate);
 
     std::vector<std::string> closuresToRelease;
     for(const auto& closure : runtimeClosureBorrowOwners)

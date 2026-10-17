@@ -244,6 +244,8 @@ private:
     };
     std::vector<InlineClosureReturnState*> inlineClosureReturnStates;
     std::map<std::string, std::string> pointerBorrowTarget;
+    // Borrow owners carried indirectly by aggregate-valued locals.
+    std::map<std::string, std::set<std::string>> aggregateBorrowOrigins;
     // Precise source place for local references. Ownership/lifetime checks
     // still use the root owner; receiver checks can distinguish sibling fields.
     std::map<std::string, std::string> pointerBorrowPlace;
@@ -666,6 +668,9 @@ private:
                                    llvm::Value*& outBool);
     bool validateNoEscapingBorrow(ExpressionNode* expr, int line,
                                   const std::string& action);
+    void trackAggregateBorrowOrigins(const std::string& variable,
+                                     ExpressionNode* expression);
+    void clearAggregateBorrowOrigins(const std::string& variable);
     void consumeMoveFromExpression(ExpressionNode* expr, int line,
                                    const std::string& context);
     llvm::StructType* getStructType(const std::string& name);

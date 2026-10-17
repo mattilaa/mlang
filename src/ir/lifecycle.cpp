@@ -107,6 +107,7 @@ void CodeGenerator::exitCleanupScope()
     }
     for(auto it = depthEntries.rbegin(); it != depthEntries.rend(); ++it)
     {
+        clearAggregateBorrowOrigins(it->varName);
         if(it->hadPreviousDepth)
             variableScopeDepth[it->varName] = it->previousDepth;
         else

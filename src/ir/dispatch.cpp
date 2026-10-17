@@ -32,6 +32,7 @@ void CodeGenerator::generateStatement(StatementNode* node)
     else if(auto letNode = dynamic_cast<LetDeclNode*>(node))
     {
         generateLetDeclaration(letNode);
+        trackAggregateBorrowOrigins(letNode->name, letNode->expression);
         auto slot = namedValues.find(letNode->name);
         if(slot != namedValues.end())
         {
@@ -46,6 +47,7 @@ void CodeGenerator::generateStatement(StatementNode* node)
     else if(auto varNode = dynamic_cast<VarDeclNode*>(node))
     {
         generateVarDeclaration(varNode);
+        trackAggregateBorrowOrigins(varNode->name, varNode->initExpr);
         auto slot = namedValues.find(varNode->name);
         if(slot != namedValues.end())
         {
@@ -60,6 +62,8 @@ void CodeGenerator::generateStatement(StatementNode* node)
     else if(auto assignNode = dynamic_cast<AssignmentNode*>(node))
     {
         generateAssignment(assignNode);
+        trackAggregateBorrowOrigins(assignNode->name,
+                                    assignNode->expression);
     }
     else if(auto fieldAssignNode = dynamic_cast<FieldAssignmentNode*>(node))
     {
