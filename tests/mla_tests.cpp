@@ -5113,6 +5113,51 @@ TEST_F(MLATest, OwnershipBorrowOfOuterDoesNotBlockShadowMutation)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// The outer binding's borrow restrictions resume after its shadow exits.
+TEST_F(MLATest, OwnershipOuterBorrowRestoredAfterOwnerShadowScope)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            let pointer = &pair.left;
+            {
+                var pair: Pair = Pair { left: 3, right: 4 };
+                pair.left = 9;
+            }
+            pair.left = 11;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'pointer'"), std::string::npos)
+        << out;
+}
+
+// A borrow created by an inner shadow must not remain attached to the outer value.
+TEST_F(MLATest, OwnershipInnerShadowBorrowDoesNotLeakToOuter)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            {
+                var pair: Pair = Pair { left: 3, right: 4 };
+                let pointer = &pair.left;
+                unsafe { if *pointer != 3 { return 1; } }
+            }
+            pair.left = 11;
+            return pair.left - 11;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, OwnershipUseOutsideBlockReportsUnknownVariable)
 {
     std::string code = R"(
