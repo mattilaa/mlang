@@ -73,7 +73,11 @@ CodeGenerator::resolveBorrowPlaceFromLValue(ExpressionNode* expr) const
         return base + "[*]";
     }
     if(auto* tuple = dynamic_cast<TupleAccessNode*>(expr))
-        return resolveBorrowPlaceFromLValue(tuple->tuple);
+    {
+        const std::string base = resolveBorrowPlaceFromLValue(tuple->tuple);
+        return base.empty() ? ""
+                            : base + "." + std::to_string(tuple->index);
+    }
     if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
     {
         if(unary->op == UnaryOpNode::OP_DEREF)

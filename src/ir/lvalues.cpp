@@ -106,6 +106,46 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
         return generateListIndexPointer(index, elementType);
     }
 
+    if(auto* tuple = dynamic_cast<TupleAccessNode*>(expr))
+    {
+        auto* baseId = dynamic_cast<IdentifierNode*>(tuple->tuple);
+        if(!baseId)
+        {
+            reportError(line, "tuple access requires an identifier");
+            return nullptr;
+        }
+        if(!validateVariableAccessible(baseId->name, line, baseId->col))
+            return nullptr;
+        auto value = namedValues.find(baseId->name);
+        auto elements = tupleElementTypes.find(baseId->name);
+        if(value == namedValues.end() || !value->second ||
+           elements == tupleElementTypes.end())
+        {
+            reportError(line, "cannot access tuple element: '" + baseId->name +
+                                   "' is not a tuple");
+            return nullptr;
+        }
+        if(tuple->index < 0 ||
+           static_cast<size_t>(tuple->index) >= elements->second.size())
+        {
+            reportError(line, "tuple index " + std::to_string(tuple->index) +
+                                   " is out of bounds");
+            return nullptr;
+        }
+        std::vector<llvm::Type*> tupleTypes;
+        for(auto* element : elements->second)
+        {
+            llvm::Type* type = getLLVMTypeFromNode(element);
+            if(!type)
+                return nullptr;
+            tupleTypes.push_back(type);
+        }
+        llvm::StructType* tupleType = llvm::StructType::get(context, tupleTypes);
+        return builder.CreateStructGEP(tupleType, value->second,
+                                       static_cast<unsigned>(tuple->index),
+                                       "tuple.element.ptr");
+    }
+
     if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
     {
         if(unary->op == UnaryOpNode::OP_DEREF)

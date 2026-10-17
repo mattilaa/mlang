@@ -3454,6 +3454,42 @@ TEST_F(MLATest, StructListBorrowRejectsAssignmentToBorrowedField)
         << out;
 }
 
+TEST_F(MLATest, OwnershipCanHoldMutableBorrowsToDisjointTupleElements)
+{
+    std::string code = R"(
+        fn sum(a: ptr<i32>, b: ptr<i32>) -> i32 {
+            unsafe { return *a + *b; }
+        }
+        fn main() -> i32 {
+            var pair: tuple<i32, i32> = (4, 5);
+            let first = &mut pair.0;
+            let second = &mut pair.1;
+            return sum(first, second);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
+TEST_F(MLATest, OwnershipRejectsOverlappingMutableTupleElementBorrows)
+{
+    std::string code = R"(
+        fn sum(a: ptr<i32>, b: ptr<i32>) -> i32 { return 0; }
+        fn main() -> i32 {
+            var pair: tuple<i32, i32> = (4, 5);
+            let first = &mut pair.0;
+            let second = &mut pair.0;
+            return sum(first, second);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow 'pair' as mutable more than once"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, SecondaryMutableFieldBorrowBlocksMethodOnThatField)
 {
     std::string code = R"(
