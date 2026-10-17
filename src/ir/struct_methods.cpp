@@ -5927,12 +5927,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     const std::string receiverOwner =
         resolveBorrowOwnerFromLValue(node->object);
     bool methodRequiresMutableReceiver = false;
+    bool methodHasSharedReceiver = false;
     if(definingMethodNode && definingMethodNode->parameters)
         for(auto* parameter : definingMethodNode->parameters->parameters)
             if(parameter && parameter->name == "self")
+            {
+                methodHasSharedReceiver = parameter->isSharedSelf;
                 if(auto* reference =
                        dynamic_cast<ReferenceTypeNode*>(parameter->type))
+                {
                     methodRequiresMutableReceiver = reference->isMutable;
+                    methodHasSharedReceiver = !reference->isMutable;
+                }
+            }
     if(methodRequiresMutableReceiver && !receiverOwner.empty())
     {
         if(immutableReferenceVariables.count(receiverOwner) != 0)
@@ -6047,9 +6054,16 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     if(!receiverOwner.empty())
     {
         auto activeIt = activeBorrowers.find(receiverOwner);
-        if(activeIt != activeBorrowers.end() && !activeIt->second.empty())
+        const auto activeMutIt = activeMutBorrower.find(receiverOwner);
+        const bool hasSharedBorrow =
+            activeIt != activeBorrowers.end() && !activeIt->second.empty();
+        const bool hasMutableBorrow = activeMutIt != activeMutBorrower.end();
+        if((hasSharedBorrow && !methodHasSharedReceiver) ||
+           (hasMutableBorrow && methodHasSharedReceiver))
         {
-            std::string by = *activeIt->second.begin();
+            std::string by = hasMutableBorrow
+                                 ? activeMutIt->second
+                                 : *activeIt->second.begin();
             reportError(node->line, "cannot call method on '" + receiverOwner +
                                         "' while borrowed by '" + by + "'");
             return nullptr;

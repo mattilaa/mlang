@@ -4695,6 +4695,45 @@ TEST_F(MLATest, MutableMethodReceiverCanMutateVariable)
     EXPECT_EQ(compileAndRunExitCode(code), 9);
 }
 
+TEST_F(MLATest, SharedMethodReceiverAllowsExistingSharedBorrow)
+{
+    std::string code = R"(
+        struct Counter { var value: i32; };
+        impl Counter {
+            fn get(&self) -> i32 { return self.value; }
+        }
+        fn main() -> i32 {
+            var counter: Counter = Counter { value: 9 };
+            let held = &counter.value;
+            unsafe { return counter.get() + *held; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 18);
+}
+
+TEST_F(MLATest, MutableMethodReceiverRejectsExistingSharedBorrow)
+{
+    std::string code = R"(
+        struct Counter { var value: i32; };
+        impl Counter {
+            fn set(self: &mut Counter, value: i32) -> void {
+                self.value = value;
+            }
+        }
+        fn main() -> i32 {
+            var counter: Counter = Counter { value: 1 };
+            let held = &counter.value;
+            counter.set(9);
+            unsafe { return *held; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos);
+}
+
 TEST_F(MLATest, RuntimeClosurePreservesFixedArrayParameterMetadata)
 {
     std::string code = R"(
@@ -5799,7 +5838,7 @@ TEST_F(MLATest, OwnershipCanBorrowNestedDisjointFieldsInSingleCall)
     EXPECT_EQ(compileAndRunExitCode(code), 5);
 }
 
-TEST_F(MLATest, OwnershipCannotCallMethodWhileObjectBorrowed)
+TEST_F(MLATest, OwnershipCanCallSharedMethodWhileObjectBorrowed)
 {
     std::string code = R"(
         trait Summary {
@@ -5831,11 +5870,7 @@ TEST_F(MLATest, OwnershipCannotCallMethodWhileObjectBorrowed)
             return 0;
         }
     )";
-    writeSource(code);
-    int rc = 0;
-    std::string out = compileCapture(rc);
-    EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed"), std::string::npos);
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
 TEST_F(MLATest, OwnershipCannotBorrowMethodReceiverAndFieldArgSameObject)
