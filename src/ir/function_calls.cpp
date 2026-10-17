@@ -1890,13 +1890,19 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     auto validateTemporaryBorrowArguments =
         [&](const std::vector<ExpressionNode*>& args,
             const std::string& calleeName,
-            const std::string& implicitWholeOwner) -> bool
+            const std::string& implicitWholeOwner,
+            const std::vector<bool>* sharedReferenceParameters) -> bool
     {
         std::set<std::string> wholeOwnersInCall;
         std::map<std::string, std::set<std::string>> subpathsInCall;
+        std::set<std::string> exclusiveWholeOwnersInCall;
+        std::map<std::string, std::set<std::string>> exclusiveSubpathsInCall;
         std::set<std::string> movedOwnersInCall;
         if(!implicitWholeOwner.empty())
+        {
             wholeOwnersInCall.insert(implicitWholeOwner);
+            exclusiveWholeOwnersInCall.insert(implicitWholeOwner);
+        }
         auto describeBorrowPath =
             [&](ExpressionNode* expr, std::string& ownerOut,
                 std::string& pathOut, bool& isWholeOwnerOut) -> bool
@@ -2039,19 +2045,29 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
         };
 
-        for(auto* arg : args)
+        for(size_t argIndex = 0; argIndex < args.size(); ++argIndex)
         {
+            auto* arg = args[argIndex];
+            const bool sharedReference = sharedReferenceParameters &&
+                argIndex < sharedReferenceParameters->size() &&
+                (*sharedReferenceParameters)[argIndex];
             collectMovedOwners(arg, false);
 
             auto registerBorrowInCall = [&](const std::string& owner,
                                             const std::string& path,
-                                            bool isWholeOwner) -> bool
+                                            bool isWholeOwner,
+                                            bool isExclusive) -> bool
             {
                 if(isWholeOwner)
                 {
-                    if(wholeOwnersInCall.count(owner) ||
-                       (subpathsInCall.count(owner) &&
-                        !subpathsInCall[owner].empty()))
+                    const bool overlaps = wholeOwnersInCall.count(owner) ||
+                        (subpathsInCall.count(owner) &&
+                         !subpathsInCall[owner].empty());
+                    const bool overlapsExclusive =
+                        exclusiveWholeOwnersInCall.count(owner) ||
+                        (exclusiveSubpathsInCall.count(owner) &&
+                         !exclusiveSubpathsInCall[owner].empty());
+                    if(overlaps && (isExclusive || overlapsExclusive))
                     {
                         reportError(node->line,
                                     "cannot borrow overlapping parts of '" +
@@ -2060,10 +2076,14 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         return false;
                     }
                     wholeOwnersInCall.insert(owner);
+                    if(isExclusive)
+                        exclusiveWholeOwnersInCall.insert(owner);
                     return true;
                 }
 
-                if(wholeOwnersInCall.count(owner))
+                if(wholeOwnersInCall.count(owner) &&
+                   (isExclusive ||
+                    exclusiveWholeOwnersInCall.count(owner)))
                 {
                     reportError(node->line,
                                 "cannot borrow overlapping parts of '" + owner +
@@ -2094,7 +2114,22 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         break;
                     }
                 }
-                if(overlaps)
+                bool overlapsExclusive = false;
+                auto exclusivePaths = exclusiveSubpathsInCall.find(owner);
+                if(exclusivePaths != exclusiveSubpathsInCall.end())
+                    for(const auto& existing : exclusivePaths->second)
+                        if(existing == path ||
+                           (path.size() > existing.size() &&
+                            path.compare(0, existing.size(), existing) == 0 &&
+                            path[existing.size()] == '.') ||
+                           (existing.size() > path.size() &&
+                            existing.compare(0, path.size(), path) == 0 &&
+                            existing[path.size()] == '.'))
+                        {
+                            overlapsExclusive = true;
+                            break;
+                        }
+                if(overlaps && (isExclusive || overlapsExclusive))
                 {
                     reportError(node->line,
                                 "cannot borrow '" + owner + "." + path +
@@ -2103,6 +2138,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     return false;
                 }
                 paths.insert(path);
+                if(isExclusive)
+                    exclusiveSubpathsInCall[owner].insert(path);
                 return true;
             };
 
@@ -2121,7 +2158,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     {
                         continue;
                     }
-                    if(!registerBorrowInCall(pit->second, "", true))
+                    if(!registerBorrowInCall(pit->second, "", true, true))
                         return false;
                     continue;
                 }
@@ -2191,7 +2228,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 }
             }
 
-            if(!registerBorrowInCall(owner, path, isWholeOwner))
+            if(!registerBorrowInCall(owner, path, isWholeOwner,
+                                     !sharedReference))
                 return false;
         }
 
@@ -2449,7 +2487,15 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                         std::to_string(node->arguments.size()));
             return nullptr;
         }
-        if(!validateTemporaryBorrowArguments(node->arguments, node->name, ""))
+        std::vector<bool> sharedReferenceParameters(expectedCount, false);
+        if(closureType->parameterTypes)
+            for(size_t i = 0; i < expectedCount; ++i)
+                if(auto* reference = dynamic_cast<ReferenceTypeNode*>(
+                       closureType->parameterTypes->types[i]))
+                    sharedReferenceParameters[i] = !reference->isMutable;
+        if(!validateTemporaryBorrowArguments(
+               node->arguments, node->name, "",
+               &sharedReferenceParameters))
             return nullptr;
         auto valueIt = namedValues.find(node->name);
         auto* alloca = valueIt == namedValues.end()
@@ -3306,7 +3352,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     }
 
                     if(!validateTemporaryBorrowArguments(node->arguments,
-                                                         node->name, ""))
+                                                         node->name, "",
+                                                         nullptr))
                     {
                         return nullptr;
                     }
@@ -3380,7 +3427,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return nullptr;
     }
 
-    if(!validateTemporaryBorrowArguments(node->arguments, node->name, ""))
+    if(!validateTemporaryBorrowArguments(node->arguments, node->name, "",
+                                         nullptr))
         return nullptr;
 
     // Validate temporary closure borrows before generating their bodies. This
