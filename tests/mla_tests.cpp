@@ -4446,6 +4446,18 @@ TEST_F(MLATest, FunctionAcceptsExplicitImmutableReferenceArgument)
     EXPECT_EQ(compileAndRunExitCode(code), 5);
 }
 
+TEST_F(MLATest, FunctionAllowsAliasedImmutableReferenceArguments)
+{
+    std::string code = R"(
+        fn sum(left: &i32, right: &i32) -> i32 { return left + right; }
+        fn main() -> i32 {
+            let value: i32 = 6;
+            return sum(&value, &value);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 12);
+}
+
 TEST_F(MLATest, RuntimeClosureAllowsAliasedImmutableReferences)
 {
     std::string code = R"(

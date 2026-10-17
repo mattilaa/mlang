@@ -3427,8 +3427,14 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return nullptr;
     }
 
+    std::vector<bool> sharedReferenceParameters(node->arguments.size(), false);
+    for(size_t i = 0; i < sharedReferenceParameters.size(); ++i)
+        if(auto* reference = dynamic_cast<ReferenceTypeNode*>(
+               overloadParameterType(overloadIt->second,
+                                     node->arguments.size(), i)))
+            sharedReferenceParameters[i] = !reference->isMutable;
     if(!validateTemporaryBorrowArguments(node->arguments, node->name, "",
-                                         nullptr))
+                                         &sharedReferenceParameters))
         return nullptr;
 
     // Validate temporary closure borrows before generating their bodies. This
