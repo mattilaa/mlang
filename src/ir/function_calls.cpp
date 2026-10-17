@@ -3090,6 +3090,15 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         }
         return result;
     }
+    std::vector<TypeNode*> preInstantiationArrayArgumentTypes(
+        node->arguments.size(), nullptr);
+    for(size_t i = 0; i < node->arguments.size(); ++i)
+        if(auto* identifier =
+               dynamic_cast<IdentifierNode*>(node->arguments[i]);
+           identifier && arrayCapacities.count(identifier->name))
+            preInstantiationArrayArgumentTypes[i] =
+                semanticArgumentType(node->arguments[i]);
+
     if(overloadIt != functionOverloads.end())
         instantiateGenericFunctionOverloads(node, node->name,
                                             overloadIt->second);
@@ -3468,6 +3477,13 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
     std::vector<llvm::Value*> argVals;
     argVals.reserve(node->arguments.size());
+    std::vector<TypeNode*> semanticArgumentTypes;
+    semanticArgumentTypes.reserve(node->arguments.size());
+    for(size_t i = 0; i < node->arguments.size(); ++i)
+        semanticArgumentTypes.push_back(
+            preInstantiationArrayArgumentTypes[i]
+                ? preInstantiationArrayArgumentTypes[i]
+                : semanticArgumentType(node->arguments[i]));
     for(size_t argIndex = 0; argIndex < node->arguments.size(); ++argIndex)
     {
         auto arg = node->arguments[argIndex];
@@ -3872,8 +3888,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     }
                 }
 
-                TypeNode* actualSemantic =
-                    semanticArgumentType(node->arguments[i]);
+                TypeNode* actualSemantic = semanticArgumentTypes[i];
                 if(auto* expectedFunction =
                        dynamic_cast<FunctionTypeNode*>(expectedSemantic))
                 {

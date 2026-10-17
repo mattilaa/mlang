@@ -483,11 +483,17 @@ TypeNode* CodeGenerator::overloadParameterType(
     const std::vector<FunctionOverloadInfo>& overloads, size_t argCount,
     size_t index) const
 {
+    const bool hasConcreteSpecialization = std::any_of(
+        overloads.begin(), overloads.end(), [](const auto& info) {
+            return info.node && !info.node->concreteTypeBindings.empty();
+        });
     TypeNode* found = nullptr;
     std::string foundKey;
     for(const auto& info : overloads)
     {
         if(!info.node || !info.node->parameters ||
+           (hasConcreteSpecialization &&
+            info.node->concreteTypeBindings.empty()) ||
            info.node->parameters->isVarArg ||
            info.node->parameters->parameters.size() != argCount)
             continue;
