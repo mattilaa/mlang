@@ -4585,6 +4585,23 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultFromGenericStructCall)
     EXPECT_EQ(compileAndRunExitCode(code), 101);
 }
 
+TEST_F(MLATest, ClosureWithFixedArrayParameterInfersResult)
+{
+    std::string code = R"(
+        fn apply(mapper: fn(array<i32, 2>) -> i32,
+                 value: array<i32, 2>) -> i32 {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let values: array<i32, 2> = { 103, 104 };
+            return apply(|items: array<i32, 2>| {
+                return items[0];
+            }, values);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 103);
+}
+
 TEST_F(MLATest, GenericFunctionInfersClosureResultFromArrayFill)
 {
     std::string code = R"(

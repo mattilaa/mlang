@@ -121,7 +121,8 @@ static int is_generic_struct_literal_start()
             if(std::isspace(c))
                 continue;
             if(c == '{' || c == '(' || c == ')' || c == ',' || c == ';' ||
-               c == '=' || c == ':' || c == '.' || c == ']' || c == '>')
+               c == '=' || c == ':' || c == '.' || c == ']' || c == '>' ||
+               c == '|')
             {
                 saw_generic_tail = true;
             }
