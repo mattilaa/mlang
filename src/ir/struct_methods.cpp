@@ -2739,12 +2739,20 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             if(!describeBorrowPath(unary->operand, owner, path, isWholeOwner))
                 continue;
 
-            if(globalNamedValues.find(owner) == globalNamedValues.end() &&
-               isVariableMoved(owner))
+            if(globalNamedValues.find(owner) == globalNamedValues.end())
             {
-                reportError(node->line,
-                            "cannot borrow moved value: '" + owner + "'");
-                return false;
+                std::string borrowedPlace =
+                    resolveBorrowPlaceFromLValue(unary->operand);
+                if(borrowedPlace.empty())
+                    borrowedPlace = owner;
+                for(const auto& movedPlace : movedVariables)
+                    if(borrowPlacesOverlap(borrowedPlace, movedPlace))
+                    {
+                        reportError(
+                            node->line,
+                            "cannot borrow moved value: '" + movedPlace + "'");
+                        return false;
+                    }
             }
 
             const bool wantsMutable = (unary->op == UnaryOpNode::OP_ADDR_MUT);

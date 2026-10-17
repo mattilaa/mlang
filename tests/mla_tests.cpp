@@ -8895,6 +8895,58 @@ TEST_F(MLATest, OwnershipRejectsWholeAggregateBorrowAfterPartialMove)
         << out;
 }
 
+// Passing a temporary borrow of a moved field to a call is rejected.
+TEST_F(MLATest, OwnershipRejectsPassingBorrowOfPartiallyMovedField)
+{
+    std::string code = R"(
+        struct Holder { var items: list<i32>; };
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+        fn inspect(items: ptr<list<i32>>) -> i32 { return 0; }
+
+        fn main() -> i32 {
+            var holder: Holder = Holder { items: [1, 2] };
+            let moved = consume(holder.items);
+            return inspect(&holder.items) + moved;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow moved value: 'holder.items'"),
+              std::string::npos)
+        << out;
+}
+
+// Method-call reference arguments must reject moved fields as well.
+TEST_F(MLATest, OwnershipRejectsMethodBorrowOfPartiallyMovedField)
+{
+    std::string code = R"(
+        struct Holder { var items: list<i32>; };
+        struct Inspector { var tag: i32; };
+
+        impl Inspector {
+            fn inspect(&self, items: ptr<list<i32>>) -> i32 { return 0; }
+        }
+
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var holder: Holder = Holder { items: [1, 2] };
+            let inspector: Inspector = Inspector { tag: 1 };
+            let moved = consume(holder.items);
+            return inspector.inspect(&holder.items) + moved;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow moved value: 'holder.items'"),
+              std::string::npos)
+        << out;
+}
+
 // A partial move leaves disjoint fields usable and permits field reinitialization.
 TEST_F(MLATest, OwnershipPartialStructMoveAllowsSiblingAndReinitialization)
 {
