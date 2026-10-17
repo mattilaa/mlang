@@ -8425,6 +8425,31 @@ TEST_F(MLATest, CannotPassTemporaryAggregateContainingSharedBorrow)
               std::string::npos) << out;
 }
 
+TEST_F(MLATest, CannotHideSharedBorrowingAggregateInCopyCallArgument)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+
+        fn inspect(box: PointerBox) -> void {
+            return;
+        }
+
+        fn main() -> i32 {
+            let value: i32 = 7;
+            let box = PointerBox { value: &value };
+            inspect(std::copy(box));
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass aggregate containing a borrow of a local "
+                       "value"),
+              std::string::npos) << out;
+}
+
 TEST_F(MLATest, AggregateBorrowOfGlobalCanPassToFunction)
 {
     std::string code = R"(

@@ -1734,6 +1734,37 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 else if(auto* tuple =
                             dynamic_cast<TupleAccessNode*>(expression))
                     return containsLocalBorrow(tuple->tuple);
+                else if(auto* attempt =
+                            dynamic_cast<TryExpressionNode*>(expression))
+                    return containsLocalBorrow(attempt->expression);
+                else if(auto* cast =
+                            dynamic_cast<CastExpressionNode*>(expression))
+                    return containsLocalBorrow(cast->expression);
+                else if(auto* call =
+                            dynamic_cast<FunctionCallNode*>(expression))
+                {
+                    for(auto* argument : call->arguments)
+                        if(containsLocalBorrow(argument))
+                            return true;
+                }
+                else if(auto* invoke =
+                            dynamic_cast<CallableInvokeNode*>(expression))
+                {
+                    if(containsLocalBorrow(invoke->callable))
+                        return true;
+                    for(auto* argument : invoke->arguments)
+                        if(containsLocalBorrow(argument))
+                            return true;
+                }
+                else if(auto* method =
+                            dynamic_cast<MethodCallNode*>(expression))
+                {
+                    if(containsLocalBorrow(method->object))
+                        return true;
+                    for(auto* argument : method->arguments)
+                        if(containsLocalBorrow(argument))
+                            return true;
+                }
                 return false;
             };
         auto isAggregateType = [](TypeNode* type) {
