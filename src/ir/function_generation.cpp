@@ -543,7 +543,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         {
             generateStatement(bodyStmts[si]);
             // NLL: expire borrow variables not referenced in remaining stmts
-            if(!pointerBorrowTarget.empty())
+            if(!pointerBorrowTarget.empty() ||
+               !runtimeClosureBorrowOwners.empty())
             {
                 std::set<std::string> futureIdents;
                 for(size_t sj = si + 1; sj < bodyStmts.size(); sj++)
@@ -557,6 +558,15 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                 }
                 for(const auto& ptr : toClear)
                     clearPointerBorrow(ptr);
+
+                for(const auto& closure : runtimeClosureBorrowOwners)
+                {
+                    auto depth = variableScopeDepth.find(closure.first);
+                    if(depth != variableScopeDepth.end() &&
+                       depth->second == currentScopeDepth() &&
+                       !futureIdents.count(closure.first))
+                        releaseRuntimeClosureBorrows(closure.first);
+                }
             }
         }
     }

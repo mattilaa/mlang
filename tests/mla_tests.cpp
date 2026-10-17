@@ -5810,6 +5810,20 @@ TEST_F(MLATest, RuntimeClosureReturnsValueAndBorrowsCapture)
     EXPECT_EQ(compileAndRunExitCode(code), 12);
 }
 
+TEST_F(MLATest, RuntimeClosureCaptureBorrowEndsAfterLastUse)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let read = || { return value; };
+            let captured: i32 = read();
+            value = 5;
+            return captured + value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
 TEST_F(MLATest, RuntimeClosureCanBeReassignedWithMatchingSignature)
 {
     std::string code = R"(
