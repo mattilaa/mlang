@@ -293,38 +293,49 @@ bool CodeGenerator::validateBorrowWriteThroughPointer(ExpressionNode* expr,
     if(ownerIt == pointerBorrowTarget.end())
         return true;
 
-    const std::string& owner = ownerIt->second;
-    auto placeIt = pointerBorrowPlace.find(pointer->name);
-    const std::string targetPlace =
-        placeIt == pointerBorrowPlace.end() ? owner : placeIt->second;
+    std::set<std::string> owners{ownerIt->second};
+    for(const auto& active : activeBorrowers)
+        if(active.second.count(pointer->name) != 0)
+            owners.insert(active.first);
 
-    auto conflictsWith = [&](const std::string& borrower) {
-        if(borrower == pointer->name)
-            return false;
-        auto borrowedPlaceIt = pointerBorrowPlace.find(borrower);
-        const std::string borrowedPlace =
-            borrowedPlaceIt == pointerBorrowPlace.end() ? owner
-                                                        : borrowedPlaceIt->second;
-        if(!borrowPlacesOverlap(targetPlace, borrowedPlace))
-            return false;
-        reportError(line, "cannot write overlapping part of '" + owner +
-                              "' through '" + pointer->name +
-                              "' while borrowed by '" + borrower + "'");
-        return true;
-    };
-
-    auto sharedIt = activeBorrowers.find(owner);
-    if(sharedIt != activeBorrowers.end())
-        for(const auto& borrower : sharedIt->second)
-            if(conflictsWith(borrower))
-                return false;
-
-    for(const auto& mutableBorrow : activeMutBorrower)
+    for(const auto& owner : owners)
     {
-        auto mutableOwner = pointerBorrowTarget.find(mutableBorrow.second);
-        if(mutableOwner != pointerBorrowTarget.end() &&
-           mutableOwner->second == owner && conflictsWith(mutableBorrow.second))
-            return false;
+        auto placeIt = pointerBorrowPlace.find(pointer->name);
+        const std::string targetPlace =
+            placeIt == pointerBorrowPlace.end() || owner != ownerIt->second
+                ? owner
+                : placeIt->second;
+
+        auto conflictsWith = [&](const std::string& borrower) {
+            if(borrower == pointer->name)
+                return false;
+            auto borrowedPlaceIt = pointerBorrowPlace.find(borrower);
+            const std::string borrowedPlace =
+                borrowedPlaceIt == pointerBorrowPlace.end()
+                    ? owner
+                    : borrowedPlaceIt->second;
+            if(!borrowPlacesOverlap(targetPlace, borrowedPlace))
+                return false;
+            reportError(line, "cannot write overlapping part of '" + owner +
+                                  "' through '" + pointer->name +
+                                  "' while borrowed by '" + borrower + "'");
+            return true;
+        };
+
+        auto sharedIt = activeBorrowers.find(owner);
+        if(sharedIt != activeBorrowers.end())
+            for(const auto& borrower : sharedIt->second)
+                if(conflictsWith(borrower))
+                    return false;
+
+        for(const auto& mutableBorrow : activeMutBorrower)
+        {
+            auto mutableOwner = pointerBorrowTarget.find(mutableBorrow.second);
+            if(mutableOwner != pointerBorrowTarget.end() &&
+               mutableOwner->second == owner &&
+               conflictsWith(mutableBorrow.second))
+                return false;
+        }
     }
     return true;
 }
@@ -574,37 +585,50 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
         }
     }
 
-    std::string ownerName;
+    std::set<std::string> ownerNames;
     if(auto* idExpr = dynamic_cast<IdentifierNode*>(expr))
     {
         auto it = pointerBorrowTarget.find(idExpr->name);
         if(it != pointerBorrowTarget.end())
-            ownerName = it->second;
+            ownerNames.insert(it->second);
+        for(const auto& active : activeBorrowers)
+            if(active.second.count(idExpr->name) != 0)
+                ownerNames.insert(active.first);
     }
     else if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
     {
         if(unary->op == UnaryOpNode::OP_ADDR)
         {
-            ownerName = resolveBorrowOwnerFromLValue(unary->operand);
+            const std::string owner =
+                resolveBorrowOwnerFromLValue(unary->operand);
+            if(!owner.empty())
+                ownerNames.insert(owner);
         }
     }
 
-    if(ownerName.empty())
+    if(ownerNames.empty())
     {
         TypeNode* expressionType = getLValueType(expr, line);
         if(expressionType && expressionType->kind == TypeNode::TYPE_PTR)
-            ownerName = resolveBorrowOwnerFromLValue(expr);
+        {
+            const std::string owner = resolveBorrowOwnerFromLValue(expr);
+            if(!owner.empty())
+                ownerNames.insert(owner);
+        }
     }
 
-    if(ownerName.empty())
+    if(ownerNames.empty())
         return true;
 
-    if(variableScopeDepth.find(ownerName) == variableScopeDepth.end() &&
-       globalNamedValues.find(ownerName) != globalNamedValues.end())
-        return true;
-
-    if(namedValues.find(ownerName) != namedValues.end())
+    for(const auto& ownerName : ownerNames)
     {
+        if(variableScopeDepth.find(ownerName) == variableScopeDepth.end() &&
+           globalNamedValues.find(ownerName) != globalNamedValues.end())
+            continue;
+
+        if(namedValues.find(ownerName) == namedValues.end())
+            continue;
+
         // For Copy types (strings), a borrow variable is just a char* value.
         // Returning it does not create a dangling reference.
         auto typeIt = variableTypes.find(ownerName);
@@ -938,6 +962,20 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                     return;
                 }
                 (void)registerOwnerBorrow(borrowIt->second, false);
+                std::string primaryOwner = borrowIt->second;
+                for(const auto& ownerBorrowers : activeBorrowers)
+                {
+                    if(ownerBorrowers.first == primaryOwner ||
+                       ownerBorrowers.second.count(idExpr->name) == 0)
+                        continue;
+                    borrowPlace = ownerBorrowers.first;
+                    (void)registerOwnerBorrow(ownerBorrowers.first, false);
+                }
+                borrowPlace = sourcePlace == pointerBorrowPlace.end()
+                                  ? primaryOwner
+                                  : sourcePlace->second;
+                pointerBorrowTarget[pointerVar] = primaryOwner;
+                pointerBorrowPlace[pointerVar] = borrowPlace;
                 return;
             }
             (void)registerOwnerBorrow(borrowIt->second, true);
@@ -952,17 +990,18 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         auto origins = aggregateBorrowOrigins.find(container);
         if(origins != aggregateBorrowOrigins.end())
         {
-            if(origins->second.size() != 1)
-            {
-                reportError(
-                    line,
-                    "cannot extract pointer from aggregate with multiple "
-                    "borrow origins; preserve the aggregate or narrow the "
-                    "source first");
+            if(origins->second.empty())
                 return;
+            const std::string primaryOwner = *origins->second.begin();
+            for(const auto& owner : origins->second)
+            {
+                borrowPlace = owner;
+                if(!registerOwnerBorrow(owner, false))
+                    return;
             }
-            borrowPlace = *origins->second.begin();
-            (void)registerOwnerBorrow(borrowPlace, false);
+            borrowPlace = primaryOwner;
+            pointerBorrowTarget[pointerVar] = primaryOwner;
+            pointerBorrowPlace[pointerVar] = primaryOwner;
             return;
         }
     }
