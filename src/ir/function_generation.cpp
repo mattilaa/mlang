@@ -267,6 +267,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedIP = builder.saveIP();
     auto savedNamedValues = namedValues;
     auto savedConstantVariables = constantVariables;
+    auto savedImmutableReferenceVariables = immutableReferenceVariables;
     auto savedConstexprValues = constexprValues;
     auto savedPackExpansions = activePackExpansions;
     auto savedFunctionTypeBindings = activeFunctionTypeBindings;
@@ -315,6 +316,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     // Clear the named values map and constant tracking for new function scope
     namedValues.clear();
     constantVariables.clear();
+    immutableReferenceVariables.clear();
     movedVariables.clear();
     closureVariables.clear();
     runtimeClosureVariables.clear();
@@ -449,7 +451,11 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                 }
                 // Immutable reference: param may not be mutated inside body.
                 if(!refType->isMutable)
+                {
                     constantVariables.insert(std::string(arg.getName()));
+                    immutableReferenceVariables.insert(
+                        std::string(arg.getName()));
+                }
                 // Mutable reference: leave out of constantVariables.
             }
             else
@@ -615,6 +621,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
 
     namedValues = std::move(savedNamedValues);
     constantVariables = std::move(savedConstantVariables);
+    immutableReferenceVariables =
+        std::move(savedImmutableReferenceVariables);
     movedVariables = std::move(savedMovedVariables);
     pointerBorrowTarget = std::move(savedPointerBorrowTarget);
     activeBorrowers = std::move(savedActiveBorrowers);

@@ -747,6 +747,15 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         }
     }
 
+    if(!ownerName.empty() &&
+       immutableReferenceVariables.count(ownerName) != 0)
+    {
+        reportError(node->line,
+                    "cannot mutate through immutable reference '" +
+                        ownerName + "'");
+        return;
+    }
+
     if(!ownerName.empty())
     {
         auto borIt = activeBorrowers.find(ownerName);

@@ -211,6 +211,9 @@ private:
     // Track struct inheritance: derived struct name -> base struct name
     std::map<std::string, std::string> structBases;
     std::set<std::string> constantVariables;
+    // Parameters declared as `&T` are deeply read-only inside the function,
+    // including writes through struct fields and indexed containers.
+    std::set<std::string> immutableReferenceVariables;
     std::set<std::string> globalConstantVariables;
     std::set<std::string> movedVariables;
     // Inline closures: var inc = || { ... }; inc();

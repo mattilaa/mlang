@@ -4569,6 +4569,25 @@ TEST_F(MLATest, RuntimeClosureRejectsMutationThroughImmutableReference)
     EXPECT_NE(out.find("cannot assign"), std::string::npos);
 }
 
+TEST_F(MLATest, FunctionRejectsFieldMutationThroughImmutableReference)
+{
+    std::string code = R"(
+        struct Counter { var value: i32; };
+        fn mutate(counter: &Counter) -> void { counter.value = 9; }
+        fn main() -> i32 {
+            var counter: Counter = Counter { value: 1 };
+            mutate(&counter);
+            return counter.value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot mutate through immutable reference"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, RuntimeClosurePreservesFixedArrayParameterMetadata)
 {
     std::string code = R"(
