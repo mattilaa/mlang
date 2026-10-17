@@ -84,6 +84,9 @@ llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
 
 llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
 {
+    if(!validateBorrowRead(node, node->line))
+        return nullptr;
+
     auto constexprIt = constexprValues.find(node->name);
     if(constexprIt != constexprValues.end())
         return buildLLVMConstantFromConstexprValue(constexprIt->second, nullptr,

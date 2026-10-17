@@ -3590,6 +3590,25 @@ TEST_F(MLATest, ReadFromBorrowedListElementRejected)
         << out;
 }
 
+TEST_F(MLATest, WholeValueReadRejectedWhileMutablyBorrowed)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var scalar: i32 = 4;
+            let held = &mut scalar;
+            let snapshot = scalar;
+            unsafe { return snapshot + *held; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot read overlapping part of 'scalar'"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, ReadFromDisjointStructFieldAllowedDuringMutableBorrow)
 {
     std::string code = R"(

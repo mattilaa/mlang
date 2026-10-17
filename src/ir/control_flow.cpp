@@ -63,6 +63,8 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
 
     if(node->expression)
     {
+        if(!validateBorrowRead(node->expression, node->line))
+            return;
         if(!validateNoEscapingBorrow(node->expression, node->line, "return"))
             return;
 
