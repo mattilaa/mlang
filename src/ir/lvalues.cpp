@@ -571,21 +571,45 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                             "' because it is immutable; use var or &mut");
             return;
         }
-        auto sharedBorrowers = activeBorrowers.find(rootIdentifier->name);
-        if(sharedBorrowers != activeBorrowers.end() &&
-           !sharedBorrowers->second.empty())
+        const std::string targetPlace =
+            resolveBorrowPlaceFromLValue(indexTarget);
+        const std::string ownerName = rootIdentifier->name;
+        auto sharedBorrowers = activeBorrowers.find(ownerName);
+        if(sharedBorrowers != activeBorrowers.end())
         {
-            reportError(node->line,
-                        "cannot mutate multiarray '" + rootIdentifier->name +
-                            "' while it is borrowed");
-            return;
+            for(const auto& borrower : sharedBorrowers->second)
+            {
+                auto place = pointerBorrowPlace.find(borrower);
+                const std::string borrowedPlace =
+                    place == pointerBorrowPlace.end() ? ownerName
+                                                      : place->second;
+                if(borrowPlacesOverlap(borrowedPlace, targetPlace))
+                {
+                    reportError(node->line,
+                                "cannot mutate indexed element of '" +
+                                    ownerName + "' while borrowed by '" +
+                                    borrower + "'");
+                    return;
+                }
+            }
         }
-        if(activeMutBorrower.count(rootIdentifier->name) != 0)
+        for(const auto& mutableBorrow : activeMutBorrower)
         {
-            reportError(node->line,
-                        "cannot mutate multiarray '" + rootIdentifier->name +
-                            "' directly while it is mutably borrowed");
-            return;
+            auto borrowOwner = pointerBorrowTarget.find(mutableBorrow.second);
+            if(borrowOwner == pointerBorrowTarget.end() ||
+               borrowOwner->second != ownerName)
+                continue;
+            auto place = pointerBorrowPlace.find(mutableBorrow.second);
+            const std::string borrowedPlace =
+                place == pointerBorrowPlace.end() ? ownerName : place->second;
+            if(borrowPlacesOverlap(borrowedPlace, targetPlace))
+            {
+                reportError(node->line,
+                            "cannot mutate indexed element of '" + ownerName +
+                                "' while borrowed by '" +
+                                mutableBorrow.second + "'");
+                return;
+            }
         }
 
         TypeNode* elementTypeNode = nullptr;

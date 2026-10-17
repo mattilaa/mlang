@@ -3384,6 +3384,38 @@ TEST_F(MLATest, DynamicIndexBorrowOverlapsEveryListElement)
         << out;
 }
 
+TEST_F(MLATest, IndexedAssignmentAllowsDisjointLiveElementBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<i32> = [4, 5];
+            let first = &mut values[0];
+            values[1] = 8;
+            unsafe { return *first + values[1]; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 12);
+}
+
+TEST_F(MLATest, IndexedAssignmentRejectsOverlappingLiveElementBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<i32> = [4, 5];
+            let first = &mut values[0];
+            values[0] = 8;
+            unsafe { return *first; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot mutate indexed element of 'values'"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, SecondaryMutableFieldBorrowBlocksMethodOnThatField)
 {
     std::string code = R"(
