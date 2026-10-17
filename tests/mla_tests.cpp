@@ -4651,6 +4651,50 @@ TEST_F(MLATest, ImmutableMethodReceiverRejectsContainerMutation)
               std::string::npos);
 }
 
+TEST_F(MLATest, ImmutableMethodReceiverRejectsNestedMutableMethodCall)
+{
+    std::string code = R"(
+        struct Inner { var value: i32; };
+        impl Inner {
+            fn mutate(self: &mut Inner) -> void { self.value = 9; }
+        }
+        struct Outer { var inner: Inner; };
+        impl Outer {
+            fn mutate(&self) -> void { self.inner.mutate(); }
+        }
+        fn main() -> i32 {
+            var outer: Outer = Outer { inner: Inner { value: 1 } };
+            outer.mutate();
+            return outer.inner.value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot call mutating method through immutable "
+                       "reference"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, MutableMethodReceiverCanMutateVariable)
+{
+    std::string code = R"(
+        struct Counter { var value: i32; };
+        impl Counter {
+            fn set(self: &mut Counter, value: i32) -> void {
+                self.value = value;
+            }
+        }
+        fn main() -> i32 {
+            var counter: Counter = Counter { value: 1 };
+            counter.set(9);
+            return counter.value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
 TEST_F(MLATest, RuntimeClosurePreservesFixedArrayParameterMetadata)
 {
     std::string code = R"(

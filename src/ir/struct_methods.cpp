@@ -5924,6 +5924,34 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         }
     }
 
+    const std::string receiverOwner =
+        resolveBorrowOwnerFromLValue(node->object);
+    bool methodRequiresMutableReceiver = false;
+    if(definingMethodNode && definingMethodNode->parameters)
+        for(auto* parameter : definingMethodNode->parameters->parameters)
+            if(parameter && parameter->name == "self")
+                if(auto* reference =
+                       dynamic_cast<ReferenceTypeNode*>(parameter->type))
+                    methodRequiresMutableReceiver = reference->isMutable;
+    if(methodRequiresMutableReceiver && !receiverOwner.empty())
+    {
+        if(immutableReferenceVariables.count(receiverOwner) != 0)
+        {
+            reportError(
+                node->line,
+                "cannot call mutating method through immutable reference '" +
+                    receiverOwner + "'");
+            return nullptr;
+        }
+        if(constantVariables.count(receiverOwner) != 0)
+        {
+            reportError(node->line,
+                        "cannot call mutating method on immutable value '" +
+                            receiverOwner + "'");
+            return nullptr;
+        }
+    }
+
     std::string methodModule =
         definingMethodNode ? definingMethodNode->sourceModule : "";
     if(methodModule.empty())
@@ -6016,7 +6044,6 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         }
     }
 
-    std::string receiverOwner = resolveBorrowOwnerFromLValue(node->object);
     if(!receiverOwner.empty())
     {
         auto activeIt = activeBorrowers.find(receiverOwner);
