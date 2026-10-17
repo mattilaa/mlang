@@ -571,6 +571,90 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
 
 void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 {
+    if(auto* tupleTarget = dynamic_cast<TupleAccessNode*>(node->target))
+    {
+        const std::string owner =
+            resolveBorrowOwnerFromLValue(tupleTarget);
+        const std::string targetPlace =
+            resolveBorrowPlaceFromLValue(tupleTarget);
+        if(owner.empty() || targetPlace.empty())
+        {
+            reportError(node->line, "invalid tuple assignment target");
+            return;
+        }
+        if(constantVariables.count(owner) != 0)
+        {
+            reportError(node->line,
+                        "cannot mutate tuple '" + owner +
+                            "' because it is immutable; use var or &mut");
+            return;
+        }
+
+        auto rejectOverlappingBorrow = [&](const std::string& borrower) {
+            auto place = pointerBorrowPlace.find(borrower);
+            const std::string borrowedPlace =
+                place == pointerBorrowPlace.end() ? owner : place->second;
+            if(!borrowPlacesOverlap(borrowedPlace, targetPlace))
+                return false;
+            reportError(node->line,
+                        "cannot assign to tuple element of '" + owner +
+                            "' while borrowed by '" + borrower + "'");
+            return true;
+        };
+        auto sharedBorrowers = activeBorrowers.find(owner);
+        if(sharedBorrowers != activeBorrowers.end())
+            for(const auto& borrower : sharedBorrowers->second)
+                if(rejectOverlappingBorrow(borrower))
+                    return;
+        for(const auto& mutableBorrow : activeMutBorrower)
+        {
+            auto borrowOwner = pointerBorrowTarget.find(mutableBorrow.second);
+            if(borrowOwner != pointerBorrowTarget.end() &&
+               borrowOwner->second == owner &&
+               rejectOverlappingBorrow(mutableBorrow.second))
+                return;
+        }
+
+        auto tupleElements = tupleElementTypes.find(owner);
+        if(tupleElements == tupleElementTypes.end() ||
+           tupleTarget->index < 0 ||
+           static_cast<size_t>(tupleTarget->index) >=
+               tupleElements->second.size())
+        {
+            reportError(node->line, "invalid tuple assignment index");
+            return;
+        }
+        llvm::Value* targetPtr = getLValuePointer(tupleTarget, node->line);
+        TypeNode* targetNode = tupleElements->second[tupleTarget->index];
+        llvm::Type* targetType = targetNode ? getLLVMTypeFromNode(targetNode)
+                                            : nullptr;
+        llvm::Value* value = targetNode
+                                 ? generateExpression(node->expression,
+                                                      targetNode)
+                                 : nullptr;
+        if(!targetPtr || !targetType || !value)
+            return;
+        if(value->getType() != targetType)
+        {
+            if(value->getType()->isIntegerTy() && targetType->isIntegerTy())
+                value = builder.CreateSExtOrTrunc(value, targetType,
+                                                  "tuple.assign.int");
+            else if(value->getType()->isFloatingPointTy() &&
+                    targetType->isFloatingPointTy())
+                value = builder.CreateFPCast(value, targetType,
+                                             "tuple.assign.float");
+            else
+            {
+                reportError(node->line, "type mismatch in tuple assignment");
+                return;
+            }
+        }
+        consumeMoveFromExpression(node->expression, node->line,
+                                  "assigning tuple element");
+        builder.CreateStore(applyStructCopySemantics(value), targetPtr);
+        return;
+    }
+
     if(auto* indexTarget = dynamic_cast<IndexExpressionNode*>(node->target))
     {
         ExpressionNode* root = indexTarget;

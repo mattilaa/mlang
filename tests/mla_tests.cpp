@@ -3490,6 +3490,38 @@ TEST_F(MLATest, OwnershipRejectsOverlappingMutableTupleElementBorrows)
         << out;
 }
 
+TEST_F(MLATest, TupleAssignmentAllowsDisjointLiveElementBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var pair: tuple<i32, i32> = (4, 5);
+            let first = &mut pair.0;
+            pair.1 = 8;
+            unsafe { return *first + pair.1; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 12);
+}
+
+TEST_F(MLATest, TupleAssignmentRejectsOverlappingLiveElementBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var pair: tuple<i32, i32> = (4, 5);
+            let first = &mut pair.0;
+            pair.0 = 8;
+            unsafe { return *first; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to tuple element of 'pair'"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, SecondaryMutableFieldBorrowBlocksMethodOnThatField)
 {
     std::string code = R"(
