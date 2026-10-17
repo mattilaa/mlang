@@ -5770,6 +5770,33 @@ TEST_F(MLATest, DeferredPointerBorrowWaitsForEverySlot)
               std::string::npos) << out;
 }
 
+// Preserves shared-borrow restrictions when pointer origins merge at an if-join.
+TEST_F(MLATest, MergedSharedPointerCannotBeReplacedThroughBorrowedSlot)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var replacement: i32 = 3;
+            var pointer: ptr<i32> = &first;
+            let flag: bool = true;
+            if flag {
+                pointer = &second;
+            }
+            var slot: ptr<ptr<i32>> = &pointer;
+            let mutable_slot: ptr<ptr<ptr<i32>>> = &mut slot;
+            unsafe { *(*mutable_slot) = &mut replacement; }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
 // Verifies that a shared borrow remains read-only when stored in an aggregate.
 TEST_F(MLATest, SharedBorrowCannotWriteThroughAggregatePointerField)
 {
