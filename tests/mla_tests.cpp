@@ -4630,6 +4630,27 @@ TEST_F(MLATest, ImmutableMethodReceiverRejectsFieldMutation)
               std::string::npos);
 }
 
+TEST_F(MLATest, ImmutableMethodReceiverRejectsContainerMutation)
+{
+    std::string code = R"(
+        struct Counter { var values: list<i32>; };
+        impl Counter {
+            fn mutate(&self) -> void { self.values.push(9); }
+        }
+        fn main() -> i32 {
+            var counter: Counter = Counter { values: [1] };
+            counter.mutate();
+            return counter.values.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot mutate through immutable reference"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, RuntimeClosurePreservesFixedArrayParameterMetadata)
 {
     std::string code = R"(

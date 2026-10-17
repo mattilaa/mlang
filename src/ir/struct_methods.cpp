@@ -2222,6 +2222,35 @@ CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
     const std::string& method = node->methodName;
+    TypeNode* directReceiverType = nullptr;
+    static const std::set<std::string> mutatingContainerMethods = {
+        "clear", "dedup", "extend", "fill", "pop", "push", "push_str",
+        "reverse", "sort", "sort_desc"};
+    TypeNode* borrowCheckedReceiverType =
+        mutatingContainerMethods.count(method) != 0
+            ? getLValueType(node->object, node->line)
+            : nullptr;
+    const bool isBuiltinMutableContainer =
+        borrowCheckedReceiverType &&
+        (dynamic_cast<GenericListTypeNode*>(borrowCheckedReceiverType) ||
+         dynamic_cast<ArrayTypeNode*>(borrowCheckedReceiverType) ||
+         dynamic_cast<MapTypeNode*>(borrowCheckedReceiverType) ||
+         borrowCheckedReceiverType->kind == TypeNode::TYPE_STRING ||
+         borrowCheckedReceiverType->kind == TypeNode::TYPE_STR8 ||
+         borrowCheckedReceiverType->kind == TypeNode::TYPE_STR16);
+    if(isBuiltinMutableContainer &&
+       mutatingContainerMethods.count(method) != 0)
+    {
+        const std::string owner = resolveBorrowOwnerFromLValue(node->object);
+        if(!owner.empty() &&
+           immutableReferenceVariables.count(owner) != 0)
+        {
+            reportError(node->line,
+                        "cannot mutate through immutable reference '" + owner +
+                            "'");
+            return nullptr;
+        }
+    }
     const bool matrixMethod =
         method == "sum" || method == "add" || method == "subtract" ||
         method == "hadamard" || method == "offset" || method == "scale" ||
@@ -2232,7 +2261,6 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         method == "add_assign" || method == "subtract_assign" ||
         method == "hadamard_assign" || method == "offset_assign" ||
         method == "scale_assign";
-    TypeNode* directReceiverType = nullptr;
     if(matrixMethod)
     {
         directReceiverType = getLValueType(node->object, node->line);
