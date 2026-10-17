@@ -5002,6 +5002,24 @@ TEST_F(MLATest, OwnershipBorrowEndsWhenPointerGoesOutOfScope)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, OwnershipMutableBorrowEndsBeforeOwnerMove)
+{
+    std::string code = R"(
+        struct Post {
+            var content: list<i32>;
+        };
+
+        fn main() -> i32 {
+            var a: Post = Post { content: [1] };
+            let p: ptr<Post> = &mut a;
+            unsafe { println!("{}", (*p).content[0]); }
+            let moved: Post = a;
+            return moved.content[0] - 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, OwnershipOuterPointerBorrowRestoredAfterShadowedPointerScope)
 {
     std::string code = R"(
