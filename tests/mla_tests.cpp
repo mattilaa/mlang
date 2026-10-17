@@ -4500,6 +4500,41 @@ TEST_F(MLATest, FunctionAllowsSharedBorrowWhileAnotherIsLive)
     EXPECT_EQ(compileAndRunExitCode(code), 12);
 }
 
+TEST_F(MLATest, FunctionRejectsSharedAndMutableAliasing)
+{
+    std::string code = R"(
+        fn update(read: &i32, write: &mut i32) -> void { write = read; }
+        fn main() -> i32 {
+            var value: i32 = 1;
+            update(&value, &mut value);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow"), std::string::npos);
+}
+
+TEST_F(MLATest, FunctionRejectsMutableBorrowWhileSharedBorrowIsLive)
+{
+    std::string code = R"(
+        fn update(value: &mut i32) -> void { value = 9; }
+        fn main() -> i32 {
+            var value: i32 = 1;
+            let held = &value;
+            update(&mut value);
+            unsafe { return *held; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow"), std::string::npos);
+}
+
 TEST_F(MLATest, RuntimeClosureRejectsMutationThroughImmutableReference)
 {
     std::string code = R"(
