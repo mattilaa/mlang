@@ -1665,11 +1665,15 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     if(node->body)
     {
         enterCleanupScope();
-        for(auto stmt : node->body->statements)
+        const int bodyScopeDepth = currentScopeDepth();
+        for(size_t index = 0; index < node->body->statements.size(); ++index)
         {
+            auto stmt = node->body->statements[index];
             generateStatement(stmt);
             if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
+            expireUnusedLocalBorrows(node->body->statements, index,
+                                     bodyScopeDepth);
         }
         exitCleanupScope();
     }
@@ -1988,11 +1992,15 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     if(node->body)
     {
         enterCleanupScope();
-        for(auto stmt : node->body->statements)
+        const int bodyScopeDepth = currentScopeDepth();
+        for(size_t index = 0; index < node->body->statements.size(); ++index)
         {
+            auto stmt = node->body->statements[index];
             generateStatement(stmt);
             if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
+            expireUnusedLocalBorrows(node->body->statements, index,
+                                     bodyScopeDepth);
         }
         exitCleanupScope();
     }
@@ -2225,11 +2233,15 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
     if(node->body)
     {
         enterCleanupScope();
-        for(auto stmt : node->body->statements)
+        const int bodyScopeDepth = currentScopeDepth();
+        for(size_t index = 0; index < node->body->statements.size(); ++index)
         {
+            auto stmt = node->body->statements[index];
             generateStatement(stmt);
             if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
+            expireUnusedLocalBorrows(node->body->statements, index,
+                                     bodyScopeDepth);
         }
         exitCleanupScope();
     }
@@ -2477,11 +2489,15 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
     if(node->body)
     {
         enterCleanupScope();
-        for(auto stmt : node->body->statements)
+        const int bodyScopeDepth = currentScopeDepth();
+        for(size_t index = 0; index < node->body->statements.size(); ++index)
         {
+            auto stmt = node->body->statements[index];
             generateStatement(stmt);
             if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
+            expireUnusedLocalBorrows(node->body->statements, index,
+                                     bodyScopeDepth);
         }
         exitCleanupScope();
     }

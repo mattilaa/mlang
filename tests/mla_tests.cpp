@@ -5100,6 +5100,44 @@ TEST_F(MLATest, OwnershipLoopLocalBorrowRemainsLiveUntilLastUse)
     EXPECT_NE(out.find("while borrowed"), std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipLoopLocalBorrowExpiresAcrossIteratorKinds)
+{
+    std::string code = R"(
+        struct Box {
+            var value: i32;
+        };
+        enum Direction { North, South };
+
+        fn main() -> i32 {
+            var box: Box = Box { value: 0 };
+            for item in [0] {
+                let p: ptr<Box> = &box;
+                let observed: i32 = (*p).value;
+                box.value = observed + 1;
+            }
+            let items: list<i32> = [0];
+            for item in items {
+                let p: ptr<Box> = &box;
+                let observed: i32 = (*p).value;
+                box.value = observed + 1;
+            }
+            for direction in Direction {
+                let p: ptr<Box> = &box;
+                let observed: i32 = (*p).value;
+                box.value = observed + 1;
+            }
+            let values: map<str8, i32> = {"key": 0};
+            for value in values.values() {
+                let p: ptr<Box> = &box;
+                let observed: i32 = (*p).value;
+                box.value = observed + 1;
+            }
+            return box.value - 5;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, OwnershipOuterSharedPointerBorrowEndsAfterLastUse)
 {
     std::string code = R"(
