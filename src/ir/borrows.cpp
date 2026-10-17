@@ -377,6 +377,136 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
                               "is proven safe");
         return false;
     }
+
+    TypeNode* escapingValueType = getLValueType(expr, line);
+    if(!escapingValueType)
+        escapingValueType = inferExpressionTypeNode(expr, line);
+    const bool isAggregateValue = escapingValueType &&
+        (escapingValueType->kind == TypeNode::TYPE_STRUCT ||
+         escapingValueType->kind == TypeNode::TYPE_LIST ||
+         escapingValueType->kind == TypeNode::TYPE_MAP ||
+         escapingValueType->kind == TypeNode::TYPE_TUPLE);
+    if(isAggregateValue)
+    {
+        std::set<std::string> borrowOrigins;
+        std::function<void(ExpressionNode*)> findBorrowOrigins =
+            [&](ExpressionNode* current) {
+                if(!current)
+                    return;
+                if(auto* identifier = dynamic_cast<IdentifierNode*>(current))
+                {
+                    auto borrow = pointerBorrowTarget.find(identifier->name);
+                    if(borrow != pointerBorrowTarget.end())
+                        borrowOrigins.insert(borrow->second);
+                    return;
+                }
+                if(auto* unary = dynamic_cast<UnaryOpNode*>(current))
+                {
+                    if(unary->op == UnaryOpNode::OP_ADDR ||
+                       unary->op == UnaryOpNode::OP_ADDR_MUT)
+                    {
+                        const std::string owner =
+                            resolveBorrowOwnerFromLValue(unary->operand);
+                        if(!owner.empty())
+                            borrowOrigins.insert(owner);
+                        return;
+                    }
+                    findBorrowOrigins(unary->operand);
+                    return;
+                }
+                if(auto* structure = dynamic_cast<StructLiteralNode*>(current))
+                {
+                    for(const auto& field : structure->fields)
+                        findBorrowOrigins(field.second);
+                    return;
+                }
+                if(auto* tuple = dynamic_cast<TupleLiteralNode*>(current))
+                {
+                    if(tuple->elements)
+                        for(auto* element : tuple->elements->elements)
+                            findBorrowOrigins(element);
+                    return;
+                }
+                if(auto* list = dynamic_cast<ListLiteralNode*>(current))
+                {
+                    if(list->elements)
+                        for(auto* element : list->elements->elements)
+                            findBorrowOrigins(element);
+                    return;
+                }
+                if(auto* map = dynamic_cast<MapLiteralNode*>(current))
+                {
+                    if(map->entries)
+                        for(auto* entry : map->entries->entries)
+                        {
+                            findBorrowOrigins(entry->key);
+                            findBorrowOrigins(entry->value);
+                        }
+                    return;
+                }
+                if(auto* array = dynamic_cast<ArrayFillNode*>(current))
+                {
+                    findBorrowOrigins(array->value);
+                    return;
+                }
+                if(auto* field = dynamic_cast<FieldAccessNode*>(current))
+                {
+                    findBorrowOrigins(field->object);
+                    return;
+                }
+                if(auto* index = dynamic_cast<IndexExpressionNode*>(current))
+                {
+                    findBorrowOrigins(index->base);
+                    findBorrowOrigins(index->index);
+                    return;
+                }
+                if(auto* tuple = dynamic_cast<TupleAccessNode*>(current))
+                {
+                    findBorrowOrigins(tuple->tuple);
+                    return;
+                }
+                if(auto* binary = dynamic_cast<BinaryOpNode*>(current))
+                {
+                    findBorrowOrigins(binary->left);
+                    findBorrowOrigins(binary->right);
+                    return;
+                }
+                if(auto* cast = dynamic_cast<CastExpressionNode*>(current))
+                {
+                    findBorrowOrigins(cast->expression);
+                    return;
+                }
+                if(auto* call = dynamic_cast<FunctionCallNode*>(current))
+                {
+                    for(auto* argument : call->arguments)
+                        findBorrowOrigins(argument);
+                    return;
+                }
+                if(auto* invoke = dynamic_cast<CallableInvokeNode*>(current))
+                {
+                    findBorrowOrigins(invoke->callable);
+                    for(auto* argument : invoke->arguments)
+                        findBorrowOrigins(argument);
+                    return;
+                }
+                if(auto* method = dynamic_cast<MethodCallNode*>(current))
+                {
+                    findBorrowOrigins(method->object);
+                    for(auto* argument : method->arguments)
+                        findBorrowOrigins(argument);
+                }
+            };
+        findBorrowOrigins(expr);
+        for(const auto& owner : borrowOrigins)
+            if(variableScopeDepth.find(owner) != variableScopeDepth.end())
+            {
+                reportError(line, "cannot " + action +
+                                      " aggregate containing a pointer that "
+                                      "borrows local value: '" + owner + "'");
+                return false;
+            }
+    }
+
     if(auto* idExpr = dynamic_cast<IdentifierNode*>(expr))
     {
         auto runtimeClosure = runtimeClosureVariables.find(idExpr->name);

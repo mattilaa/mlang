@@ -7794,6 +7794,28 @@ TEST_F(MLATest, OwnershipCannotReturnPointerLoadedThroughBorrowedPointer)
         << out;
 }
 
+TEST_F(MLATest, OwnershipCannotReturnAggregateContainingBorrowedPointer)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+
+        fn wrap(pointer: ptr<i32>) -> PointerBox {
+            return PointerBox { value: pointer };
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let escaped = wrap(&value);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return"), std::string::npos) << out;
+}
+
 TEST_F(MLATest, OwnershipCannotStorePointerBorrowingLocalFieldInGlobalPointer)
 {
     std::string code = R"(
