@@ -233,14 +233,15 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             };
             for(auto* statement : statements->statements)
             {
+                // Snapshot a shadow at its declaration point so earlier
+                // assignments in this block still update the outer binding.
                 if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
                     rememberShadow(declaration->name);
                 else if(auto* declaration =
                             dynamic_cast<VarDeclNode*>(statement))
                     rememberShadow(declaration->name);
-            }
-            for(auto* statement : statements->statements)
                 scanStatement(statement);
+            }
             for(const auto& name : aliasesNotPreviouslyPresent)
                 pointerAliases.erase(name);
             for(auto& previous : previousAliases)

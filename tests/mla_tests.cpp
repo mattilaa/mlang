@@ -10587,6 +10587,32 @@ TEST_F(MLATest, OwnershipFunctionReturnedPointerDropsDefiniteBranchOrigin)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// A mutation before a local alias shadow must survive restoration of the outer.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerRestoresUpdatedShadowedAlias)
+{
+    std::string code = R"(
+        var global_value: i32 = 9;
+        fn choose(flag: bool, a: ptr<i32>, b: ptr<i32>) -> ptr<i32> {
+            var pointer: ptr<i32> = a;
+            if flag {
+                pointer = &*b;
+                let pointer: ptr<i32> = &global_value;
+            } else {
+                pointer = b;
+            }
+            return pointer;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let selected: ptr<i32> = choose(true, &first, &second);
+            first = 3;
+            unsafe { return *selected + first - 5; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 // A local pointer shadow must not replace the outer return provenance.
 TEST_F(MLATest, OwnershipFunctionReturnedPointerRestoresShadowedAlias)
 {
