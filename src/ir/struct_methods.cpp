@@ -2225,6 +2225,22 @@ CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
     const std::string& method = node->methodName;
+    auto retainInsertedAggregateBorrow = [&](ExpressionNode* value) {
+        const std::string owner = resolveBorrowOwnerFromLValue(node->object);
+        if(owner.empty())
+            return;
+        std::set<std::string> previousOrigins;
+        auto previous = aggregateBorrowOrigins.find(owner);
+        if(previous != aggregateBorrowOrigins.end())
+            previousOrigins = previous->second;
+        trackAggregateBorrowOrigins(owner, value);
+        auto& currentOrigins = aggregateBorrowOrigins[owner];
+        currentOrigins.insert(previousOrigins.begin(), previousOrigins.end());
+        for(const auto& origin : previousOrigins)
+            activeBorrowers[origin].insert(owner);
+        if(currentOrigins.empty())
+            aggregateBorrowOrigins.erase(owner);
+    };
     TypeNode* directReceiverType = nullptr;
     static const std::set<std::string> mutatingContainerMethods = {
         "clear", "dedup", "extend", "fill", "pop", "push", "push_str",
@@ -4091,6 +4107,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             if(lenIt != arrayKnownLengths.end())
                                 updateKnownArrayLength2(lenIt->second + 1);
                         }
+                        retainInsertedAggregateBorrow(node->arguments[0]);
                         return successfulVoidExpression(context);
                     }
                     llvm::FunctionType* ft2 = llvm::FunctionType::get(
@@ -4123,6 +4140,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         if(lenIt != arrayKnownLengths.end())
                             updateKnownArrayLength2(lenIt->second + 1);
                     }
+                    retainInsertedAggregateBorrow(node->arguments[0]);
                     return successfulVoidExpression(context);
                 }
                 // --- extend(list_or_array) ---
@@ -5162,6 +5180,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                 builder.CreateCall(fnRaw,
                                                    {recvPtr, elemPtrAsOpaque,
                                                     elemSize});
+                            retainInsertedAggregateBorrow(node->arguments[0]);
                             return successfulVoidExpression(context);
                         }
                     }
@@ -5192,6 +5211,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
                 else
                     builder.CreateCall(fn, {recvPtr, val});
+                retainInsertedAggregateBorrow(node->arguments[0]);
                 return successfulVoidExpression(context);
             }
             if(node->methodName == "extend")
