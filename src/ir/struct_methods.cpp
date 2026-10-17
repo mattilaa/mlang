@@ -2225,10 +2225,17 @@ CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
     const std::string& method = node->methodName;
-    auto retainInsertedAggregateBorrow = [&](ExpressionNode* value) {
+    auto retainInsertedAggregateBorrow = [&](ExpressionNode* value,
+                                             bool replacesAllContents = false) {
         const std::string owner = resolveBorrowOwnerFromLValue(node->object);
         if(owner.empty())
             return;
+        if(replacesAllContents &&
+           dynamic_cast<IdentifierNode*>(node->object))
+        {
+            trackAggregateBorrowOrigins(owner, value);
+            return;
+        }
         std::set<std::string> previousOrigins;
         auto previous = aggregateBorrowOrigins.find(owner);
         if(previous != aggregateBorrowOrigins.end())
@@ -3936,7 +3943,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         builder.CreateCall(
                             fn, {allocaPtr2, val2, arrayCapacity2});
                         updateKnownArrayLength2(arrayCapIt2->second);
-                        retainInsertedAggregateBorrow(node->arguments[0]);
+                        retainInsertedAggregateBorrow(node->arguments[0], true);
                         return successfulVoidExpression(context);
                     }
                     if(elemIsI64)
@@ -3952,7 +3959,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         builder.CreateCall(
                             fn, {allocaPtr2, val2, arrayCapacity2});
                         updateKnownArrayLength2(arrayCapIt2->second);
-                        retainInsertedAggregateBorrow(node->arguments[0]);
+                        retainInsertedAggregateBorrow(node->arguments[0], true);
                         return successfulVoidExpression(context);
                     }
                     if(elemKind2 == TypeNode::TYPE_INT ||
@@ -3975,7 +3982,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         builder.CreateCall(
                             fn, {allocaPtr2, val2, arrayCapacity2});
                         updateKnownArrayLength2(arrayCapIt2->second);
-                        retainInsertedAggregateBorrow(node->arguments[0]);
+                        retainInsertedAggregateBorrow(node->arguments[0], true);
                         return successfulVoidExpression(context);
                     }
 
@@ -4009,7 +4016,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                        {allocaPtr2, elemPtrAsOpaque, elemSize,
                                         arrayCapacity2});
                     updateKnownArrayLength2(arrayCapIt2->second);
-                    retainInsertedAggregateBorrow(node->arguments[0]);
+                    retainInsertedAggregateBorrow(node->arguments[0], true);
                     return successfulVoidExpression(context);
                 }
                 // --- push(val) ---
@@ -4429,6 +4436,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     }
                     llvm::Value* result = callVecVoidFn("__mlang_std_vec_clear");
                     updateKnownArrayLength2(0);
+                    clearAggregateBorrowOrigins(objId->name);
                     return result;
                 }
                 // --- contains(val) ---

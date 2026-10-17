@@ -7978,7 +7978,8 @@ TEST_F(MLATest, FixedArrayFillTracksBorrowOrigin)
     std::string code = R"(
         fn main() -> i32 {
             var value: i32 = 7;
-            var pointers: array<ptr<i32>, 1> = {null};
+            var other: i32 = 3;
+            var pointers: array<ptr<i32>, 1> = {&other};
             pointers.fill(&value);
             value = 9;
             let pointer = pointers[0];
@@ -7991,6 +7992,37 @@ TEST_F(MLATest, FixedArrayFillTracksBorrowOrigin)
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("while borrowed by 'pointers'"), std::string::npos)
         << out;
+}
+
+TEST_F(MLATest, FixedArrayFillReleasesReplacedBorrowOrigin)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var other: i32 = 3;
+            var pointers: array<ptr<i32>, 1> = {&other};
+            pointers.fill(&value);
+            pointers.fill(&other);
+            value = 9;
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ClearingListReleasesStoredBorrowOrigin)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&value);
+            pointers.clear();
+            value = 9;
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
 TEST_F(MLATest, OwnershipCannotStoreBorrowingAggregateInGlobal)
