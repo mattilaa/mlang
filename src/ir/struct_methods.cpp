@@ -2342,7 +2342,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     auto validateTemporaryBorrowArguments =
         [&](const std::vector<ExpressionNode*>& args,
             const std::string& calleeName,
-            const std::string& implicitWholeOwner) -> bool
+            const std::string& implicitWholeOwner,
+            bool implicitReceiverShared = false,
+            const std::vector<bool>& sharedReferenceArgs = {}) -> bool
     {
         std::set<std::string> wholeOwnersInCall;
         std::map<std::string, std::set<std::string>> subpathsInCall;
@@ -2491,8 +2493,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
         };
 
-        for(auto* arg : args)
+        for(size_t argIndex = 0; argIndex < args.size(); ++argIndex)
         {
+            auto* arg = args[argIndex];
+            const bool sharedReferenceArg =
+                argIndex < sharedReferenceArgs.size() &&
+                sharedReferenceArgs[argIndex];
             collectMovedOwners(arg, false);
 
             auto registerBorrowInCall = [&](const std::string& owner,
@@ -2501,6 +2507,13 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             {
                 if(isWholeOwner)
                 {
+                    // A shared receiver and an explicitly shared reference
+                    // argument may safely observe the same object during one
+                    // call. Keep raw pointers and mutable references on the
+                    // existing exclusive path.
+                    if(implicitReceiverShared && sharedReferenceArg &&
+                       owner == implicitWholeOwner)
+                        return true;
                     if(wholeOwnersInCall.count(owner) ||
                        (subpathsInCall.count(owner) &&
                         !subpathsInCall[owner].empty()))
@@ -2517,6 +2530,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
                 if(wholeOwnersInCall.count(owner))
                 {
+                    if(implicitReceiverShared && sharedReferenceArg &&
+                       owner == implicitWholeOwner)
+                        return true;
                     reportError(node->line,
                                 "cannot borrow overlapping parts of '" + owner +
                                     "' in call to '" + calleeName + "'");
@@ -6074,8 +6090,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     std::vector<llvm::Value*> args;
     args.push_back(objPtr);
 
+    std::vector<bool> sharedReferenceArgs;
+    sharedReferenceArgs.reserve(declaredParams.size());
+    for(auto* parameter : declaredParams)
+    {
+        auto* reference = parameter
+                              ? dynamic_cast<ReferenceTypeNode*>(parameter->type)
+                              : nullptr;
+        sharedReferenceArgs.push_back(reference && !reference->isMutable);
+    }
     if(!validateTemporaryBorrowArguments(node->arguments, node->methodName,
-                                         receiverOwner))
+                                         receiverOwner,
+                                         methodHasSharedReceiver,
+                                         sharedReferenceArgs))
         return nullptr;
 
     // Add other arguments with the same coercion rules as normal function
@@ -6083,10 +6110,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     for(size_t argIndex = 0; argIndex < node->arguments.size(); ++argIndex)
     {
         auto* arg = node->arguments[argIndex];
-        llvm::Value* argVal = generateArgumentValue(
-            arg, argIndex < declaredParams.size() && declaredParams[argIndex]
-                     ? declaredParams[argIndex]->type
-                     : nullptr);
+        TypeNode* declaredType =
+            argIndex < declaredParams.size() && declaredParams[argIndex]
+                ? declaredParams[argIndex]->type
+                : nullptr;
+        ExpressionNode* valueExpr = arg;
+        if(auto* reference = dynamic_cast<ReferenceTypeNode*>(declaredType))
+        {
+            auto* borrow = dynamic_cast<UnaryOpNode*>(arg);
+            if(!reference->isMutable && borrow &&
+               borrow->op == UnaryOpNode::OP_ADDR)
+                valueExpr = borrow->operand;
+        }
+        llvm::Value* argVal = generateArgumentValue(valueExpr, declaredType);
         if(!argVal)
             return nullptr;
 

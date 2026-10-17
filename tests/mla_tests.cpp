@@ -5901,6 +5901,28 @@ TEST_F(MLATest, OwnershipCannotBorrowMethodReceiverAndFieldArgSameObject)
     EXPECT_NE(out.find("overlapping parts"), std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipCanShareBorrowMethodReceiverAndFieldArg)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+
+        impl Pair {
+            fn add_with(&self, x: &i32) -> i32 {
+                return self.left + x;
+            }
+        }
+
+        fn main() -> i32 {
+            let p: Pair = Pair { left: 2, right: 3 };
+            return p.add_with(&p.right);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 5);
+}
+
 TEST_F(MLATest, OwnershipCanBorrowMethodReceiverAndArgFromDifferentObject)
 {
     std::string code = R"(
