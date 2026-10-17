@@ -10981,6 +10981,30 @@ TEST_F(MLATest, OwnershipListForwardedPointerElementAssignmentKeepsNewOrigin)
         << out;
 }
 
+// Returning a pointer extracted from an aggregate argument retains its borrow.
+TEST_F(MLATest, OwnershipAggregateArgumentReturnedPointerKeepsBorrowLive)
+{
+    std::string code = R"(
+        fn extract(pointers: list<ptr<i32>>, index: i32) -> ptr<i32> {
+            return pointers[index];
+        }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let pointers: list<ptr<i32>> = [&value];
+            let forwarded = extract(pointers, 0);
+            value = 9;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass aggregate 'pointers' containing a borrow of a local value because the callee may retain it"),
+              std::string::npos)
+        << out;
+}
+
 // Pointer provenance must propagate through multiple visible forwarding calls.
 TEST_F(MLATest, OwnershipNestedFunctionReturnedPointerKeepsBorrowLive)
 {
