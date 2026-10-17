@@ -392,13 +392,16 @@ their last use. It can distinguish disjoint struct fields when their paths are
 known.
 
 An aggregate that stores a borrow keeps the borrowed place reserved while that
-aggregate remains live. Currently, one aggregate can retain at most one
-exclusive borrow. Copying that aggregate with `std::copy` or extracting its
-exclusive pointer is rejected, and the aggregate cannot outlive the borrowed
-local. Passing it by value to an ordinary function is also rejected because
-the compiler cannot yet prove that the callee will not retain it; this applies
-to both shared and exclusive local borrows. Shared borrows in aggregates
-continue to track their individual source places.
+aggregate remains live. A struct literal may retain multiple exclusive
+borrows when their source places are disjoint; overlapping borrows are
+rejected. Copying an aggregate containing an exclusive borrow with `std::copy`
+or extracting its exclusive pointer is rejected, and the aggregate cannot
+outlive the borrowed local. Dynamic updates such as appending multiple
+exclusive borrows to a list remain conservative. Passing an aggregate with a
+local borrow by value to an ordinary function is also rejected because the
+compiler cannot yet prove that the callee will not retain it; this applies to
+both shared and exclusive local borrows. Shared borrows in aggregates continue
+to track their individual source places.
 
 Struct values follow the same rule: every field starts at its zero value.
 The explicit `{}` form requests zero-initialized storage in the same style as

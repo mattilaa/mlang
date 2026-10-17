@@ -681,10 +681,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                     return;
         for(const auto& mutableBorrow : activeMutBorrower)
         {
-            auto borrowOwner = pointerBorrowTarget.find(mutableBorrow.second);
-            if(borrowOwner != pointerBorrowTarget.end() &&
-               borrowOwner->second == owner &&
-               rejectOverlappingBorrow(mutableBorrow.second))
+            if(rejectOverlappingBorrow(mutableBorrow.second))
                 return;
         }
 
@@ -789,14 +786,8 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         }
         for(const auto& mutableBorrow : activeMutBorrower)
         {
-            auto borrowOwner = pointerBorrowTarget.find(mutableBorrow.second);
-            if(borrowOwner == pointerBorrowTarget.end() ||
-               borrowOwner->second != ownerName)
-                continue;
-            auto place = pointerBorrowPlace.find(mutableBorrow.second);
-            const std::string borrowedPlace =
-                place == pointerBorrowPlace.end() ? ownerName : place->second;
-            if(borrowPlacesOverlap(borrowedPlace, targetPlace))
+            if(borrowerPlaceOverlaps(mutableBorrow.second, ownerName,
+                                     targetPlace))
             {
                 reportError(node->line,
                             "cannot mutate indexed element of '" + ownerName +
@@ -1054,24 +1045,15 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
         for(const auto& mutBorrow : activeMutBorrower)
         {
-            auto borrowOwner = pointerBorrowTarget.find(mutBorrow.second);
-            if(borrowOwner == pointerBorrowTarget.end() ||
-               borrowOwner->second != ownerName ||
-               allowedBorrowers.find(mutBorrow.second) !=
-                   allowedBorrowers.end())
+            if(allowedBorrowers.find(mutBorrow.second) !=
+                allowedBorrowers.end() ||
+               !borrowerPlaceOverlaps(mutBorrow.second, ownerName, targetPlace))
                 continue;
-            auto borrowPlace = pointerBorrowPlace.find(mutBorrow.second);
-            const std::string place = borrowPlace == pointerBorrowPlace.end()
-                                          ? ownerName
-                                          : borrowPlace->second;
-            if(borrowPlacesOverlap(place, targetPlace))
-            {
-                reportError(node->line,
-                            "cannot assign to field of '" + ownerName +
-                                "' while borrowed by '" + mutBorrow.second +
-                                "'");
-                return;
-            }
+            reportError(node->line,
+                        "cannot assign to field of '" + ownerName +
+                            "' while borrowed by '" + mutBorrow.second +
+                            "'");
+            return;
         }
     }
 

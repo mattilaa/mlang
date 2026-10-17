@@ -60,12 +60,14 @@
  * types, and other move-only values, are rejected. There is currently no
  * general `Clone` trait or user-defined copy hook.
  *
- * Mutable borrows stored in aggregates transfer from their source pointer and
- * keep the borrowed place exclusively reserved while the aggregate is live.
- * At present, an aggregate may retain only one mutable borrow; copying or
- * extracting that borrow is rejected. Shared aggregate borrows retain their
- * tracked source places, including disjoint fields where the compiler can
- * identify them.
+ * Mutable borrows stored in struct literals transfer from their source pointer
+ * and keep each borrowed place exclusively reserved while the aggregate is
+ * live. Multiple disjoint struct fields may retain separate mutable borrows;
+ * overlapping borrows are rejected. Copying or extracting a mutable borrow
+ * from an aggregate is rejected. Dynamic aggregate updates such as appending
+ * multiple mutable borrows to a list remain conservative. Shared aggregate
+ * borrows retain their tracked source places, including disjoint fields where
+ * the compiler can identify them.
  *
  * Callable values, runtime closure environments, function-type annotations,
  * and named-function items are implemented. A closure that borrows locals

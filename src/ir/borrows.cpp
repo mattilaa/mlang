@@ -249,12 +249,14 @@ bool CodeGenerator::borrowerPlaceOverlaps(const std::string& borrower,
             }
             return false;
         }
+        return false;
     }
 
+    // Aggregate places include all retained shared and exclusive borrows.
     auto borrowedOwner = pointerBorrowTarget.find(borrower);
     if(borrowedOwner != pointerBorrowTarget.end() &&
        borrowedOwner->second != owner)
-        return borrowPlacesOverlap(owner, place);
+        return false;
     auto borrowedPlace = pointerBorrowPlace.find(borrower);
     return borrowPlacesOverlap(
         borrowedPlace == pointerBorrowPlace.end() ? owner
@@ -294,15 +296,7 @@ bool CodeGenerator::validateBorrowRead(ExpressionNode* expr, int line)
     {
         if(accessedThrough(expr, mutableBorrow.second))
             continue;
-        auto borrowOwner = pointerBorrowTarget.find(mutableBorrow.second);
-        if(borrowOwner == pointerBorrowTarget.end() ||
-           borrowOwner->second != owner)
-            continue;
-        auto borrowPlace = pointerBorrowPlace.find(mutableBorrow.second);
-        const std::string borrowedPlace =
-            borrowPlace == pointerBorrowPlace.end() ? owner
-                                                    : borrowPlace->second;
-        if(borrowPlacesOverlap(borrowedPlace, place))
+        if(borrowerPlaceOverlaps(mutableBorrow.second, owner, place))
         {
             reportError(line, "cannot read overlapping part of '" + owner +
                                   "' while mutably borrowed by '" +
@@ -356,10 +350,7 @@ bool CodeGenerator::validateBorrowWriteThroughPointer(ExpressionNode* expr,
 
         for(const auto& mutableBorrow : activeMutBorrower)
         {
-            auto mutableOwner = pointerBorrowTarget.find(mutableBorrow.second);
-            if(mutableOwner != pointerBorrowTarget.end() &&
-               mutableOwner->second == owner &&
-               conflictsWith(mutableBorrow.second))
+            if(conflictsWith(mutableBorrow.second))
                 return false;
         }
     }
@@ -747,15 +738,28 @@ void CodeGenerator::trackAggregateBorrowOrigins(
         {
             if(isMutBorrower(identifier->name))
             {
-                auto owner = pointerBorrowTarget.find(identifier->name);
-                if(owner != pointerBorrowTarget.end())
+                auto places = aggregateBorrowPlaces.find(identifier->name);
+                if(places != aggregateBorrowPlaces.end())
                 {
-                    auto place = pointerBorrowPlace.find(identifier->name);
-                    exclusiveBorrows.push_back(
-                        {identifier->name, owner->second,
-                         place == pointerBorrowPlace.end() ? owner->second
-                                                           : place->second,
-                         nullptr});
+                    for(const auto& owner : places->second)
+                        for(const auto& place : owner.second)
+                            exclusiveBorrows.push_back(
+                                {identifier->name, owner.first, place,
+                                 nullptr});
+                }
+                else
+                {
+                    auto owner = pointerBorrowTarget.find(identifier->name);
+                    if(owner != pointerBorrowTarget.end())
+                    {
+                        auto place = pointerBorrowPlace.find(identifier->name);
+                        exclusiveBorrows.push_back(
+                            {identifier->name, owner->second,
+                             place == pointerBorrowPlace.end()
+                                 ? owner->second
+                                 : place->second,
+                             nullptr});
+                    }
                 }
             }
             else
@@ -835,11 +839,7 @@ void CodeGenerator::trackAggregateBorrowOrigins(
                     };
                     for(const auto& mutableBorrow : activeMutBorrower)
                     {
-                        auto activeOwner =
-                            pointerBorrowTarget.find(mutableBorrow.second);
-                        if(activeOwner != pointerBorrowTarget.end() &&
-                           activeOwner->second == owner &&
-                           conflicts(mutableBorrow.second))
+                        if(conflicts(mutableBorrow.second))
                         {
                             reportError(
                                 current->line,
@@ -1136,14 +1136,6 @@ void CodeGenerator::trackAggregateBorrowOrigins(
         }
     };
     collectFields(expression, "");
-    if(exclusiveBorrows.size() > 1)
-    {
-        reportError(expression ? expression->line : 0,
-                    "cannot store multiple mutable borrows in one aggregate; "
-                    "use separate aggregates so each exclusive borrow has "
-                    "an independent lifetime");
-        return;
-    }
     for(const auto& borrow : exclusiveBorrows)
     {
         auto aggregateDepth = variableScopeDepth.find(variable);
@@ -1209,21 +1201,57 @@ void CodeGenerator::trackAggregateBorrowOrigins(
 
     if(!exclusiveBorrows.empty())
     {
-        const auto& borrow = exclusiveBorrows.front();
-        if(borrow.source.empty())
-            registerPointerBorrow(
-                variable, borrow.expression,
-                borrow.expression ? borrow.expression->line : 0, true);
-        else
+        size_t borrowIndex = 0;
+        for(const auto& borrow : exclusiveBorrows)
         {
-            clearPointerBorrow(borrow.source);
+            if(borrow.source.empty())
+            {
+                // Register each inline &mut with its own temporary identity
+                // so overlap checks can distinguish disjoint field places.
+                const std::string temporaryBorrower =
+                    variable + std::string(1, '\x1f') + "aggregate_mut_" +
+                    std::to_string(borrowIndex++);
+                registerPointerBorrow(
+                    temporaryBorrower, borrow.expression,
+                    borrow.expression ? borrow.expression->line : 0, true);
+                auto registeredOwner =
+                    pointerBorrowTarget.find(temporaryBorrower);
+                if(registeredOwner == pointerBorrowTarget.end())
+                    continue;
+                auto registeredPlace =
+                    pointerBorrowPlace.find(temporaryBorrower);
+                const std::string place =
+                    registeredPlace == pointerBorrowPlace.end()
+                        ? registeredOwner->second
+                        : registeredPlace->second;
+                for(auto& active : activeMutBorrower)
+                    if(active.second == temporaryBorrower)
+                        active.second = variable;
+                aggregateBorrowOrigins[variable].insert(
+                    registeredOwner->second);
+                aggregateBorrowPlaces[variable][registeredOwner->second]
+                    .insert(place);
+                pointerBorrowTarget.erase(temporaryBorrower);
+                pointerBorrowPlace.erase(temporaryBorrower);
+                continue;
+            }
+
+            // Transfer existing active entries rather than releasing and
+            // reacquiring them; this preserves all disjoint places when an
+            // exclusive pointer is moved into an aggregate.
+            for(auto& active : activeMutBorrower)
+                if(active.second == borrow.source)
+                    active.second = variable;
             movedVariables.insert(borrow.source);
-            pointerBorrowTarget[variable] = borrow.owner;
-            pointerBorrowPlace[variable] = borrow.place;
-            std::string borrowKey = borrow.owner;
-            if(activeMutBorrower.find(borrowKey) != activeMutBorrower.end())
-                borrowKey = borrow.place;
-            activeMutBorrower[borrowKey] = variable;
+            pointerBorrowTarget.erase(borrow.source);
+            pointerBorrowPlace.erase(borrow.source);
+            aggregateBorrowOrigins[variable].insert(borrow.owner);
+            aggregateBorrowPlaces[variable][borrow.owner].insert(borrow.place);
+            if(pointerBorrowTarget.find(variable) == pointerBorrowTarget.end())
+            {
+                pointerBorrowTarget[variable] = borrow.owner;
+                pointerBorrowPlace[variable] = borrow.place;
+            }
         }
     }
 }
@@ -1292,17 +1320,13 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             bool hasRootMutableBorrow = false;
             for(const auto& mutBorrow : activeMutBorrower)
             {
-                auto existingOwner = pointerBorrowTarget.find(mutBorrow.second);
-                if(existingOwner == pointerBorrowTarget.end() ||
-                   existingOwner->second != ownerName)
+                if(mutBorrow.second == pointerVar ||
+                   !borrowerPlaceOverlaps(mutBorrow.second, ownerName,
+                                          ownerName))
                     continue;
-                hasRootMutableBorrow |= mutBorrow.first == ownerName;
-                auto place = pointerBorrowPlace.find(mutBorrow.second);
-                const std::string existingPlace =
-                    place == pointerBorrowPlace.end() ? ownerName
-                                                      : place->second;
-                if(mutBorrow.second != pointerVar &&
-                   borrowPlacesOverlap(existingPlace, borrowPlace))
+                hasRootMutableBorrow = true;
+                if(borrowerPlaceOverlaps(mutBorrow.second, ownerName,
+                                         borrowPlace))
                 {
                     reportError(line, "cannot borrow '" + ownerName +
                                           "' as mutable more than once at "
@@ -1329,14 +1353,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         // Shared borrow: reject only an overlapping mutable borrow.
         for(const auto& mutBorrow : activeMutBorrower)
         {
-            auto existingOwner = pointerBorrowTarget.find(mutBorrow.second);
-            if(existingOwner == pointerBorrowTarget.end() ||
-               existingOwner->second != ownerName)
-                continue;
-            auto place = pointerBorrowPlace.find(mutBorrow.second);
-            const std::string existingPlace =
-                place == pointerBorrowPlace.end() ? ownerName : place->second;
-            if(borrowPlacesOverlap(existingPlace, borrowPlace))
+            if(borrowerPlaceOverlaps(mutBorrow.second, ownerName, borrowPlace))
             {
                 reportError(line,
                             "cannot borrow '" + ownerName +

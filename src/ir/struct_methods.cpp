@@ -2370,11 +2370,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         return nullptr;
             for(const auto& mutableBorrow : activeMutBorrower)
             {
-                auto borrowOwner =
-                    pointerBorrowTarget.find(mutableBorrow.second);
-                if(borrowOwner != pointerBorrowTarget.end() &&
-                   borrowOwner->second == owner &&
-                   rejectOverlappingBorrow(mutableBorrow.second))
+                if(rejectOverlappingBorrow(mutableBorrow.second))
                     return nullptr;
             }
         }
@@ -2834,10 +2830,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         std::string mutableBorrower;
         for(const auto& mutBorrow : activeMutBorrower)
         {
-            auto owner = pointerBorrowTarget.find(mutBorrow.second);
-            if(owner != pointerBorrowTarget.end() &&
-               owner->second == receiverOwner &&
-               borrowerPlaceOverlaps(mutBorrow.second, receiverOwner,
+            if(borrowerPlaceOverlaps(mutBorrow.second, receiverOwner,
                                      receiverPlace))
             {
                 hasMutableBorrow = true;
@@ -6452,10 +6445,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         std::string mutableBorrower;
         for(const auto& mutBorrow : activeMutBorrower)
         {
-            auto owner = pointerBorrowTarget.find(mutBorrow.second);
-            if(owner != pointerBorrowTarget.end() &&
-               owner->second == receiverOwner &&
-               borrowerPlaceOverlaps(mutBorrow.second, receiverOwner,
+            if(borrowerPlaceOverlaps(mutBorrow.second, receiverOwner,
                                      receiverPlace))
             {
                 hasMutableBorrow = true;

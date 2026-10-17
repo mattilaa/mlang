@@ -8228,7 +8228,7 @@ TEST_F(MLATest, ListRetainsExclusiveBorrowUntilItsLastUse)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while mutably borrowed by 'pointers'"),
+    EXPECT_NE(out.find("mutably borrowed by 'pointers'"),
               std::string::npos) << out;
 }
 
@@ -8292,6 +8292,68 @@ TEST_F(MLATest, ListCannotRetainMultipleExclusiveBorrows)
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("cannot store multiple mutable borrows in one "
                        "aggregate"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, StructBorrowsProtectOnlyBorrowedFields)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; var spare: i32; };
+        struct PairPointers { var left: ptr<i32>; var right: ptr<i32>; };
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 4, right: 8, spare: 3 };
+            let refs: PairPointers = PairPointers {
+                left: &mut pair.left,
+                right: &mut pair.right
+            };
+            pair.spare = 9;
+            unsafe { return *refs.left + *refs.right + pair.spare; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 21);
+}
+
+TEST_F(MLATest, StructCannotMutateBorrowedExclusiveField)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct PairPointers { var left: ptr<i32>; var right: ptr<i32>; };
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 4, right: 8 };
+            let refs: PairPointers = PairPointers {
+                left: &mut pair.left,
+                right: &mut pair.right
+            };
+            pair.left = 9;
+            unsafe { return *refs.left + *refs.right; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'refs'"), std::string::npos) << out;
+}
+
+TEST_F(MLATest, StructRejectsOverlappingExclusiveFieldBorrows)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct PairPointers { var first: ptr<i32>; var second: ptr<i32>; };
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 4, right: 8 };
+            let refs: PairPointers = PairPointers {
+                first: &mut pair.left,
+                second: &mut pair.left
+            };
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow 'pair' as mutable more than once"),
               std::string::npos) << out;
 }
 
