@@ -1914,28 +1914,14 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             isWholeOwnerOut = true;
             pathOut.clear();
 
-            std::vector<std::string> fields;
-            ExpressionNode* cur = expr;
-            while(auto* field = dynamic_cast<FieldAccessNode*>(cur))
+            pathOut = resolveBorrowPlaceFromLValue(expr);
+            if(pathOut.compare(0, ownerOut.size(), ownerOut) == 0)
             {
-                fields.push_back(field->fieldName);
-                if(field->object)
-                    cur = field->object;
-                else
-                    break;
+                pathOut.erase(0, ownerOut.size());
+                if(!pathOut.empty() && pathOut.front() == '.')
+                    pathOut.erase(0, 1);
             }
-
-            if(!fields.empty())
-            {
-                isWholeOwnerOut = false;
-                std::reverse(fields.begin(), fields.end());
-                for(size_t i = 0; i < fields.size(); ++i)
-                {
-                    if(i)
-                        pathOut += ".";
-                    pathOut += fields[i];
-                }
-            }
+            isWholeOwnerOut = pathOut.empty();
             return true;
         };
         std::function<void(ExpressionNode*, bool)> collectMovedOwners =
@@ -2094,21 +2080,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 bool overlaps = false;
                 for(const auto& existing : paths)
                 {
-                    if(existing == path)
-                    {
-                        overlaps = true;
-                        break;
-                    }
-                    if(path.size() > existing.size() &&
-                       path.compare(0, existing.size(), existing) == 0 &&
-                       path[existing.size()] == '.')
-                    {
-                        overlaps = true;
-                        break;
-                    }
-                    if(existing.size() > path.size() &&
-                       existing.compare(0, path.size(), path) == 0 &&
-                       existing[path.size()] == '.')
+                    if(borrowPlacesOverlap(existing, path))
                     {
                         overlaps = true;
                         break;
@@ -2118,13 +2090,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 auto exclusivePaths = exclusiveSubpathsInCall.find(owner);
                 if(exclusivePaths != exclusiveSubpathsInCall.end())
                     for(const auto& existing : exclusivePaths->second)
-                        if(existing == path ||
-                           (path.size() > existing.size() &&
-                            path.compare(0, existing.size(), existing) == 0 &&
-                            path[existing.size()] == '.') ||
-                           (existing.size() > path.size() &&
-                            existing.compare(0, path.size(), path) == 0 &&
-                            existing[path.size()] == '.'))
+                        if(borrowPlacesOverlap(existing, path))
                         {
                             overlapsExclusive = true;
                             break;
@@ -2158,7 +2124,21 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     {
                         continue;
                     }
-                    if(!registerBorrowInCall(pit->second, "", true, true))
+                    std::string path;
+                    auto place = pointerBorrowPlace.find(idArg->name);
+                    if(place != pointerBorrowPlace.end())
+                    {
+                        path = place->second;
+                        if(path.compare(0, pit->second.size(), pit->second) ==
+                           0)
+                        {
+                            path.erase(0, pit->second.size());
+                            if(!path.empty() && path.front() == '.')
+                                path.erase(0, 1);
+                        }
+                    }
+                    if(!registerBorrowInCall(pit->second, path, path.empty(),
+                                             true))
                         return false;
                     continue;
                 }

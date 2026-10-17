@@ -62,7 +62,16 @@ CodeGenerator::resolveBorrowPlaceFromLValue(ExpressionNode* expr) const
         return base.empty() ? "" : base + "." + field->fieldName;
     }
     if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
-        return resolveBorrowPlaceFromLValue(index->base);
+    {
+        const std::string base = resolveBorrowPlaceFromLValue(index->base);
+        if(base.empty())
+            return "";
+        if(auto* literal = dynamic_cast<IntLiteralNode*>(index->index))
+            return base + "[" + std::to_string(literal->value) + "]";
+        // Unknown indices may alias any element. Keep the wildcard in the
+        // path so fields beneath the element remain conservatively tracked.
+        return base + "[*]";
+    }
     if(auto* tuple = dynamic_cast<TupleAccessNode*>(expr))
         return resolveBorrowPlaceFromLValue(tuple->tuple);
     if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
@@ -88,13 +97,62 @@ bool CodeGenerator::borrowPlacesOverlap(const std::string& left,
         return true;
     if(left == right)
         return true;
-    const auto isParent = [](const std::string& parent,
-                             const std::string& child) {
-        return child.size() > parent.size() &&
-               child.compare(0, parent.size(), parent) == 0 &&
-               child[parent.size()] == '.';
+    struct Segment
+    {
+        std::string value;
+        bool index = false;
     };
-    return isParent(left, right) || isParent(right, left);
+    const auto split = [](const std::string& path) {
+        std::vector<Segment> segments;
+        std::size_t start = 0;
+        while(start < path.size())
+        {
+            if(path[start] == '.')
+            {
+                const std::size_t end = path.find_first_of(".[", start + 1);
+                segments.push_back({path.substr(start + 1,
+                                                end == std::string::npos
+                                                    ? end
+                                                    : end - start - 1),
+                                    false});
+                start = end == std::string::npos ? path.size() : end;
+            }
+            else if(path[start] == '[')
+            {
+                const std::size_t end = path.find(']', start + 1);
+                if(end == std::string::npos)
+                    break;
+                segments.push_back({path.substr(start + 1, end - start - 1),
+                                    true});
+                start = end + 1;
+            }
+            else
+            {
+                const std::size_t end = path.find_first_of(".[", start);
+                segments.push_back({path.substr(start,
+                                                end == std::string::npos
+                                                    ? end
+                                                    : end - start),
+                                    false});
+                start = end == std::string::npos ? path.size() : end;
+            }
+        }
+        return segments;
+    };
+    const auto a = split(left);
+    const auto b = split(right);
+    for(std::size_t i = 0; i < std::min(a.size(), b.size()); ++i)
+    {
+        if(a[i].index != b[i].index)
+            return false;
+        if(a[i].value == b[i].value)
+            continue;
+        if(a[i].index && (a[i].value == "*" || b[i].value == "*"))
+            continue;
+        return false;
+    }
+    // A whole place overlaps every nested place beneath it.
+    return true;
 }
 
 std::string

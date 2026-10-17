@@ -100,6 +100,12 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
                                        fieldAccess->fieldName + "_ptr");
     }
 
+    if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
+    {
+        TypeNode* elementType = nullptr;
+        return generateListIndexPointer(index, elementType);
+    }
+
     if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
     {
         if(unary->op == UnaryOpNode::OP_DEREF)
