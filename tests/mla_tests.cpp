@@ -11047,6 +11047,72 @@ TEST_F(MLATest, BorrowingListArgumentRejectsMutatingCallee)
         << out;
 }
 
+// A map borrow may be passed to a helper that only reads through its pointer.
+TEST_F(MLATest, ReadOnlyMapBorrowCanPassThroughScalarReader)
+{
+    std::string code = R"(
+        fn read_value(values: map<str8, ptr<i32>>) -> i32 {
+            unsafe { return *values["value"]; }
+        }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let values: map<str8, ptr<i32>> = {"value": &value};
+            let snapshot = read_value(values);
+            value = 9;
+            return snapshot + value - 16;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A map containing a borrow cannot be passed to a mutating helper.
+TEST_F(MLATest, BorrowingMapArgumentRejectsElementMutation)
+{
+    std::string code = R"(
+        fn replace(values: map<str8, ptr<i32>>, extra: ptr<i32>) -> i32 {
+            values["value"] = extra;
+            return 0;
+        }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var extra: i32 = 8;
+            let values: map<str8, ptr<i32>> = {"value": &value};
+            return replace(values, &extra);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass aggregate 'values' containing a borrow"),
+              std::string::npos)
+        << out;
+}
+
+// A borrowed map value cannot escape through a helper's pointer result.
+TEST_F(MLATest, BorrowingMapArgumentRejectsPointerEscape)
+{
+    std::string code = R"(
+        fn extract(values: map<str8, ptr<i32>>) -> ptr<i32> {
+            return values["value"];
+        }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let values: map<str8, ptr<i32>> = {"value": &value};
+            let forwarded = extract(values);
+            value = 9;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass aggregate 'values' containing a borrow"),
+              std::string::npos)
+        << out;
+}
+
 // Pointer provenance must propagate through multiple visible forwarding calls.
 TEST_F(MLATest, OwnershipNestedFunctionReturnedPointerKeepsBorrowLive)
 {

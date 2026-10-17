@@ -197,7 +197,8 @@ bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
     if(!parameter ||
        (!dynamic_cast<StructTypeRefNode*>(parameter->type) &&
         !dynamic_cast<GenericStructTypeRefNode*>(parameter->type) &&
-        !dynamic_cast<GenericListTypeNode*>(parameter->type)))
+        !dynamic_cast<GenericListTypeNode*>(parameter->type) &&
+        !dynamic_cast<MapTypeNode*>(parameter->type)))
         return false;
 
     const std::string parameterName = parameter->name;
@@ -233,9 +234,13 @@ bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
                                                           : nullptr;
             if(auto* index = dynamic_cast<IndexExpressionNode*>(expression))
             {
-                auto* listType = dynamic_cast<GenericListTypeNode*>(
-                    parameterFieldType(index->base));
-                return listType ? listType->elementType : nullptr;
+                TypeNode* baseType = parameterFieldType(index->base);
+                if(auto* listType =
+                       dynamic_cast<GenericListTypeNode*>(baseType))
+                    return listType->elementType;
+                if(auto* mapType = dynamic_cast<MapTypeNode*>(baseType))
+                    return mapType->valueType;
+                return nullptr;
             }
             auto* field = dynamic_cast<FieldAccessNode*>(expression);
             if(!field)
