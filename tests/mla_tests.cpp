@@ -4448,6 +4448,20 @@ TEST_F(MLATest, RuntimeClosureAllowsAliasedImmutableReferences)
     EXPECT_EQ(compileAndRunExitCode(code), 12);
 }
 
+TEST_F(MLATest, RuntimeClosureAllowsSharedBorrowWhileAnotherIsLive)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let value: i32 = 6;
+            let held = &value;
+            let read: fn(&i32) -> i32 = |item| { return item; };
+            let current: i32 = read(&value);
+            unsafe { return *held + current; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 12);
+}
+
 TEST_F(MLATest, RuntimeClosureRejectsMutationThroughImmutableReference)
 {
     std::string code = R"(

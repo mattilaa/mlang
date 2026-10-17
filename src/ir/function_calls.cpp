@@ -2217,7 +2217,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             mutIt->second + "'");
                     return false;
                 }
-                if(activeIt != activeBorrowers.end() &&
+                if(!sharedReference && activeIt != activeBorrowers.end() &&
                    !activeIt->second.empty())
                 {
                     std::string by = *activeIt->second.begin();
