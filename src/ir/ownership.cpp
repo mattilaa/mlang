@@ -346,6 +346,34 @@ void CodeGenerator::recordVariableScopeDepth(const std::string& varName)
     {
         entry.hadPreviousDepth = true;
         entry.previousDepth = it->second;
+        auto namedValue = namedValues.find(varName);
+        if(namedValue != namedValues.end())
+        {
+            entry.hadPreviousNamedValue = true;
+            entry.previousNamedValue = namedValue->second;
+        }
+        auto valueType = variableTypes.find(varName);
+        if(valueType != variableTypes.end())
+        {
+            entry.hadPreviousVariableType = true;
+            entry.previousVariableType = valueType->second;
+        }
+        auto structType = structVariableTypes.find(varName);
+        if(structType != structVariableTypes.end())
+        {
+            entry.hadPreviousStructVariableType = true;
+            entry.previousStructVariableType = structType->second;
+        }
+        entry.previousWasConstant = constantVariables.count(varName) != 0;
+    }
+    for(const auto& moved : movedVariables)
+    {
+        if(moved == varName ||
+           (moved.size() > varName.size() &&
+            moved.compare(0, varName.size(), varName) == 0 &&
+            (moved[varName.size()] == '.' ||
+             moved[varName.size()] == '[')))
+            entry.previousMovedValues.insert(moved);
     }
     auto aggregate = aggregateBorrowOrigins.find(varName);
     if(aggregate != aggregateBorrowOrigins.end())

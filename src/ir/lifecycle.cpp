@@ -109,6 +109,37 @@ void CodeGenerator::exitCleanupScope()
     }
     for(auto it = depthEntries.rbegin(); it != depthEntries.rend(); ++it)
     {
+        for(auto moved = movedVariables.begin(); moved != movedVariables.end();)
+        {
+            const bool belongsToVariable =
+                *moved == it->varName ||
+                (moved->size() > it->varName.size() &&
+                 moved->compare(0, it->varName.size(), it->varName) == 0 &&
+                 ((*moved)[it->varName.size()] == '.' ||
+                  (*moved)[it->varName.size()] == '['));
+            if(belongsToVariable)
+                moved = movedVariables.erase(moved);
+            else
+                ++moved;
+        }
+        movedVariables.insert(it->previousMovedValues.begin(),
+                              it->previousMovedValues.end());
+        if(it->hadPreviousNamedValue)
+            namedValues[it->varName] = it->previousNamedValue;
+        else
+            namedValues.erase(it->varName);
+        if(it->hadPreviousVariableType)
+            variableTypes[it->varName] = it->previousVariableType;
+        else
+            variableTypes.erase(it->varName);
+        if(it->hadPreviousStructVariableType)
+            structVariableTypes[it->varName] = it->previousStructVariableType;
+        else
+            structVariableTypes.erase(it->varName);
+        if(it->previousWasConstant)
+            constantVariables.insert(it->varName);
+        else
+            constantVariables.erase(it->varName);
         clearAggregateBorrowOrigins(it->varName);
         if(it->hadPreviousAggregateBorrowOrigins)
         {

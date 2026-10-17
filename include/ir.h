@@ -587,6 +587,14 @@ private:
         std::string varName;
         bool hadPreviousDepth = false;
         int previousDepth = 0;
+        bool hadPreviousNamedValue = false;
+        llvm::Value* previousNamedValue = nullptr;
+        bool hadPreviousVariableType = false;
+        TypeNode::TypeKind previousVariableType = TypeNode::TYPE_I32;
+        bool hadPreviousStructVariableType = false;
+        std::string previousStructVariableType;
+        bool previousWasConstant = false;
+        std::set<std::string> previousMovedValues;
         bool hadPreviousAggregateBorrowOrigins = false;
         std::set<std::string> previousAggregateBorrowOrigins;
         bool hadPreviousAggregateBorrowPlaces = false;

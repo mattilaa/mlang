@@ -5052,6 +5052,48 @@ TEST_F(MLATest, OwnershipReassignmentDropsReplacedCleanupValue)
     EXPECT_EQ(compileAndRun(code), "free 1\nfree 2\n");
 }
 
+// Moving an outer variable remains visible as moved after an inner shadow ends.
+TEST_F(MLATest, OwnershipShadowDoesNotRestoreMovedOuterVariable)
+{
+    std::string code = R"(
+        struct Owned { var marker: i32; var items: list<i32>; };
+
+        fn main() -> i32 {
+            let owned: Owned = Owned { marker: 1, items: [1] };
+            let moved: Owned = owned;
+            {
+                let owned: Owned = Owned { marker: 2, items: [2] };
+                println!("{}", owned.marker);
+            }
+            return owned.marker;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("use of moved value: 'owned'"), std::string::npos)
+        << out;
+}
+
+// A move of an inner shadow must not make the outer variable unavailable.
+TEST_F(MLATest, OwnershipInnerShadowMoveDoesNotMoveOuterVariable)
+{
+    std::string code = R"(
+        struct Owned { var marker: i32; var items: list<i32>; };
+
+        fn main() -> i32 {
+            let owned: Owned = Owned { marker: 1, items: [1] };
+            {
+                let owned: Owned = Owned { marker: 2, items: [2] };
+                let moved: Owned = owned;
+            }
+            return owned.marker - 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, OwnershipUseOutsideBlockReportsUnknownVariable)
 {
     std::string code = R"(
