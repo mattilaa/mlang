@@ -5094,6 +5094,25 @@ TEST_F(MLATest, OwnershipInnerShadowMoveDoesNotMoveOuterVariable)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// A borrow of an outer binding must not prohibit mutation of a same-named shadow.
+TEST_F(MLATest, OwnershipBorrowOfOuterDoesNotBlockShadowMutation)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            let pointer = &pair.left;
+            {
+                var pair: Pair = Pair { left: 3, right: 4 };
+                pair.left = 9;
+            }
+            unsafe { return *pointer - 1; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, OwnershipUseOutsideBlockReportsUnknownVariable)
 {
     std::string code = R"(

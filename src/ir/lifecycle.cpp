@@ -140,6 +140,33 @@ void CodeGenerator::exitCleanupScope()
             constantVariables.insert(it->varName);
         else
             constantVariables.erase(it->varName);
+        auto belongsToVariable = [&](const std::string& place) {
+            return place == it->varName ||
+                   (place.size() > it->varName.size() &&
+                    place.compare(0, it->varName.size(), it->varName) == 0 &&
+                    (place[it->varName.size()] == '.' ||
+                     place[it->varName.size()] == '['));
+        };
+        for(auto borrowers = activeBorrowers.begin();
+            borrowers != activeBorrowers.end();)
+        {
+            if(belongsToVariable(borrowers->first))
+                borrowers = activeBorrowers.erase(borrowers);
+            else
+                ++borrowers;
+        }
+        for(auto borrower = activeMutBorrower.begin();
+            borrower != activeMutBorrower.end();)
+        {
+            if(belongsToVariable(borrower->first))
+                borrower = activeMutBorrower.erase(borrower);
+            else
+                ++borrower;
+        }
+        activeBorrowers.insert(it->previousActiveBorrowers.begin(),
+                               it->previousActiveBorrowers.end());
+        activeMutBorrower.insert(it->previousActiveMutBorrowers.begin(),
+                                 it->previousActiveMutBorrowers.end());
         clearAggregateBorrowOrigins(it->varName);
         if(it->hadPreviousAggregateBorrowOrigins)
         {

@@ -365,6 +365,35 @@ void CodeGenerator::recordVariableScopeDepth(const std::string& varName)
             entry.previousStructVariableType = structType->second;
         }
         entry.previousWasConstant = constantVariables.count(varName) != 0;
+        auto belongsToVariable = [&](const std::string& place) {
+            return place == varName ||
+                   (place.size() > varName.size() &&
+                    place.compare(0, varName.size(), varName) == 0 &&
+                    (place[varName.size()] == '.' ||
+                     place[varName.size()] == '['));
+        };
+        for(const auto& borrowers : activeBorrowers)
+            if(belongsToVariable(borrowers.first))
+                entry.previousActiveBorrowers.insert(borrowers);
+        for(const auto& borrower : activeMutBorrower)
+            if(belongsToVariable(borrower.first))
+                entry.previousActiveMutBorrowers.insert(borrower);
+        for(auto borrowers = activeBorrowers.begin();
+            borrowers != activeBorrowers.end();)
+        {
+            if(belongsToVariable(borrowers->first))
+                borrowers = activeBorrowers.erase(borrowers);
+            else
+                ++borrowers;
+        }
+        for(auto borrower = activeMutBorrower.begin();
+            borrower != activeMutBorrower.end();)
+        {
+            if(belongsToVariable(borrower->first))
+                borrower = activeMutBorrower.erase(borrower);
+            else
+                ++borrower;
+        }
     }
     for(const auto& moved : movedVariables)
     {
