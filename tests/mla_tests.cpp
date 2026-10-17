@@ -7863,6 +7863,53 @@ TEST_F(MLATest, AggregateBorrowKeepsOwnerBorrowedUntilLastUse)
         << out;
 }
 
+TEST_F(MLATest, AggregateFieldAssignmentTracksBorrowOrigin)
+{
+    std::string code = R"(
+        struct Inner { var value: ptr<i32>; };
+        struct Outer { var inner: Inner; };
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var outer: Outer = Outer { inner: Inner {} };
+            outer.inner = Inner { value: &value };
+            value = 9;
+            let pointer = outer.inner.value;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'outer'"), std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, AggregateFieldMovePreservesBorrowOrigin)
+{
+    std::string code = R"(
+        struct Inner { var value: ptr<i32>; };
+        struct Outer { var inner: Inner; };
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let inner: Inner = Inner { value: &value };
+            var outer: Outer = Outer { inner: Inner {} };
+            outer.inner = inner;
+            value = 9;
+            let pointer = outer.inner.value;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'outer'"), std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, OwnershipCannotStoreBorrowingAggregateInGlobal)
 {
     std::string code = R"(

@@ -571,6 +571,23 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
 
 void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 {
+    auto retainAggregateStoreOrigins = [&](const std::string& owner) {
+        if(owner.empty())
+            return;
+        std::set<std::string> previousOrigins;
+        auto previous = aggregateBorrowOrigins.find(owner);
+        if(previous != aggregateBorrowOrigins.end())
+            previousOrigins = previous->second;
+
+        trackAggregateBorrowOrigins(owner, node->expression);
+        auto& currentOrigins = aggregateBorrowOrigins[owner];
+        currentOrigins.insert(previousOrigins.begin(), previousOrigins.end());
+        for(const auto& origin : previousOrigins)
+            activeBorrowers[origin].insert(owner);
+        if(currentOrigins.empty())
+            aggregateBorrowOrigins.erase(owner);
+    };
+
     if(auto* tupleTarget = dynamic_cast<TupleAccessNode*>(node->target))
     {
         const std::string owner =
@@ -652,6 +669,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         consumeMoveFromExpression(node->expression, node->line,
                                   "assigning tuple element");
         builder.CreateStore(applyStructCopySemantics(value), targetPtr);
+        retainAggregateStoreOrigins(owner);
         return;
     }
 
@@ -775,6 +793,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         consumeMoveFromExpression(node->expression, node->line,
                                   "assigning mutable multiarray element");
         builder.CreateStore(value, elementPointer);
+        retainAggregateStoreOrigins(ownerName);
         return;
     }
 
@@ -1162,6 +1181,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
     storeStructFieldValue(structTypeName, structPtr, fieldIndex, fieldType,
                           value, fieldName, node->line);
+    retainAggregateStoreOrigins(ownerName);
 }
 
 void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
