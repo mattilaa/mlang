@@ -249,6 +249,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     auto savedImmutableReferenceVariables = immutableReferenceVariables;
     auto savedMovedVariables = movedVariables;
     auto savedPointerBorrowTarget = pointerBorrowTarget;
+    auto savedPointerBorrowParent = pointerBorrowParent;
     auto savedPointerBorrowPlace = pointerBorrowPlace;
     auto savedActiveBorrowers = activeBorrowers;
     auto savedActiveMutBorrower = activeMutBorrower;
@@ -259,6 +260,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     auto savedRuntimeClosureVariables = runtimeClosureVariables;
     auto savedRuntimeClosureReturnTypes = runtimeClosureReturnTypes;
     auto savedFunctionTypeVariables = functionTypeVariables;
+    auto savedFunctionItemVariables = functionItemVariables;
     auto savedRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     auto savedActiveInlineClosures = activeInlineClosures;
     auto savedTraitObjectVariableTypes = traitObjectVariableTypes;
@@ -287,6 +289,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         immutableReferenceVariables = savedImmutableReferenceVariables;
         movedVariables = savedMovedVariables;
         pointerBorrowTarget = savedPointerBorrowTarget;
+        pointerBorrowParent = savedPointerBorrowParent;
         pointerBorrowPlace = savedPointerBorrowPlace;
         activeBorrowers = savedActiveBorrowers;
         activeMutBorrower = savedActiveMutBorrower;
@@ -306,6 +309,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         runtimeClosureVariables = savedRuntimeClosureVariables;
         runtimeClosureReturnTypes = savedRuntimeClosureReturnTypes;
         functionTypeVariables = savedFunctionTypeVariables;
+        functionItemVariables = savedFunctionItemVariables;
         runtimeClosureBorrowOwners = savedRuntimeClosureBorrowOwners;
         activeInlineClosures = savedActiveInlineClosures;
     };
@@ -341,6 +345,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     runtimeClosureVariables.clear();
     runtimeClosureReturnTypes.clear();
     functionTypeVariables.clear();
+    functionItemVariables.clear();
     runtimeClosureBorrowOwners.clear();
     activeInlineClosures.clear();
     cleanupScopes.clear();
@@ -6379,6 +6384,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     auto savedPointerElementTypes = pointerElementTypes;
                     auto savedMovedVariables = movedVariables;
                     auto savedPointerBorrowTarget = pointerBorrowTarget;
+                    auto savedPointerBorrowParent = pointerBorrowParent;
                     auto savedPointerBorrowPlace = pointerBorrowPlace;
                     auto savedActiveBorrowers = activeBorrowers;
                     auto savedActiveMutBorrower = activeMutBorrower;
@@ -6403,6 +6409,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     pointerElementTypes = savedPointerElementTypes;
                     movedVariables = savedMovedVariables;
                     pointerBorrowTarget = savedPointerBorrowTarget;
+                    pointerBorrowParent = savedPointerBorrowParent;
                     pointerBorrowPlace = savedPointerBorrowPlace;
                     activeBorrowers = savedActiveBorrowers;
                     activeMutBorrower = savedActiveMutBorrower;

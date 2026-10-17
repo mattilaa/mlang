@@ -6,6 +6,7 @@
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Intrinsics.h>
 
+#include <algorithm>
 #include <functional>
 
 using mlang::ir_detail::common::Helpers;
@@ -33,6 +34,7 @@ bool CodeGenerator::getRuntimeClosureCaptures(
     auto savedVariableScopeDepth = variableScopeDepth;
     auto savedVariableTypes = variableTypes;
     auto savedFunctionTypeVariables = functionTypeVariables;
+    auto savedFunctionItemVariables = functionItemVariables;
     auto savedStructVariableTypes = structVariableTypes;
     auto savedEnumVariableTypes = enumVariableTypes;
     auto savedListElementTypes = listElementTypes;
@@ -223,6 +225,7 @@ bool CodeGenerator::getRuntimeClosureCaptures(
     variableScopeDepth = std::move(savedVariableScopeDepth);
     variableTypes = std::move(savedVariableTypes);
     functionTypeVariables = std::move(savedFunctionTypeVariables);
+    functionItemVariables = std::move(savedFunctionItemVariables);
     structVariableTypes = std::move(savedStructVariableTypes);
     enumVariableTypes = std::move(savedEnumVariableTypes);
     listElementTypes = std::move(savedListElementTypes);
@@ -326,6 +329,265 @@ bool CodeGenerator::isClosureReturnTypeCompatible(TypeNode* inferredType,
             (inferredLLVM->isPointerTy() && expectedLLVM->isPointerTy()));
 }
 
+void CodeGenerator::analyzeRuntimeClosurePointerBorrowEffects(
+    ClosureNode* closure,
+    const std::vector<std::pair<std::string, TypeNode*>>& captures)
+{
+    if(!closure)
+        return;
+    std::set<std::string> capturedPointers;
+    for(const auto& capture : captures)
+        if(dynamic_cast<PointerTypeNode*>(capture.second))
+            capturedPointers.insert(capture.first);
+    auto& pointerBorrowEffects =
+        runtimeClosurePointerBorrowEffects[closure];
+    pointerBorrowEffects.clear();
+    using ClosurePointerOrigins = std::map<
+        std::string, std::vector<RuntimeClosurePointerBorrowEffect>>;
+    struct ClosurePointerPath
+    {
+        ClosurePointerOrigins origins;
+        enum class Exit
+        {
+            Normal,
+            Return,
+            Break,
+            Continue,
+            Throw
+        } exit = Exit::Normal;
+    };
+    std::vector<ClosurePointerPath> possibleOrigins(1);
+    std::set<std::string> assignedPointers;
+    auto mergePaths = [&](std::vector<ClosurePointerPath>& paths) {
+        std::vector<ClosurePointerPath> merged;
+        auto appendUnique = [](auto& destination, const auto& effect) {
+            auto duplicate = std::find_if(
+                destination.begin(), destination.end(), [&](const auto& item) {
+                    return item.expression == effect.expression &&
+                           item.preserveIncoming == effect.preserveIncoming;
+                });
+            if(duplicate == destination.end())
+                destination.push_back(effect);
+        };
+        for(const auto& path : paths)
+        {
+            auto existing = std::find_if(
+                merged.begin(), merged.end(), [&](const auto& candidate) {
+                    return candidate.exit == path.exit;
+                });
+            if(existing == merged.end())
+            {
+                merged.push_back(path);
+                continue;
+            }
+            std::set<std::string> pointerNames;
+            for(const auto& origin : existing->origins)
+                pointerNames.insert(origin.first);
+            for(const auto& origin : path.origins)
+                pointerNames.insert(origin.first);
+            for(const auto& pointerName : pointerNames)
+            {
+                auto& alternatives = existing->origins[pointerName];
+                auto incoming = path.origins.find(pointerName);
+                if(incoming == path.origins.end())
+                {
+                    RuntimeClosurePointerBorrowEffect preserve{
+                        pointerName, nullptr, closure->line, false, true};
+                    appendUnique(alternatives, preserve);
+                    continue;
+                }
+                if(alternatives.empty())
+                {
+                    RuntimeClosurePointerBorrowEffect preserve{
+                        pointerName, nullptr, closure->line, false, true};
+                    appendUnique(alternatives, preserve);
+                }
+                for(const auto& effect : incoming->second)
+                    appendUnique(alternatives, effect);
+            }
+        }
+        paths = std::move(merged);
+    };
+    std::function<void(StatementListNode*, std::vector<ClosurePointerPath>&)>
+        analyzeList;
+    std::function<void(StatementNode*, std::vector<ClosurePointerPath>&)>
+        analyzeStatement;
+    analyzeList = [&](StatementListNode* statements,
+                      std::vector<ClosurePointerPath>& states) {
+        if(!statements)
+            return;
+        for(auto* statement : statements->statements)
+        {
+            analyzeStatement(statement, states);
+            mergePaths(states);
+        }
+    };
+    analyzeStatement = [&](StatementNode* statement,
+                           std::vector<ClosurePointerPath>& states) {
+        auto setExit = [&](ClosurePointerPath::Exit exit) {
+            for(auto& state : states)
+                if(state.exit == ClosurePointerPath::Exit::Normal)
+                    state.exit = exit;
+        };
+        if(dynamic_cast<ReturnNode*>(statement))
+        {
+            setExit(ClosurePointerPath::Exit::Return);
+            return;
+        }
+        if(dynamic_cast<BreakNode*>(statement))
+        {
+            setExit(ClosurePointerPath::Exit::Break);
+            return;
+        }
+        if(dynamic_cast<ContinueNode*>(statement))
+        {
+            setExit(ClosurePointerPath::Exit::Continue);
+            return;
+        }
+        if(dynamic_cast<ThrowNode*>(statement))
+        {
+            setExit(ClosurePointerPath::Exit::Throw);
+            return;
+        }
+        if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
+        {
+            if(!capturedPointers.count(assignment->name))
+                return;
+            bool isMutable = false;
+            if(auto* address =
+                   dynamic_cast<UnaryOpNode*>(assignment->expression))
+                isMutable = address->op == UnaryOpNode::OP_ADDR_MUT;
+            else if(auto* source = dynamic_cast<IdentifierNode*>(
+                        assignment->expression))
+                isMutable = isMutBorrower(source->name);
+            RuntimeClosurePointerBorrowEffect effect{
+                assignment->name, assignment->expression, assignment->line,
+                isMutable, false};
+            assignedPointers.insert(assignment->name);
+            for(auto& state : states)
+                if(state.exit == ClosurePointerPath::Exit::Normal)
+                    state.origins[assignment->name] = {effect};
+            return;
+        }
+        if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+        {
+            analyzeList(block->statements, states);
+            return;
+        }
+        if(auto* conditional = dynamic_cast<IfNode*>(statement))
+        {
+            const auto incoming = states;
+            auto thenStates = incoming;
+            analyzeList(conditional->thenBranch, thenStates);
+            states = std::move(thenStates);
+            if(conditional->elseIfBranch)
+            {
+                auto elseStates = incoming;
+                analyzeStatement(conditional->elseIfBranch, elseStates);
+                states.insert(states.end(), elseStates.begin(),
+                              elseStates.end());
+            }
+            else if(conditional->elseBranch)
+            {
+                auto elseStates = incoming;
+                analyzeList(conditional->elseBranch, elseStates);
+                states.insert(states.end(), elseStates.begin(),
+                              elseStates.end());
+            }
+            else
+                states.insert(states.end(), incoming.begin(), incoming.end());
+            return;
+        }
+        if(auto* conditional = dynamic_cast<CexprIfNode*>(statement))
+        {
+            const auto incoming = states;
+            auto thenStates = incoming;
+            analyzeList(conditional->thenBranch, thenStates);
+            states = std::move(thenStates);
+            if(conditional->elseIfBranch)
+            {
+                auto elseStates = incoming;
+                analyzeStatement(conditional->elseIfBranch, elseStates);
+                states.insert(states.end(), elseStates.begin(),
+                              elseStates.end());
+            }
+            else if(conditional->elseBranch)
+            {
+                auto elseStates = incoming;
+                analyzeList(conditional->elseBranch, elseStates);
+                states.insert(states.end(), elseStates.begin(),
+                              elseStates.end());
+            }
+            else
+                states.insert(states.end(), incoming.begin(), incoming.end());
+            return;
+        }
+        if(auto* loop = dynamic_cast<WhileNode*>(statement))
+        {
+            auto bodyStates = states;
+            analyzeList(loop->body, bodyStates);
+            for(auto& state : bodyStates)
+                if(state.exit == ClosurePointerPath::Exit::Break ||
+                   state.exit == ClosurePointerPath::Exit::Continue)
+                    state.exit = ClosurePointerPath::Exit::Normal;
+            states.insert(states.end(), bodyStates.begin(), bodyStates.end());
+            return;
+        }
+        if(auto* loop = dynamic_cast<ForNode*>(statement))
+        {
+            auto bodyStates = states;
+            analyzeList(loop->body, bodyStates);
+            for(auto& state : bodyStates)
+                if(state.exit == ClosurePointerPath::Exit::Break ||
+                   state.exit == ClosurePointerPath::Exit::Continue)
+                    state.exit = ClosurePointerPath::Exit::Normal;
+            states.insert(states.end(), bodyStates.begin(), bodyStates.end());
+            return;
+        }
+        if(auto* tryCatch = dynamic_cast<TryCatchNode*>(statement))
+        {
+            auto incoming = states;
+            auto tryStates = incoming;
+            if(tryCatch->tryBlock)
+                analyzeList(tryCatch->tryBlock->statements, tryStates);
+            auto catchStates = incoming;
+            if(tryCatch->catchBlock)
+                analyzeList(tryCatch->catchBlock->statements, catchStates);
+            states = std::move(tryStates);
+            states.insert(states.end(), catchStates.begin(),
+                          catchStates.end());
+        }
+    };
+    analyzeList(closure->body, possibleOrigins);
+    for(const auto& pointer : assignedPointers)
+    {
+        std::set<ExpressionNode*> seenExpressions;
+        bool preservesIncoming = false;
+        for(const auto& state : possibleOrigins)
+        {
+            auto origin = state.origins.find(pointer);
+            if(origin == state.origins.end())
+            {
+                preservesIncoming = true;
+                continue;
+            }
+            for(const auto& effect : origin->second)
+            {
+                if(effect.preserveIncoming)
+                {
+                    preservesIncoming = true;
+                    continue;
+                }
+                if(seenExpressions.insert(effect.expression).second)
+                    pointerBorrowEffects.push_back(effect);
+            }
+        }
+        if(preservesIncoming)
+            pointerBorrowEffects.push_back(
+                {pointer, nullptr, closure->line, false, true});
+    }
+}
+
 bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
                                                    ClosureNode* closure,
                                                    int line,
@@ -335,6 +597,266 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
     TypeNode* inferredReturnType = nullptr;
     if(!getRuntimeClosureCaptures(closure, captures, inferredReturnType))
         return false;
+
+    std::set<std::string> capturedPointers;
+    for(const auto& capture : captures)
+        if(dynamic_cast<PointerTypeNode*>(capture.second))
+            capturedPointers.insert(capture.first);
+    auto& pointerBorrowEffects =
+        runtimeClosurePointerBorrowEffects[closure];
+    pointerBorrowEffects.clear();
+    using ClosurePointerOrigins = std::map<
+        std::string, std::vector<RuntimeClosurePointerBorrowEffect>>;
+    struct ClosurePointerPath
+    {
+        ClosurePointerOrigins origins;
+        enum class Exit
+        {
+            Normal,
+            Return,
+            Break,
+            Continue,
+            Throw
+        } exit = Exit::Normal;
+    };
+    std::vector<ClosurePointerPath> possibleOrigins(1);
+    std::set<std::string> assignedPointers;
+    auto mergePaths = [&](std::vector<ClosurePointerPath>& paths) {
+        std::vector<ClosurePointerPath> merged;
+        auto appendUnique = [](auto& destination, const auto& effect) {
+            auto duplicate = std::find_if(
+                destination.begin(), destination.end(), [&](const auto& item) {
+                    return item.expression == effect.expression &&
+                           item.preserveIncoming == effect.preserveIncoming;
+                });
+            if(duplicate == destination.end())
+                destination.push_back(effect);
+        };
+        for(const auto& path : paths)
+        {
+            auto existing = std::find_if(
+                merged.begin(), merged.end(), [&](const auto& candidate) {
+                    return candidate.exit == path.exit;
+                });
+            if(existing == merged.end())
+            {
+                merged.push_back(path);
+                continue;
+            }
+
+            std::set<std::string> pointerNames;
+            for(const auto& origin : existing->origins)
+                pointerNames.insert(origin.first);
+            for(const auto& origin : path.origins)
+                pointerNames.insert(origin.first);
+            for(const auto& pointerName : pointerNames)
+            {
+                auto& alternatives = existing->origins[pointerName];
+                auto incoming = path.origins.find(pointerName);
+                if(incoming == path.origins.end())
+                {
+                    RuntimeClosurePointerBorrowEffect preserve{
+                        pointerName, nullptr, closure->line, false, true};
+                    appendUnique(alternatives, preserve);
+                    continue;
+                }
+                if(alternatives.empty())
+                {
+                    RuntimeClosurePointerBorrowEffect preserve{
+                        pointerName, nullptr, closure->line, false, true};
+                    appendUnique(alternatives, preserve);
+                }
+                for(const auto& effect : incoming->second)
+                    appendUnique(alternatives, effect);
+            }
+        }
+        paths = std::move(merged);
+    };
+    std::function<void(StatementListNode*, std::vector<ClosurePointerPath>&)>
+        analyzeList;
+    std::function<void(StatementNode*, std::vector<ClosurePointerPath>&)>
+        analyzeStatement;
+    analyzeList = [&](StatementListNode* statements,
+                      std::vector<ClosurePointerPath>& states) {
+        if(!statements)
+            return;
+        for(auto* statement : statements->statements)
+        {
+            analyzeStatement(statement, states);
+            mergePaths(states);
+        }
+    };
+    analyzeStatement = [&](StatementNode* statement,
+                           std::vector<ClosurePointerPath>& states) {
+        if(dynamic_cast<ReturnNode*>(statement))
+        {
+            for(auto& state : states)
+                if(state.exit == ClosurePointerPath::Exit::Normal)
+                    state.exit = ClosurePointerPath::Exit::Return;
+            return;
+        }
+        if(dynamic_cast<BreakNode*>(statement))
+        {
+            for(auto& state : states)
+                if(state.exit == ClosurePointerPath::Exit::Normal)
+                    state.exit = ClosurePointerPath::Exit::Break;
+            return;
+        }
+        if(dynamic_cast<ContinueNode*>(statement))
+        {
+            for(auto& state : states)
+                if(state.exit == ClosurePointerPath::Exit::Normal)
+                    state.exit = ClosurePointerPath::Exit::Continue;
+            return;
+        }
+        if(dynamic_cast<ThrowNode*>(statement))
+        {
+            for(auto& state : states)
+                if(state.exit == ClosurePointerPath::Exit::Normal)
+                    state.exit = ClosurePointerPath::Exit::Throw;
+            return;
+        }
+        if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
+        {
+            if(!capturedPointers.count(assignment->name))
+                return;
+            bool isMutable = false;
+            if(auto* address =
+                   dynamic_cast<UnaryOpNode*>(assignment->expression))
+                isMutable = address->op == UnaryOpNode::OP_ADDR_MUT;
+            else if(auto* source = dynamic_cast<IdentifierNode*>(
+                        assignment->expression))
+                isMutable = isMutBorrower(source->name);
+            RuntimeClosurePointerBorrowEffect effect{
+                assignment->name, assignment->expression, assignment->line,
+                isMutable, false};
+            assignedPointers.insert(assignment->name);
+            for(auto& state : states)
+                if(state.exit == ClosurePointerPath::Exit::Normal)
+                    state.origins[assignment->name] = {effect};
+            return;
+        }
+        if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+        {
+            analyzeList(block->statements, states);
+            return;
+        }
+
+        if(auto* conditional = dynamic_cast<IfNode*>(statement))
+        {
+            // Each arm starts from the same incoming pointer origins; an
+            // absent else arm preserves those origins as a real outcome.
+            auto incoming = states;
+            auto branches = incoming;
+            analyzeList(conditional->thenBranch, branches);
+            states = std::move(branches);
+            if(conditional->elseIfBranch)
+            {
+                auto elseStates = incoming;
+                analyzeStatement(conditional->elseIfBranch, elseStates);
+                states.insert(states.end(), elseStates.begin(),
+                              elseStates.end());
+            }
+            else if(conditional->elseBranch)
+            {
+                auto elseStates = incoming;
+                analyzeList(conditional->elseBranch, elseStates);
+                states.insert(states.end(), elseStates.begin(),
+                              elseStates.end());
+            }
+            else
+                states.insert(states.end(), incoming.begin(), incoming.end());
+            return;
+        }
+        if(auto* conditional = dynamic_cast<CexprIfNode*>(statement))
+        {
+            const auto incoming = states;
+            auto thenStates = incoming;
+            analyzeList(conditional->thenBranch, thenStates);
+            states = std::move(thenStates);
+            if(conditional->elseIfBranch)
+            {
+                auto elseStates = incoming;
+                analyzeStatement(conditional->elseIfBranch, elseStates);
+                states.insert(states.end(), elseStates.begin(),
+                              elseStates.end());
+            }
+            else if(conditional->elseBranch)
+            {
+                auto elseStates = incoming;
+                analyzeList(conditional->elseBranch, elseStates);
+                states.insert(states.end(), elseStates.begin(),
+                              elseStates.end());
+            }
+            else
+                states.insert(states.end(), incoming.begin(), incoming.end());
+            return;
+        }
+        if(auto* loop = dynamic_cast<WhileNode*>(statement))
+        {
+            auto bodyStates = states;
+            analyzeList(loop->body, bodyStates);
+            for(auto& state : bodyStates)
+                if(state.exit == ClosurePointerPath::Exit::Break ||
+                   state.exit == ClosurePointerPath::Exit::Continue)
+                    state.exit = ClosurePointerPath::Exit::Normal;
+            states.insert(states.end(), bodyStates.begin(), bodyStates.end());
+            return;
+        }
+        if(auto* loop = dynamic_cast<ForNode*>(statement))
+        {
+            auto bodyStates = states;
+            analyzeList(loop->body, bodyStates);
+            for(auto& state : bodyStates)
+                if(state.exit == ClosurePointerPath::Exit::Break ||
+                   state.exit == ClosurePointerPath::Exit::Continue)
+                    state.exit = ClosurePointerPath::Exit::Normal;
+            states.insert(states.end(), bodyStates.begin(), bodyStates.end());
+            return;
+        }
+        if(auto* tryCatch = dynamic_cast<TryCatchNode*>(statement))
+        {
+            auto incoming = states;
+            auto tryStates = incoming;
+            if(tryCatch->tryBlock)
+                analyzeList(tryCatch->tryBlock->statements, tryStates);
+            auto catchStates = incoming;
+            if(tryCatch->catchBlock)
+                analyzeList(tryCatch->catchBlock->statements, catchStates);
+            states = std::move(tryStates);
+            states.insert(states.end(), catchStates.begin(),
+                          catchStates.end());
+        }
+    };
+    analyzeList(closure->body, possibleOrigins);
+
+    for(const auto& pointer : assignedPointers)
+    {
+        std::set<ExpressionNode*> seenExpressions;
+        bool preservesIncoming = false;
+        for(const auto& state : possibleOrigins)
+        {
+            auto origin = state.origins.find(pointer);
+            if(origin == state.origins.end())
+            {
+                preservesIncoming = true;
+                continue;
+            }
+            for(const auto& effect : origin->second)
+            {
+                if(effect.preserveIncoming)
+                {
+                    preservesIncoming = true;
+                    continue;
+                }
+                if(seenExpressions.insert(effect.expression).second)
+                    pointerBorrowEffects.push_back(effect);
+            }
+        }
+        if(preservesIncoming)
+            pointerBorrowEffects.push_back(
+                {pointer, nullptr, closure->line, false, true});
+    }
 
     TypeNode* returnType = inferredReturnType;
     if(expectedType)
@@ -446,6 +968,47 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
         activeBorrowers[owner].insert(name);
     }
     return true;
+}
+
+void CodeGenerator::applyRuntimeClosurePointerBorrowEffects(
+    const std::string& name, ClosureNode* closure, int line)
+{
+    if(!closure)
+        return;
+    auto effects = runtimeClosurePointerBorrowEffects.find(closure);
+    if(effects == runtimeClosurePointerBorrowEffects.end() ||
+       effects->second.empty())
+        return;
+
+    // Remove this environment's shared-capture markers while transferring the
+    // pointer assignments made by its body into the surrounding borrow state.
+    releaseRuntimeClosureBorrows(name);
+    std::map<std::string,
+             std::vector<const RuntimeClosurePointerBorrowEffect*>>
+        effectsByPointer;
+    for(const auto& effect : effects->second)
+        effectsByPointer[effect.pointerVariable].push_back(&effect);
+    for(const auto& pointerEffects : effectsByPointer)
+    {
+        const auto& alternatives = pointerEffects.second;
+        std::vector<ExpressionNode*> sources;
+        sources.reserve(alternatives.size());
+        bool preservesIncoming = false;
+        for(const auto* effect : alternatives)
+            if(effect->preserveIncoming)
+                preservesIncoming = true;
+            else
+                sources.push_back(effect->expression);
+        registerPointerBorrowAlternatives(
+            pointerEffects.first, sources, line,
+            alternatives.size() == 1 ? alternatives.front()->isMutable
+                                     : false,
+            preservesIncoming);
+    }
+    auto owners = runtimeClosureBorrowOwners.find(name);
+    if(owners != runtimeClosureBorrowOwners.end())
+        for(const auto& owner : owners->second)
+            activeBorrowers[owner].insert(name);
 }
 
 bool CodeGenerator::tryCopyRuntimeClosureValue(const std::string& name,
@@ -626,6 +1189,11 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 clearPointerBorrow(node->name);
                 variableTypes[node->name] = TypeNode::TYPE_FUNCTION;
                 functionTypeVariables[node->name] = inferredType;
+                std::string target = resolveFunctionItemTarget(
+                    functionItem, inferredType);
+                functionItemVariables[node->name] =
+                    target.empty() ? std::set<std::string>{}
+                                   : std::set<std::string>{target};
                 constantVariables.insert(node->name);
                 return;
             }
@@ -655,6 +1223,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             return;
         closureVariables[node->name] = effectiveClosure;
         recordVariableScopeDepth(node->name);
+        functionItemVariables[node->name] = {};
         if(tryGenerateRuntimeClosureValue(
                node->name, effectiveClosure, node->line,
                dynamic_cast<FunctionTypeNode*>(declaredType)))
@@ -790,6 +1359,26 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     recordVariableScopeDepth(node->name);
     clearMovedVariable(node->name);
     clearPointerBorrow(node->name);
+    if(auto* callableType = dynamic_cast<FunctionTypeNode*>(declaredType))
+    {
+        if(auto* functionItem =
+               dynamic_cast<IdentifierNode*>(node->expression))
+        {
+            auto copied = functionItemVariables.find(functionItem->name);
+            if(copied != functionItemVariables.end())
+                functionItemVariables[node->name] = copied->second;
+            else
+            {
+                std::string target = resolveFunctionItemTarget(
+                    functionItem, callableType);
+                functionItemVariables[node->name] =
+                    target.empty() ? std::set<std::string>{}
+                                   : std::set<std::string>{target};
+            }
+        }
+        else
+            functionItemVariables[node->name] = {};
+    }
 
     if(!declaredType)
     {
@@ -917,6 +1506,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             auto functionType = functionTypeVariables.find(id->name);
             if(functionType != functionTypeVariables.end())
                 functionTypeVariables[node->name] = functionType->second;
+            auto functionItem = functionItemVariables.find(id->name);
+            if(functionItem != functionItemVariables.end())
+                functionItemVariables[node->name] = functionItem->second;
             auto sit = structVariableTypes.find(id->name);
             if(sit != structVariableTypes.end())
             {
@@ -1955,6 +2547,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     }
 
     recordVariableScopeDepth(node->name);
+    functionItemVariables.erase(node->name);
 
     // Inline closure: var inc = || { ... }
     // Store the AST and leave a null-ptr placeholder; no LLVM value generated.
@@ -2708,6 +3301,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
     if(auto* functionType = dynamic_cast<FunctionTypeNode*>(declaredType))
     {
+        functionItemVariables[node->name] = {};
         llvm::Type* callableType = getLLVMTypeFromNode(functionType);
         if(!callableType)
         {
@@ -2729,6 +3323,21 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 return;
             }
             builder.CreateStore(initValue, alloca);
+            if(auto* functionItem =
+                   dynamic_cast<IdentifierNode*>(node->initExpr))
+            {
+                auto copied = functionItemVariables.find(functionItem->name);
+                if(copied != functionItemVariables.end())
+                    functionItemVariables[node->name] = copied->second;
+                else
+                {
+                    std::string target = resolveFunctionItemTarget(
+                        functionItem, functionType);
+                    functionItemVariables[node->name] =
+                        target.empty() ? std::set<std::string>{}
+                                       : std::set<std::string>{target};
+                }
+            }
         }
         else
         {

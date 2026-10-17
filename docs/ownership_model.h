@@ -68,13 +68,44 @@
  * mutable borrows to a list are supported when their source places are known
  * to be disjoint; unknown or overlapping places are conservatively rejected.
  * Shared aggregate borrows retain their tracked source places, including
- * disjoint fields where the compiler can identify them.
+ * disjoint fields where the compiler can identify them. Writes through a
+ * pointer known to represent a shared borrow are rejected even inside an
+ * `unsafe` block; untracked raw pointers remain subject to unsafe rules.
+ * Passing a known shared borrow to a visible function that writes through a
+ * `ptr<T>` parameter is rejected, including when the write is reached through
+ * named helper or method calls. Opaque functions without a body are assumed to
+ * mutate pointer parameters; opaque callable parameters with `ptr<T>` inputs
+ * are treated the same way. Callers must pass an exclusive borrow. Untracked
+ * raw pointers remain governed by unsafe rules.
+ * Visible functions may return pointer parameters directly, through local
+ * pointer aliases, or through chains of other visible forwarding functions;
+ * call sites retain the corresponding argument borrow through the returned
+ * pointer's last use. Indirectly loaded pointer values are not assumed to
+ * share the outer pointer's lifetime. Methods that return a pointer field
+ * from `self` or forward a pointer parameter preserve that source borrow at
+ * the call site; methods without such a summary conservatively retain receiver
+ * and pointer-argument borrows.
+ * A shared borrow stored in a struct may be passed by value to a visible,
+ * non-generic function when its body is proven to read only scalar fields or
+ * scalar values through the borrowed pointer fields, including local pointer
+ * aliases, and not to retain, pass, return, or mutate those pointers. Opaque
+ * or unproven callees and aggregates containing exclusive local borrows
+ * remain rejected.
+ * Passing a borrow of local storage to an opaque pointer parameter also
+ * requires `unsafe`, because the callee may retain it; the unsafe caller is
+ * responsible for that lifetime.
+ * An exclusive pointer can be exclusively reborrowed with `&mut *pointer`;
+ * accesses through the parent are rejected while the child reborrow is live,
+ * and the parent borrow remains active after the child expires.
  *
  * Callable values, runtime closure environments, function-type annotations,
  * and named-function items are implemented. A closure that borrows locals
  * across a boundary is conservatively rejected unless the compiler can prove
- * the callee does not let it escape. General closure copying and explicit
- * owned/move captures are not part of the current ownership model.
+ * the callee does not let it escape. This proof currently covers direct
+ * invocations in straight-line code, blocks, conditionals, loops, try/catch,
+ * and print/assert expressions; other statement forms remain conservative.
+ * General closure copying and explicit owned/move captures are not part of
+ * the current ownership model.
  */
 
 /**

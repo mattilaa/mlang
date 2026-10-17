@@ -272,6 +272,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedFunctionTypeBindings = activeFunctionTypeBindings;
     auto savedMovedVariables = movedVariables;
     auto savedPointerBorrowTarget = pointerBorrowTarget;
+    auto savedPointerBorrowParent = pointerBorrowParent;
     auto savedAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto savedAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto savedAggregateBorrowFieldPlaces = aggregateBorrowFieldPlaces;
@@ -295,6 +296,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedRuntimeClosureVariables = runtimeClosureVariables;
     auto savedRuntimeClosureReturnTypes = runtimeClosureReturnTypes;
     auto savedFunctionTypeVariables = functionTypeVariables;
+    auto savedFunctionItemVariables = functionItemVariables;
+    auto savedFunctionTypeParameters = functionTypeParameters;
+    auto savedPointerParameterBorrowOrigins = pointerParameterBorrowOrigins;
     auto savedRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     auto savedClosureCaptureAliases = closureCaptureAliases;
     auto savedClosureCaptureTypes = closureCaptureTypes;
@@ -325,6 +329,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     runtimeClosureVariables.clear();
     runtimeClosureReturnTypes.clear();
     functionTypeVariables.clear();
+    functionItemVariables.clear();
+    functionTypeParameters.clear();
+    pointerParameterBorrowOrigins.clear();
     runtimeClosureBorrowOwners.clear();
     closureVariables = node->boundClosureParameters;
     closureCaptureAliases = node->boundClosureCaptureAliases;
@@ -334,6 +341,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     activeInlineClosures.clear();
     inlineClosureReturnStates.clear();
     pointerBorrowTarget.clear();
+    pointerBorrowParent.clear();
     aggregateBorrowOrigins.clear();
     aggregateBorrowPlaces.clear();
     aggregateBorrowFieldPlaces.clear();
@@ -520,11 +528,12 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                     ptrType->elementType;
                 // Pointer parameters may originate from caller-owned stack
                 // storage. Track the parameter as a local borrow origin so
-                // returning it or storing an alias globally is rejected
-                // until Mlang has explicit lifetime relationships.
+                // global escapes remain rejected; direct returns are tied to
+                // their argument at visible call sites.
                 const std::string parameterName(arg.getName());
                 pointerBorrowTarget[parameterName] = parameterName;
                 pointerBorrowPlace[parameterName] = parameterName;
+                pointerParameterBorrowOrigins.insert(parameterName);
             }
             if(auto* traitObjType =
                    dynamic_cast<TraitObjectTypeNode*>(paramNode->type))
@@ -536,8 +545,11 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             }
             if(auto* functionType =
                    dynamic_cast<FunctionTypeNode*>(paramNode->type))
+            {
                 functionTypeVariables[std::string(arg.getName())] =
                     functionType;
+                functionTypeParameters.insert(std::string(arg.getName()));
+            }
         }
         // mlang -g: the parameter, with its MLang type.
         if(paramIdx < node->parameters->parameters.size())
@@ -616,6 +628,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         std::move(savedImmutableReferenceVariables);
     movedVariables = std::move(savedMovedVariables);
     pointerBorrowTarget = std::move(savedPointerBorrowTarget);
+    pointerBorrowParent = std::move(savedPointerBorrowParent);
     aggregateBorrowOrigins = std::move(savedAggregateBorrowOrigins);
     aggregateBorrowPlaces = std::move(savedAggregateBorrowPlaces);
     aggregateBorrowFieldPlaces =
@@ -640,6 +653,10 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     runtimeClosureVariables = std::move(savedRuntimeClosureVariables);
     runtimeClosureReturnTypes = std::move(savedRuntimeClosureReturnTypes);
     functionTypeVariables = std::move(savedFunctionTypeVariables);
+    functionItemVariables = std::move(savedFunctionItemVariables);
+    functionTypeParameters = std::move(savedFunctionTypeParameters);
+    pointerParameterBorrowOrigins =
+        std::move(savedPointerParameterBorrowOrigins);
     runtimeClosureBorrowOwners =
         std::move(savedRuntimeClosureBorrowOwners);
     closureCaptureAliases = std::move(savedClosureCaptureAliases);

@@ -410,6 +410,7 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
                 return;
             }
             functionTypeVariables[node->name] = expectedCallableType;
+            functionItemVariables[node->name] = {};
             return;
         }
     }
@@ -548,6 +549,26 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     value = applyStructCopySemantics(value);
     builder.CreateStore(value, variable);
     clearMovedVariable(node->name);
+    if(functionTypeVariables.count(node->name) != 0)
+    {
+        if(auto* functionItem =
+               dynamic_cast<IdentifierNode*>(node->expression))
+        {
+            auto copied = functionItemVariables.find(functionItem->name);
+            if(copied != functionItemVariables.end())
+                functionItemVariables[node->name] = copied->second;
+            else
+            {
+                std::string target = resolveFunctionItemTarget(
+                    functionItem, functionTypeVariables[node->name]);
+                functionItemVariables[node->name] =
+                    target.empty() ? std::set<std::string>{}
+                                   : std::set<std::string>{std::move(target)};
+            }
+        }
+        else
+            functionItemVariables[node->name] = {};
+    }
     if(targetType->isPointerTy())
     {
         {
@@ -582,6 +603,73 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         auto previousPlaceInfo = aggregateBorrowPlaces.find(owner);
         if(previousPlaceInfo != aggregateBorrowPlaces.end())
             previousPlaces = previousPlaceInfo->second;
+        const auto previousPlacesBeforeFieldUpdate = previousPlaces;
+        std::map<std::string,
+                 std::map<std::string, std::set<std::string>>>
+            previousFieldPlaces;
+        auto previousFieldInfo = aggregateBorrowFieldPlaces.find(owner);
+        if(previousFieldInfo != aggregateBorrowFieldPlaces.end())
+            previousFieldPlaces = previousFieldInfo->second;
+        std::string destinationPath;
+        const std::string targetPlace =
+            node->target ? resolveBorrowPlaceFromLValue(node->target)
+                         : owner + "." + node->fieldName;
+        if(targetPlace.size() > owner.size() &&
+           targetPlace.compare(0, owner.size(), owner) == 0 &&
+           (targetPlace[owner.size()] == '.' ||
+            targetPlace[owner.size()] == '['))
+        {
+            destinationPath = targetPlace.substr(owner.size());
+            if(destinationPath.front() == '.')
+                destinationPath.erase(0, 1);
+        }
+        auto fieldIsReplaced = [&](const std::string& fieldPath) {
+            if(destinationPath.empty())
+                return false;
+            // Overlap is not enough: an unknown/dynamic index may overwrite
+            // one of several slots, but cannot prove that any one prior slot
+            // was removed. Prune only a definite path or a whole subtree.
+            if(destinationPath.find("[*]") != std::string::npos)
+                return false;
+            if(fieldPath == destinationPath)
+                return true;
+            return fieldPath.size() > destinationPath.size() &&
+                   fieldPath.compare(0, destinationPath.size(),
+                                     destinationPath) == 0 &&
+                   (fieldPath[destinationPath.size()] == '.' ||
+                    fieldPath[destinationPath.size()] == '[');
+        };
+        std::set<std::string> ownersWithPreciseFields;
+        for(const auto& field : previousFieldPlaces)
+            for(const auto& source : field.second)
+                ownersWithPreciseFields.insert(source.first);
+        for(auto field = previousFieldPlaces.begin();
+            field != previousFieldPlaces.end();)
+            if(fieldIsReplaced(field->first))
+                field = previousFieldPlaces.erase(field);
+            else
+                ++field;
+        for(const auto& sourceOwner : ownersWithPreciseFields)
+        {
+            std::set<std::string> retainedPlaces;
+            for(const auto& field : previousFieldPlaces)
+            {
+                auto source = field.second.find(sourceOwner);
+                if(source != field.second.end())
+                    retainedPlaces.insert(source->second.begin(),
+                                          source->second.end());
+            }
+            if(retainedPlaces.empty())
+            {
+                previousOrigins.erase(sourceOwner);
+                previousPlaces.erase(sourceOwner);
+            }
+            else
+            {
+                previousOrigins.insert(sourceOwner);
+                previousPlaces[sourceOwner] = std::move(retainedPlaces);
+            }
+        }
         const bool hadExclusiveBorrow = isMutBorrower(owner);
         std::string previousExclusiveOwner;
         std::string previousExclusivePlace;
@@ -601,7 +689,10 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                     previousExclusiveKeys.push_back(active.first);
 
             auto sharedFields = aggregateBorrowFieldPlaces.find(owner);
-            for(const auto& byOwner : previousPlaces)
+            // Exclusive borrows currently have aggregate-place metadata but
+            // no per-field map. Keep using the unfiltered snapshot here so a
+            // field update cannot accidentally release one.
+            for(const auto& byOwner : previousPlacesBeforeFieldUpdate)
                 for(const auto& sourcePlace : byOwner.second)
                 {
                     bool isShared = false;
@@ -622,16 +713,26 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                 }
         }
 
-        trackAggregateBorrowOrigins(owner, node->expression);
+        trackAggregateBorrowOrigins(owner, node->expression,
+                                    destinationPath);
         if(!mergeAggregateBorrowStateAfterUpdate(
                owner, previousOrigins, previousPlaces,
                previousExclusivePlaces, previousExclusiveKeys,
                previousExclusiveOwner, previousExclusivePlace, node->line))
             return;
-        if(!previousOrigins.empty())
-        {
+        auto mergedFieldPlaces = std::move(previousFieldPlaces);
+        auto updatedFieldInfo = aggregateBorrowFieldPlaces.find(owner);
+        if(updatedFieldInfo != aggregateBorrowFieldPlaces.end())
+            for(const auto& field : updatedFieldInfo->second)
+                for(const auto& source : field.second)
+                {
+                    auto& places = mergedFieldPlaces[field.first][source.first];
+                    places.insert(source.second.begin(), source.second.end());
+                }
+        if(mergedFieldPlaces.empty())
             aggregateBorrowFieldPlaces.erase(owner);
-        }
+        else
+            aggregateBorrowFieldPlaces[owner] = std::move(mergedFieldPlaces);
         auto currentOrigins = aggregateBorrowOrigins.find(owner);
         if(currentOrigins == aggregateBorrowOrigins.end() ||
            currentOrigins->second.empty())
@@ -976,58 +1077,52 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
     if(!ownerName.empty())
     {
         std::set<std::string> allowedBorrowers;
+        if(node->target)
+        {
+            std::function<void(ExpressionNode*)> collectAllowedBorrowers =
+                [&](ExpressionNode* expr) -> void
+            {
+                if(!expr)
+                    return;
+
+                if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+                {
+                    if(unary->op == UnaryOpNode::OP_DEREF)
+                    {
+                        if(auto* pid =
+                               dynamic_cast<IdentifierNode*>(unary->operand))
+                        {
+                            auto pit = pointerBorrowTarget.find(pid->name);
+                            if(pit != pointerBorrowTarget.end() &&
+                               pit->second == ownerName)
+                                allowedBorrowers.insert(pid->name);
+                        }
+                    }
+                    collectAllowedBorrowers(unary->operand);
+                    return;
+                }
+
+                if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
+                {
+                    collectAllowedBorrowers(field->object);
+                    return;
+                }
+
+                if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
+                {
+                    collectAllowedBorrowers(index->base);
+                    collectAllowedBorrowers(index->index);
+                    return;
+                }
+
+                if(auto* tuple = dynamic_cast<TupleAccessNode*>(expr))
+                    collectAllowedBorrowers(tuple->tuple);
+            };
+            collectAllowedBorrowers(node->target);
+        }
         auto borIt = activeBorrowers.find(ownerName);
         if(borIt != activeBorrowers.end() && !borIt->second.empty())
         {
-            if(node->target)
-            {
-                std::function<void(ExpressionNode*)> collectAllowedBorrowers =
-                    [&](ExpressionNode* expr) -> void
-                {
-                    if(!expr)
-                        return;
-
-                    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
-                    {
-                        if(unary->op == UnaryOpNode::OP_DEREF)
-                        {
-                            if(auto* pid = dynamic_cast<IdentifierNode*>(
-                                   unary->operand))
-                            {
-                                auto pit = pointerBorrowTarget.find(pid->name);
-                                if(pit != pointerBorrowTarget.end() &&
-                                   pit->second == ownerName)
-                                {
-                                    allowedBorrowers.insert(pid->name);
-                                }
-                            }
-                        }
-                        collectAllowedBorrowers(unary->operand);
-                        return;
-                    }
-
-                    if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
-                    {
-                        collectAllowedBorrowers(field->object);
-                        return;
-                    }
-
-                    if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
-                    {
-                        collectAllowedBorrowers(index->base);
-                        collectAllowedBorrowers(index->index);
-                        return;
-                    }
-
-                    if(auto* tuple = dynamic_cast<TupleAccessNode*>(expr))
-                    {
-                        collectAllowedBorrowers(tuple->tuple);
-                        return;
-                    }
-                };
-                collectAllowedBorrowers(node->target);
-            }
-
             for(const auto& by : borIt->second)
             {
                 if(allowedBorrowers.find(by) == allowedBorrowers.end() &&

@@ -261,6 +261,7 @@ void CodeGenerator::clearPointerBorrow(const std::string& pointerVar)
     }
     pointerBorrowTarget.erase(pointerVar);
     pointerBorrowPlace.erase(pointerVar);
+    pointerBorrowParent.erase(pointerVar);
 }
 
 bool CodeGenerator::isMutBorrower(const std::string& ptrVar) const
@@ -313,6 +314,12 @@ void CodeGenerator::recordVariableScopeDepth(const std::string& varName)
         entry.hadPreviousAggregateBorrowPlace = true;
         entry.previousAggregateBorrowPlace = place->second;
     }
+    auto functionItem = functionItemVariables.find(varName);
+    if(functionItem != functionItemVariables.end())
+    {
+        entry.hadPreviousFunctionItemTarget = true;
+        entry.previousFunctionItemTargets = functionItem->second;
+    }
     variableScopeDepth[varName] = currentScopeDepth();
     variableScopeDepthScopes.back().push_back(std::move(entry));
 }
@@ -329,6 +336,9 @@ void CodeGenerator::recordScopedPointerVariable(const std::string& pointerVar)
     {
         entry.hadPreviousBorrow = true;
         entry.previousOwner = it->second;
+        auto parent = pointerBorrowParent.find(pointerVar);
+        if(parent != pointerBorrowParent.end())
+            entry.previousParent = parent->second;
         auto place = pointerBorrowPlace.find(pointerVar);
         if(place != pointerBorrowPlace.end())
             entry.previousPlace = place->second;

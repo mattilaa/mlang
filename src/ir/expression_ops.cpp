@@ -256,6 +256,7 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                         auto savedPointerKnownNull = pointerKnownNull;
                         auto savedMovedVariables = movedVariables;
                         auto savedPointerBorrowTarget = pointerBorrowTarget;
+                        auto savedPointerBorrowParent = pointerBorrowParent;
                         auto savedActiveBorrowers = activeBorrowers;
                         auto savedActiveMutBorrower = activeMutBorrower;
                         auto savedVariableScopeDepth = variableScopeDepth;
@@ -280,6 +281,7 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                         pointerKnownNull = savedPointerKnownNull;
                         movedVariables = savedMovedVariables;
                         pointerBorrowTarget = savedPointerBorrowTarget;
+                        pointerBorrowParent = savedPointerBorrowParent;
                         activeBorrowers = savedActiveBorrowers;
                         activeMutBorrower = savedActiveMutBorrower;
                         variableScopeDepth = savedVariableScopeDepth;
@@ -1600,6 +1602,7 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
                             auto savedPointerElementTypes = pointerElementTypes;
                             auto savedMovedVariables = movedVariables;
                             auto savedPointerBorrowTarget = pointerBorrowTarget;
+                            auto savedPointerBorrowParent = pointerBorrowParent;
                             auto savedActiveBorrowers = activeBorrowers;
                             auto savedActiveMutBorrower = activeMutBorrower;
                             auto savedVariableScopeDepth = variableScopeDepth;
@@ -1623,6 +1626,7 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
                             pointerElementTypes = savedPointerElementTypes;
                             movedVariables = savedMovedVariables;
                             pointerBorrowTarget = savedPointerBorrowTarget;
+                            pointerBorrowParent = savedPointerBorrowParent;
                             activeBorrowers = savedActiveBorrowers;
                             activeMutBorrower = savedActiveMutBorrower;
                             variableScopeDepth = savedVariableScopeDepth;
@@ -1916,6 +1920,7 @@ llvm::Value* CodeGenerator::generateUpdateExpression(UpdateExpressionNode* node)
                     auto savedPointerElementTypes = pointerElementTypes;
                     auto savedMovedVariables = movedVariables;
                     auto savedPointerBorrowTarget = pointerBorrowTarget;
+                    auto savedPointerBorrowParent = pointerBorrowParent;
                     auto savedActiveBorrowers = activeBorrowers;
                     auto savedActiveMutBorrower = activeMutBorrower;
                     auto savedVariableScopeDepth = variableScopeDepth;
@@ -1938,6 +1943,7 @@ llvm::Value* CodeGenerator::generateUpdateExpression(UpdateExpressionNode* node)
                     pointerElementTypes = savedPointerElementTypes;
                     movedVariables = savedMovedVariables;
                     pointerBorrowTarget = savedPointerBorrowTarget;
+                    pointerBorrowParent = savedPointerBorrowParent;
                     activeBorrowers = savedActiveBorrowers;
                     activeMutBorrower = savedActiveMutBorrower;
                     variableScopeDepth = savedVariableScopeDepth;
@@ -2008,6 +2014,7 @@ llvm::Value* CodeGenerator::generateShortCircuitLogicalOp(BinaryOpNode* node)
 
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
+    auto incomingPointerBorrowParent = pointerBorrowParent;
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingActiveMutBorrower = activeMutBorrower;
 
@@ -2043,17 +2050,19 @@ llvm::Value* CodeGenerator::generateShortCircuitLogicalOp(BinaryOpNode* node)
     if(rhsFallsThrough)
         phi->addIncoming(Rb, rhsEnd);
 
-    // The right operand may not run: a move there is only a possible move,
-    // and a &mut borrow it starts is not guaranteed to be active.
+    // The right operand may not run, so moves and borrows from it are
+    // conditional. Preserve possible borrows conservatively across the join.
     movedVariables.insert(incomingMoved.begin(), incomingMoved.end());
+    pointerBorrowParent = incomingPointerBorrowParent;
     for(const auto& kv : incomingPointerBorrowTarget)
         pointerBorrowTarget.emplace(kv.first, kv.second);
     for(const auto& kv : incomingActiveBorrowers)
         activeBorrowers[kv.first].insert(kv.second.begin(), kv.second.end());
-    std::map<std::string, std::string> mergedActiveMutBorrower;
-    for(const auto& kv : activeMutBorrower)
-        if(incomingActiveMutBorrower.count(kv.first))
-            mergedActiveMutBorrower[kv.first] = kv.second;
+    std::map<std::string, std::string> mergedActiveMutBorrower =
+        incomingActiveMutBorrower;
+    if(rhsFallsThrough)
+        for(const auto& kv : activeMutBorrower)
+            mergedActiveMutBorrower.emplace(kv.first, kv.second);
     activeMutBorrower = std::move(mergedActiveMutBorrower);
 
     return phi;
@@ -2064,6 +2073,7 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
 {
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
+    auto incomingPointerBorrowParent = pointerBorrowParent;
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingActiveMutBorrower = activeMutBorrower;
 
@@ -2121,6 +2131,7 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
     builder.SetInsertPoint(thenBB);
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
+    pointerBorrowParent = incomingPointerBorrowParent;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
     llvm::Value* thenVal = generateExpression(node->trueExpr, expectedType);
@@ -2128,6 +2139,7 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
         return nullptr;
     auto thenMoved = movedVariables;
     auto thenPointerBorrowTarget = pointerBorrowTarget;
+    auto thenPointerBorrowParent = pointerBorrowParent;
     auto thenActiveBorrowers = activeBorrowers;
     auto thenActiveMutBorrower = activeMutBorrower;
     if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
@@ -2139,6 +2151,7 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
     builder.SetInsertPoint(elseBB);
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
+    pointerBorrowParent = incomingPointerBorrowParent;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
     llvm::Value* elseVal = generateExpression(node->falseExpr, expectedType);
@@ -2146,6 +2159,7 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
         return nullptr;
     auto elseMoved = movedVariables;
     auto elsePointerBorrowTarget = pointerBorrowTarget;
+    auto elsePointerBorrowParent = pointerBorrowParent;
     auto elseActiveBorrowers = activeBorrowers;
     auto elseActiveMutBorrower = activeMutBorrower;
     if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
@@ -2329,6 +2343,15 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
         }
     }
     pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
+    pointerBorrowParent = thenPointerBorrowParent;
+    for(auto it = pointerBorrowParent.begin(); it != pointerBorrowParent.end();)
+    {
+        auto other = elsePointerBorrowParent.find(it->first);
+        if(other == elsePointerBorrowParent.end() || other->second != it->second)
+            it = pointerBorrowParent.erase(it);
+        else
+            ++it;
+    }
 
     std::map<std::string, std::set<std::string>> mergedActiveBorrowers =
         thenActiveBorrowers;
@@ -2339,11 +2362,13 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
     }
     activeBorrowers = std::move(mergedActiveBorrowers);
 
-    // Merge &mut borrowers: keep only those active in both branches
+    // A mutable borrow from either result branch may remain live after the
+    // expression. Retain the union so owner accesses stay blocked.
     std::map<std::string, std::string> mergedActiveMutBorrower;
     for(const auto& kv : thenActiveMutBorrower)
-        if(elseActiveMutBorrower.count(kv.first))
-            mergedActiveMutBorrower[kv.first] = kv.second;
+        mergedActiveMutBorrower.emplace(kv.first, kv.second);
+    for(const auto& kv : elseActiveMutBorrower)
+        mergedActiveMutBorrower.emplace(kv.first, kv.second);
     activeMutBorrower = std::move(mergedActiveMutBorrower);
 
     return phi;

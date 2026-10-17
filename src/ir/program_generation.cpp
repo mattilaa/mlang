@@ -913,6 +913,26 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
+    // Resolve pointer-return provenance summaries after all named functions
+    // have been declared. Repeating the AST scan propagates forwarding chains
+    // even when a caller or wrapper appears before the function it invokes.
+    for(size_t pass = 0; pass <= functionOverloads.size(); ++pass)
+    {
+        const auto previousParameterSummaries =
+            functionPointerReturnParameters;
+        const auto previousCompleteSummaries =
+            functionPointerReturnSummaryComplete;
+
+        for(const auto& namedOverloads : functionOverloads)
+            for(const auto& overload : namedOverloads.second)
+                if(overload.node)
+                    registerFunctionOverload(overload.node, overload.function);
+
+        if(functionPointerReturnParameters == previousParameterSummaries &&
+           functionPointerReturnSummaryComplete == previousCompleteSummaries)
+            break;
+    }
+
     // Then generate all function bodies
     if(program->functionList)
     {

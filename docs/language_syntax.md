@@ -381,7 +381,10 @@ var next2: ptr<i32> {};  // null
 
 Dereferencing a raw pointer requires `unsafe`, but `unsafe` does not disable
 null checks. A pointer known to be null is rejected at compile time; unknown raw
-pointers are checked at runtime before load or store.
+pointers are checked at runtime before load or store. Dereference assignment
+accepts a pointer expression, including a pointer stored in a struct field;
+the pointer can be used in place without copying it out of a borrow-owning
+aggregate.
 
 ### Local Borrow Checking
 
@@ -390,6 +393,35 @@ exclusive borrow. The compiler tracks their source places, rejects conflicting
 reads, writes, moves, or overlapping borrows, and releases local borrows after
 their last use. It can distinguish disjoint struct fields when their paths are
 known.
+Writes through a pointer known to represent a shared borrow are rejected even
+inside `unsafe`; an untracked raw pointer remains governed by unsafe rules.
+When a visible function body writes through a `ptr<T>` parameter, passing it a
+known shared borrow is rejected; this effect is followed through named helper
+and method calls. Opaque functions without a body are conservatively assumed
+to mutate pointer parameters; opaque callable parameters with `ptr<T>` inputs
+are treated the same way. Callers must pass an exclusive borrow. Untracked raw
+pointers remain governed by unsafe rules.
+Passing a borrow of local storage to an opaque pointer parameter also requires
+`unsafe`, because the callee may retain it; the unsafe caller is responsible
+for that lifetime.
+
+An exclusive pointer can be reborrowed with `&mut *pointer`. While the child
+reborrow is live, accesses through the parent pointer are rejected. When the
+child's last use ends, the parent pointer becomes usable again and its original
+exclusive borrow remains active.
+
+A visible function may return a pointer parameter directly, including through
+a local pointer alias or a chain of other visible forwarding functions. At the
+call site, the returned pointer keeps the corresponding argument borrow alive
+until the result's last use. Returning a pointer loaded indirectly through
+another pointer is not treated as forwarding: the compiler cannot prove that
+the loaded pointer has the same lifetime as the pointer parameter. Opaque
+functions retain the existing unsafe boundary for local pointer arguments.
+
+Methods that return a pointer field from `self` or forward a pointer parameter
+preserve that field or argument's borrow at the call site. For methods whose
+pointer result cannot be summarized from those sources, the compiler
+conservatively tracks the receiver and pointer arguments.
 
 An aggregate that stores a borrow keeps the borrowed place reserved while that
 aggregate remains live. A struct literal may retain multiple exclusive
@@ -399,10 +431,13 @@ or extracting its exclusive pointer is rejected, and the aggregate cannot
 outlive the borrowed local. Appending multiple exclusive borrows to a list is
 also supported when their source places are known to be disjoint; dynamic or
 unknown places are treated conservatively as overlapping. Passing an aggregate
-with a local borrow by value to an ordinary function is still rejected because
-the compiler cannot yet prove that the callee will not retain it; this applies
-to both shared and exclusive local borrows. Shared borrows in aggregates
-continue to track their individual source places.
+with a local shared borrow by value is allowed only when the compiler proves
+the visible, non-generic struct-parameter function reads scalar fields directly
+or scalar values through its borrowed pointer fields (including local pointer
+aliases) without returning, storing, passing, or mutating those pointers.
+Opaque functions, unproven overloads, and aggregates containing exclusive
+local borrows remain rejected.
+Shared borrows in aggregates continue to track their individual source places.
 
 Struct values follow the same rule: every field starts at its zero value.
 The explicit `{}` form requests zero-initialized storage in the same style as
@@ -1240,7 +1275,10 @@ prove their capture environment safe. A borrowed closure may be passed to a
 function-typed parameter when the compiler can prove the callee only invokes
 or ignores that parameter; storing it, returning it, forwarding it, or passing
 it to an opaque/external function is rejected. This no-escape analysis is
-intentionally conservative.
+intentionally conservative. The current proof recognizes direct invocations
+in straight-line code, nested blocks, `if`/`else` branches, `while`/`for`
+loops, `try`/`catch` blocks, and print/assert expressions; other statement
+forms remain rejected until they can be analyzed safely.
 
 Inline typed lambda (captures outer variables, callable via bound name):
 

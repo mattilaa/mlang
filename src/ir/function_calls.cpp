@@ -13,6 +13,439 @@
 using mlang::ir_detail::ast_analysis::collect_used_idents;
 using mlang::ir_detail::common::Helpers;
 
+bool CodeGenerator::functionMayWritePointerParameter(
+    FunctionDefNode* function, size_t parameterIndex) const
+{
+    if(!function || !function->parameters ||
+       parameterIndex >= function->parameters->parameters.size())
+        return true;
+    ParameterNode* parameter =
+        function->parameters->parameters[parameterIndex];
+    if(!parameter || !dynamic_cast<PointerTypeNode*>(parameter->type) ||
+       !function->body)
+        return true;
+
+    std::set<std::string> aliases{parameter->name};
+    auto usesAlias = [&](ASTNode* expression) {
+        std::set<std::string> identifiers;
+        collect_used_idents(expression, identifiers);
+        return std::any_of(identifiers.begin(), identifiers.end(),
+                           [&](const std::string& identifier) {
+                               return aliases.count(identifier) != 0;
+                           });
+    };
+    std::function<void(StatementListNode*)> collectAliases;
+    std::function<void(StatementNode*)> collectAliasesFromStatement;
+    collectAliases = [&](StatementListNode* statements) {
+        if(!statements)
+            return;
+        for(auto* statement : statements->statements)
+            collectAliasesFromStatement(statement);
+    };
+    collectAliasesFromStatement = [&](StatementNode* statement) {
+        if(!statement)
+            return;
+        if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
+        {
+            if(usesAlias(declaration->expression))
+                aliases.insert(declaration->name);
+        }
+        else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
+        {
+            if(usesAlias(declaration->initExpr))
+                aliases.insert(declaration->name);
+        }
+        else if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
+        {
+            if(usesAlias(assignment->expression))
+                aliases.insert(assignment->name);
+        }
+        else if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+            collectAliases(block->statements);
+        else if(auto* branch = dynamic_cast<IfNode*>(statement))
+        {
+            collectAliases(branch->thenBranch);
+            collectAliasesFromStatement(branch->elseIfBranch);
+            collectAliases(branch->elseBranch);
+        }
+        else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+        {
+            collectAliases(branch->thenBranch);
+            collectAliasesFromStatement(branch->elseIfBranch);
+            collectAliases(branch->elseBranch);
+        }
+        else if(auto* loop = dynamic_cast<ForNode*>(statement))
+            collectAliases(loop->body);
+        else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+            collectAliases(loop->body);
+        else if(auto* attempt = dynamic_cast<TryCatchNode*>(statement))
+        {
+            collectAliasesFromStatement(attempt->tryBlock);
+            collectAliasesFromStatement(attempt->catchBlock);
+        }
+    };
+    size_t previousAliasCount = 0;
+    do
+    {
+        previousAliasCount = aliases.size();
+        collectAliases(function->body);
+    } while(aliases.size() != previousAliasCount);
+
+    std::function<bool(StatementListNode*)> scansStatements;
+    std::function<bool(StatementNode*)> scansStatement;
+    auto expressionMayWrite = [&](ASTNode* expression) {
+        if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
+            for(auto* argument : call->arguments)
+                if(usesAlias(argument))
+                    return true;
+        if(auto* call = dynamic_cast<CallableInvokeNode*>(expression))
+        {
+            if(usesAlias(call->callable))
+                return true;
+            for(auto* argument : call->arguments)
+                if(usesAlias(argument))
+                    return true;
+        }
+        if(auto* call = dynamic_cast<MethodCallNode*>(expression))
+        {
+            if(usesAlias(call->object))
+                return true;
+            for(auto* argument : call->arguments)
+                if(usesAlias(argument))
+                    return true;
+        }
+        if(auto* assembly = dynamic_cast<InlineAsmNode*>(expression))
+            for(auto* argument : assembly->arguments)
+                if(usesAlias(argument))
+                    return true;
+        if(auto* closure = dynamic_cast<ClosureNode*>(expression))
+            return scansStatements(closure->body);
+        return false;
+    };
+    scansStatements = [&](StatementListNode* statements) {
+        if(!statements)
+            return false;
+        for(auto* statement : statements->statements)
+            if(scansStatement(statement))
+                return true;
+        return false;
+    };
+    scansStatement = [&](StatementNode* statement) {
+        if(!statement)
+            return false;
+        if(auto* assignment = dynamic_cast<DerefAssignmentNode*>(statement))
+            return usesAlias(assignment->pointerExpr);
+        if(auto* assignment = dynamic_cast<FieldAssignmentNode*>(statement))
+            return assignment->target ? usesAlias(assignment->target)
+                                      : aliases.count(assignment->structName) !=
+                                            0;
+        if(auto* expression =
+               dynamic_cast<ExpressionStatementNode*>(statement))
+            return expressionMayWrite(expression->expression);
+        if(auto* returned = dynamic_cast<ReturnNode*>(statement))
+            return expressionMayWrite(returned->expression);
+        if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
+            return expressionMayWrite(declaration->expression);
+        if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
+            return expressionMayWrite(declaration->initExpr);
+        if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
+            return expressionMayWrite(assignment->expression);
+        if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+            return scansStatements(block->statements);
+        if(auto* branch = dynamic_cast<IfNode*>(statement))
+            return scansStatements(branch->thenBranch) ||
+                   scansStatement(branch->elseIfBranch) ||
+                   scansStatements(branch->elseBranch);
+        if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+            return scansStatements(branch->thenBranch) ||
+                   scansStatement(branch->elseIfBranch) ||
+                   scansStatements(branch->elseBranch);
+        if(auto* loop = dynamic_cast<ForNode*>(statement))
+            return scansStatements(loop->body);
+        if(auto* loop = dynamic_cast<WhileNode*>(statement))
+            return scansStatements(loop->body);
+        if(auto* attempt = dynamic_cast<TryCatchNode*>(statement))
+            return scansStatement(attempt->tryBlock) ||
+                   scansStatement(attempt->catchBlock);
+        if(auto* print = dynamic_cast<PrintNode*>(statement))
+        {
+            for(auto* argument : print->arguments)
+                if(expressionMayWrite(argument))
+                    return true;
+            for(const auto& argument : print->namedArguments)
+                if(expressionMayWrite(argument.second))
+                    return true;
+        }
+        if(auto* assertion = dynamic_cast<AssertNode*>(statement))
+            return expressionMayWrite(assertion->condition);
+        if(auto* assertion = dynamic_cast<AssertEqNode*>(statement))
+            return expressionMayWrite(assertion->left) ||
+                   expressionMayWrite(assertion->right);
+        return false;
+    };
+    return scansStatements(function->body);
+}
+
+bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
+    FunctionDefNode* function, size_t parameterIndex)
+{
+    if(!function || !function->parameters || !function->body ||
+       parameterIndex >= function->parameters->parameters.size() ||
+       !function->typeParams.empty())
+        return false;
+    auto* parameter = function->parameters->parameters[parameterIndex];
+    if(!parameter ||
+       (!dynamic_cast<StructTypeRefNode*>(parameter->type) &&
+        !dynamic_cast<GenericStructTypeRefNode*>(parameter->type)))
+        return false;
+
+    const std::string parameterName = parameter->name;
+    std::set<std::string> borrowedPointerAliases;
+    std::map<std::string, PointerTypeNode*> borrowedPointerAliasTypes;
+    auto usesParameter = [&](ASTNode* expression) {
+        std::set<std::string> identifiers;
+        collect_used_idents(expression, identifiers);
+        if(identifiers.count(parameterName) != 0)
+            return true;
+        return std::any_of(identifiers.begin(), identifiers.end(),
+                           [&](const std::string& identifier) {
+                               return borrowedPointerAliases.count(
+                                          identifier) != 0;
+                           });
+    };
+    std::function<bool(ExpressionNode*)> isParameterFieldPath =
+        [&](ExpressionNode* expression) {
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
+                return identifier->name == parameterName;
+            if(auto* field = dynamic_cast<FieldAccessNode*>(expression))
+                return field->object
+                           ? isParameterFieldPath(field->object)
+                           : field->structName == parameterName;
+            return false;
+        };
+    std::function<TypeNode*(ExpressionNode*)> parameterFieldType =
+        [&](ExpressionNode* expression) -> TypeNode* {
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
+                return identifier->name == parameterName ? parameter->type
+                                                          : nullptr;
+            auto* field = dynamic_cast<FieldAccessNode*>(expression);
+            if(!field)
+                return nullptr;
+            TypeNode* baseType = field->object
+                                     ? parameterFieldType(field->object)
+                                     : (field->structName == parameterName
+                                            ? parameter->type
+                                            : nullptr);
+            std::string structName;
+            if(auto* structure = dynamic_cast<StructTypeRefNode*>(baseType))
+                structName = structure->structName;
+            else if(auto* generic =
+                        dynamic_cast<GenericStructTypeRefNode*>(baseType))
+                structName = generic->getMangledName();
+            if(structName.empty())
+                return nullptr;
+            auto members = structMembers.find(structName);
+            if(members == structMembers.end())
+                return nullptr;
+            auto member = std::find_if(
+                members->second.begin(), members->second.end(),
+                [&](const auto& candidate) {
+                    return candidate.first == field->fieldName;
+                });
+            return member == members->second.end() ? nullptr : member->second;
+        };
+    auto isBorrowedPointerSource = [&](ExpressionNode* expression) {
+        if(auto* fieldType = parameterFieldType(expression))
+            return dynamic_cast<PointerTypeNode*>(fieldType) != nullptr;
+        if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
+            return borrowedPointerAliasTypes.count(identifier->name) != 0;
+        return false;
+    };
+    auto isScalarType = [](TypeNode* type) {
+        if(!type)
+            return false;
+        switch(type->kind)
+        {
+        case TypeNode::TYPE_BOOL:
+        case TypeNode::TYPE_BIT:
+        case TypeNode::TYPE_INT:
+        case TypeNode::TYPE_I8:
+        case TypeNode::TYPE_I16:
+        case TypeNode::TYPE_I32:
+        case TypeNode::TYPE_I64:
+        case TypeNode::TYPE_U8:
+        case TypeNode::TYPE_U16:
+        case TypeNode::TYPE_U32:
+        case TypeNode::TYPE_U64:
+        case TypeNode::TYPE_FLOAT:
+        case TypeNode::TYPE_DOUBLE:
+            return true;
+        default:
+            return false;
+        }
+    };
+    std::function<bool(ExpressionNode*)> expressionIsSafe;
+    expressionIsSafe = [&](ExpressionNode* expression) {
+        if(!expression || !usesParameter(expression))
+            return true;
+        if(auto* unary = dynamic_cast<UnaryOpNode*>(expression))
+        {
+            if(unary->op != UnaryOpNode::OP_DEREF ||
+               !isBorrowedPointerSource(unary->operand))
+                return false;
+            TypeNode* resultType = nullptr;
+            if(auto* fieldType = parameterFieldType(unary->operand))
+                if(auto* pointer = dynamic_cast<PointerTypeNode*>(fieldType))
+                    resultType = pointer->elementType;
+            if(auto* identifier =
+                   dynamic_cast<IdentifierNode*>(unary->operand))
+                if(auto alias = borrowedPointerAliasTypes.find(
+                       identifier->name);
+                   alias != borrowedPointerAliasTypes.end())
+                    resultType = alias->second->elementType;
+            return resultType && isScalarType(resultType);
+        }
+        if(auto* field = dynamic_cast<FieldAccessNode*>(expression))
+            return isParameterFieldPath(field) &&
+                   isScalarType(parameterFieldType(field));
+        if(auto* binary = dynamic_cast<BinaryOpNode*>(expression))
+            return expressionIsSafe(binary->left) &&
+                   expressionIsSafe(binary->right);
+        if(auto* ternary = dynamic_cast<TernaryNode*>(expression))
+            return expressionIsSafe(ternary->condition) &&
+                   expressionIsSafe(ternary->trueExpr) &&
+                   expressionIsSafe(ternary->falseExpr);
+        if(auto* match = dynamic_cast<MatchExpressionNode*>(expression))
+        {
+            if(!expressionIsSafe(match->target))
+                return false;
+            for(auto* arm : match->arms)
+                if(!arm || !expressionIsSafe(arm->expression))
+                    return false;
+            return true;
+        }
+        return false;
+    };
+
+    std::function<bool(StatementNode*)> statementIsSafe;
+    std::function<bool(StatementListNode*)> statementsAreSafe;
+    statementsAreSafe = [&](StatementListNode* statements) {
+        if(!statements)
+            return true;
+        const auto outerAliases = borrowedPointerAliases;
+        const auto outerAliasTypes = borrowedPointerAliasTypes;
+        for(auto* statement : statements->statements)
+            if(!statementIsSafe(statement))
+            {
+                borrowedPointerAliases = outerAliases;
+                borrowedPointerAliasTypes = outerAliasTypes;
+                return false;
+            }
+        borrowedPointerAliases = outerAliases;
+        borrowedPointerAliasTypes = outerAliasTypes;
+        return true;
+    };
+    statementIsSafe = [&](StatementNode* statement) {
+        if(!statement)
+            return true;
+        if(auto* returned = dynamic_cast<ReturnNode*>(statement))
+            return expressionIsSafe(returned->expression);
+        if(auto* expression =
+               dynamic_cast<ExpressionStatementNode*>(statement))
+            return expressionIsSafe(expression->expression);
+        if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
+        {
+            auto* source = dynamic_cast<IdentifierNode*>(
+                declaration->expression);
+            TypeNode* sourceType = parameterFieldType(
+                declaration->expression);
+            if(source)
+                if(auto alias = borrowedPointerAliasTypes.find(source->name);
+                   alias != borrowedPointerAliasTypes.end())
+                    sourceType = alias->second;
+            const bool aliasesBorrowedPointer =
+                (source && borrowedPointerAliases.count(source->name) != 0) ||
+                isParameterFieldPath(declaration->expression);
+            if(aliasesBorrowedPointer)
+            {
+                auto* pointerType =
+                    dynamic_cast<PointerTypeNode*>(sourceType);
+                if(pointerType)
+                {
+                    if(declaration->name == parameterName ||
+                       borrowedPointerAliases.count(declaration->name) != 0)
+                        return false;
+                    borrowedPointerAliases.insert(declaration->name);
+                    borrowedPointerAliasTypes[declaration->name] = pointerType;
+                    return true;
+                }
+                if(!source)
+                    return expressionIsSafe(declaration->expression);
+                return false;
+            }
+            return expressionIsSafe(declaration->expression);
+        }
+        if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
+            return expressionIsSafe(declaration->initExpr);
+        if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
+            return assignment->name != parameterName &&
+                   expressionIsSafe(assignment->expression);
+        if(auto* assignment = dynamic_cast<DerefAssignmentNode*>(statement))
+            return !usesParameter(assignment->pointerExpr) &&
+                   expressionIsSafe(assignment->pointerExpr) &&
+                   expressionIsSafe(assignment->value);
+        if(auto* assignment = dynamic_cast<FieldAssignmentNode*>(statement))
+            return (assignment->target
+                        ? !usesParameter(assignment->target)
+                        : assignment->structName != parameterName) &&
+                   expressionIsSafe(assignment->expression);
+        if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+            return statementsAreSafe(block->statements);
+        if(auto* branch = dynamic_cast<IfNode*>(statement))
+            return !branch->conditionInit &&
+                   expressionIsSafe(branch->condition) &&
+                   statementsAreSafe(branch->thenBranch) &&
+                   statementIsSafe(branch->elseIfBranch) &&
+                   statementsAreSafe(branch->elseBranch);
+        if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+            return expressionIsSafe(branch->condition) &&
+                   statementsAreSafe(branch->thenBranch) &&
+                   statementIsSafe(branch->elseIfBranch) &&
+                   statementsAreSafe(branch->elseBranch);
+        if(auto* loop = dynamic_cast<WhileNode*>(statement))
+            return expressionIsSafe(loop->condition) &&
+                   statementsAreSafe(loop->body);
+        if(auto* loop = dynamic_cast<ForNode*>(statement))
+            return loop->varName != parameterName &&
+                   loop->indexVarName != parameterName &&
+                   expressionIsSafe(loop->iterable) &&
+                   statementsAreSafe(loop->body);
+        if(auto* attempt = dynamic_cast<TryCatchNode*>(statement))
+            return attempt->catchName != parameterName &&
+                   statementIsSafe(attempt->tryBlock) &&
+                   statementIsSafe(attempt->catchBlock);
+        if(auto* print = dynamic_cast<PrintNode*>(statement))
+        {
+            for(auto* argument : print->arguments)
+                if(!expressionIsSafe(argument))
+                    return false;
+            for(const auto& argument : print->namedArguments)
+                if(!expressionIsSafe(argument.second))
+                    return false;
+            return true;
+        }
+        if(auto* assertion = dynamic_cast<AssertNode*>(statement))
+            return expressionIsSafe(assertion->condition);
+        if(auto* assertion = dynamic_cast<AssertEqNode*>(statement))
+            return expressionIsSafe(assertion->left) &&
+                   expressionIsSafe(assertion->right);
+        if(auto* thrown = dynamic_cast<ThrowNode*>(statement))
+            return expressionIsSafe(thrown->expression);
+        return !usesParameter(statement);
+    };
+    return statementsAreSafe(function->body);
+}
+
 llvm::Value*
 CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
                                            FunctionDefNode* functionTemplate)
@@ -1560,6 +1993,40 @@ llvm::Value* CodeGenerator::generateCallableInvocation(
                                     std::to_string(node->arguments.size()));
         return nullptr;
     }
+    if(callableType->parameterTypes)
+        for(size_t i = 0; i < expectedCount; ++i)
+            if(dynamic_cast<PointerTypeNode*>(
+                   callableType->parameterTypes->types[i]))
+            {
+                if(expressionIsKnownSharedBorrow(node->arguments[i]))
+                {
+                    reportError(
+                        node->line,
+                        "cannot pass a shared borrow to opaque callable "
+                        "pointer parameter " + std::to_string(i + 1));
+                    return nullptr;
+                }
+                const auto* callableIdentifier =
+                    dynamic_cast<IdentifierNode*>(node->callable);
+                const bool isCheckedCallableParameter =
+                    callableIdentifier &&
+                    functionTypeParameters.count(callableIdentifier->name);
+                if(unsafeDepth == 0 &&
+                   expressionCarriesLocalBorrow(node->arguments[i]) &&
+                   !(isCheckedCallableParameter &&
+                     expressionIsPointerParameterBorrow(
+                         node->arguments[i])))
+                {
+                    reportError(
+                        node->line,
+                        "cannot pass a borrow of local storage to opaque "
+                        "callable pointer parameter " +
+                            std::to_string(i + 1) +
+                            " outside unsafe because the callable may retain "
+                            "it");
+                    return nullptr;
+                }
+            }
 
     llvm::Value* callableValue = generateExpression(node->callable,
                                                     callableType);
@@ -1783,14 +2250,105 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 return false;
             }
         };
-        for(auto* argument : node->arguments)
+        std::function<bool(ExpressionNode*)> containsExclusiveBorrow;
+        containsExclusiveBorrow = [&](ExpressionNode* expression) {
+            if(!expression)
+                return false;
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
+                return isMutBorrower(identifier->name);
+            if(auto* unary = dynamic_cast<UnaryOpNode*>(expression))
+                return unary->op == UnaryOpNode::OP_ADDR_MUT ||
+                       containsExclusiveBorrow(unary->operand);
+            if(auto* structure = dynamic_cast<StructLiteralNode*>(expression))
+                for(const auto& field : structure->fields)
+                    if(containsExclusiveBorrow(field.second))
+                        return true;
+            if(auto* tuple = dynamic_cast<TupleLiteralNode*>(expression))
+                if(tuple->elements)
+                    for(auto* element : tuple->elements->elements)
+                        if(containsExclusiveBorrow(element))
+                            return true;
+            if(auto* list = dynamic_cast<ListLiteralNode*>(expression))
+                if(list->elements)
+                    for(auto* element : list->elements->elements)
+                        if(containsExclusiveBorrow(element))
+                            return true;
+            if(auto* map = dynamic_cast<MapLiteralNode*>(expression))
+                if(map->entries)
+                    for(auto* entry : map->entries->entries)
+                        if(entry &&
+                           (containsExclusiveBorrow(entry->key) ||
+                            containsExclusiveBorrow(entry->value)))
+                            return true;
+            if(auto* ternary = dynamic_cast<TernaryNode*>(expression))
+                return containsExclusiveBorrow(ternary->trueExpr) ||
+                       containsExclusiveBorrow(ternary->falseExpr);
+            if(auto* binary = dynamic_cast<BinaryOpNode*>(expression))
+                return containsExclusiveBorrow(binary->left) ||
+                       containsExclusiveBorrow(binary->right);
+            if(auto* array = dynamic_cast<ArrayFillNode*>(expression))
+                return containsExclusiveBorrow(array->value);
+            if(auto* field = dynamic_cast<FieldAccessNode*>(expression))
+                return containsExclusiveBorrow(field->object);
+            if(auto* index = dynamic_cast<IndexExpressionNode*>(expression))
+                return containsExclusiveBorrow(index->base);
+            if(auto* tuple = dynamic_cast<TupleAccessNode*>(expression))
+                return containsExclusiveBorrow(tuple->tuple);
+            if(auto* attempt = dynamic_cast<TryExpressionNode*>(expression))
+                return containsExclusiveBorrow(attempt->expression);
+            if(auto* cast = dynamic_cast<CastExpressionNode*>(expression))
+                return containsExclusiveBorrow(cast->expression);
+            if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
+                for(auto* argument : call->arguments)
+                    if(containsExclusiveBorrow(argument))
+                        return true;
+            return false;
+        };
+        for(size_t argumentIndex = 0;
+            argumentIndex < node->arguments.size(); ++argumentIndex)
         {
+            auto* argument = node->arguments[argumentIndex];
             if(containsLocalBorrow(argument) &&
                isAggregateType(
                    inferExpressionTypeNode(argument, node->line)))
             {
                 const std::string aggregate =
                     resolveBorrowOwnerFromLValue(argument);
+                TypeNode* argumentType =
+                    inferExpressionTypeNode(argument, node->line);
+                bool hasMatchingVisibleOverload = false;
+                bool everyMatchingOverloadIsSafe = true;
+                auto overloads = functionOverloads.find(node->name);
+                if(argumentType && argumentType->kind == TypeNode::TYPE_STRUCT &&
+                   !containsExclusiveBorrow(argument) &&
+                   overloads != functionOverloads.end())
+                {
+                    for(const auto& overload : overloads->second)
+                    {
+                        FunctionDefNode* candidate = overload.node;
+                        if(!isOverloadVisible(overload) || !candidate ||
+                           !candidate->parameters ||
+                           candidate->parameters->isVarArg ||
+                           candidate->parameters->parameters.size() !=
+                               node->arguments.size() ||
+                           argumentIndex >=
+                               candidate->parameters->parameters.size())
+                            continue;
+                        auto* parameter = candidate->parameters->parameters[
+                            argumentIndex];
+                        if(!parameter || !parameter->type ||
+                           typeMangle(parameter->type) !=
+                               typeMangle(argumentType))
+                            continue;
+                        hasMatchingVisibleOverload = true;
+                        if(!functionCanReadBorrowingAggregateParameter(
+                               candidate, argumentIndex))
+                            everyMatchingOverloadIsSafe = false;
+                    }
+                }
+                if(hasMatchingVisibleOverload &&
+                   everyMatchingOverloadIsSafe)
+                    continue;
                 reportError(node->line,
                             "cannot pass aggregate" +
                                 (aggregate.empty()
@@ -2416,6 +2974,21 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
 
             const bool wantsMutable = (unary->op == UnaryOpNode::OP_ADDR_MUT);
+            std::string exclusiveReborrowParent;
+            if(wantsMutable)
+            {
+                if(auto* dereference =
+                       dynamic_cast<UnaryOpNode*>(unary->operand))
+                {
+                    if(dereference->op == UnaryOpNode::OP_DEREF)
+                    {
+                        if(auto* parent = dynamic_cast<IdentifierNode*>(
+                               dereference->operand))
+                            if(isMutBorrower(parent->name))
+                                exclusiveReborrowParent = parent->name;
+                    }
+                }
+            }
             auto activeIt = activeBorrowers.find(owner);
             auto overlapsActiveBorrower = [&](const std::string& borrower) {
                 auto ownerIt = pointerBorrowTarget.find(borrower);
@@ -2439,6 +3012,12 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             std::string overlappingMutableBorrower;
             for(const auto& activeMutable : activeMutBorrower)
             {
+                const bool isReborrowAncestor =
+                    activeMutable.second == exclusiveReborrowParent ||
+                    isPointerBorrowAncestor(activeMutable.second,
+                                            exclusiveReborrowParent);
+                if(isReborrowAncestor)
+                    continue;
                 if(overlapsActiveBorrower(activeMutable.second))
                 {
                     overlappingMutableBorrower = activeMutable.second;
@@ -2732,6 +3311,22 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(node->name == "atomic_i64_free")
         return generateAtomicI64Free(node);
 
+    auto functionItem = functionItemVariables.find(node->name);
+    if(functionItem != functionItemVariables.end() &&
+       functionItem->second.size() == 1)
+    {
+        const std::string variableName = node->name;
+        const std::string targetName = *functionItem->second.begin();
+        FunctionCallNode directCall(targetName);
+        directCall.line = node->line;
+        directCall.col = node->col;
+        directCall.arguments = node->arguments;
+        functionItemVariables.erase(functionItem);
+        llvm::Value* result = generateFunctionCall(&directCall);
+        functionItemVariables[variableName] = {targetName};
+        return result;
+    }
+
     // Runtime closures are represented by a code pointer and an environment
     // pointer. Their declared parameter types determine the indirect call ABI.
     auto closureSignature = functionTypeVariables.find(node->name);
@@ -2760,6 +3355,179 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                node->arguments, node->name, "",
                &sharedReferenceParameters))
             return nullptr;
+        std::vector<FunctionDefNode*> knownTargets;
+        bool hasKnownCallableTargetSet = false;
+        bool allCallableTargetsResolved = false;
+        auto knownTargetSet = functionItemVariables.find(node->name);
+        if(knownTargetSet != functionItemVariables.end() &&
+           !knownTargetSet->second.empty())
+        {
+            hasKnownCallableTargetSet = true;
+            allCallableTargetsResolved = true;
+            const std::string expectedSignature = typeMangle(closureType);
+            for(const auto& targetName : knownTargetSet->second)
+            {
+                auto overloads = functionOverloads.find(targetName);
+                if(overloads == functionOverloads.end())
+                {
+                    allCallableTargetsResolved = false;
+                    break;
+                }
+                FunctionDefNode* target = nullptr;
+                for(const auto& overload : overloads->second)
+                {
+                    if(!isOverloadVisible(overload) || !overload.node ||
+                       !overload.node->parameters ||
+                       overload.node->parameters->isVarArg ||
+                       !overload.node->typeParams.empty())
+                        continue;
+                    auto* parameters = new TypeListNode();
+                    for(auto* parameter :
+                        overload.node->parameters->parameters)
+                        parameters->addType(cloneTypeNode(parameter->type));
+                    auto* candidateType = new FunctionTypeNode(
+                        parameters, cloneTypeNode(overload.node->returnType));
+                    if(typeMangle(candidateType) != expectedSignature)
+                        continue;
+                    if(target)
+                    {
+                        target = nullptr;
+                        break;
+                    }
+                    target = overload.node;
+                }
+                if(!target)
+                {
+                    allCallableTargetsResolved = false;
+                    break;
+                }
+                knownTargets.push_back(target);
+            }
+        }
+        if(closureType->parameterTypes)
+            for(size_t i = 0; i < expectedCount; ++i)
+                if(dynamic_cast<PointerTypeNode*>(
+                       closureType->parameterTypes->types[i]))
+                {
+                    if(hasKnownCallableTargetSet &&
+                       allCallableTargetsResolved)
+                    {
+                        bool mutatesPointer = false;
+                        bool allTargetsHaveBodies = true;
+                        for(auto* target : knownTargets)
+                        {
+                            if(!target || !target->body)
+                            {
+                                allTargetsHaveBodies = false;
+                                mutatesPointer = true;
+                                continue;
+                            }
+                            if(functionMayWritePointerParameter(target, i))
+                                mutatesPointer = true;
+                        }
+                        if(expressionIsKnownSharedBorrow(node->arguments[i]) &&
+                           mutatesPointer)
+                        {
+                            reportError(
+                                node->line,
+                                "cannot pass a shared borrow to mutating "
+                                "callable pointer parameter " +
+                                    std::to_string(i + 1));
+                            return nullptr;
+                        }
+                        if(unsafeDepth == 0 &&
+                           expressionCarriesLocalBorrow(node->arguments[i]))
+                        {
+                            bool resultCanCarryBorrow = false;
+                            if(closureType->returnType &&
+                               closureType->returnType->kind ==
+                                   TypeNode::TYPE_PTR)
+                            {
+                                resultCanCarryBorrow = std::any_of(
+                                    knownTargets.begin(), knownTargets.end(),
+                                    [&](FunctionDefNode* target) {
+                                        auto record = std::find_if(
+                                            functionOverloads.begin(),
+                                            functionOverloads.end(),
+                                            [&](const auto& namedOverloads) {
+                                                return std::any_of(
+                                                    namedOverloads.second.begin(),
+                                                    namedOverloads.second.end(),
+                                                    [&](const auto& overload) {
+                                                        return overload.node ==
+                                                               target;
+                                                    });
+                                            });
+                                        if(record == functionOverloads.end())
+                                            return true;
+                                        for(const auto& overload :
+                                            record->second)
+                                            if(overload.node == target)
+                                                return !functionPointerReturnSummaryComplete
+                                                            .count(overload.symbolName);
+                                        return true;
+                                    });
+                            }
+                            const auto returnKind =
+                                closureType->returnType
+                                    ? closureType->returnType->kind
+                                    : TypeNode::TYPE_VOID;
+                            const bool returnsSimpleValue =
+                                returnKind == TypeNode::TYPE_VOID ||
+                                returnKind == TypeNode::TYPE_BOOL ||
+                                returnKind == TypeNode::TYPE_INT ||
+                                returnKind == TypeNode::TYPE_I8 ||
+                                returnKind == TypeNode::TYPE_I16 ||
+                                returnKind == TypeNode::TYPE_I32 ||
+                                returnKind == TypeNode::TYPE_I64 ||
+                                returnKind == TypeNode::TYPE_U8 ||
+                                returnKind == TypeNode::TYPE_U16 ||
+                                returnKind == TypeNode::TYPE_U32 ||
+                                returnKind == TypeNode::TYPE_U64 ||
+                                returnKind == TypeNode::TYPE_FLOAT ||
+                                returnKind == TypeNode::TYPE_DOUBLE;
+                            const bool canSafelyTrackResult =
+                                returnsSimpleValue ||
+                                (returnKind == TypeNode::TYPE_PTR &&
+                                 !resultCanCarryBorrow);
+                            if(!allTargetsHaveBodies || !canSafelyTrackResult)
+                            {
+                                reportError(
+                                    node->line,
+                                    "cannot pass a borrow of local storage to "
+                                    "opaque callable pointer parameter " +
+                                        std::to_string(i + 1) +
+                                        " outside unsafe because the callable "
+                                        "may retain it");
+                                return nullptr;
+                            }
+                        }
+                        continue;
+                    }
+                    if(expressionIsKnownSharedBorrow(node->arguments[i]))
+                    {
+                        reportError(
+                            node->line,
+                            "cannot pass a shared borrow to opaque callable "
+                            "pointer parameter " + std::to_string(i + 1));
+                        return nullptr;
+                    }
+                    if(unsafeDepth == 0 &&
+                       expressionCarriesLocalBorrow(node->arguments[i]) &&
+                       !(functionTypeParameters.count(node->name) &&
+                         expressionIsPointerParameterBorrow(
+                             node->arguments[i])))
+                    {
+                        reportError(
+                            node->line,
+                            "cannot pass a borrow of local storage to opaque "
+                            "callable pointer parameter " +
+                                std::to_string(i + 1) +
+                                " outside unsafe because the callable may "
+                                "retain it");
+                        return nullptr;
+                    }
+                }
         auto valueIt = namedValues.find(node->name);
         auto* alloca = valueIt == namedValues.end()
                            ? nullptr
@@ -2847,10 +3615,17 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         code = builder.CreateBitCast(code, signature->getPointerTo(),
                                      node->name + ".callable");
 #endif
-        return builder.CreateCall(signature, code, callArguments,
-                                  signature->getReturnType()->isVoidTy()
-                                      ? ""
-                                      : node->name + ".call");
+        llvm::Value* callResult = builder.CreateCall(
+            signature, code, callArguments,
+            signature->getReturnType()->isVoidTy() ? ""
+                                                  : node->name + ".call");
+
+        auto runtimeClosure = runtimeClosureVariables.find(node->name);
+        if(runtimeClosure != runtimeClosureVariables.end() &&
+           runtimeClosure->second)
+            applyRuntimeClosurePointerBorrowEffects(
+                node->name, runtimeClosure->second, node->line);
+        return callResult;
     }
 
     // Inline closure/lambda call: inc(...)
@@ -3561,6 +4336,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         auto savedPointerElementTypes = pointerElementTypes;
                         auto savedMovedVariables = movedVariables;
                         auto savedPointerBorrowTarget = pointerBorrowTarget;
+                        auto savedPointerBorrowParent = pointerBorrowParent;
                         auto savedActiveBorrowers = activeBorrowers;
                         auto savedActiveMutBorrower = activeMutBorrower;
                         auto savedVariableScopeDepth = variableScopeDepth;
@@ -3585,6 +4361,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         pointerElementTypes = savedPointerElementTypes;
                         movedVariables = savedMovedVariables;
                         pointerBorrowTarget = savedPointerBorrowTarget;
+                        pointerBorrowParent = savedPointerBorrowParent;
                         activeBorrowers = savedActiveBorrowers;
                         activeMutBorrower = savedActiveMutBorrower;
                         variableScopeDepth = savedVariableScopeDepth;
@@ -4512,6 +5289,692 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return nullptr;
     }
 
+    // Pointer parameters use the raw `ptr<T>` ABI, so their caller-side
+    // mutability is otherwise erased. Inspect the selected body for writes
+    // through a pointer parameter and reject a known shared borrow at this
+    // boundary. Unknown raw pointers remain governed by unsafe code.
+    std::function<bool(FunctionDefNode*, size_t, const void*,
+                       std::set<std::pair<const void*, size_t>>&)>
+        functionMutatesPointerParameter;
+    functionMutatesPointerParameter = [&](FunctionDefNode* function,
+                                          size_t parameterIndex,
+                                          const void* callableIdentity,
+                                          std::set<std::pair<const void*,
+                                                             size_t>>& visiting) {
+        if(!function || !function->parameters ||
+           parameterIndex >= function->parameters->parameters.size())
+            return false;
+        ParameterNode* parameter =
+            function->parameters->parameters[parameterIndex];
+        if(!parameter ||
+           !dynamic_cast<PointerTypeNode*>(parameter->type))
+            return false;
+        if(!function->body)
+            return true;
+        const auto functionAndParameter = std::make_pair(
+            callableIdentity ? callableIdentity : static_cast<const void*>(function),
+                                                         parameterIndex);
+        if(!visiting.insert(functionAndParameter).second)
+            return false;
+        const std::string parameterName = parameter->name;
+        std::set<std::string> pointerAliases{parameterName};
+        auto usesPointerAlias = [&](ASTNode* expression) {
+            std::set<std::string> identifiers;
+            collect_used_idents(expression, identifiers);
+            return std::any_of(identifiers.begin(), identifiers.end(),
+                               [&](const std::string& identifier) {
+                                   return pointerAliases.count(identifier) != 0;
+                               });
+        };
+        std::function<void(StatementListNode*)> collectAliasesFromList;
+        std::function<void(StatementNode*)> collectAliasesFromStatement;
+        collectAliasesFromList = [&](StatementListNode* statements) {
+            if(!statements)
+                return;
+            for(auto* statement : statements->statements)
+                collectAliasesFromStatement(statement);
+        };
+        collectAliasesFromStatement = [&](StatementNode* statement) {
+            if(!statement)
+                return;
+            if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
+            {
+                if(usesPointerAlias(declaration->expression))
+                    pointerAliases.insert(declaration->name);
+                return;
+            }
+            if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
+            {
+                if(usesPointerAlias(declaration->initExpr))
+                    pointerAliases.insert(declaration->name);
+                return;
+            }
+            if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
+            {
+                if(usesPointerAlias(assignment->expression))
+                    pointerAliases.insert(assignment->name);
+                return;
+            }
+            if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+                collectAliasesFromList(block->statements);
+            else if(auto* branch = dynamic_cast<IfNode*>(statement))
+            {
+                collectAliasesFromList(branch->thenBranch);
+                collectAliasesFromStatement(branch->elseIfBranch);
+                collectAliasesFromList(branch->elseBranch);
+            }
+            else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+            {
+                collectAliasesFromList(branch->thenBranch);
+                collectAliasesFromStatement(branch->elseIfBranch);
+                collectAliasesFromList(branch->elseBranch);
+            }
+            else if(auto* loop = dynamic_cast<ForNode*>(statement))
+                collectAliasesFromList(loop->body);
+            else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+                collectAliasesFromList(loop->body);
+            else if(auto* attempt = dynamic_cast<TryCatchNode*>(statement))
+            {
+                collectAliasesFromStatement(attempt->tryBlock);
+                collectAliasesFromStatement(attempt->catchBlock);
+            }
+        };
+        bool addedPointerAlias;
+        do
+        {
+            const size_t previousCount = pointerAliases.size();
+            collectAliasesFromList(function->body);
+            addedPointerAlias = pointerAliases.size() != previousCount;
+        } while(addedPointerAlias);
+
+        auto structNameFromType = [&](TypeNode* type) {
+            if(auto* reference = dynamic_cast<ReferenceTypeNode*>(type))
+                type = reference->elementType;
+            if(auto* structure = dynamic_cast<StructTypeRefNode*>(type))
+                return structure->structName;
+            if(auto* generic =
+                   dynamic_cast<GenericStructTypeRefNode*>(type))
+                return generic->getMangledName();
+            return std::string();
+        };
+        auto structNameFromExpression = [&](ExpressionNode* expression) {
+            if(auto* structure = dynamic_cast<StructLiteralNode*>(expression))
+                return structure->structName;
+            return std::string();
+        };
+        auto receiverStructName = [&](ExpressionNode* receiver) {
+            if(auto* id = dynamic_cast<IdentifierNode*>(receiver))
+            {
+                if(function->parameters)
+                    for(auto* parameter : function->parameters->parameters)
+                        if(parameter && parameter->name == id->name)
+                        {
+                            std::string name = structNameFromType(parameter->type);
+                            if(!name.empty())
+                                return name;
+                        }
+                std::string resolvedName;
+                std::function<void(StatementListNode*)> findLocal;
+                std::function<void(StatementNode*)> findInStatement;
+                findLocal = [&](StatementListNode* statements) {
+                    if(!statements)
+                        return;
+                    for(auto* statement : statements->statements)
+                        findInStatement(statement);
+                };
+                findInStatement = [&](StatementNode* statement) {
+                    if(!statement)
+                        return;
+                    if(auto* declaration =
+                           dynamic_cast<LetDeclNode*>(statement))
+                    {
+                        if(declaration->name == id->name)
+                        {
+                            resolvedName = structNameFromType(declaration->type);
+                            if(resolvedName.empty())
+                                resolvedName = structNameFromExpression(
+                                    declaration->expression);
+                        }
+                    }
+                    else if(auto* declaration =
+                                dynamic_cast<VarDeclNode*>(statement))
+                    {
+                        if(declaration->name == id->name)
+                        {
+                            resolvedName = structNameFromType(declaration->type);
+                            if(resolvedName.empty())
+                                resolvedName = structNameFromExpression(
+                                    declaration->initExpr);
+                        }
+                    }
+                    else if(auto* block =
+                                dynamic_cast<BlockStatementNode*>(statement))
+                        findLocal(block->statements);
+                    else if(auto* branch = dynamic_cast<IfNode*>(statement))
+                    {
+                        findLocal(branch->thenBranch);
+                        findInStatement(branch->elseIfBranch);
+                        findLocal(branch->elseBranch);
+                    }
+                    else if(auto* branch =
+                                dynamic_cast<CexprIfNode*>(statement))
+                    {
+                        findLocal(branch->thenBranch);
+                        findInStatement(branch->elseIfBranch);
+                        findLocal(branch->elseBranch);
+                    }
+                    else if(auto* loop = dynamic_cast<ForNode*>(statement))
+                        findLocal(loop->body);
+                    else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+                        findLocal(loop->body);
+                };
+                findLocal(function->body);
+                return resolvedName;
+            }
+            return structNameFromExpression(receiver);
+        };
+
+        auto suppliedCallableEffect = [&](const std::string& callableName,
+                                           const std::vector<ExpressionNode*>&
+                                               arguments) {
+            if(function != best->node || !function->parameters)
+                return std::pair<bool, bool>{false, false};
+            for(size_t callableIndex = 0;
+                callableIndex < function->parameters->parameters.size();
+                ++callableIndex)
+            {
+                auto* parameter =
+                    function->parameters->parameters[callableIndex];
+                if(!parameter || parameter->name != callableName ||
+                   callableIndex >= node->arguments.size())
+                    continue;
+                ClosureNode* closure =
+                    dynamic_cast<ClosureNode*>(node->arguments[callableIndex]);
+                if(!closure)
+                    if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                           node->arguments[callableIndex]))
+                    {
+                        auto knownTarget =
+                            functionItemVariables.find(identifier->name);
+                        if(knownTarget != functionItemVariables.end() &&
+                           !knownTarget->second.empty())
+                        {
+                            bool foundTarget = false;
+                            bool mayMutate = false;
+                            for(const auto& targetName : knownTarget->second)
+                            {
+                                auto overloads =
+                                    functionOverloads.find(targetName);
+                                if(overloads == functionOverloads.end())
+                                    return std::pair<bool, bool>{false,
+                                                                 false};
+                                for(const auto& overload : overloads->second)
+                                {
+                                    if(!isOverloadVisible(overload) ||
+                                       !overload.node ||
+                                       !overload.node->parameters)
+                                        continue;
+                                    foundTarget = true;
+                                    for(size_t argumentIndex = 0;
+                                        argumentIndex < arguments.size() &&
+                                        argumentIndex <
+                                            overload.node->parameters
+                                                ->parameters.size();
+                                        ++argumentIndex)
+                                    {
+                                        if(!usesPointerAlias(
+                                               arguments[argumentIndex]) ||
+                                           !dynamic_cast<PointerTypeNode*>(
+                                               overload.node->parameters
+                                                   ->parameters[argumentIndex]
+                                                   ->type))
+                                            continue;
+                                        if(functionMutatesPointerParameter(
+                                               overload.node, argumentIndex,
+                                               overload.node, visiting))
+                                            mayMutate = true;
+                                    }
+                                }
+                            }
+                            if(foundTarget)
+                                return std::pair<bool, bool>{true, mayMutate};
+                        }
+                        if(knownTarget != functionItemVariables.end())
+                            return std::pair<bool, bool>{false, false};
+                    }
+                if(!closure)
+                    if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                           node->arguments[callableIndex]))
+                    {
+                        auto found = closureVariables.find(identifier->name);
+                        if(found != closureVariables.end())
+                            closure = found->second;
+                    }
+                if(!closure || !closure->parameters)
+                    return std::pair<bool, bool>{false, false};
+
+                ParameterListNode closureParameters;
+                closureParameters.isVarArg =
+                    closure->parameters->isVarArg;
+                std::vector<size_t> pointerArgumentIndexes;
+                for(size_t argumentIndex = 0;
+                    argumentIndex < arguments.size() &&
+                    argumentIndex < closure->parameters->parameters.size();
+                    ++argumentIndex)
+                {
+                    auto* closureParameter =
+                        closure->parameters->parameters[argumentIndex];
+                    if(!closureParameter)
+                        continue;
+                    TypeNode* closureParameterType = closureParameter->type;
+                    if(usesPointerAlias(arguments[argumentIndex]))
+                    {
+                        closureParameterType = new PointerTypeNode(
+                            new TypeNode(TypeNode::TYPE_VOID));
+                        pointerArgumentIndexes.push_back(argumentIndex);
+                    }
+                    closureParameters.parameters.push_back(
+                        new ParameterNode(closureParameterType,
+                                          closureParameter->name));
+                }
+                if(pointerArgumentIndexes.empty())
+                    return std::pair<bool, bool>{true, false};
+
+                FunctionDefNode closureAdapter(
+                    new TypeNode(TypeNode::TYPE_VOID),
+                    "<borrow-check closure>", &closureParameters,
+                    closure->body);
+                for(size_t argumentIndex : pointerArgumentIndexes)
+                {
+                    if(functionMutatesPointerParameter(
+                           &closureAdapter, argumentIndex, closure, visiting))
+                        return std::pair<bool, bool>{true, true};
+                }
+                return std::pair<bool, bool>{true, false};
+            }
+            return std::pair<bool, bool>{false, false};
+        };
+
+        std::function<bool(StatementListNode*)> scansStatements;
+        std::function<bool(StatementNode*)> scansStatement;
+        std::function<bool(ExpressionNode*)> expressionCallsMutatingPointer;
+        expressionCallsMutatingPointer = [&](ExpressionNode* expression) {
+            if(!expression)
+                return false;
+            auto scansChildren = [&](const std::vector<ExpressionNode*>& children) {
+                return std::any_of(children.begin(), children.end(),
+                                   expressionCallsMutatingPointer);
+            };
+            if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
+            {
+                const auto suppliedEffect =
+                    suppliedCallableEffect(call->name, call->arguments);
+                if(suppliedEffect.first)
+                    return suppliedEffect.second ||
+                           scansChildren(call->arguments);
+                auto candidates = functionOverloads.find(call->name);
+                if(candidates == functionOverloads.end() &&
+                   function->parameters)
+                {
+                    for(auto* callableParameter :
+                        function->parameters->parameters)
+                    {
+                        if(!callableParameter ||
+                           callableParameter->name != call->name)
+                            continue;
+                        auto* callableType = dynamic_cast<FunctionTypeNode*>(
+                            callableParameter->type);
+                        if(callableType && callableType->parameterTypes)
+                            for(size_t argumentIndex = 0;
+                                argumentIndex < call->arguments.size() &&
+                                argumentIndex < callableType->parameterTypes
+                                                   ->types.size();
+                                ++argumentIndex)
+                                if(dynamic_cast<PointerTypeNode*>(
+                                       callableType->parameterTypes
+                                           ->types[argumentIndex]) &&
+                                   usesPointerAlias(
+                                       call->arguments[argumentIndex]))
+                                    return true;
+                        break;
+                    }
+                }
+                if(candidates != functionOverloads.end())
+                    for(const auto& candidate : candidates->second)
+                    {
+                        if(!candidate.node || !candidate.node->parameters)
+                            continue;
+                        const size_t argumentCount = std::min(
+                            call->arguments.size(),
+                            candidate.node->parameters->parameters.size());
+                        for(size_t argumentIndex = 0;
+                            argumentIndex < argumentCount; ++argumentIndex)
+                            if(usesPointerAlias(
+                                   call->arguments[argumentIndex]) &&
+                               functionMutatesPointerParameter(
+                                   candidate.node, argumentIndex,
+                                   candidate.node, visiting))
+                                return true;
+                    }
+                return scansChildren(call->arguments);
+            }
+            if(auto* binary = dynamic_cast<BinaryOpNode*>(expression))
+                return expressionCallsMutatingPointer(binary->left) ||
+                       expressionCallsMutatingPointer(binary->right);
+            if(auto* unary = dynamic_cast<UnaryOpNode*>(expression))
+                return expressionCallsMutatingPointer(unary->operand);
+            if(auto* update =
+                   dynamic_cast<UpdateExpressionNode*>(expression))
+                return expressionCallsMutatingPointer(update->operand);
+            if(auto* ternary = dynamic_cast<TernaryNode*>(expression))
+                return expressionCallsMutatingPointer(ternary->condition) ||
+                       expressionCallsMutatingPointer(ternary->trueExpr) ||
+                       expressionCallsMutatingPointer(ternary->falseExpr);
+            if(auto* match = dynamic_cast<MatchExpressionNode*>(expression))
+            {
+                if(expressionCallsMutatingPointer(match->target))
+                    return true;
+                for(auto* arm : match->arms)
+                    if(arm && expressionCallsMutatingPointer(arm->expression))
+                        return true;
+                return false;
+            }
+            if(auto* invoke = dynamic_cast<CallableInvokeNode*>(expression))
+            {
+                if(auto* callableName =
+                       dynamic_cast<IdentifierNode*>(invoke->callable))
+                {
+                    const auto suppliedEffect = suppliedCallableEffect(
+                        callableName->name, invoke->arguments);
+                    if(suppliedEffect.first)
+                        return suppliedEffect.second ||
+                               scansChildren(invoke->arguments);
+                }
+                FunctionTypeNode* callableType = nullptr;
+                if(auto* callableName =
+                       dynamic_cast<IdentifierNode*>(invoke->callable))
+                {
+                    if(function->parameters)
+                        for(auto* parameter :
+                            function->parameters->parameters)
+                            if(parameter &&
+                               parameter->name == callableName->name)
+                            {
+                                callableType = dynamic_cast<FunctionTypeNode*>(
+                                    parameter->type);
+                                break;
+                            }
+                }
+                if(callableType && callableType->parameterTypes)
+                    for(size_t argumentIndex = 0;
+                        argumentIndex < invoke->arguments.size() &&
+                        argumentIndex <
+                            callableType->parameterTypes->types.size();
+                        ++argumentIndex)
+                        if(dynamic_cast<PointerTypeNode*>(
+                               callableType->parameterTypes
+                                   ->types[argumentIndex]) &&
+                           usesPointerAlias(invoke->arguments[argumentIndex]))
+                            return true;
+                return expressionCallsMutatingPointer(invoke->callable) ||
+                       scansChildren(invoke->arguments);
+            }
+            if(auto* method = dynamic_cast<MethodCallNode*>(expression))
+            {
+                const std::string receiverType =
+                    receiverStructName(method->object);
+                for(const auto& byStruct : structMethods)
+                {
+                    if(!receiverType.empty() &&
+                       byStruct.first != receiverType)
+                        continue;
+                    auto methodIt = byStruct.second.find(method->methodName);
+                    if(methodIt == byStruct.second.end() ||
+                       !methodIt->second.second ||
+                       !methodIt->second.second->parameters)
+                        continue;
+                    StructMethodNode* methodNode = methodIt->second.second;
+                    std::vector<std::pair<ParameterNode*, size_t>>
+                        explicitParameters;
+                    for(size_t formalIndex = 0;
+                        formalIndex <
+                        methodNode->parameters->parameters.size();
+                        ++formalIndex)
+                    {
+                        auto* parameter =
+                            methodNode->parameters->parameters[formalIndex];
+                        if(parameter && parameter->name != "self")
+                            explicitParameters.emplace_back(parameter,
+                                                            formalIndex);
+                    }
+                    if(explicitParameters.size() != method->arguments.size())
+                        continue;
+                    for(size_t argumentIndex = 0;
+                        argumentIndex < method->arguments.size();
+                        ++argumentIndex)
+                    {
+                        ParameterNode* parameter =
+                            explicitParameters[argumentIndex].first;
+                        if(!parameter ||
+                           !dynamic_cast<PointerTypeNode*>(parameter->type) ||
+                           !usesPointerAlias(method->arguments[argumentIndex]))
+                            continue;
+                        FunctionDefNode methodAdapter(
+                            methodNode->returnType, methodNode->name,
+                            methodNode->parameters, methodNode->body);
+                        const size_t methodFormalIndex =
+                            explicitParameters[argumentIndex].second;
+                        if(functionMutatesPointerParameter(
+                               &methodAdapter, methodFormalIndex, methodNode,
+                               visiting))
+                            return true;
+                    }
+                }
+                return expressionCallsMutatingPointer(method->object) ||
+                       scansChildren(method->arguments);
+            }
+            if(auto* field = dynamic_cast<FieldAccessNode*>(expression))
+                return expressionCallsMutatingPointer(field->object);
+            if(auto* tuple = dynamic_cast<TupleAccessNode*>(expression))
+                return expressionCallsMutatingPointer(tuple->tuple);
+            if(auto* index = dynamic_cast<IndexExpressionNode*>(expression))
+                return expressionCallsMutatingPointer(index->base) ||
+                       expressionCallsMutatingPointer(index->index);
+            if(auto* cast = dynamic_cast<CastExpressionNode*>(expression))
+                return expressionCallsMutatingPointer(cast->expression);
+            if(auto* attempt = dynamic_cast<TryExpressionNode*>(expression))
+                return expressionCallsMutatingPointer(attempt->expression);
+            if(auto* cexpr = dynamic_cast<CexprExpressionNode*>(expression))
+                return expressionCallsMutatingPointer(cexpr->expression);
+            if(auto* list = dynamic_cast<ListLiteralNode*>(expression))
+                return list->elements && scansChildren(list->elements->elements);
+            if(auto* tuple = dynamic_cast<TupleLiteralNode*>(expression))
+                return tuple->elements && scansChildren(tuple->elements->elements);
+            if(auto* map = dynamic_cast<MapLiteralNode*>(expression))
+            {
+                if(!map->entries)
+                    return false;
+                for(auto* entry : map->entries->entries)
+                    if(entry &&
+                       (expressionCallsMutatingPointer(entry->key) ||
+                        expressionCallsMutatingPointer(entry->value)))
+                        return true;
+                return false;
+            }
+            if(auto* range = dynamic_cast<RangeExpressionNode*>(expression))
+                return expressionCallsMutatingPointer(range->start) ||
+                       expressionCallsMutatingPointer(range->end);
+            if(auto* closure = dynamic_cast<ClosureNode*>(expression))
+                return scansStatements(closure->body);
+            if(auto* array = dynamic_cast<ArrayFillNode*>(expression))
+                return expressionCallsMutatingPointer(array->value) ||
+                       expressionCallsMutatingPointer(array->count);
+            if(auto* structure = dynamic_cast<StructLiteralNode*>(expression))
+                for(const auto& field : structure->fields)
+                    if(expressionCallsMutatingPointer(field.second))
+                        return true;
+            if(auto* format = dynamic_cast<FormatNode*>(expression))
+            {
+                if(scansChildren(format->arguments))
+                    return true;
+                for(const auto& argument : format->namedArguments)
+                    if(expressionCallsMutatingPointer(argument.second))
+                        return true;
+            }
+            return false;
+        };
+
+        scansStatements = [&](StatementListNode* statements) {
+            if(!statements)
+                return false;
+            for(auto* statement : statements->statements)
+                if(scansStatement(statement))
+                    return true;
+            return false;
+        };
+        scansStatement = [&](StatementNode* statement) {
+            if(!statement)
+                return false;
+            if(auto* assignment =
+                   dynamic_cast<DerefAssignmentNode*>(statement))
+                return usesPointerAlias(assignment->pointerExpr);
+            if(auto* assignment =
+                   dynamic_cast<FieldAssignmentNode*>(statement))
+                return assignment->target
+                           ? usesPointerAlias(assignment->target)
+                           : pointerAliases.count(assignment->structName) != 0;
+            if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
+                return expressionCallsMutatingPointer(
+                    declaration->expression);
+            if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
+                return expressionCallsMutatingPointer(declaration->initExpr);
+            if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
+                return expressionCallsMutatingPointer(assignment->expression);
+            if(auto* returned = dynamic_cast<ReturnNode*>(statement))
+                return expressionCallsMutatingPointer(returned->expression);
+            if(auto* expression =
+                   dynamic_cast<ExpressionStatementNode*>(statement))
+                return expressionCallsMutatingPointer(expression->expression);
+            if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+                return scansStatements(block->statements);
+            if(auto* branch = dynamic_cast<IfNode*>(statement))
+                return scansStatements(branch->thenBranch) ||
+                       scansStatement(branch->elseIfBranch) ||
+                       scansStatements(branch->elseBranch);
+            if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+                return scansStatements(branch->thenBranch) ||
+                       scansStatement(branch->elseIfBranch) ||
+                       scansStatements(branch->elseBranch);
+            if(auto* loop = dynamic_cast<ForNode*>(statement))
+                return scansStatements(loop->body);
+            if(auto* loop = dynamic_cast<WhileNode*>(statement))
+                return scansStatements(loop->body);
+            if(auto* attempt = dynamic_cast<TryCatchNode*>(statement))
+                return scansStatement(attempt->tryBlock) ||
+                       scansStatement(attempt->catchBlock);
+            if(auto* print = dynamic_cast<PrintNode*>(statement))
+            {
+                for(auto* argument : print->arguments)
+                    if(expressionCallsMutatingPointer(argument))
+                        return true;
+                for(const auto& argument : print->namedArguments)
+                    if(expressionCallsMutatingPointer(argument.second))
+                        return true;
+                return false;
+            }
+            if(auto* assertion = dynamic_cast<AssertNode*>(statement))
+                return expressionCallsMutatingPointer(assertion->condition);
+            if(auto* assertion = dynamic_cast<AssertEqNode*>(statement))
+                return expressionCallsMutatingPointer(assertion->left) ||
+                       expressionCallsMutatingPointer(assertion->right);
+            return false;
+        };
+        const bool mutates = scansStatements(function->body);
+        visiting.erase(functionAndParameter);
+        return mutates;
+    };
+    auto argumentIsKnownSharedBorrow = [&](ExpressionNode* argument) {
+        return expressionIsKnownSharedBorrow(argument);
+    };
+    auto argumentCarriesLocalBorrow = [&](ExpressionNode* argument) {
+        if(expressionCarriesLocalBorrow(argument))
+            return true;
+        auto ownerIsLocal = [&](const std::string& owner) {
+            return !owner.empty() && variableScopeDepth.count(owner) != 0;
+        };
+        if(auto* address = dynamic_cast<UnaryOpNode*>(argument))
+            if(address->op == UnaryOpNode::OP_ADDR ||
+               address->op == UnaryOpNode::OP_ADDR_MUT)
+                return ownerIsLocal(
+                    resolveBorrowOwnerFromLValue(address->operand));
+        if(auto* identifier = dynamic_cast<IdentifierNode*>(argument))
+        {
+            auto pointer = pointerBorrowTarget.find(identifier->name);
+            if(pointer != pointerBorrowTarget.end() &&
+               ownerIsLocal(pointer->second))
+                return true;
+            auto origins = aggregateBorrowOrigins.find(identifier->name);
+            if(origins != aggregateBorrowOrigins.end())
+                for(const auto& owner : origins->second)
+                    if(ownerIsLocal(owner))
+                        return true;
+        }
+        const std::string container =
+            resolveBorrowOwnerFromLValue(argument);
+        auto origins = aggregateBorrowOrigins.find(container);
+        if(origins != aggregateBorrowOrigins.end())
+            for(const auto& owner : origins->second)
+                if(ownerIsLocal(owner))
+                    return true;
+        return false;
+    };
+    // Generic specializations may already have inlined/bound their callback
+    // while generating the body. Re-analyzing the call-site closure there can
+    // corrupt generic closure return-type inference; this transfer is only
+    // needed for ordinary concrete wrapper functions.
+    if(best->node && best->node->parameters &&
+       best->node->typeParams.empty() &&
+       best->node->boundClosureParameters.empty() &&
+       best->node->closureSpecializationKey.empty())
+        for(size_t parameterIndex = 0;
+            parameterIndex < node->arguments.size() &&
+            parameterIndex < best->node->parameters->parameters.size();
+            ++parameterIndex)
+        {
+            ParameterNode* parameter =
+                best->node->parameters->parameters[parameterIndex];
+            if(parameter &&
+               dynamic_cast<PointerTypeNode*>(parameter->type) &&
+               !best->node->body && unsafeDepth == 0 &&
+               argumentCarriesLocalBorrow(
+                   node->arguments[parameterIndex]))
+            {
+                reportError(
+                    node->line,
+                    "cannot pass a borrow of local storage to opaque pointer "
+                    "parameter '" + parameter->name +
+                        "' outside unsafe because the callee may retain it");
+                return nullptr;
+            }
+            std::set<std::pair<const void*, size_t>> visiting;
+            if(functionMutatesPointerParameter(best->node, parameterIndex,
+                                               best->node, visiting) &&
+               argumentIsKnownSharedBorrow(node->arguments[parameterIndex]))
+            {
+                std::string argumentName = "argument";
+                if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                       node->arguments[parameterIndex]))
+                    argumentName = identifier->name;
+                reportError(
+                    node->line,
+                    "cannot pass shared borrow '" + argumentName +
+                        "' to mutating pointer parameter '" +
+                        best->node->parameters->parameters[parameterIndex]
+                            ->name + "'");
+                return nullptr;
+            }
+        }
+
     auto callableParameterIsNoEscape = [&](size_t parameterIndex)
     {
         if(!best->node || !best->node->body || !best->node->parameters ||
@@ -4535,28 +5998,152 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                    usedIdentifiers.end();
         };
 
-        // Deliberately prove only this small, auditable subset. More complex
-        // bodies may be safe, but are treated as potentially escaping until
-        // the AST escape analysis can reason about them explicitly.
-        for(auto* statement : best->node->body->statements)
-        {
+        auto conditionUsesParameter = [&](ExpressionNode* expression) {
+            std::set<std::string> usedIdentifiers;
+            collect_used_idents(expression, usedIdentifiers);
+            return usedIdentifiers.count(parameter->name) != 0;
+        };
+        std::function<bool(StatementNode*)> statementIsNoEscape;
+        std::function<bool(StatementListNode*)> statementsAreNoEscape;
+        statementsAreNoEscape = [&](StatementListNode* statements) {
+            if(!statements)
+                return true;
+            for(auto* statement : statements->statements)
+                if(!statementIsNoEscape(statement))
+                    return false;
+            return true;
+        };
+        statementIsNoEscape = [&](StatementNode* statement) {
+            if(!statement)
+                return true;
             if(auto* expressionStatement =
                    dynamic_cast<ExpressionStatementNode*>(statement))
-            {
-                if(!isDirectInvocation(expressionStatement->expression))
-                    return false;
-                continue;
-            }
+                return isDirectInvocation(expressionStatement->expression);
             if(auto* returnStatement = dynamic_cast<ReturnNode*>(statement))
+                return !returnStatement->expression ||
+                       isDirectInvocation(returnStatement->expression) ||
+                       !conditionUsesParameter(returnStatement->expression);
+            if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+                return statementsAreNoEscape(block->statements);
+            if(auto* branch = dynamic_cast<IfNode*>(statement))
+                return !branch->conditionInit &&
+                       !conditionUsesParameter(branch->condition) &&
+                       statementsAreNoEscape(branch->thenBranch) &&
+                       statementIsNoEscape(branch->elseIfBranch) &&
+                       statementsAreNoEscape(branch->elseBranch);
+            if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+                return !conditionUsesParameter(branch->condition) &&
+                       statementsAreNoEscape(branch->thenBranch) &&
+                       statementIsNoEscape(branch->elseIfBranch) &&
+                       statementsAreNoEscape(branch->elseBranch);
+            if(auto* loop = dynamic_cast<WhileNode*>(statement))
+                return !conditionUsesParameter(loop->condition) &&
+                       statementsAreNoEscape(loop->body);
+            if(auto* loop = dynamic_cast<ForNode*>(statement))
+                return loop->varName != parameter->name &&
+                       loop->indexVarName != parameter->name &&
+                       !conditionUsesParameter(loop->iterable) &&
+                       statementsAreNoEscape(loop->body);
+            if(auto* attempt = dynamic_cast<TryCatchNode*>(statement))
+                return attempt->catchName != parameter->name &&
+                       statementIsNoEscape(attempt->tryBlock) &&
+                       statementIsNoEscape(attempt->catchBlock);
+            if(auto* print = dynamic_cast<PrintNode*>(statement))
             {
-                if(returnStatement->expression &&
-                   !isDirectInvocation(returnStatement->expression))
-                    return false;
-                continue;
+                auto argumentIsSafe = [&](ExpressionNode* expression) {
+                    return isDirectInvocation(expression) ||
+                           !conditionUsesParameter(expression);
+                };
+                for(auto* argument : print->arguments)
+                    if(!argumentIsSafe(argument))
+                        return false;
+                for(const auto& argument : print->namedArguments)
+                    if(!argumentIsSafe(argument.second))
+                        return false;
+                return true;
+            }
+            if(auto* assertion = dynamic_cast<AssertNode*>(statement))
+                return isDirectInvocation(assertion->condition) ||
+                       !conditionUsesParameter(assertion->condition);
+            if(auto* assertion = dynamic_cast<AssertEqNode*>(statement))
+            {
+                auto expressionIsSafe = [&](ExpressionNode* expression) {
+                    return isDirectInvocation(expression) ||
+                           !conditionUsesParameter(expression);
+                };
+                return expressionIsSafe(assertion->left) &&
+                       expressionIsSafe(assertion->right);
             }
             return false;
-        }
-        return true;
+        };
+        return statementsAreNoEscape(best->node->body);
+    };
+
+    auto callableParameterIsDirectlyInvoked = [&](size_t parameterIndex) {
+        if(!best->node || !best->node->body || !best->node->parameters ||
+           parameterIndex >= best->node->parameters->parameters.size())
+            return false;
+        const auto* parameter =
+            best->node->parameters->parameters[parameterIndex];
+        if(!parameter || !dynamic_cast<FunctionTypeNode*>(parameter->type))
+            return false;
+        auto isDirectInvocation = [&](ExpressionNode* expression) {
+            auto* call = dynamic_cast<FunctionCallNode*>(expression);
+            return call && call->name == parameter->name;
+        };
+        std::function<bool(StatementNode*)> statementInvokes;
+        std::function<bool(StatementListNode*)> statementsInvoke;
+        statementsInvoke = [&](StatementListNode* statements) {
+            if(!statements)
+                return false;
+            for(auto* statement : statements->statements)
+                if(statementInvokes(statement))
+                    return true;
+            return false;
+        };
+        statementInvokes = [&](StatementNode* statement) {
+            if(!statement)
+                return false;
+            if(auto* expressionStatement =
+                   dynamic_cast<ExpressionStatementNode*>(statement))
+                return isDirectInvocation(expressionStatement->expression);
+            if(auto* returnStatement = dynamic_cast<ReturnNode*>(statement))
+                return isDirectInvocation(returnStatement->expression);
+            if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+                return statementsInvoke(block->statements);
+            if(auto* branch = dynamic_cast<IfNode*>(statement))
+                return statementsInvoke(branch->thenBranch) ||
+                       statementInvokes(branch->elseIfBranch) ||
+                       statementsInvoke(branch->elseBranch);
+            if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+                return statementsInvoke(branch->thenBranch) ||
+                       statementInvokes(branch->elseIfBranch) ||
+                       statementsInvoke(branch->elseBranch);
+            if(auto* loop = dynamic_cast<WhileNode*>(statement))
+                return statementsInvoke(loop->body);
+            if(auto* loop = dynamic_cast<ForNode*>(statement))
+                return statementsInvoke(loop->body);
+            if(auto* attempt = dynamic_cast<TryCatchNode*>(statement))
+                return statementInvokes(attempt->tryBlock) ||
+                       statementInvokes(attempt->catchBlock);
+            if(auto* print = dynamic_cast<PrintNode*>(statement))
+            {
+                for(auto* argument : print->arguments)
+                    if(isDirectInvocation(argument))
+                        return true;
+                for(const auto& argument : print->namedArguments)
+                    if(isDirectInvocation(argument.second))
+                        return true;
+                return false;
+            }
+            if(auto* assertion = dynamic_cast<AssertNode*>(statement))
+                return isDirectInvocation(assertion->condition);
+            if(auto* assertion = dynamic_cast<AssertEqNode*>(statement))
+                return isDirectInvocation(assertion->left) ||
+                       isDirectInvocation(assertion->right);
+            return false;
+        };
+        return statementsInvoke(best->node->body);
     };
 
     for(size_t argumentIndex = 0;
@@ -4678,6 +6265,113 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             return nullptr;
         }
         continue;
+    }
+
+    // A directly invoked callback parameter can still retain a pointer passed
+    // to it. At this boundary the actual callback is available, so reject a
+    // local borrow when that callback is opaque (for example an extern fn).
+    if(best->node && best->node->body && best->node->parameters &&
+       unsafeDepth == 0)
+    {
+        auto callbackIsOpaque = [&](ExpressionNode* supplied)
+        {
+            if(dynamic_cast<ClosureNode*>(supplied))
+                return false;
+            auto* identifier = dynamic_cast<IdentifierNode*>(supplied);
+            if(!identifier)
+                return true;
+            auto closure = closureVariables.find(identifier->name);
+            if(closure != closureVariables.end() && closure->second)
+                return false;
+            auto knownTarget = functionItemVariables.find(identifier->name);
+            if(functionTypeVariables.count(identifier->name) &&
+               (knownTarget == functionItemVariables.end() ||
+                knownTarget->second.empty()))
+                return true;
+            bool foundVisible = false;
+            const std::set<std::string> targetNames =
+                knownTarget == functionItemVariables.end()
+                    ? std::set<std::string>{identifier->name}
+                    : knownTarget->second;
+            for(const auto& targetName : targetNames)
+            {
+                auto overloads = functionOverloads.find(targetName);
+                if(overloads == functionOverloads.end())
+                    return true;
+                for(const auto& overload : overloads->second)
+                {
+                    if(!isOverloadVisible(overload) || !overload.node)
+                        continue;
+                    foundVisible = true;
+                    if(!overload.node->body)
+                        return true;
+                }
+            }
+            return !foundVisible;
+        };
+        for(size_t callbackIndex = 0;
+            callbackIndex < best->node->parameters->parameters.size() &&
+            callbackIndex < node->arguments.size();
+            ++callbackIndex)
+        {
+            auto* callbackParameter =
+                best->node->parameters->parameters[callbackIndex];
+            if(!callbackParameter ||
+               !dynamic_cast<FunctionTypeNode*>(callbackParameter->type) ||
+               !callbackIsOpaque(node->arguments[callbackIndex]))
+                continue;
+
+            for(size_t pointerIndex = 0;
+                pointerIndex < best->node->parameters->parameters.size() &&
+                pointerIndex < node->arguments.size();
+                ++pointerIndex)
+            {
+                auto* pointerParameter =
+                    best->node->parameters->parameters[pointerIndex];
+                if(!pointerParameter ||
+                   !dynamic_cast<PointerTypeNode*>(pointerParameter->type) ||
+                   !argumentCarriesLocalBorrow(node->arguments[pointerIndex]))
+                    continue;
+
+                bool forwarded = false;
+                for(auto* statement : best->node->body->statements)
+                {
+                    ExpressionNode* expression = nullptr;
+                    if(auto* expressionStatement =
+                           dynamic_cast<ExpressionStatementNode*>(statement))
+                        expression = expressionStatement->expression;
+                    else if(auto* returnStatement =
+                                dynamic_cast<ReturnNode*>(statement))
+                        expression = returnStatement->expression;
+                    auto* invocation =
+                        dynamic_cast<FunctionCallNode*>(expression);
+                    if(!invocation ||
+                       invocation->name != callbackParameter->name)
+                        continue;
+                    for(auto* argument : invocation->arguments)
+                    {
+                        std::set<std::string> identifiers;
+                        collect_used_idents(argument, identifiers);
+                        if(identifiers.count(pointerParameter->name))
+                        {
+                            forwarded = true;
+                            break;
+                        }
+                    }
+                    if(forwarded)
+                        break;
+                }
+                if(forwarded)
+                {
+                    reportError(
+                        node->line,
+                        "cannot pass a borrow of local storage through opaque "
+                        "callable pointer parameter outside unsafe because "
+                        "the callable may retain it");
+                    return nullptr;
+                }
+            }
+        }
     }
 
     llvm::Function* callee = best->function;
@@ -4942,6 +6636,85 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     else
         callResult = builder.CreateCall(callee, args, "calltmp");
 
+    // A no-escape wrapper can synchronously invoke a concrete runtime closure.
+    // Reflect its pointer reassignments at the call boundary so the caller's
+    // borrow state matches the callback's effects.
+    if(best->node && best->node->parameters)
+        for(size_t parameterIndex = 0;
+            parameterIndex < best->node->parameters->parameters.size() &&
+            parameterIndex < node->arguments.size();
+            ++parameterIndex)
+        {
+            if(!callableParameterIsNoEscape(parameterIndex) ||
+               !callableParameterIsDirectlyInvoked(parameterIndex))
+                continue;
+            auto* identifier =
+                dynamic_cast<IdentifierNode*>(node->arguments[parameterIndex]);
+            if(identifier)
+            {
+                auto runtime = runtimeClosureVariables.find(identifier->name);
+                auto declared = closureVariables.find(identifier->name);
+                if(runtime != runtimeClosureVariables.end() &&
+                   declared != closureVariables.end() && runtime->second &&
+                   runtime->second == declared->second)
+                    applyRuntimeClosurePointerBorrowEffects(
+                        identifier->name, runtime->second, node->line);
+                continue;
+            }
+            auto* inlineClosure = dynamic_cast<ClosureNode*>(
+                node->arguments[parameterIndex]);
+            if(!inlineClosure)
+                continue;
+            std::function<bool(StatementListNode*)> assignsCapturedPointer;
+            std::function<bool(StatementNode*)> statementAssignsCapturedPointer;
+            assignsCapturedPointer = [&](StatementListNode* statements) {
+                if(!statements)
+                    return false;
+                return std::any_of(
+                    statements->statements.begin(),
+                    statements->statements.end(),
+                    [&](StatementNode* statement) {
+                        return statementAssignsCapturedPointer(statement);
+                    });
+            };
+            statementAssignsCapturedPointer = [&](StatementNode* statement) {
+                if(auto* assignment =
+                       dynamic_cast<AssignmentNode*>(statement))
+                    return pointerElementTypes.count(assignment->name) != 0;
+                if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+                    return assignsCapturedPointer(block->statements);
+                if(auto* branch = dynamic_cast<IfNode*>(statement))
+                    return assignsCapturedPointer(branch->thenBranch) ||
+                           assignsCapturedPointer(branch->elseBranch) ||
+                           (branch->elseIfBranch &&
+                            statementAssignsCapturedPointer(
+                                branch->elseIfBranch));
+                if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+                    return assignsCapturedPointer(branch->thenBranch) ||
+                           assignsCapturedPointer(branch->elseBranch) ||
+                           (branch->elseIfBranch &&
+                            statementAssignsCapturedPointer(
+                                branch->elseIfBranch));
+                if(auto* loop = dynamic_cast<WhileNode*>(statement))
+                    return assignsCapturedPointer(loop->body);
+                if(auto* loop = dynamic_cast<ForNode*>(statement))
+                    return assignsCapturedPointer(loop->body);
+                return false;
+            };
+            if(!assignsCapturedPointer(inlineClosure->body))
+                continue;
+            std::vector<std::pair<std::string, TypeNode*>> captures;
+            TypeNode* closureReturnType = nullptr;
+            if(getRuntimeClosureCaptures(inlineClosure, captures,
+                                         closureReturnType))
+            {
+                analyzeRuntimeClosurePointerBorrowEffects(inlineClosure,
+                                                          captures);
+                applyRuntimeClosurePointerBorrowEffects(
+                    "", inlineClosure, node->line);
+            }
+        }
+
     if(isFreeLikeCall)
         markFreeLikeConsumed(node->arguments[0]);
 
@@ -5006,6 +6779,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     auto savedImmutableReferenceVars = immutableReferenceVariables;
     auto savedMovedVars = movedVariables;
     auto savedPtrBorrowTarget = pointerBorrowTarget;
+    auto savedPtrBorrowParent = pointerBorrowParent;
     auto savedPtrBorrowPlace = pointerBorrowPlace;
     auto savedActiveBorrowers = activeBorrowers;
     auto savedActiveMutBorrow = activeMutBorrower;
@@ -5025,6 +6799,9 @@ llvm::Function* CodeGenerator::generateClosureFn(
     auto savedRuntimeClosureVariables = runtimeClosureVariables;
     auto savedRuntimeClosureReturnTypes = runtimeClosureReturnTypes;
     auto savedFunctionTypeVariables = functionTypeVariables;
+    auto savedFunctionItemVariables = functionItemVariables;
+    auto savedFunctionTypeParameters = functionTypeParameters;
+    auto savedPointerParameterBorrowOrigins = pointerParameterBorrowOrigins;
     auto savedRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     auto savedLoopBreak = loopBreakBlocks;
     auto savedLoopContinue = loopContinueBlocks;
@@ -5050,6 +6827,9 @@ llvm::Function* CodeGenerator::generateClosureFn(
     runtimeClosureVariables.clear();
     runtimeClosureReturnTypes.clear();
     functionTypeVariables.clear();
+    functionItemVariables.clear();
+    functionTypeParameters.clear();
+    pointerParameterBorrowOrigins.clear();
     runtimeClosureBorrowOwners.clear();
     closureCaptureAliases.clear();
     closureCaptureTypes.clear();
@@ -5057,6 +6837,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     closureCaptureReferenceAliases.clear();
     activeInlineClosures.clear();
     pointerBorrowTarget.clear();
+    pointerBorrowParent.clear();
     pointerBorrowPlace.clear();
     pointerKnownNull.clear();
     activeBorrowers.clear();
@@ -5202,9 +6983,21 @@ llvm::Function* CodeGenerator::generateClosureFn(
                     }
                 }
                 variableTypes[parameter->name] = semanticType->kind;
+                if(auto* pointer =
+                       dynamic_cast<PointerTypeNode*>(semanticType))
+                {
+                    pointerElementTypes[parameter->name] =
+                        pointer->elementType;
+                    pointerBorrowTarget[parameter->name] = parameter->name;
+                    pointerBorrowPlace[parameter->name] = parameter->name;
+                    pointerParameterBorrowOrigins.insert(parameter->name);
+                }
                 if(auto* functionType =
                        dynamic_cast<FunctionTypeNode*>(semanticType))
+                {
                     functionTypeVariables[parameter->name] = functionType;
+                    functionTypeParameters.insert(parameter->name);
+                }
                 if(auto* structType =
                        dynamic_cast<StructTypeRefNode*>(semanticType))
                 {
@@ -5288,6 +7081,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
         std::move(savedImmutableReferenceVars);
     movedVariables = std::move(savedMovedVars);
     pointerBorrowTarget = std::move(savedPtrBorrowTarget);
+    pointerBorrowParent = std::move(savedPtrBorrowParent);
     pointerBorrowPlace = std::move(savedPtrBorrowPlace);
     activeBorrowers = std::move(savedActiveBorrowers);
     activeMutBorrower = std::move(savedActiveMutBorrow);
@@ -5312,6 +7106,10 @@ llvm::Function* CodeGenerator::generateClosureFn(
     runtimeClosureVariables = std::move(savedRuntimeClosureVariables);
     runtimeClosureReturnTypes = std::move(savedRuntimeClosureReturnTypes);
     functionTypeVariables = std::move(savedFunctionTypeVariables);
+    functionItemVariables = std::move(savedFunctionItemVariables);
+    functionTypeParameters = std::move(savedFunctionTypeParameters);
+    pointerParameterBorrowOrigins =
+        std::move(savedPointerParameterBorrowOrigins);
     runtimeClosureBorrowOwners =
         std::move(savedRuntimeClosureBorrowOwners);
     closureCaptureAliases = std::move(savedClosureCaptureAliases);

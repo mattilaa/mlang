@@ -13,6 +13,41 @@ using mlang::ir_detail::ast_analysis::collect_used_idents;
 using mlang::ir_detail::ast_analysis::strip_iter_methods;
 using mlang::ir_detail::common::Helpers;
 
+namespace
+{
+class MutableCallableTargetsAcrossLoop
+{
+public:
+    MutableCallableTargetsAcrossLoop(
+        std::map<std::string, std::set<std::string>>& targets,
+        const std::set<std::string>& constants)
+        : targets_(targets), constants_(constants)
+    {
+        eraseMutableTargets();
+    }
+
+    ~MutableCallableTargetsAcrossLoop()
+    {
+        eraseMutableTargets();
+    }
+
+private:
+    void eraseMutableTargets()
+    {
+        for(auto target = targets_.begin(); target != targets_.end();)
+        {
+            if(!constants_.count(target->first))
+                target = targets_.erase(target);
+            else
+                ++target;
+        }
+    }
+
+    std::map<std::string, std::set<std::string>>& targets_;
+    const std::set<std::string>& constants_;
+};
+} // namespace
+
 void CodeGenerator::expireUnusedLocalBorrows(
     const std::vector<StatementNode*>& statements, size_t statementIndex,
     int scopeDepth)
@@ -339,7 +374,98 @@ void CodeGenerator::generateBreakStatement(BreakNode* node)
         reportError(node->line, "'break' statement not within a loop");
         return;
     }
+    LoopExitBorrowState state;
+    state.variableScopeDepth = variableScopeDepth;
+    state.movedVariables = movedVariables;
+    state.pointerBorrowTarget = pointerBorrowTarget;
+    state.pointerBorrowParent = pointerBorrowParent;
+    state.aggregateBorrowOrigins = aggregateBorrowOrigins;
+    state.aggregateBorrowPlaces = aggregateBorrowPlaces;
+    state.aggregateBorrowFieldPlaces = aggregateBorrowFieldPlaces;
+    state.pointerBorrowPlace = pointerBorrowPlace;
+    state.activeBorrowers = activeBorrowers;
+    state.activeMutBorrower = activeMutBorrower;
+    state.runtimeClosureBorrowOwners = runtimeClosureBorrowOwners;
+    if(!loopBreakBorrowStates.empty())
+        loopBreakBorrowStates.back().push_back(std::move(state));
     builder.CreateBr(loopBreakBlocks.back());
+}
+
+void CodeGenerator::mergeLoopExitBorrowStates(
+    const std::vector<LoopExitBorrowState>& states, int loopScopeDepth,
+    const std::set<std::string>& loopVariables)
+{
+    if(states.empty())
+        return;
+
+    auto survivesLoopScope = [&](const LoopExitBorrowState& state,
+                                 const std::string& name) {
+        if(loopVariables.count(name))
+            return false;
+        auto depth = state.variableScopeDepth.find(name);
+        return depth == state.variableScopeDepth.end() ||
+               depth->second <= loopScopeDepth;
+    };
+    for(const auto& state : states)
+    {
+        for(const auto& moved : state.movedVariables)
+            if(survivesLoopScope(state, moved))
+                movedVariables.insert(moved);
+        for(const auto& borrow : state.pointerBorrowTarget)
+            if(survivesLoopScope(state, borrow.first))
+                pointerBorrowTarget.emplace(borrow.first, borrow.second);
+        for(const auto& aggregate : state.aggregateBorrowOrigins)
+            if(survivesLoopScope(state, aggregate.first))
+                for(const auto& owner : aggregate.second)
+                    if(survivesLoopScope(state, owner))
+                        aggregateBorrowOrigins[aggregate.first].insert(owner);
+        for(const auto& owner : state.activeBorrowers)
+            if(survivesLoopScope(state, owner.first))
+                for(const auto& borrower : owner.second)
+                    if(survivesLoopScope(state, borrower))
+                        activeBorrowers[owner.first].insert(borrower);
+        for(const auto& borrow : state.activeMutBorrower)
+            if(survivesLoopScope(state, borrow.second))
+                activeMutBorrower.emplace(borrow.first, borrow.second);
+        for(const auto& closure : state.runtimeClosureBorrowOwners)
+            if(survivesLoopScope(state, closure.first))
+                for(const auto& owner : closure.second)
+                    if(survivesLoopScope(state, owner))
+                        runtimeClosureBorrowOwners[closure.first].insert(owner);
+    }
+
+    for(auto parent = pointerBorrowParent.begin();
+        parent != pointerBorrowParent.end();)
+    {
+        const bool common = std::all_of(
+            states.begin(), states.end(), [&](const auto& state) {
+                auto branchParent = state.pointerBorrowParent.find(parent->first);
+                return branchParent != state.pointerBorrowParent.end() &&
+                       branchParent->second == parent->second;
+            });
+        if(!common)
+            parent = pointerBorrowParent.erase(parent);
+        else
+            ++parent;
+    }
+    for(auto place = pointerBorrowPlace.begin();
+        place != pointerBorrowPlace.end();)
+    {
+        const bool common = std::all_of(
+            states.begin(), states.end(), [&](const auto& state) {
+                auto branchPlace = state.pointerBorrowPlace.find(place->first);
+                return branchPlace != state.pointerBorrowPlace.end() &&
+                       branchPlace->second == place->second;
+            });
+        if(!common)
+            place = pointerBorrowPlace.erase(place);
+        else
+            ++place;
+    }
+    // Break paths may carry different aggregate places; owner origins above
+    // retain safety while dropping path precision avoids unsound assumptions.
+    aggregateBorrowPlaces.clear();
+    aggregateBorrowFieldPlaces.clear();
 }
 
 void CodeGenerator::generateContinueStatement(ContinueNode* node)
@@ -349,6 +475,20 @@ void CodeGenerator::generateContinueStatement(ContinueNode* node)
         reportError(node->line, "'continue' statement not within a loop");
         return;
     }
+    LoopExitBorrowState state;
+    state.variableScopeDepth = variableScopeDepth;
+    state.movedVariables = movedVariables;
+    state.pointerBorrowTarget = pointerBorrowTarget;
+    state.pointerBorrowParent = pointerBorrowParent;
+    state.aggregateBorrowOrigins = aggregateBorrowOrigins;
+    state.aggregateBorrowPlaces = aggregateBorrowPlaces;
+    state.aggregateBorrowFieldPlaces = aggregateBorrowFieldPlaces;
+    state.pointerBorrowPlace = pointerBorrowPlace;
+    state.activeBorrowers = activeBorrowers;
+    state.activeMutBorrower = activeMutBorrower;
+    state.runtimeClosureBorrowOwners = runtimeClosureBorrowOwners;
+    if(!loopContinueBorrowStates.empty())
+        loopContinueBorrowStates.back().push_back(std::move(state));
     builder.CreateBr(loopContinueBlocks.back());
 }
 
@@ -654,13 +794,16 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto incomingMapKeyValueTypes = mapKeyValueTypes;
     auto incomingPointerElementTypes = pointerElementTypes;
     auto incomingMoved = movedVariables;
+    auto incomingFunctionItemVariables = functionItemVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
+    auto incomingPointerBorrowParent = pointerBorrowParent;
     auto incomingAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto incomingAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto incomingAggregateBorrowFieldPlaces = aggregateBorrowFieldPlaces;
     auto incomingPointerBorrowPlace = pointerBorrowPlace;
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingActiveMutBorrower = activeMutBorrower;
+    auto incomingRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     auto restoreIncomingState = [&]()
     {
         namedValues = incomingNamedValues;
@@ -672,13 +815,16 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         mapKeyValueTypes = incomingMapKeyValueTypes;
         pointerElementTypes = incomingPointerElementTypes;
         movedVariables = incomingMoved;
+        functionItemVariables = incomingFunctionItemVariables;
         pointerBorrowTarget = incomingPointerBorrowTarget;
+        pointerBorrowParent = incomingPointerBorrowParent;
         aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
         aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
         aggregateBorrowFieldPlaces = incomingAggregateBorrowFieldPlaces;
         pointerBorrowPlace = incomingPointerBorrowPlace;
         activeBorrowers = incomingActiveBorrowers;
         activeMutBorrower = incomingActiveMutBorrower;
+        runtimeClosureBorrowOwners = incomingRuntimeClosureBorrowOwners;
     };
 
     if(node->conditionInit)
@@ -701,9 +847,11 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto condListElementTypes = listElementTypes;
     auto condMapKeyValueTypes = mapKeyValueTypes;
     auto condPointerElementTypes = pointerElementTypes;
+    auto condFunctionItemVariables = functionItemVariables;
     auto condAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto condAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto condAggregateBorrowFieldPlaces = aggregateBorrowFieldPlaces;
+    auto condRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
 
     // Check that condition is a valid boolean type
     llvm::Type* condType = condValue->getType();
@@ -776,11 +924,14 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     listElementTypes = condListElementTypes;
     mapKeyValueTypes = condMapKeyValueTypes;
     pointerElementTypes = condPointerElementTypes;
+    functionItemVariables = condFunctionItemVariables;
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
+    pointerBorrowParent = incomingPointerBorrowParent;
     aggregateBorrowOrigins = condAggregateBorrowOrigins;
     aggregateBorrowPlaces = condAggregateBorrowPlaces;
     aggregateBorrowFieldPlaces = condAggregateBorrowFieldPlaces;
+    runtimeClosureBorrowOwners = condRuntimeClosureBorrowOwners;
     pointerBorrowPlace = incomingPointerBorrowPlace;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
@@ -791,12 +942,15 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     }
     exitCleanupScope();
     auto thenMoved = movedVariables;
+    auto thenFunctionItemVariables = functionItemVariables;
     auto thenPointerBorrowTarget = pointerBorrowTarget;
+    auto thenPointerBorrowParent = pointerBorrowParent;
     auto thenAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto thenAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto thenPointerBorrowPlace = pointerBorrowPlace;
     auto thenActiveBorrowers = activeBorrowers;
     auto thenActiveMutBorrower = activeMutBorrower;
+    auto thenRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     llvm::BasicBlock* thenEnd = builder.GetInsertBlock();
     bool thenFallsThrough = thenEnd && !mlang::llvm_compat::terminatorOrNull(thenEnd);
 
@@ -817,11 +971,14 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     listElementTypes = incomingListElementTypes;
     mapKeyValueTypes = incomingMapKeyValueTypes;
     pointerElementTypes = incomingPointerElementTypes;
+    functionItemVariables = condFunctionItemVariables;
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
+    pointerBorrowParent = incomingPointerBorrowParent;
     aggregateBorrowOrigins = condAggregateBorrowOrigins;
     aggregateBorrowPlaces = condAggregateBorrowPlaces;
     aggregateBorrowFieldPlaces = condAggregateBorrowFieldPlaces;
+    runtimeClosureBorrowOwners = condRuntimeClosureBorrowOwners;
     pointerBorrowPlace = incomingPointerBorrowPlace;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
@@ -852,12 +1009,15 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         exitCleanupScope();
     }
     auto elseMoved = movedVariables;
+    auto elseFunctionItemVariables = functionItemVariables;
     auto elsePointerBorrowTarget = pointerBorrowTarget;
+    auto elsePointerBorrowParent = pointerBorrowParent;
     auto elseAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto elseAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto elsePointerBorrowPlace = pointerBorrowPlace;
     auto elseActiveBorrowers = activeBorrowers;
     auto elseActiveMutBorrower = activeMutBorrower;
+    auto elseRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     llvm::BasicBlock* elseEnd = builder.GetInsertBlock();
     bool elseFallsThrough = elseEnd && !mlang::llvm_compat::terminatorOrNull(elseEnd);
 
@@ -880,10 +1040,34 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     mapKeyValueTypes = incomingMapKeyValueTypes;
     pointerElementTypes = incomingPointerElementTypes;
 
+    if(thenFallsThrough && elseFallsThrough)
+    {
+        functionItemVariables.clear();
+        for(const auto& target : thenFunctionItemVariables)
+        {
+            auto other = elseFunctionItemVariables.find(target.first);
+            if(other != elseFunctionItemVariables.end())
+            {
+                std::set<std::string> possibleTargets = target.second;
+                possibleTargets.insert(other->second.begin(),
+                                       other->second.end());
+                functionItemVariables.emplace(target.first,
+                                              std::move(possibleTargets));
+            }
+        }
+    }
+    else if(thenFallsThrough)
+        functionItemVariables = std::move(thenFunctionItemVariables);
+    else if(elseFallsThrough)
+        functionItemVariables = std::move(elseFunctionItemVariables);
+    else
+        functionItemVariables = incomingFunctionItemVariables;
+
     if(thenFallsThrough || elseFallsThrough)
     {
         std::set<std::string> mergedMoved;
         std::map<std::string, std::string> mergedPointerBorrowTarget;
+        std::map<std::string, std::string> mergedPointerBorrowParent;
         std::map<std::string, std::set<std::string>>
             mergedAggregateBorrowOrigins;
         std::map<std::string, std::string> mergedPointerBorrowPlace;
@@ -924,8 +1108,26 @@ void CodeGenerator::generateIfStatement(IfNode* node)
             mergeOne(elseMoved, elsePointerBorrowTarget,
                      elseAggregateBorrowOrigins, elseActiveBorrowers);
 
+        const auto& firstParentState =
+            thenFallsThrough ? thenPointerBorrowParent : elsePointerBorrowParent;
+        mergedPointerBorrowParent = firstParentState;
+        if(thenFallsThrough && elseFallsThrough)
+        {
+            for(auto it = mergedPointerBorrowParent.begin();
+                it != mergedPointerBorrowParent.end();)
+            {
+                auto other = elsePointerBorrowParent.find(it->first);
+                if(other == elsePointerBorrowParent.end() ||
+                   other->second != it->second)
+                    it = mergedPointerBorrowParent.erase(it);
+                else
+                    ++it;
+            }
+        }
+
         movedVariables = std::move(mergedMoved);
         pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
+        pointerBorrowParent = std::move(mergedPointerBorrowParent);
         aggregateBorrowOrigins = std::move(mergedAggregateBorrowOrigins);
         aggregateBorrowPlaces.clear();
         aggregateBorrowFieldPlaces.clear();
@@ -1018,12 +1220,42 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         }
         pointerBorrowPlace = std::move(mergedPointerBorrowPlace);
         activeBorrowers = std::move(mergedActiveBorrowers);
-        // Merge &mut: conservative — keep only those live in both branches
+        // A mutable borrow on either reachable path may be live after the
+        // merge. Keep the union so owner accesses cannot slip through on the
+        // path that did not create the borrow.
         std::map<std::string, std::string> mergedMutBorrower;
-        for(const auto& kv : thenActiveMutBorrower)
-            if(elseActiveMutBorrower.count(kv.first))
-                mergedMutBorrower[kv.first] = kv.second;
+        if(thenFallsThrough)
+            mergedMutBorrower.insert(thenActiveMutBorrower.begin(),
+                                     thenActiveMutBorrower.end());
+        if(elseFallsThrough)
+            for(const auto& kv : elseActiveMutBorrower)
+                mergedMutBorrower.emplace(kv.first, kv.second);
         activeMutBorrower = std::move(mergedMutBorrower);
+
+        // A callable assigned on either branch may retain any capture from
+        // that branch. Merge capture-owner sets for outer closures so last-use
+        // cleanup releases every possible borrow; discard branch-local
+        // closure entries that cannot survive the merge scope.
+        std::map<std::string, std::set<std::string>>
+            mergedRuntimeClosureBorrowOwners;
+        auto mergeRuntimeClosureOwners = [&](const auto& branchOwners) {
+            for(const auto& closure : branchOwners)
+            {
+                auto depth = variableScopeDepth.find(closure.first);
+                if(depth == variableScopeDepth.end() ||
+                   depth->second > currentScopeDepth())
+                    continue;
+                auto& owners =
+                    mergedRuntimeClosureBorrowOwners[closure.first];
+                owners.insert(closure.second.begin(), closure.second.end());
+            }
+        };
+        if(thenFallsThrough)
+            mergeRuntimeClosureOwners(thenRuntimeClosureBorrowOwners);
+        if(elseFallsThrough)
+            mergeRuntimeClosureOwners(elseRuntimeClosureBorrowOwners);
+        runtimeClosureBorrowOwners =
+            std::move(mergedRuntimeClosureBorrowOwners);
     }
     else
     {
@@ -1035,6 +1267,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         pointerBorrowPlace = incomingPointerBorrowPlace;
         activeBorrowers = incomingActiveBorrowers;
         activeMutBorrower = incomingActiveMutBorrower;
+        runtimeClosureBorrowOwners = incomingRuntimeClosureBorrowOwners;
     }
 }
 
@@ -1126,12 +1359,15 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
 
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
+    auto incomingPointerBorrowParent = pointerBorrowParent;
     auto incomingAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto incomingAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto incomingAggregateBorrowFieldPlaces = aggregateBorrowFieldPlaces;
     auto incomingPointerBorrowPlace = pointerBorrowPlace;
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingActiveMutBorrower = activeMutBorrower;
+    auto incomingRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
+    const int loopScopeDepth = currentScopeDepth();
 
     llvm::Function* function = builder.GetInsertBlock()->getParent();
     llvm::BasicBlock* condBB =
@@ -1141,6 +1377,8 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
 
     loopBreakBlocks.push_back(endBB);
     loopContinueBlocks.push_back(condBB);
+    loopBreakBorrowStates.emplace_back();
+    loopContinueBorrowStates.emplace_back();
 
     builder.CreateBr(condBB);
     builder.SetInsertPoint(condBB);
@@ -1149,6 +1387,8 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     {
         loopBreakBlocks.pop_back();
         loopContinueBlocks.pop_back();
+        loopBreakBorrowStates.pop_back();
+        loopContinueBorrowStates.pop_back();
         return;
     }
 
@@ -1170,6 +1410,8 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
                         typeStr + "'");
         loopBreakBlocks.pop_back();
         loopContinueBlocks.pop_back();
+        loopBreakBorrowStates.pop_back();
+        loopContinueBorrowStates.pop_back();
         return;
     }
 
@@ -1190,6 +1432,9 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     }
 
     builder.CreateCondBr(condValue, bodyBB, endBB);
+
+    MutableCallableTargetsAcrossLoop callableTargetsAcrossLoop(
+        functionItemVariables, constantVariables);
 
     bodyBB->insertInto(function);
     builder.SetInsertPoint(bodyBB);
@@ -1213,10 +1458,12 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     bool bodyFallsThrough = bodyEnd && !mlang::llvm_compat::terminatorOrNull(bodyEnd);
     auto bodyMoved = movedVariables;
     auto bodyPointerBorrowTarget = pointerBorrowTarget;
+    auto bodyPointerBorrowParent = pointerBorrowParent;
     auto bodyAggregateBorrowOrigins = aggregateBorrowOrigins;
     auto bodyPointerBorrowPlace = pointerBorrowPlace;
     auto bodyActiveBorrowers = activeBorrowers;
     auto bodyActiveMutBorrower = activeMutBorrower;
+    auto bodyRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
 
     if(bodyFallsThrough)
     {
@@ -1228,18 +1475,37 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
 
     loopBreakBlocks.pop_back();
     loopContinueBlocks.pop_back();
+    auto breakBorrowStates = std::move(loopBreakBorrowStates.back());
+    loopBreakBorrowStates.pop_back();
+    auto continueBorrowStates = std::move(loopContinueBorrowStates.back());
+    loopContinueBorrowStates.pop_back();
+    breakBorrowStates.insert(breakBorrowStates.end(),
+                             continueBorrowStates.begin(),
+                             continueBorrowStates.end());
 
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
+    pointerBorrowParent = incomingPointerBorrowParent;
     aggregateBorrowOrigins = incomingAggregateBorrowOrigins;
     aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
     aggregateBorrowFieldPlaces = incomingAggregateBorrowFieldPlaces;
     pointerBorrowPlace = incomingPointerBorrowPlace;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
+    runtimeClosureBorrowOwners = incomingRuntimeClosureBorrowOwners;
 
     if(bodyFallsThrough)
     {
+        for(auto it = pointerBorrowParent.begin();
+            it != pointerBorrowParent.end();)
+        {
+            auto bodyParent = bodyPointerBorrowParent.find(it->first);
+            if(bodyParent == bodyPointerBorrowParent.end() ||
+               bodyParent->second != it->second)
+                it = pointerBorrowParent.erase(it);
+            else
+                ++it;
+        }
         movedVariables.insert(bodyMoved.begin(), bodyMoved.end());
         for(const auto& aggregate : bodyAggregateBorrowOrigins)
         {
@@ -1279,11 +1545,119 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
         // from a single body pass are not a sound summary of the final value.
         aggregateBorrowPlaces.clear();
         aggregateBorrowFieldPlaces.clear();
+        for(const auto& closure : bodyRuntimeClosureBorrowOwners)
+        {
+            auto closureDepth = variableScopeDepth.find(closure.first);
+            if(closureDepth != variableScopeDepth.end() &&
+               closureDepth->second > loopScopeDepth)
+                continue;
+            auto& owners = runtimeClosureBorrowOwners[closure.first];
+            owners.insert(closure.second.begin(), closure.second.end());
+        }
+    }
+
+    // A break exits through endBB without falling through to the loop's next
+    // condition. Preserve its borrow facts separately from the back-edge join.
+    for(const auto& state : breakBorrowStates)
+    {
+        auto survivesLoopScope = [&](const std::string& name) {
+            auto depth = state.variableScopeDepth.find(name);
+            return depth == state.variableScopeDepth.end() ||
+                   depth->second <= loopScopeDepth;
+        };
+        movedVariables.insert(state.movedVariables.begin(),
+                              state.movedVariables.end());
+        for(const auto& borrow : state.pointerBorrowTarget)
+            if(survivesLoopScope(borrow.first))
+                pointerBorrowTarget.emplace(borrow.first, borrow.second);
+        for(const auto& aggregate : state.aggregateBorrowOrigins)
+            if(survivesLoopScope(aggregate.first))
+                for(const auto& owner : aggregate.second)
+                    if(survivesLoopScope(owner))
+                        aggregateBorrowOrigins[aggregate.first].insert(owner);
+        for(const auto& aggregate : state.aggregateBorrowPlaces)
+            if(survivesLoopScope(aggregate.first))
+                for(const auto& owner : aggregate.second)
+                    if(survivesLoopScope(owner.first))
+                        aggregateBorrowPlaces[aggregate.first][owner.first]
+                            .insert(owner.second.begin(), owner.second.end());
+        for(const auto& aggregate : state.aggregateBorrowFieldPlaces)
+            if(survivesLoopScope(aggregate.first))
+                for(const auto& field : aggregate.second)
+                    for(const auto& owner : field.second)
+                        if(survivesLoopScope(owner.first))
+                            aggregateBorrowFieldPlaces[aggregate.first]
+                                                      [field.first][owner.first]
+                                                          .insert(
+                                                              owner.second.begin(),
+                                                              owner.second.end());
+        for(const auto& place : state.pointerBorrowPlace)
+        {
+            if(!survivesLoopScope(place.first))
+                continue;
+            auto existing = pointerBorrowPlace.find(place.first);
+            if(existing != pointerBorrowPlace.end() &&
+               existing->second != place.second)
+                pointerBorrowPlace.erase(existing);
+        }
+        for(const auto& owner : state.activeBorrowers)
+            if(survivesLoopScope(owner.first))
+                for(const auto& borrower : owner.second)
+                    if(survivesLoopScope(borrower))
+                        activeBorrowers[owner.first].insert(borrower);
+        for(const auto& borrow : state.activeMutBorrower)
+            if(survivesLoopScope(borrow.second))
+                activeMutBorrower.emplace(borrow.first, borrow.second);
+        for(const auto& closure : state.runtimeClosureBorrowOwners)
+            if(survivesLoopScope(closure.first))
+                for(const auto& owner : closure.second)
+                    if(survivesLoopScope(owner))
+                        runtimeClosureBorrowOwners[closure.first].insert(owner);
+    }
+    if(!breakBorrowStates.empty())
+    {
+        // A reborrow's parent/place is only precise when every exiting path
+        // agrees. Keep only refinements present on all recorded break paths.
+        for(auto parent = pointerBorrowParent.begin();
+            parent != pointerBorrowParent.end();)
+        {
+            const bool common = std::all_of(
+                breakBorrowStates.begin(), breakBorrowStates.end(),
+                [&](const auto& state) {
+                    auto branchParent =
+                        state.pointerBorrowParent.find(parent->first);
+                    return branchParent != state.pointerBorrowParent.end() &&
+                           branchParent->second == parent->second;
+                });
+            if(!common)
+                parent = pointerBorrowParent.erase(parent);
+            else
+                ++parent;
+        }
+        for(auto place = pointerBorrowPlace.begin();
+            place != pointerBorrowPlace.end();)
+        {
+            const bool common = std::all_of(
+                breakBorrowStates.begin(), breakBorrowStates.end(),
+                [&](const auto& state) {
+                    auto branchPlace = state.pointerBorrowPlace.find(place->first);
+                    return branchPlace != state.pointerBorrowPlace.end() &&
+                           branchPlace->second == place->second;
+                });
+            if(!common)
+                place = pointerBorrowPlace.erase(place);
+            else
+                ++place;
+        }
+        aggregateBorrowPlaces.clear();
+        aggregateBorrowFieldPlaces.clear();
     }
 }
 
 void CodeGenerator::generateForStatement(ForNode* node)
 {
+    MutableCallableTargetsAcrossLoop callableTargetsAcrossLoop(
+        functionItemVariables, constantVariables);
     llvm::Function* function = builder.GetInsertBlock()->getParent();
 
     // Strip .iter() / .into_iter() / .enumerate() wrappers from the iterable.
@@ -1384,11 +1758,13 @@ void CodeGenerator::generateForStatement(ForNode* node)
         int oldDepth = hadOldDepth ? oldDepthIt->second : 0;
         auto stateBeforeLoopMoved = movedVariables;
         auto stateBeforeLoopPointerBorrowTarget = pointerBorrowTarget;
+        auto stateBeforeLoopPointerBorrowParent = pointerBorrowParent;
         auto stateBeforeLoopAggregateBorrowOrigins = aggregateBorrowOrigins;
         auto stateBeforeLoopAggregateBorrowPlaces = aggregateBorrowPlaces;
         auto stateBeforeLoopAggregateBorrowFieldPlaces =
             aggregateBorrowFieldPlaces;
         auto stateBeforeLoopActiveBorrowers = activeBorrowers;
+        const int loopScopeDepth = currentScopeDepth();
 
         namedValues[node->varName] = loopVar;
 
@@ -1422,6 +1798,8 @@ void CodeGenerator::generateForStatement(ForNode* node)
         // Push loop blocks for break/continue support
         loopBreakBlocks.push_back(endBB);
         loopContinueBlocks.push_back(incBB);
+        loopBreakBorrowStates.emplace_back();
+        loopContinueBorrowStates.emplace_back();
 
         // Branch to condition check
         builder.CreateBr(condBB);
@@ -1461,6 +1839,7 @@ void CodeGenerator::generateForStatement(ForNode* node)
             }
             exitCleanupScope();
         }
+        auto bodyPointerBorrowParent = pointerBorrowParent;
 
         if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         {
@@ -1483,6 +1862,14 @@ void CodeGenerator::generateForStatement(ForNode* node)
         // Pop loop blocks
         loopBreakBlocks.pop_back();
         loopContinueBlocks.pop_back();
+        auto breakBorrowStates = std::move(loopBreakBorrowStates.back());
+        loopBreakBorrowStates.pop_back();
+        auto continueBorrowStates =
+            std::move(loopContinueBorrowStates.back());
+        loopContinueBorrowStates.pop_back();
+        breakBorrowStates.insert(breakBorrowStates.end(),
+                                 continueBorrowStates.begin(),
+                                 continueBorrowStates.end());
 
         // Restore old value
         if(oldVal)
@@ -1511,6 +1898,8 @@ void CodeGenerator::generateForStatement(ForNode* node)
         {
             movedVariables = std::move(stateBeforeLoopMoved);
             pointerBorrowTarget = std::move(stateBeforeLoopPointerBorrowTarget);
+            pointerBorrowParent =
+                std::move(stateBeforeLoopPointerBorrowParent);
             aggregateBorrowOrigins =
                 std::move(stateBeforeLoopAggregateBorrowOrigins);
             aggregateBorrowPlaces =
@@ -1521,6 +1910,18 @@ void CodeGenerator::generateForStatement(ForNode* node)
         }
         else
         {
+            for(auto it = stateBeforeLoopPointerBorrowParent.begin();
+                it != stateBeforeLoopPointerBorrowParent.end();)
+            {
+                auto bodyParent = bodyPointerBorrowParent.find(it->first);
+                if(bodyParent == bodyPointerBorrowParent.end() ||
+                   bodyParent->second != it->second)
+                    it = stateBeforeLoopPointerBorrowParent.erase(it);
+                else
+                    ++it;
+            }
+            pointerBorrowParent =
+                std::move(stateBeforeLoopPointerBorrowParent);
             for(const auto& aggregate : aggregateBorrowOrigins)
             {
                 auto& origins =
@@ -1539,6 +1940,9 @@ void CodeGenerator::generateForStatement(ForNode* node)
             }
             activeBorrowers = std::move(stateBeforeLoopActiveBorrowers);
         }
+        mergeLoopExitBorrowStates(
+            breakBorrowStates, loopScopeDepth,
+            {node->varName, node->indexVarName});
     }
     else if(auto* listLit = dynamic_cast<ListLiteralNode*>(iterableExpr))
     {
@@ -1617,6 +2021,7 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
                                                     ListLiteralNode* listLit)
 {
     llvm::Function* function = builder.GetInsertBlock()->getParent();
+    const int loopScopeDepth = currentScopeDepth();
 
     if(!listLit->elements || listLit->elements->elements.empty())
     {
@@ -1806,6 +2211,8 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
 
     loopBreakBlocks.push_back(endBB);
     loopContinueBlocks.push_back(incBB);
+    loopBreakBorrowStates.emplace_back();
+    loopContinueBorrowStates.emplace_back();
 
     builder.CreateBr(condBB);
 
@@ -1869,6 +2276,13 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
 
     loopBreakBlocks.pop_back();
     loopContinueBlocks.pop_back();
+    auto breakBorrowStates = std::move(loopBreakBorrowStates.back());
+    loopBreakBorrowStates.pop_back();
+    auto continueBorrowStates = std::move(loopContinueBorrowStates.back());
+    loopContinueBorrowStates.pop_back();
+    breakBorrowStates.insert(breakBorrowStates.end(),
+                             continueBorrowStates.begin(),
+                             continueBorrowStates.end());
 
     // Restore index var if used
     if(hasIdxVar)
@@ -1938,6 +2352,9 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     else
         clearMovedVariable(node->varName);
 
+    mergeLoopExitBorrowStates(
+        breakBorrowStates, loopScopeDepth,
+        {node->varName, node->indexVarName});
     delete elemTypeNode;
 }
 
@@ -1947,6 +2364,7 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     // For iterating over a list variable, we need the list structure
     // Lists are stored as: { i64 size, ptr data }
     llvm::Function* function = builder.GetInsertBlock()->getParent();
+    const int loopScopeDepth = currentScopeDepth();
 
     llvm::Value* listPtr = namedValues[listId->name];
     if(!listPtr)
@@ -2141,6 +2559,8 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
 
     loopBreakBlocks.push_back(endBB);
     loopContinueBlocks.push_back(incBB);
+    loopBreakBorrowStates.emplace_back();
+    loopContinueBorrowStates.emplace_back();
 
     builder.CreateBr(condBB);
 
@@ -2196,6 +2616,13 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
 
     loopBreakBlocks.pop_back();
     loopContinueBlocks.pop_back();
+    auto breakBorrowStates = std::move(loopBreakBorrowStates.back());
+    loopBreakBorrowStates.pop_back();
+    auto continueBorrowStates = std::move(loopContinueBorrowStates.back());
+    loopContinueBorrowStates.pop_back();
+    breakBorrowStates.insert(breakBorrowStates.end(),
+                             continueBorrowStates.begin(),
+                             continueBorrowStates.end());
 
     // Restore index var if used
     if(hasIdxVar)
@@ -2264,11 +2691,15 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         movedVariables.insert(node->varName);
     else
         clearMovedVariable(node->varName);
+    mergeLoopExitBorrowStates(
+        breakBorrowStates, loopScopeDepth,
+        {node->varName, node->indexVarName});
 }
 
 void CodeGenerator::generateForEnumIteration(ForNode* node,
                                              const std::string& enumName)
 {
+    const int loopScopeDepth = currentScopeDepth();
     auto orderIt = enumVariantOrder.find(enumName);
     auto strOrderIt = enumStringVariantOrder.find(enumName);
     bool hasIntOrder =
@@ -2350,6 +2781,8 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
 
     loopBreakBlocks.push_back(endBB);
     loopContinueBlocks.push_back(incBB);
+    loopBreakBorrowStates.emplace_back();
+    loopContinueBorrowStates.emplace_back();
 
     builder.CreateBr(condBB);
 
@@ -2433,6 +2866,13 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
 
     loopBreakBlocks.pop_back();
     loopContinueBlocks.pop_back();
+    auto breakBorrowStates = std::move(loopBreakBorrowStates.back());
+    loopBreakBorrowStates.pop_back();
+    auto continueBorrowStates = std::move(loopContinueBorrowStates.back());
+    loopContinueBorrowStates.pop_back();
+    breakBorrowStates.insert(breakBorrowStates.end(),
+                             continueBorrowStates.begin(),
+                             continueBorrowStates.end());
 
     if(hasIdxVar)
     {
@@ -2474,12 +2914,16 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
         movedVariables.insert(node->varName);
     else
         clearMovedVariable(node->varName);
+    mergeLoopExitBorrowStates(
+        breakBorrowStates, loopScopeDepth,
+        {node->varName, node->indexVarName});
 }
 
 void CodeGenerator::generateForMapIteration(ForNode* node,
                                             MapIteratorNode* mapIter)
 {
     llvm::Function* function = builder.GetInsertBlock()->getParent();
+    const int loopScopeDepth = currentScopeDepth();
 
     // Get the map variable
     auto* mapId = dynamic_cast<IdentifierNode*>(mapIter->mapExpr);
@@ -2600,6 +3044,8 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
 
     loopBreakBlocks.push_back(endBB);
     loopContinueBlocks.push_back(incBB);
+    loopBreakBorrowStates.emplace_back();
+    loopContinueBorrowStates.emplace_back();
 
     builder.CreateBr(condBB);
 
@@ -2693,6 +3139,13 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
 
     loopBreakBlocks.pop_back();
     loopContinueBlocks.pop_back();
+    auto breakBorrowStates = std::move(loopBreakBorrowStates.back());
+    loopBreakBorrowStates.pop_back();
+    auto continueBorrowStates = std::move(loopContinueBorrowStates.back());
+    loopContinueBorrowStates.pop_back();
+    breakBorrowStates.insert(breakBorrowStates.end(),
+                             continueBorrowStates.begin(),
+                             continueBorrowStates.end());
 
     // Restore
     if(oldVal)
@@ -2720,4 +3173,6 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
     {
         tupleElementTypes.erase(node->varName);
     }
+    mergeLoopExitBorrowStates(breakBorrowStates, loopScopeDepth,
+                               {node->varName, node->indexVarName});
 }

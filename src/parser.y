@@ -3201,6 +3201,8 @@ assignment_statement
             ASTNode* ptr = create_identifier_at($1, yylineno, yycolumn_token);
             $$ = mla_ast_deref_assignment(ptr, $2, yylineno);
         }
+    | MULTIPLY condition_postfix ASSIGN expression SEMICOLON
+        { $$ = mla_ast_deref_assignment($2, $4, yylineno); }
     ;
 
 expression_statement

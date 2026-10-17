@@ -70,6 +70,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
 
     std::string signatureKey = functionSignatureKey(node);
     auto& overloads = functionOverloads[node->name];
+    bool alreadyRegistered = false;
     for(const auto& info : overloads)
     {
         if(info.signatureKey == signatureKey)
@@ -80,7 +81,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             if(info.sourceModule == node->sourceModule ||
                (function && info.symbolName == function->getName().str()))
             {
-                return;
+                alreadyRegistered = true;
+                break;
             }
             reportError(node->line,
                         "duplicate function overload: '" + signatureKey + "'");
@@ -88,15 +90,181 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
         }
     }
 
-    FunctionOverloadInfo info{node,
-                              function,
-                              signatureKey,
-                              function ? function->getName().str() : "",
-                              node->parameters ? node->parameters->isVarArg
-                                               : false,
-                              node->isPublic,
-                              node->sourceModule};
-    overloads.push_back(info);
+    if(!alreadyRegistered)
+    {
+        FunctionOverloadInfo info{node,
+                                  function,
+                                  signatureKey,
+                                  function ? function->getName().str() : "",
+                                  node->parameters
+                                      ? node->parameters->isVarArg
+                                      : false,
+                                  node->isPublic,
+                                  node->sourceModule};
+        overloads.push_back(info);
+    }
+
+    if(function && node->body && node->returnType &&
+       node->returnType->kind == TypeNode::TYPE_PTR && node->parameters)
+    {
+        const std::string symbol = function->getName().str();
+        functionPointerReturnSummaryComplete.erase(symbol);
+        bool hasUnknownReturnOrigin = false;
+        std::map<std::string, std::set<size_t>> pointerAliases;
+        for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
+        {
+            auto* parameter = node->parameters->parameters[i];
+            if(parameter && dynamic_cast<PointerTypeNode*>(parameter->type))
+                pointerAliases[parameter->name].insert(i);
+        }
+
+        std::function<std::set<size_t>(ExpressionNode*)> origins =
+            [&](ExpressionNode* expression) -> std::set<size_t> {
+            if(!expression)
+                return {};
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
+            {
+                auto alias = pointerAliases.find(identifier->name);
+                return alias == pointerAliases.end()
+                           ? std::set<size_t>{}
+                           : alias->second;
+            }
+            if(auto* cast = dynamic_cast<CastExpressionNode*>(expression))
+                return origins(cast->expression);
+            if(auto* attempt = dynamic_cast<TryExpressionNode*>(expression))
+                return origins(attempt->expression);
+            if(auto* ternary = dynamic_cast<TernaryNode*>(expression))
+            {
+                auto result = origins(ternary->trueExpr);
+                auto other = origins(ternary->falseExpr);
+                result.insert(other.begin(), other.end());
+                return result;
+            }
+            if(auto* match = dynamic_cast<MatchExpressionNode*>(expression))
+            {
+                std::set<size_t> result;
+                for(auto* arm : match->arms)
+                    if(arm)
+                    {
+                        auto other = origins(arm->expression);
+                        result.insert(other.begin(), other.end());
+                    }
+                return result;
+            }
+            if(auto* binary = dynamic_cast<BinaryOpNode*>(expression))
+                if(binary->op == BinaryOpNode::OP_COMMA)
+                    return origins(binary->right);
+            if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
+            {
+                std::set<size_t> arguments;
+                auto candidates = functionOverloads.find(call->name);
+                if(candidates != functionOverloads.end())
+                    for(const auto& candidate : candidates->second)
+                    {
+                        if(!candidate.node || !candidate.node->returnType ||
+                           candidate.node->returnType->kind !=
+                               TypeNode::TYPE_PTR)
+                            continue;
+                        auto summary = functionPointerReturnParameters.find(
+                            candidate.symbolName);
+                        if(!functionPointerReturnSummaryComplete.count(
+                               candidate.symbolName))
+                        {
+                            hasUnknownReturnOrigin = true;
+                            continue;
+                        }
+                        if(summary == functionPointerReturnParameters.end())
+                            continue;
+                        for(size_t index : summary->second)
+                            if(index < call->arguments.size())
+                            {
+                                auto forwarded = origins(call->arguments[index]);
+                                arguments.insert(forwarded.begin(),
+                                                 forwarded.end());
+                            }
+                    }
+                else
+                    hasUnknownReturnOrigin = true;
+                return arguments;
+            }
+            if(auto* address = dynamic_cast<UnaryOpNode*>(expression))
+            {
+                if((address->op == UnaryOpNode::OP_ADDR ||
+                    address->op == UnaryOpNode::OP_ADDR_MUT))
+                    if(auto* dereference =
+                           dynamic_cast<UnaryOpNode*>(address->operand))
+                        if(dereference->op == UnaryOpNode::OP_DEREF)
+                            return origins(dereference->operand);
+                if(address->op == UnaryOpNode::OP_DEREF)
+                    hasUnknownReturnOrigin = true;
+            }
+            if(dynamic_cast<CallableInvokeNode*>(expression) ||
+               dynamic_cast<MethodCallNode*>(expression))
+                hasUnknownReturnOrigin = true;
+            return {};
+        };
+
+        std::function<void(StatementNode*)> scanStatement;
+        std::function<void(StatementListNode*)> scanList;
+        scanList = [&](StatementListNode* statements) {
+            if(!statements)
+                return;
+            for(auto* statement : statements->statements)
+                scanStatement(statement);
+        };
+        scanStatement = [&](StatementNode* statement) {
+            if(auto* returned = dynamic_cast<ReturnNode*>(statement))
+            {
+                auto returnedOrigins = origins(returned->expression);
+                auto& summary = functionPointerReturnParameters[symbol];
+                summary.insert(returnedOrigins.begin(), returnedOrigins.end());
+                return;
+            }
+            if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
+            {
+                auto values = origins(declaration->expression);
+                if(!values.empty())
+                    pointerAliases[declaration->name] = std::move(values);
+            }
+            else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
+            {
+                auto values = origins(declaration->initExpr);
+                if(!values.empty())
+                    pointerAliases[declaration->name] = std::move(values);
+            }
+            else if(auto* assignment =
+                        dynamic_cast<AssignmentNode*>(statement))
+            {
+                auto values = origins(assignment->expression);
+                if(!values.empty())
+                {
+                    auto& alias = pointerAliases[assignment->name];
+                    alias.insert(values.begin(), values.end());
+                }
+            }
+            if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+                scanList(block->statements);
+            else if(auto* branch = dynamic_cast<IfNode*>(statement))
+            {
+                scanList(branch->thenBranch);
+                scanStatement(branch->elseIfBranch);
+                scanList(branch->elseBranch);
+            }
+            else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+            {
+                scanList(branch->thenBranch);
+                scanStatement(branch->elseIfBranch);
+                scanList(branch->elseBranch);
+            }
+            else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+                scanList(loop->body);
+            else if(auto* loop = dynamic_cast<ForNode*>(statement))
+                scanList(loop->body);
+        };
+        scanList(node->body);
+        if(!hasUnknownReturnOrigin)
+            functionPointerReturnSummaryComplete.insert(symbol);
+    }
 
     functionVisibility[signatureKey] =
         std::make_pair(node->isPublic, node->sourceModule);

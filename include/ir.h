@@ -223,8 +223,32 @@ private:
     // environment. Borrow checks keep captured owners alive for local values.
     std::map<std::string, ClosureNode*> runtimeClosureVariables;
     std::map<std::string, TypeNode*> runtimeClosureReturnTypes;
+    struct RuntimeClosurePointerBorrowEffect
+    {
+        std::string pointerVariable;
+        ExpressionNode* expression = nullptr;
+        int line = 0;
+        bool isMutable = false;
+        bool preserveIncoming = false;
+    };
+    std::map<ClosureNode*, std::vector<RuntimeClosurePointerBorrowEffect>>
+        runtimeClosurePointerBorrowEffects;
     // Static signatures associated with callable values and typed callbacks.
     std::map<std::string, FunctionTypeNode*> functionTypeVariables;
+    // Callable locals initialized from a named function item retain its
+    // statically known target for call-site borrow checking.
+    std::map<std::string, std::set<std::string>> functionItemVariables;
+    // Function-typed parameters are checked at the caller boundary where the
+    // concrete callable is known; distinguish them from opaque local values.
+    std::set<std::string> functionTypeParameters;
+    // Pointer parameters carry caller provenance; forwarding only those values
+    // through a checked callback is distinct from borrowing a local variable.
+    std::set<std::string> pointerParameterBorrowOrigins;
+    // Pointer-returning function symbols map to formal pointer parameters
+    // whose borrows may flow into the result.
+    std::map<std::string, std::set<size_t>> functionPointerReturnParameters;
+    // Only complete summaries may conclude that an argument cannot flow out.
+    std::set<std::string> functionPointerReturnSummaryComplete;
     // Owner variables borrowed by each runtime closure's stack environment.
     std::map<std::string, std::set<std::string>> runtimeClosureBorrowOwners;
     // Generic closure parameter -> captured local name -> hidden parameter
@@ -244,6 +268,9 @@ private:
     };
     std::vector<InlineClosureReturnState*> inlineClosureReturnStates;
     std::map<std::string, std::string> pointerBorrowTarget;
+    // Exclusive pointer reborrows retain their parent so accesses through an
+    // ancestor can be suspended while a descendant reborrow is live.
+    std::map<std::string, std::string> pointerBorrowParent;
     // Borrow owners carried indirectly by aggregate-valued locals.
     std::map<std::string, std::set<std::string>> aggregateBorrowOrigins;
     // Precise borrowed places carried by each aggregate, grouped by root owner.
@@ -507,6 +534,28 @@ private:
     // Loop control flow support (for break/continue)
     std::vector<llvm::BasicBlock*> loopBreakBlocks;
     std::vector<llvm::BasicBlock*> loopContinueBlocks;
+    struct LoopExitBorrowState
+    {
+        std::map<std::string, int> variableScopeDepth;
+        std::set<std::string> movedVariables;
+        std::map<std::string, std::string> pointerBorrowTarget;
+        std::map<std::string, std::string> pointerBorrowParent;
+        std::map<std::string, std::set<std::string>> aggregateBorrowOrigins;
+        std::map<std::string,
+                 std::map<std::string, std::set<std::string>>>
+            aggregateBorrowPlaces;
+        std::map<std::string,
+                 std::map<std::string,
+                          std::map<std::string, std::set<std::string>>>>
+            aggregateBorrowFieldPlaces;
+        std::map<std::string, std::string> pointerBorrowPlace;
+        std::map<std::string, std::set<std::string>> activeBorrowers;
+        std::map<std::string, std::string> activeMutBorrower;
+        std::map<std::string, std::set<std::string>>
+            runtimeClosureBorrowOwners;
+    };
+    std::vector<std::vector<LoopExitBorrowState>> loopBreakBorrowStates;
+    std::vector<std::vector<LoopExitBorrowState>> loopContinueBorrowStates;
     struct ScopeCleanup
     {
         enum class CallKind
@@ -528,6 +577,7 @@ private:
         std::string previousPlace;
         bool previousWasMutable = false;
         std::string previousBorrowKey;
+        std::string previousParent;
     };
     std::vector<std::vector<PointerBorrowScopeEntry>> pointerBorrowScopes;
     struct VariableScopeDepthEntry
@@ -546,6 +596,8 @@ private:
             previousAggregateBorrowFieldPlaces;
         bool hadPreviousAggregateBorrowPlace = false;
         std::string previousAggregateBorrowPlace;
+        bool hadPreviousFunctionItemTarget = false;
+        std::set<std::string> previousFunctionItemTargets;
     };
     std::vector<std::vector<VariableScopeDepthEntry>> variableScopeDepthScopes;
 
@@ -660,10 +712,20 @@ private:
     void registerPointerBorrow(const std::string& pointerVar,
                                ExpressionNode* expr, int line,
                                bool isMutable = false);
+    void registerPointerBorrowAlternatives(
+        const std::string& pointerVar,
+        const std::vector<ExpressionNode*>& alternatives, int line,
+        bool isMutable = false, bool preserveIncoming = false);
     bool isMutBorrower(const std::string& ptrVar) const;
     int currentScopeDepth() const;
     void recordVariableScopeDepth(const std::string& varName);
     void recordScopedPointerVariable(const std::string& pointerVar);
+    void applyRuntimeClosurePointerBorrowEffects(const std::string& name,
+                                                 ClosureNode* closure,
+                                                 int line);
+    void analyzeRuntimeClosurePointerBorrowEffects(
+        ClosureNode* closure,
+        const std::vector<std::pair<std::string, TypeNode*>>& captures);
     std::string resolveBorrowOwnerFromLValue(ExpressionNode* expr) const;
     std::string resolveBorrowPlaceFromLValue(ExpressionNode* expr) const;
     bool validateBorrowRead(ExpressionNode* expr, int line);
@@ -674,6 +736,8 @@ private:
     bool borrowerPlaceOverlaps(const std::string& borrower,
                                const std::string& owner,
                                const std::string& place) const;
+    bool isPointerBorrowAncestor(const std::string& ancestor,
+                                 const std::string& pointer) const;
     std::string getBorrowedOwnerForPointerExpression(
         ExpressionNode* expr) const;
     bool validatePointerDereference(ExpressionNode* pointerExpr, int line);
@@ -692,8 +756,12 @@ private:
                                    llvm::Value*& outBool);
     bool validateNoEscapingBorrow(ExpressionNode* expr, int line,
                                   const std::string& action);
+    bool expressionCarriesLocalBorrow(ExpressionNode* expr) const;
+    bool expressionIsPointerParameterBorrow(ExpressionNode* expr) const;
+    bool expressionIsKnownSharedBorrow(ExpressionNode* expr) const;
     void trackAggregateBorrowOrigins(const std::string& variable,
-                                     ExpressionNode* expression);
+                                     ExpressionNode* expression,
+                                     const std::string& destinationPath = "");
     bool mergeAggregateBorrowStateAfterUpdate(
         const std::string& variable,
         const std::set<std::string>& previousOrigins,
@@ -794,6 +862,9 @@ private:
     void generateCexprIfStatement(CexprIfNode* node);
     void generateForStatement(ForNode* node);
     void generateWhileStatement(WhileNode* node);
+    void mergeLoopExitBorrowStates(
+        const std::vector<LoopExitBorrowState>& states, int loopScopeDepth,
+        const std::set<std::string>& loopVariables = {});
     void generatePrintStatement(PrintNode* node);
     llvm::Value* generateFormatExpression(FormatNode* node);
     void generateAssert(AssertNode* node);
@@ -885,6 +956,14 @@ private:
                                        TypeNode* declaredType);
     llvm::Value* generateFunctionItemValue(IdentifierNode* identifier,
                                            FunctionTypeNode* callableType);
+    std::string resolveFunctionItemTarget(
+        IdentifierNode* identifier, FunctionTypeNode* callableType);
+    std::set<std::string> getFunctionItemTargetsForName(
+        const std::string& name) const;
+    bool functionMayWritePointerParameter(FunctionDefNode* function,
+                                          size_t parameterIndex) const;
+    bool functionCanReadBorrowingAggregateParameter(
+        FunctionDefNode* function, size_t parameterIndex);
     FunctionTypeNode* inferFunctionItemType(IdentifierNode* identifier);
     TypeNode* overloadParameterType(
         const std::vector<FunctionOverloadInfo>& overloads, size_t argCount,

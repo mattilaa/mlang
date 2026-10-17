@@ -83,6 +83,8 @@ void CodeGenerator::exitCleanupScope()
         if(it->hadPreviousBorrow && !it->previousOwner.empty())
         {
             pointerBorrowTarget[it->pointerVar] = it->previousOwner;
+            if(!it->previousParent.empty())
+                pointerBorrowParent[it->pointerVar] = it->previousParent;
             if(!it->previousPlace.empty())
                 pointerBorrowPlace[it->pointerVar] = it->previousPlace;
             if(it->previousWasMutable)
@@ -124,6 +126,11 @@ void CodeGenerator::exitCleanupScope()
         if(it->hadPreviousAggregateBorrowPlace)
             pointerBorrowPlace[it->varName] =
                 it->previousAggregateBorrowPlace;
+        if(it->hadPreviousFunctionItemTarget)
+            functionItemVariables[it->varName] =
+                it->previousFunctionItemTargets;
+        else
+            functionItemVariables.erase(it->varName);
         if(it->hadPreviousDepth)
             variableScopeDepth[it->varName] = it->previousDepth;
         else

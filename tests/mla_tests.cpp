@@ -105,9 +105,12 @@ protected:
         return result != 0;
     }
 
-    std::string compileCapture(int& exitCode)
+    std::string compileCapture(int& exitCode,
+                               const std::string& options = std::string())
     {
         std::string cmd = compilerPath + " -o " + outputExe + " " + sourceFile;
+        if(!options.empty())
+            cmd += " " + options;
         if(!stdlibLibDir.empty())
             cmd += " -L " + stdlibLibDir + " -lmlang_std";
         cmd += " 2>&1";
@@ -1044,6 +1047,7 @@ TEST_F(MLATest, ImmutableMultiarrayRejectsMutatingMethods)
     EXPECT_NE(out.find("mutation requires mutmultiarray"), std::string::npos);
 }
 
+// A `let` binding must keep even a mutable multiarray immutable.
 TEST_F(MLATest, LetMutableMultiarrayRejectsMutation)
 {
     std::string code = R"(
@@ -2054,16 +2058,17 @@ TEST_F(MLATest, VarInferenceFromIdentifier)
     EXPECT_EQ(compileAndRun(code), "15\n");
 }
 
+// Verifies field access and mutation through pointers to mutable borrows.
 TEST_F(MLATest, PointerAccess)
 {
     std::string code = R"(
         struct Foo { var value: i32; };
         fn main() -> i32 {
             var foo: Foo = Foo { value: 10 };
-            let p: ptr<Foo> = &foo;
+            let p: ptr<Foo> = &mut foo;
             (*p).value = 22;
             println!("{}", foo.value);
-            let pi: ptr<i32> = &foo.value;
+            let pi: ptr<i32> = &mut foo.value;
             *pi = 7;
             println!("{}", foo.value);
             return 0;
@@ -4191,6 +4196,7 @@ TEST_F(MLATest, ListOfTuplesUsesDeclaredFieldTypes)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// Generic range conversion must materialize maps from tuple and projected pairs.
 TEST_F(MLATest, RangesMaterializeBuiltinMapsFromGenericPairs)
 {
     std::string code = R"(
@@ -5023,6 +5029,758 @@ TEST_F(MLATest, OwnershipCannotAliasMutableBorrowFromPointerVariable)
     EXPECT_NE(out.find("cannot alias mutable borrow"), std::string::npos);
 }
 
+// Verifies that an exclusive pointer can create a usable child reborrow.
+TEST_F(MLATest, ExclusivePointerCanBeReborrowed)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let parent: ptr<i32> = &mut value;
+            let child: ptr<i32> = &mut *parent;
+            unsafe { *child = 12; }
+            unsafe { return *parent; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 12);
+}
+
+// Verifies that nested exclusive reborrows permit child access and restore
+// each parent pointer as its child loan expires.
+TEST_F(MLATest, ExclusivePointerSupportsNestedReborrows)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let parent: ptr<i32> = &mut value;
+            let child: ptr<i32> = &mut *parent;
+            let grandchild: ptr<i32> = &mut *child;
+            unsafe { *grandchild = 15; }
+            unsafe { let child_value: i32 = *child; }
+            unsafe { return *parent; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 15);
+}
+
+// Verifies that a synchronous call can use a temporary exclusive reborrow.
+TEST_F(MLATest, ExclusivePointerCanBeReborrowedForCall)
+{
+    std::string code = R"(
+        fn write_value(pointer: ptr<i32>) -> i32 {
+            unsafe { *pointer = 21; }
+            return 0;
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let parent: ptr<i32> = &mut value;
+            write_value(&mut *parent);
+            unsafe { return *parent; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 21);
+}
+
+// Verifies that a call still rejects a second overlapping exclusive argument.
+TEST_F(MLATest, ExclusiveReborrowCallRejectsAliasedSecondArgument)
+{
+    std::string code = R"(
+        fn take_two(first: ptr<i32>, second: ptr<i32>) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let parent: ptr<i32> = &mut value;
+            take_two(&mut *parent, &mut value);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow 'value' as mutable more than once"),
+              std::string::npos) << out;
+}
+
+// Verifies that a shared pointer cannot mutate the place it borrows.
+TEST_F(MLATest, SharedBorrowCannotWriteThroughItsPointer)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            unsafe { *shared = 9; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow 'shared'"),
+              std::string::npos) << out;
+}
+
+// Verifies that a shared borrow remains read-only when stored in an aggregate.
+TEST_F(MLATest, SharedBorrowCannotWriteThroughAggregatePointerField)
+{
+    std::string code = R"(
+        struct PointerBox { var pointer: ptr<i32>; };
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let box = PointerBox { pointer: &value };
+            unsafe { *box.pointer = 9; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
+// Verifies that a mutating pointer parameter cannot receive a shared borrow.
+TEST_F(MLATest, SharedBorrowCannotPassToMutatingPointerParameter)
+{
+    std::string code = R"(
+        fn write_value(pointer: ptr<i32>) -> void {
+            let copied_pointer: ptr<i32> = pointer;
+            unsafe { *copied_pointer = 9; }
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            write_value(shared);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
+              std::string::npos) << out;
+}
+
+// Verifies that an opaque pointer parameter cannot retain a shared local borrow.
+TEST_F(MLATest, SharedBorrowCannotPassToOpaquePointerParameter)
+{
+    std::string code = R"(
+        extern fn update_value(pointer: ptr<i32>) -> void;
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            update_value(shared);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
+              std::string::npos) << out;
+}
+
+// Verifies a conditional expression cannot hide a shared borrow from a
+// writer.
+TEST_F(MLATest, SharedBorrowInTernaryCannotPassToMutatingPointerParameter)
+{
+    std::string code = R"(
+        fn write_value(pointer: ptr<i32>) -> void {
+            unsafe { *pointer = 9; }
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            write_value(true ? shared : &mut value);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("to mutating pointer parameter 'pointer'"),
+              std::string::npos) << out;
+}
+
+// Verifies a shared pointer extracted from a list is not passed to a writer.
+TEST_F(MLATest, SharedBorrowExtractedFromListCannotReachWriter)
+{
+    std::string code = R"(
+        fn write_value(pointer: ptr<i32>) -> void {
+            unsafe { *pointer = 9; }
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let pointers: list<ptr<i32>> = [&value];
+            write_value(pointers[0]);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("to mutating pointer parameter 'pointer'"),
+              std::string::npos) << out;
+}
+
+// Verifies an exclusive borrow live on one branch remains active after merge.
+TEST_F(MLATest, ConditionalExclusiveBorrowBlocksOwnerMutationAfterMerge)
+{
+    std::string code = R"(
+        var global_value: i32 = 0;
+        fn main() -> i32 {
+            var value: i32 = 4;
+            var flag: bool = true;
+            var pointer: ptr<i32> = &global_value;
+            if flag {
+                pointer = &mut value;
+            }
+            value = 9;
+            unsafe { *pointer = 10; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while mutably borrowed"), std::string::npos) << out;
+}
+
+// Verifies a pointer remains usable after a conditional exclusive borrow
+// merge.
+TEST_F(MLATest, ConditionalExclusiveBorrowRemainsUsableAfterMerge)
+{
+    std::string code = R"(
+        var global_value: i32 = 0;
+        fn main() -> i32 {
+            var value: i32 = 4;
+            var flag: bool = true;
+            var pointer: ptr<i32> = &global_value;
+            if flag {
+                pointer = &mut value;
+            }
+            unsafe { *pointer = 10; }
+            return value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 10);
+}
+
+// Verifies a ternary-created exclusive borrow blocks owner mutation
+// afterward.
+TEST_F(MLATest, TernaryExclusiveBorrowBlocksOwnerMutationAfterMerge)
+{
+    std::string code = R"(
+        var global_value: i32 = 0;
+        fn main() -> i32 {
+            var value: i32 = 4;
+            var flag: bool = true;
+            var pointer: ptr<i32> = &global_value;
+            pointer = flag ? &mut value : &global_value;
+            value = 9;
+            unsafe { *pointer = 10; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while mutably borrowed"), std::string::npos) << out;
+}
+
+// Verifies a pointer from a ternary can still use its active exclusive
+// borrow.
+TEST_F(MLATest, TernaryExclusiveBorrowRemainsUsableAfterMerge)
+{
+    std::string code = R"(
+        var global_value: i32 = 0;
+        fn main() -> i32 {
+            var value: i32 = 4;
+            var flag: bool = true;
+            var pointer: ptr<i32> = &global_value;
+            pointer = flag ? &mut value : &global_value;
+            unsafe { *pointer = 10; }
+            return value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 10);
+}
+
+// Verifies even a single-arm match result registers its exclusive borrow.
+TEST_F(MLATest, SingleArmMatchExclusiveBorrowBlocksOwnerMutation)
+{
+    std::string code = R"(
+        enum Choice : i32 { Borrow = 1 };
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let choice: Choice = Choice::Borrow;
+            var pointer: ptr<i32> = &value;
+            pointer = match choice { _ => &mut value };
+            value = 9;
+            unsafe { *pointer = 10; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while mutably borrowed"), std::string::npos) << out;
+}
+
+// Verifies that opaque pointer calls cannot retain a local mutable borrow.
+TEST_F(MLATest, OpaquePointerCannotRetainLocalBorrowOutsideUnsafe)
+{
+    std::string code = R"(
+        extern fn retain_pointer(pointer: ptr<i32>) -> void;
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            retain_pointer(&mut value);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("callee may retain it"), std::string::npos) << out;
+}
+
+// Verifies that read-only pointer parameters still accept shared borrows.
+TEST_F(MLATest, SharedBorrowCanPassToReadOnlyPointerParameter)
+{
+    std::string code = R"(
+        fn read_value(pointer: ptr<i32>) -> i32 {
+            unsafe { return *pointer; }
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            return read_value(shared);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 0) << out;
+}
+
+// Verifies that shared-borrow checks follow named calls to pointer writers.
+TEST_F(MLATest, SharedBorrowCannotReachMutatingPointerThroughHelper)
+{
+    std::string code = R"(
+        fn write_value(pointer: ptr<i32>) -> i32 {
+            unsafe { *pointer = 9; }
+            return 0;
+        }
+
+        fn forward_pointer(pointer: ptr<i32>) -> void {
+            let ignored: i32 = 1 + write_value(pointer);
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            forward_pointer(shared);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
+              std::string::npos) << out;
+}
+
+// Verifies that pointer writes hidden inside a local closure count as effects.
+TEST_F(MLATest, SharedBorrowCannotReachMutatingPointerThroughCapturedClosure)
+{
+    std::string code = R"(
+        fn forward_pointer(pointer: ptr<i32>) -> void {
+            let write = || {
+                unsafe { *pointer = 9; }
+            };
+            write();
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            forward_pointer(shared);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
+              std::string::npos) << out;
+}
+
+// Verifies that method calls propagate pointer mutation effects to callers.
+TEST_F(MLATest, SharedBorrowCannotReachMutatingPointerThroughMethod)
+{
+    std::string code = R"(
+        struct Writer { var marker: i32; };
+        impl Writer {
+            fn write(&self, pointer: ptr<i32>) -> i32 {
+                unsafe { *pointer = 9; }
+                return 0;
+            }
+        }
+
+        fn forward_pointer(pointer: ptr<i32>) -> void {
+            let writer = Writer { marker: 0 };
+            let ignored: i32 = writer.write(pointer);
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            forward_pointer(shared);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
+              std::string::npos) << out;
+}
+
+// Verifies that opaque callable parameters cannot mutate a shared borrow.
+TEST_F(MLATest, SharedBorrowCannotReachMutatingPointerThroughCallable)
+{
+    std::string code = R"(
+        fn forward_pointer(
+            pointer: ptr<i32>,
+            callback: fn(ptr<i32>) -> void
+        ) -> void {
+            callback(pointer);
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            let writer = |pointer: ptr<i32>| {
+                unsafe { *pointer = 9; }
+            };
+            forward_pointer(shared, writer);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
+              std::string::npos) << out;
+}
+
+// Verifies that invoking a runtime callable with a local borrow requires unsafe.
+TEST_F(MLATest, CallablePointerArgumentRequiresUnsafeForLocalBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let callback: fn(ptr<i32>) -> void = |pointer| {
+                unsafe { *pointer = 9; }
+            };
+            callback(&mut value);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("outside unsafe because the callable may retain it"),
+              std::string::npos) << out;
+}
+
+// Verifies callback parameters cannot retain borrows of the callee's locals.
+TEST_F(MLATest, CallableParameterCannotRetainCalleeLocalBorrow)
+{
+    std::string code = R"(
+        fn invoke(callback: fn(ptr<i32>) -> void) -> void {
+            var local: i32 = 4;
+            callback(&mut local);
+        }
+        fn main() -> i32 {
+            invoke(|pointer| {});
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("outside unsafe because the callable may retain it"),
+              std::string::npos) << out;
+}
+
+// A named function stored as a callable local is not treated as opaque when
+// passed through a wrapper that immediately invokes the callback.
+TEST_F(MLATest, NamedFunctionItemCallbackMayReceiveForwardedLocalBorrow)
+{
+    std::string code = R"(
+        fn inspect(pointer: ptr<i32>) -> void {
+            unsafe { let observed: i32 = *pointer; }
+        }
+        fn forward_pointer(pointer: ptr<i32>,
+                           callback: fn(ptr<i32>) -> void) -> void {
+            callback(pointer);
+        }
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let callback: fn(ptr<i32>) -> void = inspect;
+            forward_pointer(&value, callback);
+            value = 8;
+            return value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 8);
+}
+
+// A known callback that writes through its pointer rejects a shared borrow
+// forwarded through the wrapper.
+TEST_F(MLATest, NamedFunctionItemCallbackCannotMutateSharedBorrow)
+{
+    std::string code = R"(
+        fn write(pointer: ptr<i32>) -> void {
+            unsafe { *pointer = 9; }
+        }
+        fn forward_pointer(pointer: ptr<i32>,
+                           callback: fn(ptr<i32>) -> void) -> void {
+            callback(pointer);
+        }
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            let callback: fn(ptr<i32>) -> void = write;
+            forward_pointer(shared, callback);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating pointer"),
+              std::string::npos) << out;
+}
+
+// Verifies a match expression cannot hide a local borrow from a callable
+// guard.
+TEST_F(MLATest, CallablePointerArgumentDetectsBorrowInsideMatchExpression)
+{
+    std::string code = R"(
+        enum Choice : i32 { Borrow = 1, Other = 2 };
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let choice: Choice = Choice::Borrow;
+            let callback: fn(ptr<i32>) -> void = |pointer| {};
+            callback(match choice {
+                Choice::Borrow => &mut value,
+                _ => &mut value
+            });
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("outside unsafe because the callable may retain it"),
+              std::string::npos) << out;
+}
+
+// Verifies that unsafe callable invocation accepts an exclusive local borrow.
+TEST_F(MLATest, CallablePointerArgumentAcceptsUnsafeExclusiveBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let callback: fn(ptr<i32>) -> void = |pointer| {
+                unsafe { *pointer = 9; }
+            };
+            unsafe { callback(&mut value); }
+            return value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
+// Verifies nested closures do not treat local callable values as checked
+// parameters.
+TEST_F(MLATest, NestedClosureLocalCallableRequiresUnsafeForLocalBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let outer = || {
+                let callback: fn(ptr<i32>) -> void = |pointer| {};
+                callback(&mut value);
+            };
+            outer();
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("outside unsafe because the callable may retain it"),
+              std::string::npos) << out;
+}
+
+// Verifies a generic callback cannot forward a local borrow to an opaque
+// function.
+TEST_F(MLATest, GenericCallbackCannotForwardLocalBorrowToExternFunction)
+{
+    std::string code = R"(
+        extern fn retain_pointer(pointer: ptr<i32>) -> void;
+
+        generic<T> fn forward(callback: fn(ptr<T>) -> void,
+                              pointer: ptr<T>) -> void {
+            callback(pointer);
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            forward(retain_pointer, &mut value);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc, "-c");
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
+              std::string::npos) << out;
+}
+
+// Verifies unsafe explicitly permits forwarding a local borrow to an opaque
+// callback.
+TEST_F(MLATest, GenericCallbackCanForwardLocalBorrowToExternFunctionInUnsafe)
+{
+    std::string code = R"(
+        extern fn retain_pointer(pointer: ptr<i32>) -> void;
+
+        generic<T> fn forward(callback: fn(ptr<T>) -> void,
+                              pointer: ptr<T>) -> void {
+            callback(pointer);
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            unsafe { forward(retain_pointer, &mut value); }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    compileCapture(rc, "-c");
+    EXPECT_EQ(rc, 0);
+}
+
+// Verifies that a read-only same-named method is not confused with a writer.
+TEST_F(MLATest, SharedBorrowCanReachReadOnlyPointerMethod)
+{
+    std::string code = R"(
+        struct Reader { var marker: i32; };
+        struct Writer { var marker: i32; };
+        impl Reader {
+            fn access(&self, pointer: ptr<i32>) -> i32 {
+                unsafe { return *pointer; }
+            }
+        }
+        impl Writer {
+            fn access(&self, pointer: ptr<i32>) -> i32 {
+                unsafe { *pointer = 9; }
+                return 0;
+            }
+        }
+
+        fn read_through_method(pointer: ptr<i32>) -> i32 {
+            let reader = Reader { marker: 0 };
+            return reader.access(pointer);
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            return read_through_method(shared);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 0) << out;
+}
+
+// Verifies that a live exclusive child reborrow blocks writes through parent.
+TEST_F(MLATest, ExclusiveReborrowPreventsAccessThroughParent)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let parent: ptr<i32> = &mut value;
+            let child: ptr<i32> = &mut *parent;
+            unsafe { *parent = 8; }
+            unsafe { *child = 12; }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'child'"), std::string::npos)
+        << out;
+}
+
+// Verifies that the parent borrow remains active after its child expires.
+TEST_F(MLATest, ExclusiveReborrowRestoresParentBorrowAfterChildLastUse)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let parent: ptr<i32> = &mut value;
+            let child: ptr<i32> = &mut *parent;
+            unsafe { *child = 12; }
+            value = 20;
+            unsafe { return *parent; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while mutably borrowed by 'parent'"),
+              std::string::npos) << out;
+}
+
 TEST_F(MLATest, OwnershipBorrowEndsWhenPointerGoesOutOfScope)
 {
     std::string code = R"(
@@ -5353,6 +6111,377 @@ TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocal)
               std::string::npos);
 }
 
+// A closure call must not return a pointer borrowed from its captured local.
+TEST_F(MLATest, OwnershipCannotReturnPointerFromBorrowingClosureCall)
+{
+    std::string code = R"(
+        fn leak() -> ptr<i32> {
+            var local_value: i32 = 7;
+            let callback: fn() -> ptr<i32> = || { return &local_value; };
+            return callback();
+        }
+        fn main() -> i32 {
+            let pointer: ptr<i32> = leak();
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return"), std::string::npos) << out;
+}
+
+// A forwarding helper must not hide a pointer to storage local to the
+// returning function.
+TEST_F(MLATest, OwnershipCannotReturnLocalPointerThroughForwardingFunction)
+{
+    std::string code = R"(
+        fn relay(pointer: ptr<i32>) -> ptr<i32> {
+            return pointer;
+        }
+        fn leak() -> ptr<i32> {
+            var local_value: i32 = 7;
+            return relay(&local_value);
+        }
+        fn main() -> i32 {
+            let pointer = leak();
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
+              std::string::npos)
+        << out;
+}
+
+// A forwarding call with a proven global result does not inherit unrelated
+// borrows.
+TEST_F(MLATest, OwnershipGlobalPointerReturnDoesNotBorrowUnrelatedArgument)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+        fn get_global(ignored: ptr<i32>) -> ptr<i32> {
+            return &global_value;
+        }
+        fn relay_global(pointer: ptr<i32>) -> ptr<i32> {
+            return get_global(pointer);
+        }
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            let global_pointer = relay_global(&local_value);
+            local_value = 9;
+            unsafe { return *global_pointer; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 11);
+}
+
+// A closure must not return a borrowed pointer hidden in a captured aggregate.
+TEST_F(MLATest, OwnershipCannotReturnPointerFromClosureCapturedAggregate)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        fn leak() -> ptr<i32> {
+            var local_value: i32 = 7;
+            let boxed: PointerBox = PointerBox { value: &local_value };
+            let callback: fn() -> ptr<i32> = || { return boxed.value; };
+            return callback();
+        }
+        fn main() -> i32 {
+            let pointer: ptr<i32> = leak();
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return"), std::string::npos) << out;
+}
+
+// A closure-returned field pointer must borrow its owner through the local alias.
+TEST_F(MLATest, OwnershipClosureReturnedPointerKeepsAggregateBorrowLive)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            let boxed: PointerBox = PointerBox { value: &local_value };
+            let callback: fn() -> ptr<i32> = || { return boxed.value; };
+            let pointer: ptr<i32> = callback();
+            local_value = 9;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
+}
+
+// A closure-returned pointer borrow ends after that pointer's final use.
+TEST_F(MLATest, OwnershipClosureReturnedPointerBorrowEndsAfterLastUse)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            let boxed: PointerBox = PointerBox { value: &local_value };
+            let callback: fn() -> ptr<i32> = || { return boxed.value; };
+            let pointer: ptr<i32> = callback();
+            var observed: i32 = 0;
+            unsafe { observed = *pointer; }
+            local_value = 9;
+            return observed + local_value - 16;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// An opaque callback parameter cannot return an untracked pointer past its call.
+TEST_F(MLATest, OwnershipCannotReturnPointerFromCallableParameter)
+{
+    std::string code = R"(
+        fn relay(callback: fn() -> ptr<i32>) -> ptr<i32> {
+            return callback();
+        }
+        fn main() -> i32 {
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("capture lifetime is unknown"), std::string::npos)
+        << out;
+}
+
+// A closure may still return a global pointer while capturing unrelated state.
+TEST_F(MLATest, OwnershipCanReturnGlobalPointerFromBorrowingClosure)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+        fn get_global_pointer() -> ptr<i32> {
+            var local_value: i32 = 7;
+            let callback: fn() -> ptr<i32> = || {
+                if local_value > 0 { return &global_value; }
+                return &global_value;
+            };
+            return callback();
+        }
+        fn main() -> i32 {
+            let pointer: ptr<i32> = get_global_pointer();
+            unsafe { return *pointer; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 11);
+}
+
+// A method must preserve the borrow stored in its receiver's pointer field.
+TEST_F(MLATest, OwnershipCannotReturnPointerFromBorrowingAggregateMethod)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        impl PointerBox {
+            fn get(self: PointerBox) -> ptr<i32> { return self.value; }
+        }
+        fn leak() -> ptr<i32> {
+            var local_value: i32 = 7;
+            let boxed: PointerBox = PointerBox { value: &local_value };
+            return boxed.get();
+        }
+        fn main() -> i32 {
+            let pointer: ptr<i32> = leak();
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
+              std::string::npos)
+        << out;
+}
+
+// A method-returned field pointer must retain the receiver's borrow locally.
+TEST_F(MLATest, OwnershipMethodReturnedPointerKeepsReceiverBorrowLive)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        impl PointerBox {
+            fn get(self: PointerBox) -> ptr<i32> { return self.value; }
+        }
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            let boxed: PointerBox = PointerBox { value: &local_value };
+            let pointer: ptr<i32> = boxed.get();
+            local_value = 9;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
+}
+
+// A method-returned field borrow ends after the result pointer's final use.
+TEST_F(MLATest, OwnershipMethodReturnedPointerBorrowEndsAfterLastUse)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        impl PointerBox {
+            fn get(self: PointerBox) -> ptr<i32> { return self.value; }
+        }
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            let boxed: PointerBox = PointerBox { value: &local_value };
+            let pointer: ptr<i32> = boxed.get();
+            var observed: i32 = 0;
+            unsafe { observed = *pointer; }
+            local_value = 9;
+            return observed + local_value - 16;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A method-returned pointer parameter must retain the call argument's borrow.
+TEST_F(MLATest, OwnershipMethodReturnedArgumentPointerKeepsBorrowLive)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        impl PointerBox {
+            fn forward(self: PointerBox, pointer: ptr<i32>) -> ptr<i32> {
+                return pointer;
+            }
+        }
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            let boxed: PointerBox = PointerBox {};
+            let pointer: ptr<i32> = boxed.forward(&local_value);
+            local_value = 9;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
+}
+
+// A method-forwarded argument borrow ends after the caller's final pointer use.
+TEST_F(MLATest, OwnershipMethodReturnedArgumentBorrowEndsAfterLastUse)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        impl PointerBox {
+            fn forward(self: PointerBox, pointer: ptr<i32>) -> ptr<i32> {
+                return pointer;
+            }
+        }
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            let boxed: PointerBox = PointerBox {};
+            let pointer: ptr<i32> = boxed.forward(&local_value);
+            var observed: i32 = 0;
+            unsafe { observed = *pointer; }
+            local_value = 9;
+            return observed + local_value - 16;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A method call must not hide a local pointer when its enclosing function returns.
+TEST_F(MLATest, OwnershipCannotReturnLocalPointerThroughMethodArgument)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        impl PointerBox {
+            fn forward(self: PointerBox, pointer: ptr<i32>) -> ptr<i32> {
+                return pointer;
+            }
+        }
+        fn leak() -> ptr<i32> {
+            var local_value: i32 = 7;
+            let boxed: PointerBox = PointerBox {};
+            return boxed.forward(&local_value);
+        }
+        fn main() -> i32 {
+            let pointer = leak();
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
+              std::string::npos)
+        << out;
+}
+
+// Returning a pointer indexed from a local list must retain its borrow origin.
+TEST_F(MLATest, OwnershipCannotReturnPointerIndexedFromBorrowingList)
+{
+    std::string code = R"(
+        fn leak() -> ptr<i32> {
+            var local_value: i32 = 7;
+            let pointers = [&local_value];
+            return pointers[0];
+        }
+        fn main() -> i32 {
+            let pointer: ptr<i32> = leak();
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return"), std::string::npos) << out;
+}
+
+// Returning an unrelated global pointer field must remain allowed.
+TEST_F(MLATest, OwnershipCanReturnUnborrowedPointerFromAggregateMethod)
+{
+    std::string code = R"(
+        struct PointerPair {
+            var local_pointer: ptr<i32>;
+            var global_pointer: ptr<i32>;
+        };
+        impl PointerPair {
+            fn get_global(self: PointerPair) -> ptr<i32> {
+                return self.global_pointer;
+            }
+        }
+        var global_value: i32 = 11;
+        fn get_global_pointer() -> ptr<i32> {
+            var local_value: i32 = 7;
+            let pair: PointerPair = PointerPair {
+                local_pointer: &local_value,
+                global_pointer: &global_value
+            };
+            return pair.get_global();
+        }
+        fn main() -> i32 {
+            let pointer: ptr<i32> = get_global_pointer();
+            unsafe { return *pointer; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 11);
+}
+
 TEST_F(MLATest, ClosureCannotReturnBorrowingLocalCapture)
 {
     std::string code = R"(
@@ -5389,6 +6518,345 @@ TEST_F(MLATest, ClosureBorrowBlocksMutationUntilLastUse)
     EXPECT_NE(out.find("cannot assign to 'count' while borrowed by 'bump'"),
               std::string::npos);
 }
+
+// A closure's pointer reassignment must transfer the resulting borrow to the pointer.
+TEST_F(MLATest, ClosurePointerReassignmentPreservesBorrowAfterCall)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            let bind = || { pointer = &mut value; };
+            bind();
+            value = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// A closure-produced mutable pointer remains usable through its new borrow.
+TEST_F(MLATest, ClosurePointerReassignmentAllowsPointerUse)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            let bind = || { pointer = &mut value; };
+            bind();
+            return *pointer;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
+// A later straight-line pointer assignment replaces the earlier borrow origin.
+TEST_F(MLATest, ClosurePointerReassignmentReleasesOverwrittenBorrow)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var earlier: i32 = 7;
+            var later: i32 = 5;
+            var pointer: ptr<i32> = &mut outside;
+            let bind = || {
+                pointer = &mut earlier;
+                pointer = &mut later;
+            };
+            bind();
+            earlier = 9;
+            return *pointer;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 5);
+}
+
+// An if branch without an else must retain the pointer's incoming borrow path.
+TEST_F(MLATest, ClosurePointerReassignmentPreservesUnchangedBranchBorrow)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var original: i32 = 7;
+            var alternate: i32 = 5;
+            var pointer: ptr<i32> = &mut original;
+            var flag: bool = true;
+            let maybe_rebind = || {
+                if flag {
+                    pointer = &mut alternate;
+                }
+            };
+            maybe_rebind();
+            original = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'original' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// A return from one branch must keep that branch's final pointer origin.
+TEST_F(MLATest, ClosurePointerReassignmentKeepsOriginOnEarlyReturn)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var alternate: i32 = 5;
+            var later: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            var flag: bool = true;
+            let bind = || {
+                if flag {
+                    pointer = &mut alternate;
+                    return;
+                }
+                pointer = &mut later;
+            };
+            bind();
+            alternate = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'alternate' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// A break must stop analysis of the rest of its loop-body path.
+TEST_F(MLATest, ClosurePointerReassignmentKeepsOriginBeforeBreak)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var alternate: i32 = 5;
+            var later: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            var flag: bool = true;
+            let bind = || {
+                while flag {
+                    pointer = &mut alternate;
+                    break;
+                    pointer = &mut later;
+                }
+            };
+            bind();
+            alternate = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'alternate' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// A continue must stop the rest of the loop body and retain its pointer origin.
+TEST_F(MLATest, ClosurePointerReassignmentKeepsOriginBeforeContinue)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var alternate: i32 = 5;
+            var later: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            var flag: bool = true;
+            let bind = || {
+                while flag {
+                    pointer = &mut alternate;
+                    flag = false;
+                    continue;
+                    pointer = &mut later;
+                }
+            };
+            bind();
+            alternate = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'alternate' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// Pointer origins from every closure branch must survive the runtime call.
+TEST_F(MLATest, ClosurePointerReassignmentMergesBranches)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var other: i32 = 5;
+            var pointer: ptr<i32> = &mut outside;
+            var flag: bool = true;
+            let bind = || {
+                if flag {
+                    pointer = &mut value;
+                } else {
+                    pointer = &mut other;
+                }
+            };
+            bind();
+            value = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// Multiple independent branches must retain each possible final pointer origin.
+TEST_F(MLATest, ClosurePointerReassignmentMergesSequentialBranches)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var third: i32 = 3;
+            var pointer: ptr<i32> = &mut outside;
+            var choose_first: bool = true;
+            var choose_second: bool = false;
+            var choose_third: bool = false;
+            let bind = || {
+                if choose_first {
+                    pointer = &mut first;
+                }
+                if choose_second {
+                    pointer = &mut second;
+                }
+                if choose_third {
+                    pointer = &mut third;
+                }
+            };
+            bind();
+            first = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'first' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// A throw terminates the path but retains pointer assignments made before it.
+TEST_F(MLATest, ClosurePointerReassignmentKeepsOriginOnThrow)
+{
+    std::string code = R"(
+        struct BorrowError {
+            var type_name: str8;
+            var message: str8;
+            var source_line: i32;
+        };
+
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var alternate: i32 = 5;
+            var later: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            let bind = || {
+                pointer = &mut alternate;
+                throw BorrowError {
+                    type_name: "BorrowError",
+                    message: "test",
+                    source_line: 1
+                };
+                pointer = &mut later;
+            };
+            try {
+                bind();
+            } catch error: BorrowError {
+                println!("caught");
+            }
+            alternate = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'alternate' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// A copied runtime closure must propagate pointer-reassignment borrow effects.
+TEST_F(MLATest, CopiedClosurePointerReassignmentKeepsBorrow)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            let bind = || { pointer = &mut value; };
+            let copied = bind;
+            copied();
+            value = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
 
 TEST_F(MLATest, ClosureBorrowCannotEscapeThroughFunctionArgument)
 {
@@ -6186,6 +7654,7 @@ TEST_F(MLATest, NamedFunctionCanInitializeCallableLocals)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+// A function item can be returned and invoked through its callable type.
 TEST_F(MLATest, NamedFunctionCanBeReturnedAsCallableValue)
 {
     std::string code = R"(
@@ -6200,6 +7669,7 @@ TEST_F(MLATest, NamedFunctionCanBeReturnedAsCallableValue)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+// The declared callable return type selects the matching named-function overload.
 TEST_F(MLATest, ReturnTypeSelectsNamedFunctionOverload)
 {
     std::string code = R"(
@@ -6781,6 +8251,202 @@ TEST_F(MLATest, BorrowedClosureCanPassToProvenNoEscapeParameter)
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 13);
+}
+
+// A callback remains non-escaping when invoked only inside conditional branches.
+TEST_F(MLATest, BorrowedClosureCanPassToNoEscapeParameterWithBranches)
+{
+    std::string code = R"(
+        fn invoke(callback: fn() -> i32, select: bool) -> i32 {
+            if select {
+                return callback();
+            } else {
+                return callback();
+            }
+        }
+        fn main() -> i32 {
+            var local: i32 = 17;
+            let read = || { return local; };
+            return invoke(read, true);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 17);
+}
+
+// A synchronous loop that invokes its callback does not let that callback escape.
+TEST_F(MLATest, BorrowedClosureCanPassToNoEscapeParameterWithLoop)
+{
+    std::string code = R"(
+        fn invoke(callback: fn() -> i32) -> i32 {
+            for index in 0..1 {
+                callback();
+            }
+            return 0;
+        }
+        fn main() -> i32 {
+            var local: i32 = 19;
+            let read = || { return local; };
+            invoke(read);
+            return local;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 19);
+}
+
+// A callback invoked in a try body remains synchronous and non-escaping.
+TEST_F(MLATest, BorrowedClosureCanPassToNoEscapeParameterWithTryCatch)
+{
+    std::string code = R"(
+        struct BorrowError {
+            var type_name: str8;
+            var message: str8;
+            var source_line: i32;
+        };
+        fn invoke(callback: fn() -> i32) -> void {
+            try {
+                callback();
+            } catch error: BorrowError {
+            }
+        }
+        fn main() -> i32 {
+            var local: i32 = 23;
+            let read = || { return local; };
+            invoke(read);
+            return local;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 23);
+}
+
+// A callback used only as a formatting result is invoked without escaping.
+TEST_F(MLATest, BorrowedClosureCanPassToNoEscapeParameterUsedByPrint)
+{
+    std::string code = R"(
+        fn invoke(callback: fn() -> i32) -> void {
+            println!("{}", callback());
+        }
+        fn main() -> i32 {
+            var local: i32 = 29;
+            let read = || { return local; };
+            invoke(read);
+            return local;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 29);
+}
+
+// A callback invoked by a print statement must still propagate pointer writes.
+TEST_F(MLATest, PrintCallbackWrapperPropagatesPointerBorrow)
+{
+    std::string code = R"(
+        fn write(pointer: ptr<i32>) -> i32 {
+            unsafe { *pointer = 11; }
+            return 0;
+        }
+        fn invoke(callback: fn(ptr<i32>) -> i32,
+                  pointer: ptr<i32>) -> void {
+            println!("{}", callback(pointer));
+        }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let shared: ptr<i32> = &value;
+            invoke(write, shared);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
+              std::string::npos) << out;
+}
+
+// Pointer-borrow effects still flow through a callback invoked conditionally.
+TEST_F(MLATest, ConditionalCallbackWrapperPropagatesPointerBorrow)
+{
+    std::string code = R"(
+        fn invoke(callback: fn(ptr<i32>) -> void,
+                  pointer: ptr<i32>, select: bool) -> void {
+            if select {
+                callback(pointer);
+            } else {
+                callback(pointer);
+            }
+        }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let shared: ptr<i32> = &value;
+            let write = |pointer: ptr<i32>| {
+                unsafe { *pointer = 11; }
+            };
+            invoke(write, shared, true);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
+              std::string::npos) << out;
+}
+
+// A no-escape wrapper must propagate the callback's pointer borrow effects.
+TEST_F(MLATest, CallbackWrapperPropagatesClosurePointerBorrow)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn invoke(callback: fn() -> void) -> void {
+            callback();
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            let bind = || { pointer = &mut value; };
+            invoke(bind);
+            value = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// A directly supplied inline closure must propagate pointer borrow effects too.
+TEST_F(MLATest, CallbackWrapperPropagatesInlineClosurePointerBorrow)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn invoke(callback: fn() -> void) -> void {
+            callback();
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            invoke(|| { pointer = &mut value; });
+            value = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, BorrowedClosureCannotPassToEscapingParameter)
@@ -7725,17 +9391,17 @@ TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocalField)
               std::string::npos);
 }
 
-TEST_F(MLATest, OwnershipCannotReturnPointerParameterBorrow)
+// Returning a pointer-valued ternary must reject any branch borrowing a local.
+TEST_F(MLATest, OwnershipCannotReturnTernaryPointerBorrowingLocal)
 {
     std::string code = R"(
-        fn relay(pointer: ptr<i32>) -> ptr<i32> {
-            let forwarded = pointer;
-            return forwarded;
+        var global_value: i32 = 11;
+        fn choose(flag: bool) -> ptr<i32> {
+            var local_value: i32 = 7;
+            return flag ? &local_value : &global_value;
         }
-
         fn main() -> i32 {
-            var value: i32 = 7;
-            let escaped = relay(&value);
+            let pointer: ptr<i32> = choose(true);
             return 0;
         }
     )";
@@ -7746,6 +9412,314 @@ TEST_F(MLATest, OwnershipCannotReturnPointerParameterBorrow)
     EXPECT_NE(out.find("cannot return pointer that borrows local value"),
               std::string::npos)
         << out;
+}
+
+// Returning a match-produced pointer must reject a local borrow in any arm.
+TEST_F(MLATest, OwnershipCannotReturnMatchPointerBorrowingLocal)
+{
+    std::string code = R"(
+        enum Choice : i32 { Local = 0, Global = 1 };
+        var global_value: i32 = 11;
+        fn choose(choice: Choice) -> ptr<i32> {
+            var local_value: i32 = 7;
+            return match choice {
+                Choice::Local => &local_value,
+                Choice::Global => &global_value
+            };
+        }
+        fn main() -> i32 {
+            let pointer: ptr<i32> = choose(Choice::Local);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
+              std::string::npos)
+        << out;
+}
+
+// A pointer forwarding function keeps its caller's borrowed owner protected.
+TEST_F(MLATest, OwnershipCannotMutateOwnerWhileFunctionReturnedPointerLive)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let forwarded = relay(&value);
+            value = 9;
+            unsafe { return *forwarded; }
+        }
+        fn relay(pointer: ptr<i32>) -> ptr<i32> {
+            let forwarded = pointer;
+            return forwarded;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
+}
+
+// The forwarded borrow ends once the caller's returned pointer is last used.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerBorrowEndsAfterLastUse)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let forwarded = relay(&value);
+            var observed: i32 = 0;
+            unsafe { observed = *forwarded; }
+            value = 9;
+            return observed + value - 16;
+        }
+        fn relay(pointer: ptr<i32>) -> ptr<i32> {
+            let forwarded = pointer;
+            return forwarded;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// Pointer provenance must propagate through multiple visible forwarding calls.
+TEST_F(MLATest, OwnershipNestedFunctionReturnedPointerKeepsBorrowLive)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let forwarded = relay_again(&value);
+            value = 9;
+            unsafe { return *forwarded; }
+        }
+        fn relay_again(pointer: ptr<i32>) -> ptr<i32> {
+            return relay(pointer);
+        }
+        fn relay(pointer: ptr<i32>) -> ptr<i32> {
+            let forwarded = pointer;
+            return forwarded;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
+}
+
+// Generic pointer-forwarding specializations must preserve caller borrow origins.
+TEST_F(MLATest, OwnershipGenericFunctionReturnedPointerKeepsBorrowLive)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let forwarded = relay(&value);
+            value = 9;
+            unsafe { return *forwarded; }
+        }
+        generic<T> fn relay(pointer: ptr<T>) -> ptr<T> {
+            return pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
+}
+
+// Generic forwarding borrows expire once the returned pointer is last used.
+TEST_F(MLATest, OwnershipGenericFunctionReturnedPointerBorrowEndsAfterLastUse)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let forwarded = relay(&value);
+            var observed: i32 = 0;
+            unsafe { observed = *forwarded; }
+            value = 9;
+            return observed + value - 16;
+        }
+        generic<T> fn relay(pointer: ptr<T>) -> ptr<T> {
+            let local_alias = pointer;
+            return local_alias;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// Callable aliases of forwarding functions preserve returned pointer borrows.
+TEST_F(MLATest, OwnershipCallableFunctionItemKeepsArgumentBorrowLive)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let forward: fn(ptr<i32>) -> ptr<i32> = relay;
+            let copied_forward = forward;
+            let forwarded = copied_forward(&value);
+            value = 9;
+            unsafe { return *forwarded; }
+        }
+        fn relay(pointer: ptr<i32>) -> ptr<i32> {
+            return pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
+}
+
+// A callable function-item alias releases its argument borrow after last use.
+TEST_F(MLATest, OwnershipCallableFunctionItemBorrowEndsAfterLastUse)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let forward: fn(ptr<i32>) -> ptr<i32> = relay;
+            let forwarded = forward(&value);
+            var observed: i32 = 0;
+            unsafe { observed = *forwarded; }
+            value = 9;
+            return observed + value - 16;
+        }
+        fn relay(pointer: ptr<i32>) -> ptr<i32> {
+            return pointer;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// Straight-line reassignment of a mutable callable retains its known target.
+TEST_F(MLATest, OwnershipMutableCallableReassignmentKeepsBorrowSummary)
+{
+    std::string code = R"(
+        fn relay(pointer: ptr<i32>) -> ptr<i32> { return pointer; }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var forward: fn(ptr<i32>) -> ptr<i32> = relay;
+            forward = relay;
+            let forwarded = forward(&value);
+            value = 9;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
+}
+
+// A control-flow join keeps a callable target when every path agrees.
+TEST_F(MLATest, OwnershipMutableCallableSameTargetAcrossBranchesKeepsBorrow)
+{
+    std::string code = R"(
+        fn relay(pointer: ptr<i32>) -> ptr<i32> { return pointer; }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var forward: fn(ptr<i32>) -> ptr<i32> = relay;
+            if value > 0 {
+                forward = relay;
+            } else {
+                forward = relay;
+            }
+            let forwarded = forward(&value);
+            value = 9;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
+}
+
+// A control-flow join retains every possible target and merges their borrow
+// summaries.
+TEST_F(MLATest, OwnershipMutableCallableDifferentTargetsMergeBorrowSummaries)
+{
+    std::string code = R"(
+        fn relay(pointer: ptr<i32>) -> ptr<i32> { return pointer; }
+        fn relay_again(pointer: ptr<i32>) -> ptr<i32> { return pointer; }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var forward: fn(ptr<i32>) -> ptr<i32> = relay;
+            if value > 0 {
+                forward = relay;
+            } else {
+                forward = relay_again;
+            }
+            let forwarded = forward(&value);
+            value = 9;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
+}
+
+// Any mutating target in a joined callable set rejects a shared borrow.
+TEST_F(MLATest, OwnershipMutableCallableTargetSetRejectsSharedMutation)
+{
+    std::string code = R"(
+        fn relay(pointer: ptr<i32>) -> ptr<i32> { return pointer; }
+        fn mutate(pointer: ptr<i32>) -> ptr<i32> {
+            unsafe { *pointer = 11; }
+            return pointer;
+        }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var forward: fn(ptr<i32>) -> ptr<i32> = relay;
+            if value > 0 {
+                forward = relay;
+            } else {
+                forward = mutate;
+            }
+            let shared: ptr<i32> = &value;
+            let forwarded = forward(shared);
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass a shared borrow to mutating callable "
+                      "pointer parameter"),
+              std::string::npos) << out;
+}
+
+// A mutable callable assigned in a loop loses its single-target summary after
+// the loop because the loop may execute zero or multiple times.
+TEST_F(MLATest, OwnershipMutableCallableLoopInvalidatesTargetSummary)
+{
+    std::string code = R"(
+        fn relay(pointer: ptr<i32>) -> ptr<i32> { return pointer; }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var forward: fn(ptr<i32>) -> ptr<i32> = relay;
+            var again: bool = true;
+            while again {
+                forward = relay;
+                again = false;
+            }
+            let forwarded = forward(&value);
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("opaque callable pointer parameter"),
+              std::string::npos) << out;
 }
 
 TEST_F(MLATest, OwnershipCannotStorePointerParameterBorrowGlobally)
@@ -7760,6 +9734,27 @@ TEST_F(MLATest, OwnershipCannotStorePointerParameterBorrowGlobally)
         fn main() -> i32 {
             var value: i32 = 7;
             save(&value);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot store in global/static"), std::string::npos)
+        << out;
+}
+
+// A conditional pointer expression must not store a local borrow globally.
+TEST_F(MLATest, OwnershipCannotStoreTernaryPointerBorrowGlobally)
+{
+    std::string code = R"(
+        var saved: ptr<i32>;
+        var global_value: i32 = 11;
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            var flag: bool = true;
+            saved = flag ? &local_value : &global_value;
             return 0;
         }
     )";
@@ -7815,6 +9810,34 @@ TEST_F(MLATest, OwnershipCannotReturnAggregateContainingBorrowedPointer)
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("cannot return"), std::string::npos) << out;
+}
+
+// A match result must not hide a local pointer inside a returned aggregate.
+TEST_F(MLATest, OwnershipCannotReturnMatchAggregateContainingBorrow)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        enum Choice : i32 { Local = 0, Global = 1 };
+        var global_value: i32 = 11;
+        fn choose(choice: Choice) -> PointerBox {
+            var local_value: i32 = 7;
+            return match choice {
+                Choice::Local => PointerBox { value: &local_value },
+                _ => PointerBox { value: &global_value }
+            };
+        }
+        fn main() -> i32 {
+            let boxed: PointerBox = choose(Choice::Local);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return aggregate containing a pointer"),
+              std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, OwnershipCannotReturnLocalAggregateAliasContainingBorrow)
@@ -8128,6 +10151,163 @@ TEST_F(MLATest, AggregateFieldAssignmentTracksBorrowOrigin)
         << out;
 }
 
+// Replacing one pointer field releases its previous borrow of that field's owner.
+TEST_F(MLATest, AggregateFieldReplacementReleasesOldBorrow)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct PointerPair { var first: ptr<i32>; var second: ptr<i32>; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            var other: i32 = 3;
+            var refs: PointerPair = PointerPair {
+                first: &pair.left,
+                second: &pair.right
+            };
+            refs.first = &other;
+            pair.left = 9;
+            unsafe { return *refs.first + pair.left + *refs.second; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 14);
+}
+
+// Replacing one field must retain a sibling field's borrow of another place.
+TEST_F(MLATest, AggregateFieldReplacementKeepsSiblingBorrow)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct PointerPair { var first: ptr<i32>; var second: ptr<i32>; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            var other: i32 = 3;
+            var refs: PointerPair = PointerPair {
+                first: &pair.left,
+                second: &pair.right
+            };
+            refs.first = &other;
+            pair.right = 9;
+            unsafe { return *refs.second; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'pair' while borrowed by 'refs'"),
+              std::string::npos)
+        << out;
+}
+
+// Copying a sibling pointer into a field transfers its tracked source path.
+TEST_F(MLATest, AggregateFieldReplacementFromSiblingTransfersBorrowPlace)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct PointerPair { var first: ptr<i32>; var second: ptr<i32>; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            var refs: PointerPair = PointerPair {
+                first: &pair.left,
+                second: &pair.right
+            };
+            refs.first = refs.second;
+            pair.left = 9;
+            unsafe { return *refs.first + pair.left + *refs.second; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 13);
+}
+
+// Replacing a nested pointer field releases its old borrow and keeps siblings.
+TEST_F(MLATest, NestedAggregateFieldReplacementUpdatesBorrowPlaces)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct Inner { var value: ptr<i32>; };
+        struct Outer { var inner: Inner; var sibling: ptr<i32>; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            var other: i32 = 3;
+            var outer: Outer = Outer {
+                inner: Inner { value: &pair.left },
+                sibling: &pair.right
+            };
+            outer.inner.value = &other;
+            pair.left = 9;
+            unsafe { return *outer.inner.value + pair.left + *outer.sibling; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 14);
+}
+
+// Replacing a list element updates only that element's retained borrow place.
+TEST_F(MLATest, ListElementReplacementUpdatesBorrowPlaces)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            var other: i32 = 3;
+            var refs: list<ptr<i32>> = [&pair.left, &pair.right];
+            refs[0] = &other;
+            pair.left = 9;
+            unsafe { return *refs[0] + pair.left + *refs[1]; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 14);
+}
+
+// Replacing a list element must not release a sibling element's borrow.
+TEST_F(MLATest, ListElementReplacementKeepsSiblingBorrow)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            var other: i32 = 3;
+            var refs: list<ptr<i32>> = [&pair.left, &pair.right];
+            refs[0] = &other;
+            pair.right = 9;
+            unsafe { return *refs[1]; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'refs'"), std::string::npos) << out;
+}
+
+// A dynamic list index may replace only one slot, so other borrows must remain.
+TEST_F(MLATest, DynamicListElementReplacementKeepsPossibleSiblingBorrows)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 1, right: 2 };
+            var other: i32 = 3;
+            var index: i32 = 0;
+            var refs: list<ptr<i32>> = [&pair.left, &pair.right];
+            refs[index] = &other;
+            pair.right = 9;
+            unsafe { return *refs[1]; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'refs'"), std::string::npos) << out;
+}
+
 TEST_F(MLATest, AggregateFieldMovePreservesBorrowOrigin)
 {
     std::string code = R"(
@@ -8384,6 +10564,23 @@ TEST_F(MLATest, StructBorrowsProtectOnlyBorrowedFields)
     EXPECT_EQ(compileAndRunExitCode(code), 21);
 }
 
+// Verifies in-place mutation through an exclusive pointer stored in a struct.
+TEST_F(MLATest, CanUseExclusiveBorrowInPlaceInsideStruct)
+{
+    std::string code = R"(
+        struct MutableSlot { var value: ptr<i32>; };
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let slot: MutableSlot = MutableSlot { value: &mut value };
+            unsafe {
+                *slot.value = 12;
+                return *slot.value;
+            }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 12);
+}
+
 TEST_F(MLATest, StructCannotMutateBorrowedExclusiveField)
 {
     std::string code = R"(
@@ -8489,6 +10686,27 @@ TEST_F(MLATest, ListCannotPopExclusiveBorrowOut)
               std::string::npos) << out;
 }
 
+// A shared borrow returned by pop() remains live through the extracted pointer.
+TEST_F(MLATest, ListPopTransfersSharedBorrowToExtractedPointer)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&value);
+            let extracted: ptr<i32> = pointers.pop();
+            value = 9;
+            unsafe { return *extracted; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'extracted'"), std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, CannotPassExclusiveBorrowOutOfAggregateToFunction)
 {
     std::string code = R"(
@@ -8517,8 +10735,9 @@ TEST_F(MLATest, CannotPassAggregateContainingExclusiveBorrowToFunction)
     std::string code = R"(
         struct PointerBox { var value: ptr<i32>; };
 
-        fn inspect(box: PointerBox) -> void {
-            return;
+        fn inspect(box: PointerBox) -> ptr<i32> {
+            let pointer = box.value;
+            return pointer;
         }
 
         fn main() -> i32 {
@@ -8566,8 +10785,8 @@ TEST_F(MLATest, CannotPassAggregateContainingSharedBorrowToFunction)
     std::string code = R"(
         struct PointerBox { var value: ptr<i32>; };
 
-        fn inspect(box: PointerBox) -> void {
-            return;
+        fn inspect(box: PointerBox) -> ptr<i32> {
+            return box.value;
         }
 
         fn main() -> i32 {
@@ -8591,8 +10810,8 @@ TEST_F(MLATest, CannotPassTemporaryAggregateContainingSharedBorrow)
     std::string code = R"(
         struct PointerBox { var value: ptr<i32>; };
 
-        fn inspect(box: PointerBox) -> void {
-            return;
+        fn inspect(box: PointerBox) -> ptr<i32> {
+            return box.value;
         }
 
         fn main() -> i32 {
@@ -8610,13 +10829,112 @@ TEST_F(MLATest, CannotPassTemporaryAggregateContainingSharedBorrow)
               std::string::npos) << out;
 }
 
+// A visible function may read a shared borrow from an aggregate synchronously.
+TEST_F(MLATest, SharedBorrowingAggregateCanPassToReadOnlyFunction)
+{
+    std::string code = R"(
+        struct PointerBox {
+            var value: ptr<i32>;
+            var count: i32;
+        };
+        fn inspect(box: PointerBox) -> i32 {
+            let saved = box.value;
+            unsafe { return *saved + box.count; }
+        }
+        fn main() -> i32 {
+            let value: i32 = 17;
+            let box = PointerBox { value: &value, count: 2 };
+            if inspect(box) != 19 { return 1; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A read-only callee may dereference a shared pointer nested in an aggregate field.
+TEST_F(MLATest, SharedBorrowingAggregateCanReadNestedPointerField)
+{
+    std::string code = R"(
+        struct InnerPointer {
+            var value: ptr<i32>;
+        };
+        struct PointerBox {
+            var inner: InnerPointer;
+            var count: i32;
+        };
+        fn inspect(box: PointerBox) -> i32 {
+            let saved = box.inner.value;
+            unsafe { return *saved + box.count; }
+        }
+        fn main() -> i32 {
+            let value: i32 = 17;
+            let inner = InnerPointer { value: &value };
+            let box = PointerBox { inner: inner, count: 2 };
+            if inspect(box) != 19 { return 1; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A callee that writes through an aggregate pointer field cannot accept its shared borrow.
+TEST_F(MLATest, SharedBorrowingAggregateRejectsMutatingFunction)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        fn write(box: PointerBox) -> void {
+            unsafe { *box.value = 9; }
+        }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let box = PointerBox { value: &value };
+            write(box);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass aggregate 'box' containing a borrow of a "
+                       "local value"),
+              std::string::npos) << out;
+}
+
+// A nested pointer write must not pass the read-only aggregate-call proof.
+TEST_F(MLATest, SharedBorrowingAggregateRejectsNestedPointerMutation)
+{
+    std::string code = R"(
+        struct InnerPointer { var value: ptr<i32>; };
+        struct PointerBox { var inner: InnerPointer; };
+        fn write(box: PointerBox) -> void {
+            unsafe { *box.inner.value = 9; }
+        }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let inner = InnerPointer { value: &value };
+            let box = PointerBox { inner: inner };
+            write(box);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass aggregate 'box' containing a borrow of a "
+                       "local value"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, CannotHideSharedBorrowingAggregateInCopyCallArgument)
 {
     std::string code = R"(
         struct PointerBox { var value: ptr<i32>; };
 
-        fn inspect(box: PointerBox) -> void {
-            return;
+        fn inspect(box: PointerBox) -> ptr<i32> {
+            return box.value;
         }
 
         fn main() -> i32 {
@@ -8890,6 +11208,350 @@ TEST_F(MLATest, ClearingListReleasesStoredBorrowOrigin)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// A pointer stored in a map keeps its owner borrowed for the map's lifetime.
+TEST_F(MLATest, MapPointerValueTracksBorrowOrigin)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let pointers: map<str8, ptr<i32>> = {"value": &value};
+            value = 9;
+            let pointer: ptr<i32> = pointers["value"];
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'pointers'"), std::string::npos)
+        << out;
+}
+
+// Copying a map preserves pointer borrow origins in the copied aggregate.
+TEST_F(MLATest, MapCopyPreservesPointerBorrowOrigin)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let original: map<str8, ptr<i32>> = {"value": &value};
+            let copied: map<str8, ptr<i32>> = original;
+            value = 9;
+            let pointer: ptr<i32> = copied["value"];
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'copied'"), std::string::npos)
+        << out;
+}
+
+// A map literal holding an exclusive pointer must prevent owner mutation.
+TEST_F(MLATest, MapPointerValueRetainsExclusiveBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let pointers: map<str8, ptr<i32>> = {"value": &mut value};
+            value = 9;
+            let pointer: ptr<i32> = pointers["value"];
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while mutably borrowed by 'pointers'"),
+              std::string::npos)
+        << out;
+}
+
+// A constant-key map lookup preserves the precise field borrowed by its value.
+TEST_F(MLATest, MapConstantKeyPointerAllowsDisjointFieldMutation)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+
+        fn main() -> i32 {
+            var pair = Pair { left: 11, right: 22 };
+            let pointers: map<i32, ptr<i32>> = {
+                0: &pair.left,
+                1: &pair.right
+            };
+            let left: ptr<i32> = pointers[0];
+            pair.right = 23;
+            unsafe { return *left; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 11);
+}
+
+// A runtime map key keeps all possible entry borrow origins conservative.
+TEST_F(MLATest, MapDynamicKeyPointerBlocksPotentiallyOverlappingMutation)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+
+        fn main() -> i32 {
+            var pair = Pair { left: 11, right: 22 };
+            let pointers: map<i32, ptr<i32>> = {
+                0: &pair.left,
+                1: &pair.right
+            };
+            var key: i32 = 0;
+            let selected: ptr<i32> = pointers[key];
+            pair.right = 23;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'selected'"), std::string::npos)
+        << out;
+}
+
+// A literal string key preserves the selected map value's borrow place.
+TEST_F(MLATest, MapStringKeyPointerAllowsDisjointFieldMutation)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+
+        fn main() -> i32 {
+            var pair = Pair { left: 11, right: 22 };
+            let pointers: map<str8, ptr<i32>> = {
+                "left": &pair.left,
+                "right": &pair.right
+            };
+            let left: ptr<i32> = pointers["left"];
+            pair.right = 23;
+            unsafe { return *left; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 11);
+}
+
+// A constexpr map key preserves the same precise borrow path as its literal.
+TEST_F(MLATest, MapCexprKeyPointerAllowsDisjointFieldMutation)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+
+        fn main() -> i32 {
+            cexpr LEFT_KEY: i32 = 0;
+            var pair = Pair { left: 11, right: 22 };
+            let pointers: map<i32, ptr<i32>> = {
+                LEFT_KEY: &pair.left,
+                1: &pair.right
+            };
+            let left: ptr<i32> = pointers[LEFT_KEY];
+            pair.right = 23;
+            unsafe { return *left; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 11);
+}
+
+// A compile-time arithmetic map key keeps construction and lookup paths equal.
+TEST_F(MLATest, MapConstantExpressionKeyAllowsDisjointFieldMutation)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+
+        fn main() -> i32 {
+            var pair = Pair { left: 11, right: 22 };
+            let pointers: map<i32, ptr<i32>> = {
+                1 + 1: &pair.left,
+                3: &pair.right
+            };
+            let left: ptr<i32> = pointers[1 + 1];
+            pair.right = 23;
+            unsafe { return *left; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 11);
+}
+
+// A closure selected across branches must retain every possible captured owner.
+TEST_F(MLATest, RuntimeClosureBranchMergeRetainsAllCaptureBorrows)
+{
+    std::string code = R"(
+        fn run(choose_first: bool) -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var selected = || {};
+            if choose_first {
+                let capture_first = || { first += 1; };
+                selected = capture_first;
+            } else {
+                let capture_second = || { second += 1; };
+                selected = capture_second;
+            }
+            first = 3;
+            selected();
+            return first + second;
+        }
+
+        fn main() -> i32 { return run(true); }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'selected'"), std::string::npos)
+        << out;
+}
+
+// Branch-merged closure captures release every owner after the closure's last use.
+TEST_F(MLATest, RuntimeClosureBranchMergeReleasesAllCaptureBorrows)
+{
+    std::string code = R"(
+        fn run(choose_first: bool) -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var selected = || {};
+            if choose_first {
+                let capture_first = || { first += 1; };
+                selected = capture_first;
+            } else {
+                let capture_second = || { second += 1; };
+                selected = capture_second;
+            }
+            selected();
+            first = 3;
+            second = 4;
+            return first + second;
+        }
+
+        fn main() -> i32 { return run(true); }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
+// A branch-local closure transferred before break releases its borrow after
+// its last use.
+TEST_F(MLATest, RuntimeClosureCaptureBorrowReleasesAfterLoopBreak)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 1;
+            var selected = || {};
+            var enter: bool = true;
+            while enter {
+                if enter {
+                    let capture_value = || { value += 1; };
+                    selected = capture_value;
+                    break;
+                }
+                enter = false;
+            }
+            selected();
+            value = 3;
+            return value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 3);
+}
+
+// A closure carried out by break keeps its captured owner borrowed until
+// called.
+TEST_F(MLATest, RuntimeClosureCaptureBorrowRemainsLiveAfterLoopBreak)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 1;
+            var selected = || {};
+            var enter: bool = true;
+            while enter {
+                if enter {
+                    let capture_value = || { value += 1; };
+                    selected = capture_value;
+                    break;
+                }
+                enter = false;
+            }
+            value = 3;
+            selected();
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'selected'"), std::string::npos)
+        << out;
+}
+
+// A range-loop break preserves an outer closure's capture until its last use.
+TEST_F(MLATest, RuntimeClosureCaptureBorrowReleasesAfterRangeBreak)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 1;
+            var selected = || {};
+            for item in 0..1 {
+                if item == 0 {
+                    let capture_value = || { value += 1; };
+                    selected = capture_value;
+                    break;
+                }
+            }
+            selected();
+            value = 3;
+            return value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 3);
+}
+
+// A range-loop break keeps an outer closure's capture borrowed until called.
+TEST_F(MLATest, RuntimeClosureCaptureBorrowRemainsLiveAfterRangeBreak)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 1;
+            var selected = || {};
+            for item in 0..1 {
+                if item == 0 {
+                    let capture_value = || { value += 1; };
+                    selected = capture_value;
+                    break;
+                }
+            }
+            value = 3;
+            selected();
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'selected'"), std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, OwnershipCannotStoreBorrowingAggregateInGlobal)
 {
     std::string code = R"(
@@ -9011,6 +11673,260 @@ TEST_F(MLATest, AggregateBorrowOriginsMergeAcrossWhileLoop)
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos)
+        << out;
+}
+
+// A pointer reassigned inside a possibly executed loop must retain the new
+// iteration's borrow origin after the loop join.
+TEST_F(MLATest, PointerBorrowOriginsMergeAcrossWhileLoop)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            var flag: bool = true;
+            while flag {
+                pointer = &mut value;
+                flag = false;
+            }
+            value = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// An if-join must retain either possible owner of a reassigned mutable pointer.
+TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var other: i32 = 5;
+            var pointer: ptr<i32> = &mut outside;
+            let flag: bool = true;
+            if flag {
+                pointer = &mut value;
+            } else {
+                pointer = &mut other;
+            }
+            value = 9;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// Borrow state from a loop path ending in break must be joined at loop exit.
+TEST_F(MLATest, PointerBorrowOriginsMergeAcrossWhileBreak)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            while true {
+                pointer = &mut value;
+                break;
+            }
+            value = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// A pointer local to the loop body must stop borrowing when break exits scope.
+TEST_F(MLATest, LoopBodyPointerBorrowEndsOnBreak)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            while true {
+                let pointer: ptr<i32> = &mut value;
+                break;
+            }
+            value = 9;
+            return value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
+// A borrow created before a conditional break remains possible after the join.
+TEST_F(MLATest, PointerBorrowOriginsMergeAcrossConditionalBreak)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            var flag: bool = true;
+            while true {
+                if flag {
+                    pointer = &mut value;
+                    break;
+                } else {
+                    break;
+                }
+            }
+            value = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// A range-loop conditional break must retain borrows from its exiting arm.
+TEST_F(MLATest, PointerBorrowOriginsMergeAcrossRangeLoopBreak)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            var flag: bool = true;
+            for i in 0..1 {
+                if flag {
+                    pointer = &mut value;
+                    break;
+                } else {
+                    break;
+                }
+            }
+            value = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// A list-loop conditional break must retain borrows from its exiting arm.
+TEST_F(MLATest, PointerBorrowOriginsMergeAcrossListLoopBreak)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            var flag: bool = true;
+            let values: list<i32> = [1];
+            for item in values {
+                if flag {
+                    pointer = &mut value;
+                    break;
+                } else {
+                    break;
+                }
+            }
+            value = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// A while-loop continue path must preserve a borrow that can reach loop exit.
+TEST_F(MLATest, PointerBorrowOriginsMergeAcrossWhileContinue)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            while true {
+                pointer = &mut value;
+                continue;
+            }
+            value = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
+// A range-loop continue must preserve borrows on the eventual loop exit.
+TEST_F(MLATest, PointerBorrowOriginsMergeAcrossRangeLoopContinue)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointer: ptr<i32> = &mut outside;
+            for i in 0..1 {
+                pointer = &mut value;
+                continue;
+            }
+            value = 9;
+            return *pointer;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
         << out;
 }
 
