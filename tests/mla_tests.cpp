@@ -10514,6 +10514,82 @@ TEST_F(MLATest, OwnershipFunctionReturnedPointerBorrowEndsAfterLastUse)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// A reassigned return alias should retain only its final parameter origin.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerDropsOverwrittenOrigin)
+{
+    std::string code = R"(
+        fn choose(a: ptr<i32>, b: ptr<i32>) -> ptr<i32> {
+            var pointer: ptr<i32> = a;
+            pointer = b;
+            return pointer;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let selected: ptr<i32> = choose(&first, &second);
+            first = 3;
+            unsafe { return *selected + first - 5; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// Conditional pointer assignments must conservatively retain both origins.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerMergesBranchOrigins)
+{
+    std::string code = R"(
+        fn choose(flag: bool, a: ptr<i32>, b: ptr<i32>) -> ptr<i32> {
+            var pointer: ptr<i32> = a;
+            if flag {
+                pointer = b;
+            }
+            return pointer;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let selected: ptr<i32> = choose(true, &first, &second);
+            first = 3;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'first' while borrowed by 'selected'"),
+              std::string::npos)
+        << out;
+}
+
+// A local pointer shadow must not replace the outer return provenance.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerRestoresShadowedAlias)
+{
+    std::string code = R"(
+        fn choose(a: ptr<i32>, b: ptr<i32>) -> ptr<i32> {
+            var pointer: ptr<i32> = a;
+            {
+                let pointer: ptr<i32> = b;
+            }
+            return pointer;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let selected: ptr<i32> = choose(&first, &second);
+            first = 3;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'first' while borrowed by 'selected'"),
+              std::string::npos)
+        << out;
+}
+
 // Pointer provenance must propagate through multiple visible forwarding calls.
 TEST_F(MLATest, OwnershipNestedFunctionReturnedPointerKeepsBorrowLive)
 {

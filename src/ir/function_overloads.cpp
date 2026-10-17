@@ -111,6 +111,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
         functionPointerReturnSummaryComplete.erase(symbol);
         bool hasUnknownReturnOrigin = false;
         std::map<std::string, std::set<size_t>> pointerAliases;
+        size_t conditionalAliasDepth = 0;
         for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
         {
             auto* parameter = node->parameters->parameters[i];
@@ -209,8 +210,32 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
         scanList = [&](StatementListNode* statements) {
             if(!statements)
                 return;
+            std::map<std::string, std::set<size_t>> previousAliases;
+            std::set<std::string> aliasesNotPreviouslyPresent;
+            auto rememberShadow = [&](const std::string& name) {
+                if(previousAliases.count(name) != 0 ||
+                   aliasesNotPreviouslyPresent.count(name) != 0)
+                    return;
+                auto previous = pointerAliases.find(name);
+                if(previous == pointerAliases.end())
+                    aliasesNotPreviouslyPresent.insert(name);
+                else
+                    previousAliases.emplace(name, previous->second);
+            };
+            for(auto* statement : statements->statements)
+            {
+                if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
+                    rememberShadow(declaration->name);
+                else if(auto* declaration =
+                            dynamic_cast<VarDeclNode*>(statement))
+                    rememberShadow(declaration->name);
+            }
             for(auto* statement : statements->statements)
                 scanStatement(statement);
+            for(const auto& name : aliasesNotPreviouslyPresent)
+                pointerAliases.erase(name);
+            for(auto& previous : previousAliases)
+                pointerAliases[previous.first] = std::move(previous.second);
         };
         scanStatement = [&](StatementNode* statement) {
             if(auto* returned = dynamic_cast<ReturnNode*>(statement))
@@ -225,41 +250,61 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 auto values = origins(declaration->expression);
                 if(!values.empty())
                     pointerAliases[declaration->name] = std::move(values);
+                else
+                    pointerAliases.erase(declaration->name);
             }
             else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
             {
                 auto values = origins(declaration->initExpr);
                 if(!values.empty())
                     pointerAliases[declaration->name] = std::move(values);
+                else
+                    pointerAliases.erase(declaration->name);
             }
             else if(auto* assignment =
                         dynamic_cast<AssignmentNode*>(statement))
             {
                 auto values = origins(assignment->expression);
-                if(!values.empty())
+                if(conditionalAliasDepth != 0)
                 {
                     auto& alias = pointerAliases[assignment->name];
                     alias.insert(values.begin(), values.end());
                 }
+                else if(values.empty())
+                    pointerAliases.erase(assignment->name);
+                else
+                    pointerAliases[assignment->name] = std::move(values);
             }
             if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                 scanList(block->statements);
             else if(auto* branch = dynamic_cast<IfNode*>(statement))
             {
+                ++conditionalAliasDepth;
                 scanList(branch->thenBranch);
                 scanStatement(branch->elseIfBranch);
                 scanList(branch->elseBranch);
+                --conditionalAliasDepth;
             }
             else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
             {
+                ++conditionalAliasDepth;
                 scanList(branch->thenBranch);
                 scanStatement(branch->elseIfBranch);
                 scanList(branch->elseBranch);
+                --conditionalAliasDepth;
             }
             else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+            {
+                ++conditionalAliasDepth;
                 scanList(loop->body);
+                --conditionalAliasDepth;
+            }
             else if(auto* loop = dynamic_cast<ForNode*>(statement))
+            {
+                ++conditionalAliasDepth;
                 scanList(loop->body);
+                --conditionalAliasDepth;
+            }
         };
         scanList(node->body);
         if(!hasUnknownReturnOrigin)
