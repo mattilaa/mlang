@@ -365,6 +365,26 @@ void CodeGenerator::recordVariableScopeDepth(const std::string& varName)
             entry.previousStructVariableType = structType->second;
         }
         entry.previousWasConstant = constantVariables.count(varName) != 0;
+        auto capture = [&](auto& mapping, auto& previous) {
+            auto value = mapping.find(varName);
+            if(value != mapping.end())
+            {
+                previous.existed = true;
+                previous.value = value->second;
+            }
+        };
+        capture(listElementTypes, entry.previousListElementType);
+        capture(arrayCapacities, entry.previousArrayCapacity);
+        capture(arrayKnownLengths, entry.previousArrayKnownLength);
+        capture(multiarrayMutability, entry.previousMultiarrayMutability);
+        capture(mapKeyValueTypes, entry.previousMapKeyValueTypes);
+        capture(pointerElementTypes, entry.previousPointerElementType);
+        capture(pointerKnownNull, entry.previousPointerKnownNull);
+        capture(tupleElementTypes, entry.previousTupleElementTypes);
+        capture(enumVariableTypes, entry.previousEnumVariableType);
+        capture(traitObjectVariableTypes,
+                entry.previousTraitObjectVariableType);
+        capture(functionTypeVariables, entry.previousFunctionTypeVariable);
         auto belongsToVariable = [&](const std::string& place) {
             return place == varName ||
                    (place.size() > varName.size() &&

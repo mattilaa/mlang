@@ -140,6 +140,24 @@ void CodeGenerator::exitCleanupScope()
             constantVariables.insert(it->varName);
         else
             constantVariables.erase(it->varName);
+        auto restore = [&](auto& mapping, const auto& previous) {
+            if(previous.existed)
+                mapping[it->varName] = previous.value;
+            else
+                mapping.erase(it->varName);
+        };
+        restore(listElementTypes, it->previousListElementType);
+        restore(arrayCapacities, it->previousArrayCapacity);
+        restore(arrayKnownLengths, it->previousArrayKnownLength);
+        restore(multiarrayMutability, it->previousMultiarrayMutability);
+        restore(mapKeyValueTypes, it->previousMapKeyValueTypes);
+        restore(pointerElementTypes, it->previousPointerElementType);
+        restore(pointerKnownNull, it->previousPointerKnownNull);
+        restore(tupleElementTypes, it->previousTupleElementTypes);
+        restore(enumVariableTypes, it->previousEnumVariableType);
+        restore(traitObjectVariableTypes,
+                it->previousTraitObjectVariableType);
+        restore(functionTypeVariables, it->previousFunctionTypeVariable);
         auto belongsToVariable = [&](const std::string& place) {
             return place == it->varName ||
                    (place.size() > it->varName.size() &&

@@ -582,6 +582,11 @@ private:
         std::string previousParent;
     };
     std::vector<std::vector<PointerBorrowScopeEntry>> pointerBorrowScopes;
+    template <typename T> struct ScopedBindingValue
+    {
+        bool existed = false;
+        T value{};
+    };
     struct VariableScopeDepthEntry
     {
         std::string varName;
@@ -598,6 +603,18 @@ private:
             previousActiveBorrowers;
         std::map<std::string, std::string> previousActiveMutBorrowers;
         std::set<std::string> previousMovedValues;
+        ScopedBindingValue<TypeNode*> previousListElementType;
+        ScopedBindingValue<int64_t> previousArrayCapacity;
+        ScopedBindingValue<int64_t> previousArrayKnownLength;
+        ScopedBindingValue<bool> previousMultiarrayMutability;
+        ScopedBindingValue<std::pair<TypeNode*, TypeNode*>>
+            previousMapKeyValueTypes;
+        ScopedBindingValue<TypeNode*> previousPointerElementType;
+        ScopedBindingValue<bool> previousPointerKnownNull;
+        ScopedBindingValue<std::vector<TypeNode*>> previousTupleElementTypes;
+        ScopedBindingValue<std::string> previousEnumVariableType;
+        ScopedBindingValue<std::string> previousTraitObjectVariableType;
+        ScopedBindingValue<FunctionTypeNode*> previousFunctionTypeVariable;
         bool hadPreviousAggregateBorrowOrigins = false;
         std::set<std::string> previousAggregateBorrowOrigins;
         bool hadPreviousAggregateBorrowPlaces = false;

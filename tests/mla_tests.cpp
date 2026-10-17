@@ -5158,6 +5158,21 @@ TEST_F(MLATest, OwnershipInnerShadowBorrowDoesNotLeakToOuter)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// Container element type metadata must return to the outer binding after shadowing.
+TEST_F(MLATest, OwnershipListElementTypeRestoresAfterShadowScope)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<i32> = [7];
+            {
+                var values: list<ptr<i32>> = [];
+            }
+            return values[0] - 7;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, OwnershipUseOutsideBlockReportsUnknownVariable)
 {
     std::string code = R"(
