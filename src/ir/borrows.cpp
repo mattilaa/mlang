@@ -313,20 +313,21 @@ bool CodeGenerator::isPointerBorrowAncestor(const std::string& ancestor,
 
 bool CodeGenerator::validateBorrowRead(ExpressionNode* expr, int line)
 {
+    const std::string place = resolveBorrowPlaceFromLValue(expr);
+    if(!place.empty())
+        for(const auto& movedPlace : movedVariables)
+            if(borrowPlacesOverlap(place, movedPlace))
+            {
+                reportError(line, "use of moved value: '" + movedPlace + "'");
+                return false;
+            }
+
     if(suppressBorrowReadValidation)
         return true;
 
     const std::string owner = resolveBorrowOwnerFromLValue(expr);
-    const std::string place = resolveBorrowPlaceFromLValue(expr);
     if(owner.empty() || place.empty())
         return true;
-
-    for(const auto& movedPlace : movedVariables)
-        if(borrowPlacesOverlap(place, movedPlace))
-        {
-            reportError(line, "use of moved value: '" + movedPlace + "'");
-            return false;
-        }
 
     std::function<bool(ExpressionNode*, const std::string&)> accessedThrough =
         [&](ExpressionNode* current, const std::string& pointer) -> bool {

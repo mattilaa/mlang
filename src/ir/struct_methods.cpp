@@ -2230,6 +2230,17 @@ CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
     const std::string& method = node->methodName;
+    const std::string receiverPlace =
+        resolveBorrowPlaceFromLValue(node->object);
+    if(!receiverPlace.empty())
+        for(const auto& movedPlace : movedVariables)
+            if(borrowPlacesOverlap(receiverPlace, movedPlace))
+            {
+                reportError(node->line,
+                            "use of moved value: '" + movedPlace + "'");
+                return nullptr;
+            }
+
     if(method == "first" || method == "last" || method == "pop")
     {
         const std::string aggregate =

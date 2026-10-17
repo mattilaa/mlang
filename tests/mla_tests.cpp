@@ -8955,6 +8955,39 @@ TEST_F(MLATest, OwnershipDynamicIndexMoveInvalidatesPossibleElements)
         << out;
 }
 
+// Receiver materialization must not bypass partial-move validation.
+TEST_F(MLATest, OwnershipRejectsMethodCallOnPartiallyMovedNestedReceiver)
+{
+    std::string code = R"(
+        struct Inner {
+            var items: list<i32>;
+            var marker: i32;
+        };
+
+        impl Inner {
+            fn read_marker(&self) -> i32 { return self.marker; }
+        }
+
+        struct Outer { var inner: Inner; };
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var outer: Outer = Outer {
+                inner: Inner { items: [1], marker: 7 }
+            };
+            let moved = consume(outer.inner.items);
+            return outer.inner.read_marker() + moved;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("use of moved value: 'outer.inner.items'"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, OwnershipCanMoveDisjointFieldWhileSiblingIsBorrowed)
 {
     std::string code = R"(
