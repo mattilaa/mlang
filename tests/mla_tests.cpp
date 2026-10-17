@@ -7069,6 +7069,72 @@ TEST_F(MLATest, OwnershipCannotMoveTupleElementWhileItIsBorrowed)
     EXPECT_NE(out.find("cannot move"), std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipCannotMoveListElementWhileItIsBorrowed)
+{
+    std::string code = R"(
+        struct Cell { var items: list<i32>; };
+        fn consume(cell: Cell) -> i32 { return cell.items.len(); }
+        fn inspect(cell: ptr<Cell>) -> i32 { return 0; }
+
+        fn main() -> i32 {
+            var cells: list<Cell> = [
+                Cell { items: [1, 2] }, Cell { items: [3] }
+            ];
+            let borrowed = &cells[0];
+            let moved = consume(cells[0]);
+            return inspect(borrowed) + moved;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot move"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCanMoveDisjointListElementWhileSiblingIsBorrowed)
+{
+    std::string code = R"(
+        struct Cell { var items: list<i32>; };
+        fn consume(cell: Cell) -> i32 { return cell.items.len(); }
+        fn inspect(cell: ptr<Cell>) -> i32 { return 0; }
+
+        fn main() -> i32 {
+            var cells: list<Cell> = [
+                Cell { items: [1, 2] }, Cell { items: [3] }
+            ];
+            let borrowed = &cells[0];
+            let moved = consume(cells[1]);
+            return inspect(borrowed) + moved;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 1);
+}
+
+TEST_F(MLATest, OwnershipTreatsDynamicElementBorrowAsOverlappingMove)
+{
+    std::string code = R"(
+        struct Cell { var items: list<i32>; };
+        fn consume(cell: Cell) -> i32 { return cell.items.len(); }
+        fn inspect(cell: ptr<Cell>) -> i32 { return 0; }
+
+        fn main() -> i32 {
+            var cells: list<Cell> = [
+                Cell { items: [1, 2] }, Cell { items: [3] }
+            ];
+            let index: i32 = 0;
+            let borrowed = &cells[index];
+            let moved = consume(cells[1]);
+            return inspect(borrowed) + moved;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot move"), std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipCannotBorrowWholeAndFieldInSingleCall)
 {
     std::string code = R"(
