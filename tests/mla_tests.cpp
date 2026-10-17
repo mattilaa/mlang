@@ -2973,6 +2973,31 @@ TEST_F(MLATest, TraitObjectVoidMutatingMethodRuns)
     EXPECT_EQ(compileAndRunExitCode(code), 9);
 }
 
+TEST_F(MLATest, TraitObjectMutatingMethodRejectsLiveSharedBorrow)
+{
+    std::string code = R"(
+        trait CounterOps {
+            fn bump(self: &mut Self) -> void;
+        }
+        struct Counter { var value: i32; };
+        impl CounterOps for Counter {
+            fn bump(self: &mut Counter) -> void { self.value += 1; }
+        }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 8 };
+            var item: dyn CounterOps = counter;
+            let held = &item;
+            item.bump();
+            return held == held ? 0 : 1;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos);
+}
+
 TEST_F(MLATest, TraitObjectFieldVoidMutatingMethodRuns)
 {
     std::string code = R"(
