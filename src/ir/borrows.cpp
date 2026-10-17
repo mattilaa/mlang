@@ -377,7 +377,36 @@ bool CodeGenerator::validateBorrowRead(ExpressionNode* expr, int line)
 bool CodeGenerator::validateBorrowWriteThroughPointer(ExpressionNode* expr,
                                                        int line)
 {
-    auto* pointer = dynamic_cast<IdentifierNode*>(expr);
+    size_t dereferenceDepth = 0;
+    auto* current = expr;
+    while(auto* dereference = dynamic_cast<UnaryOpNode*>(current))
+    {
+        if(dereference->op != UnaryOpNode::OP_DEREF)
+            break;
+        ++dereferenceDepth;
+        current = dereference->operand;
+    }
+    auto* pointer = dynamic_cast<IdentifierNode*>(current);
+    // A write through `*outer` mutates the pointer value stored in outer's
+    // referent. Validate each pointer in that chain too: an exclusive borrow
+    // of the slot does not upgrade a shared pointer stored inside the slot.
+    std::set<std::string> checkedPointers;
+    auto nestedOwner = pointer
+                           ? pointerBorrowTarget.find(pointer->name)
+                           : pointerBorrowTarget.end();
+    for(size_t depth = 0;
+        pointer && depth < dereferenceDepth &&
+        nestedOwner != pointerBorrowTarget.end();
+        ++depth)
+    {
+        const std::string owner = nestedOwner->second;
+        if(owner.empty() || !checkedPointers.insert(owner).second)
+            break;
+        IdentifierNode nestedPointer(owner);
+        if(!validateBorrowWriteThroughPointer(&nestedPointer, line))
+            return false;
+        nestedOwner = pointerBorrowTarget.find(owner);
+    }
     if(!pointer)
     {
         const std::string container = resolveBorrowOwnerFromLValue(expr);

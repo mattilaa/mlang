@@ -5654,6 +5654,51 @@ TEST_F(MLATest, SharedBorrowCannotWriteThroughItsPointer)
               std::string::npos) << out;
 }
 
+// A nested dereference must retain the shared borrow restriction on its place.
+TEST_F(MLATest, SharedBorrowCannotWriteThroughNestedPointer)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var pointer: ptr<i32> = &first;
+            var slot: ptr<ptr<i32>> = &pointer;
+            let shared_slot: ptr<ptr<ptr<i32>>> = &slot;
+            unsafe { *(*shared_slot) = &mut second; }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
+// A mutable borrow of a pointer slot cannot upgrade its stored shared pointer.
+TEST_F(MLATest, MutableSlotCannotUpgradeStoredSharedPointer)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var pointer: ptr<i32> = &first;
+            var slot: ptr<ptr<i32>> = &pointer;
+            let mutable_slot: ptr<ptr<ptr<i32>>> = &mut slot;
+            unsafe { *(*mutable_slot) = &mut second; }
+            let keep_slot_live: ptr<ptr<i32>> = slot;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
 // Verifies that a shared borrow remains read-only when stored in an aggregate.
 TEST_F(MLATest, SharedBorrowCannotWriteThroughAggregatePointerField)
 {
