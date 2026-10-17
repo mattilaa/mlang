@@ -4957,6 +4957,55 @@ TEST_F(MLATest, OwnershipConditionalMoveThenReinitializeCleansBothValues)
     EXPECT_EQ(run(), "free 7\nfree 8\n");
 }
 
+// A type with cleanup remains move-only even when all fields are Copy.
+TEST_F(MLATest, OwnershipCleanupTypeCannotBeCopiedByAssignment)
+{
+    std::string code = R"(
+        struct Owned { var marker: i32; };
+
+        impl Owned {
+            fn free(self: Owned) -> i32 {
+                println!("free {}", self.marker);
+                return 0;
+            }
+        }
+
+        fn main() -> i32 {
+            let first: Owned = Owned { marker: 7 };
+            let second: Owned = first;
+            return first.marker + second.marker;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("use of moved value: 'first'"), std::string::npos)
+        << out;
+}
+
+// Moving a cleanup type transfers responsibility and invokes cleanup once.
+TEST_F(MLATest, OwnershipCleanupTypeMoveTransfersCleanupResponsibility)
+{
+    std::string code = R"(
+        struct Owned { var marker: i32; };
+
+        impl Owned {
+            fn free(self: Owned) -> i32 {
+                println!("free {}", self.marker);
+                return 0;
+            }
+        }
+
+        fn main() -> i32 {
+            let first: Owned = Owned { marker: 7 };
+            let second: Owned = first;
+            return second.marker - 7;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "free 7\n");
+}
+
 TEST_F(MLATest, OwnershipUseOutsideBlockReportsUnknownVariable)
 {
     std::string code = R"(

@@ -34,6 +34,48 @@ CodeGenerator::classifyOwnership(TypeNode* typeNode)
         if(dynamic_cast<PointerTypeNode*>(t))
             return OwnershipClass::Copy;
 
+        auto structHasCleanup = [&](const std::string& structName) {
+            static const std::vector<std::string> cleanupNames = {
+                "__drop", "drop", "free", "destroy"};
+            auto methods = structMethods.find(structName);
+            if(methods != structMethods.end())
+                for(const auto& cleanupName : cleanupNames)
+                {
+                    auto method = methods->second.find(cleanupName);
+                    if(method == methods->second.end() || !method->second.second)
+                        continue;
+                    StructMethodNode* node = method->second.second;
+                    if(node->isStatic)
+                        continue;
+                    size_t nonSelfParams = 0;
+                    if(node->parameters)
+                        for(auto* parameter : node->parameters->parameters)
+                            if(parameter && parameter->name != "self")
+                                ++nonSelfParams;
+                    if(nonSelfParams == 0)
+                        return true;
+                }
+
+            llvm::StructType* llvmStruct = getStructType(structName);
+            if(!llvmStruct)
+                return false;
+            for(const auto& cleanupName : cleanupNames)
+            {
+                auto overloads = functionOverloads.find(cleanupName);
+                if(overloads == functionOverloads.end())
+                    continue;
+                for(const auto& overload : overloads->second)
+                {
+                    llvm::Function* function = overload.function;
+                    if(function && function->arg_size() == 1 &&
+                       function->getReturnType()->isVoidTy() &&
+                       function->getArg(0)->getType() == llvmStruct)
+                        return true;
+                }
+            }
+            return false;
+        };
+
         auto classifyStructByName =
             [&](const std::string& structName) -> OwnershipClass
         {
@@ -46,6 +88,9 @@ CodeGenerator::classifyOwnership(TypeNode* typeNode)
                 // Unknown/user-generic type parameter: conservative default.
                 return OwnershipClass::MoveOnly;
             }
+
+            if(structHasCleanup(structName))
+                return OwnershipClass::MoveOnly;
 
             if(visitingStructs.count(structName))
             {
