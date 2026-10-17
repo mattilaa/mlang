@@ -5930,6 +5930,25 @@ TEST_F(MLATest, SharedBorrowExtractedFromListCannotBeWrittenThrough)
               std::string::npos) << out;
 }
 
+// A shared pointer indexed directly from a list must also remain read-only.
+TEST_F(MLATest, SharedBorrowIndexedFromListCannotBeWrittenThrough)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let pointers: list<ptr<i32>> = [&value];
+            unsafe { *pointers[0] = 9; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
 // Verifies an exclusive borrow live on one branch remains active after merge.
 TEST_F(MLATest, ConditionalExclusiveBorrowBlocksOwnerMutationAfterMerge)
 {
