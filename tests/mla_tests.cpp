@@ -11170,6 +11170,34 @@ TEST_F(MLATest, OwnershipIndirectPointerAssignmentKeepsNewOrigin)
     EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
 }
 
+// A helper's indirect pointer write must update the caller's returned origin.
+TEST_F(MLATest, OwnershipHelperIndirectPointerAssignmentKeepsNewOrigin)
+{
+    std::string code = R"(
+        fn replace(slot: ptr<ptr<i32>>, replacement: ptr<i32>) -> void {
+            unsafe { *slot = replacement; }
+        }
+        fn relay(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+            var selected = first;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            replace(slot, second);
+            return selected;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded = relay(&mut first, &mut second);
+            second = 3;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
+}
+
 // Returning a pointer extracted from an aggregate argument retains its borrow.
 TEST_F(MLATest, OwnershipAggregateArgumentReturnedPointerKeepsBorrowLive)
 {

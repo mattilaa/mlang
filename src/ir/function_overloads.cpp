@@ -579,6 +579,21 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                        hasTrackedPointerAggregateAtOrBelow(path))
                         hasUnknownReturnOrigin = true;
                 };
+            auto invalidateIndirectPointerArgument =
+                [&](ExpressionNode* argument) {
+                    auto* identifier =
+                        dynamic_cast<IdentifierNode*>(argument);
+                    if(!identifier)
+                        return;
+                    auto slot = pointerLocalSlots.find(identifier->name);
+                    if(slot == pointerLocalSlots.end())
+                        return;
+                    // A callee receiving a pointer-to-pointer may replace a
+                    // local alias. Until interprocedural write effects are
+                    // summarized, retain the conservative return-origin
+                    // fallback rather than returning a stale alias summary.
+                    hasUnknownReturnOrigin = true;
+                };
             if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
             {
                 auto closureEffect =
@@ -589,6 +604,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 for(auto* argument : call->arguments)
                 {
                     invalidateMutableAggregateArgument(argument);
+                    invalidateIndirectPointerArgument(argument);
                     if(argumentMayInvokeMutatingClosure(argument))
                         hasUnknownReturnOrigin = true;
                     scanCallEffects(argument);
@@ -626,6 +642,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 for(auto* argument : invoke->arguments)
                 {
                     invalidateMutableAggregateArgument(argument);
+                    invalidateIndirectPointerArgument(argument);
                     if(argumentMayInvokeMutatingClosure(argument))
                         hasUnknownReturnOrigin = true;
                     scanCallEffects(argument);
