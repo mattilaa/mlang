@@ -243,6 +243,11 @@ void collect_used_idents(ASTNode* node, std::set<std::string>& out)
         collect_used_idents(aeq->right, out);
         return;
     }
+    if(auto* assertion = dynamic_cast<AssertNode*>(node))
+    {
+        collect_used_idents(assertion->condition, out);
+        return;
+    }
     if(auto* ifN = dynamic_cast<IfNode*>(node))
     {
         collect_used_idents(ifN->conditionInit, out);
