@@ -577,7 +577,12 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                             {
                                 if(auto* actualReference =
                                        dynamic_cast<ReferenceTypeNode*>(actual))
+                                {
+                                    if(reference->isMutable !=
+                                       actualReference->isMutable)
+                                        return false;
                                     actual = actualReference->elementType;
+                                }
                                 return bindCallType(reference->elementType,
                                                     actual);
                             }
@@ -593,6 +598,30 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                                         typeMangle(inserted.first->second) ==
                                             typeMangle(actual);
                                 }
+                            }
+                            if(auto* patternMulti =
+                                   dynamic_cast<MultiArrayTypeNode*>(pattern))
+                            {
+                                auto* actualMulti =
+                                    dynamic_cast<MultiArrayTypeNode*>(actual);
+                                return actualMulti &&
+                                    patternMulti->capacity ==
+                                        actualMulti->capacity &&
+                                    patternMulti->elementsMutable ==
+                                        actualMulti->elementsMutable &&
+                                    bindCallType(patternMulti->elementType,
+                                                 actualMulti->elementType);
+                            }
+                            if(auto* patternArray =
+                                   dynamic_cast<ArrayTypeNode*>(pattern))
+                            {
+                                auto* actualArray =
+                                    dynamic_cast<ArrayTypeNode*>(actual);
+                                return actualArray &&
+                                    patternArray->capacity ==
+                                        actualArray->capacity &&
+                                    bindCallType(patternArray->elementType,
+                                                 actualArray->elementType);
                             }
                             if(auto* patternList =
                                    dynamic_cast<GenericListTypeNode*>(pattern))
@@ -629,6 +658,87 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                                     if(!bindCallType(
                                            patternTuple->elementTypes->types[n],
                                            actualTuple->elementTypes->types[n]))
+                                        return false;
+                                return true;
+                            }
+                            if(auto* patternPointer =
+                                   dynamic_cast<PointerTypeNode*>(pattern))
+                            {
+                                auto* actualPointer =
+                                    dynamic_cast<PointerTypeNode*>(actual);
+                                return actualPointer && bindCallType(
+                                    patternPointer->elementType,
+                                    actualPointer->elementType);
+                            }
+                            if(auto* patternFunction =
+                                   dynamic_cast<FunctionTypeNode*>(pattern))
+                            {
+                                auto* actualFunction =
+                                    dynamic_cast<FunctionTypeNode*>(actual);
+                                const size_t patternCount =
+                                    patternFunction->parameterTypes
+                                        ? patternFunction->parameterTypes
+                                              ->types.size()
+                                        : 0;
+                                const size_t actualCount =
+                                    actualFunction &&
+                                            actualFunction->parameterTypes
+                                        ? actualFunction->parameterTypes
+                                              ->types.size()
+                                        : 0;
+                                if(!actualFunction ||
+                                   patternCount != actualCount)
+                                    return false;
+                                for(size_t n = 0; n < patternCount; ++n)
+                                    if(!bindCallType(
+                                           patternFunction->parameterTypes
+                                               ->types[n],
+                                           actualFunction->parameterTypes
+                                               ->types[n]))
+                                        return false;
+                                return bindCallType(
+                                    patternFunction->returnType,
+                                    actualFunction->returnType);
+                            }
+                            if(auto* patternGeneric =
+                                   dynamic_cast<GenericStructTypeRefNode*>(
+                                       pattern))
+                            {
+                                const std::vector<TypeNode*>* actualArgs =
+                                    nullptr;
+                                if(auto* actualGeneric =
+                                       dynamic_cast<GenericStructTypeRefNode*>(
+                                           actual))
+                                {
+                                    if(patternGeneric->structName ==
+                                       actualGeneric->structName)
+                                        actualArgs = &actualGeneric->typeArgs;
+                                }
+                                else if(auto* actualStruct =
+                                            dynamic_cast<StructTypeRefNode*>(
+                                                actual))
+                                {
+                                    auto genericName =
+                                        mangledToGenericName.find(
+                                            actualStruct->structName);
+                                    auto typeArgs = monomorphizedTypeArgs.find(
+                                        actualStruct->structName);
+                                    if(genericName !=
+                                           mangledToGenericName.end() &&
+                                       genericName->second ==
+                                           patternGeneric->structName &&
+                                       typeArgs != monomorphizedTypeArgs.end())
+                                        actualArgs = &typeArgs->second;
+                                }
+                                if(!actualArgs ||
+                                   patternGeneric->typeArgs.size() !=
+                                       actualArgs->size())
+                                    return false;
+                                for(size_t n = 0;
+                                    n < patternGeneric->typeArgs.size(); ++n)
+                                    if(!bindCallType(
+                                           patternGeneric->typeArgs[n],
+                                           (*actualArgs)[n]))
                                         return false;
                                 return true;
                             }

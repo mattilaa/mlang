@@ -4567,6 +4567,24 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultFromGenericCall)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromGenericStructCall)
+{
+    std::string code = R"(
+        struct Box<T> { var value: T; };
+        generic<T> fn extract(box: Box<T>) -> T {
+            return box.value;
+        }
+        generic<T, U> fn apply(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let boxed: Box<i32> = Box<i32> { value: 101 };
+            return apply(|item| { return extract(item); }, boxed);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 101);
+}
+
 TEST_F(MLATest, GenericFunctionInfersClosureResultFromArrayFill)
 {
     std::string code = R"(
