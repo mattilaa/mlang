@@ -641,6 +641,8 @@ private:
     std::string resolveBorrowOwnerFromLValue(ExpressionNode* expr) const;
     std::string resolveBorrowPlaceFromLValue(ExpressionNode* expr) const;
     bool validateBorrowRead(ExpressionNode* expr, int line);
+    bool validateBorrowWriteThroughPointer(ExpressionNode* pointerExpr,
+                                           int line);
     bool borrowPlacesOverlap(const std::string& left,
                              const std::string& right) const;
     std::string getBorrowedOwnerForPointerExpression(

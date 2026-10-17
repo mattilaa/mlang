@@ -1166,6 +1166,8 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
 void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
 {
+    if(!validateBorrowWriteThroughPointer(node->pointerExpr, node->line))
+        return;
     if(!validatePointerDereference(node->pointerExpr, node->line))
         return;
 

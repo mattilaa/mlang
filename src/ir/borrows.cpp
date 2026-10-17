@@ -210,6 +210,53 @@ bool CodeGenerator::validateBorrowRead(ExpressionNode* expr, int line)
     return true;
 }
 
+bool CodeGenerator::validateBorrowWriteThroughPointer(ExpressionNode* expr,
+                                                       int line)
+{
+    auto* pointer = dynamic_cast<IdentifierNode*>(expr);
+    if(!pointer)
+        return true;
+
+    auto ownerIt = pointerBorrowTarget.find(pointer->name);
+    if(ownerIt == pointerBorrowTarget.end())
+        return true;
+
+    const std::string& owner = ownerIt->second;
+    auto placeIt = pointerBorrowPlace.find(pointer->name);
+    const std::string targetPlace =
+        placeIt == pointerBorrowPlace.end() ? owner : placeIt->second;
+
+    auto conflictsWith = [&](const std::string& borrower) {
+        if(borrower == pointer->name)
+            return false;
+        auto borrowedPlaceIt = pointerBorrowPlace.find(borrower);
+        const std::string borrowedPlace =
+            borrowedPlaceIt == pointerBorrowPlace.end() ? owner
+                                                        : borrowedPlaceIt->second;
+        if(!borrowPlacesOverlap(targetPlace, borrowedPlace))
+            return false;
+        reportError(line, "cannot write overlapping part of '" + owner +
+                              "' through '" + pointer->name +
+                              "' while borrowed by '" + borrower + "'");
+        return true;
+    };
+
+    auto sharedIt = activeBorrowers.find(owner);
+    if(sharedIt != activeBorrowers.end())
+        for(const auto& borrower : sharedIt->second)
+            if(conflictsWith(borrower))
+                return false;
+
+    for(const auto& mutableBorrow : activeMutBorrower)
+    {
+        auto mutableOwner = pointerBorrowTarget.find(mutableBorrow.second);
+        if(mutableOwner != pointerBorrowTarget.end() &&
+           mutableOwner->second == owner && conflictsWith(mutableBorrow.second))
+            return false;
+    }
+    return true;
+}
+
 std::string
 CodeGenerator::getBorrowedOwnerForPointerExpression(ExpressionNode* expr) const
 {
