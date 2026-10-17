@@ -1057,7 +1057,8 @@ TEST_F(MLATest, LetMutableMultiarrayRejectsMutation)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("declared with let; use var"), std::string::npos);
+    EXPECT_NE(out.find("because it is immutable; use var or &mut"),
+              std::string::npos);
 }
 
 TEST_F(MLATest, MutableMultiarrayWriteChecksDynamicIndex)

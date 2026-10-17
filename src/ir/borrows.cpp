@@ -415,6 +415,16 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
         return false;
     }
 
+    // Named function items have no closure environment and therefore cannot
+    // carry a borrow. Do not ask getLValueType() to resolve an overloaded
+    // function here: the surrounding callable type (for example a function
+    // return type) supplies the context needed to select the overload later.
+    if(auto* identifier = dynamic_cast<IdentifierNode*>(expr))
+        if(functionOverloads.count(identifier->name) &&
+           !namedValues.count(identifier->name) &&
+           !globalNamedValues.count(identifier->name))
+            return true;
+
     TypeNode* escapingValueType = getLValueType(expr, line);
     if(!escapingValueType)
         escapingValueType = inferExpressionTypeNode(expr, line);

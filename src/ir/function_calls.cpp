@@ -1669,6 +1669,14 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                        candidate.node->parameters->parameters[argumentIndex]
                            ->type))
                     callableCandidate = true;
+                else if(auto* named = dynamic_cast<StructTypeRefNode*>(
+                            candidate.node->parameters
+                                ->parameters[argumentIndex]->type))
+                    callableCandidate =
+                        std::find(candidate.node->typeParams.begin(),
+                                  candidate.node->typeParams.end(),
+                                  named->structName) !=
+                        candidate.node->typeParams.end();
             }
             if(callableCandidate)
                 continue;
@@ -4045,6 +4053,34 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         bool ok = true;
         for(size_t i = 0; i < sourceParameterCount; ++i)
         {
+            bool isBoundClosureArgument = false;
+            if(info.node && info.node->parameters)
+            {
+                for(const auto& bound : info.node->boundClosureParameters)
+                {
+                    if(i >= info.node->parameters->parameters.size() ||
+                       info.node->parameters->parameters[i]->name !=
+                           bound.first)
+                        continue;
+                    ClosureNode* actual =
+                        dynamic_cast<ClosureNode*>(node->arguments[i]);
+                    if(auto* identifier =
+                           dynamic_cast<IdentifierNode*>(node->arguments[i]))
+                    {
+                        auto closure = closureVariables.find(identifier->name);
+                        if(closure != closureVariables.end())
+                            actual = closure->second;
+                    }
+                    isBoundClosureArgument = actual == bound.second;
+                    break;
+                }
+            }
+            // This generic specialization has the closure body and captures
+            // bound into its generated function. The source closure is not a
+            // runtime argument, so it must not participate in ABI matching.
+            if(isBoundClosureArgument)
+                continue;
+
             bool explicitSharedReferenceArgument = false;
             if(info.node && info.node->parameters &&
                i < info.node->parameters->parameters.size())
@@ -4490,6 +4526,31 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 callArgVals[i] = builder.CreateLoad(
                     callee->getArg(i)->getType(), callArgVals[i],
                     "shared.ref.arg");
+        }
+        for(const auto& bound : best->node->boundClosureParameters)
+        {
+            for(size_t i = 0; i < node->arguments.size() &&
+                               i < best->node->parameters->parameters.size();
+                ++i)
+            {
+                if(best->node->parameters->parameters[i]->name != bound.first)
+                    continue;
+                ClosureNode* actual =
+                    dynamic_cast<ClosureNode*>(node->arguments[i]);
+                if(auto* identifier =
+                       dynamic_cast<IdentifierNode*>(node->arguments[i]))
+                {
+                    auto closure = closureVariables.find(identifier->name);
+                    if(closure != closureVariables.end())
+                        actual = closure->second;
+                }
+                if(actual == bound.second && i < expectedArgs &&
+                   callee->getArg(i)->getType()->isPointerTy())
+                    callArgVals[i] = llvm::ConstantPointerNull::get(
+                        llvm::cast<llvm::PointerType>(
+                            callee->getArg(i)->getType()));
+                break;
+            }
         }
     }
     if(best->node)
