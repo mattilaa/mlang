@@ -38,6 +38,7 @@ bool CodeGenerator::getRuntimeClosureCaptures(
     auto savedListElementTypes = listElementTypes;
     auto savedMapKeyValueTypes = mapKeyValueTypes;
     auto savedTupleElementTypes = tupleElementTypes;
+    auto savedPointerElementTypes = pointerElementTypes;
     auto savedArrayCapacities = arrayCapacities;
     auto savedMultiarrayMutability = multiarrayMutability;
     bool parameterTypesValid = true;
@@ -86,6 +87,10 @@ bool CodeGenerator::getRuntimeClosureCaptures(
                    dynamic_cast<TupleTypeNode*>(parameter->type))
                 tupleElementTypes[parameter->name] =
                     tupleType->elementTypes->types;
+            if(auto* pointerType =
+                   dynamic_cast<PointerTypeNode*>(parameter->type))
+                pointerElementTypes[parameter->name] =
+                    pointerType->elementType;
         }
     }
 
@@ -219,6 +224,7 @@ bool CodeGenerator::getRuntimeClosureCaptures(
     listElementTypes = std::move(savedListElementTypes);
     mapKeyValueTypes = std::move(savedMapKeyValueTypes);
     tupleElementTypes = std::move(savedTupleElementTypes);
+    pointerElementTypes = std::move(savedPointerElementTypes);
     arrayCapacities = std::move(savedArrayCapacities);
     multiarrayMutability = std::move(savedMultiarrayMutability);
     if(!returnTypesValid || (sawValueReturn && sawVoidReturn))

@@ -4658,6 +4658,23 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultFromGenericMapCall)
     EXPECT_EQ(compileAndRunExitCode(code), 107);
 }
 
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromPointerCall)
+{
+    std::string code = R"(
+        generic<T> fn read(pointer: ptr<T>) -> T {
+            unsafe { return *pointer; }
+        }
+        generic<T, U> fn apply(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            var value: i32 = 109;
+            return apply(|pointer: ptr<i32>| { return read(pointer); }, &value);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 109);
+}
+
 TEST_F(MLATest, GenericFunctionInfersClosureResultFromArrayFill)
 {
     std::string code = R"(

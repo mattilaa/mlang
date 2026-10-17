@@ -4697,6 +4697,10 @@ llvm::Function* CodeGenerator::generateClosureFn(
                             dynamic_cast<TupleTypeNode*>(parameter->type))
                     tupleElementTypes[parameter->name] =
                         tupleType->elementTypes->types;
+                else if(auto* pointerType =
+                            dynamic_cast<PointerTypeNode*>(parameter->type))
+                    pointerElementTypes[parameter->name] =
+                        pointerType->elementType;
             }
         }
     }
