@@ -3572,6 +3572,19 @@ TEST_F(MLATest, ReadFromDisjointListElementAllowedDuringMutableBorrow)
     EXPECT_EQ(compileAndRunExitCode(code), 9);
 }
 
+TEST_F(MLATest, WriteToDisjointListElementWithConstantExpressionBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<i32> = [4, 5, 6];
+            let selected = &mut values[1 + 1];
+            values[0] = 7;
+            unsafe { return *selected + values[0]; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 13);
+}
+
 TEST_F(MLATest, ReadFromBorrowedListElementRejected)
 {
     std::string code = R"(

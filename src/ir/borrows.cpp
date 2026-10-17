@@ -1,6 +1,8 @@
 #include "ir.h"
 
 #include <functional>
+#include <limits>
+#include <optional>
 
 std::string
 CodeGenerator::resolveBorrowOwnerFromLValue(ExpressionNode* expr) const
@@ -50,6 +52,63 @@ CodeGenerator::resolveBorrowOwnerFromLValue(ExpressionNode* expr) const
 std::string
 CodeGenerator::resolveBorrowPlaceFromLValue(ExpressionNode* expr) const
 {
+    std::function<std::optional<int64_t>(ExpressionNode*)> constantInteger =
+        [&](ExpressionNode* value) -> std::optional<int64_t> {
+        if(auto* literal = dynamic_cast<IntLiteralNode*>(value))
+            return literal->value;
+        if(auto* unary = dynamic_cast<UnaryOpNode*>(value))
+        {
+            auto operand = constantInteger(unary->operand);
+            if(!operand)
+                return std::nullopt;
+            if(unary->op == UnaryOpNode::OP_NEG)
+            {
+                if(*operand == std::numeric_limits<int64_t>::min())
+                    return std::nullopt;
+                return -*operand;
+            }
+            if(unary->op == UnaryOpNode::OP_BITNOT)
+                return ~*operand;
+            return std::nullopt;
+        }
+        auto* binary = dynamic_cast<BinaryOpNode*>(value);
+        if(!binary)
+            return std::nullopt;
+        auto left = constantInteger(binary->left);
+        auto right = constantInteger(binary->right);
+        if(!left || !right)
+            return std::nullopt;
+        __int128 result = 0;
+        switch(binary->op)
+        {
+        case BinaryOpNode::OP_PLUS:
+            result = static_cast<__int128>(*left) + *right;
+            break;
+        case BinaryOpNode::OP_MINUS:
+            result = static_cast<__int128>(*left) - *right;
+            break;
+        case BinaryOpNode::OP_MULTIPLY:
+            result = static_cast<__int128>(*left) * *right;
+            break;
+        case BinaryOpNode::OP_DIVIDE:
+            if(*right == 0 ||
+               (*left == std::numeric_limits<int64_t>::min() && *right == -1))
+                return std::nullopt;
+            return *left / *right;
+        case BinaryOpNode::OP_MODULO:
+            if(*right == 0 ||
+               (*left == std::numeric_limits<int64_t>::min() && *right == -1))
+                return std::nullopt;
+            return *left % *right;
+        default:
+            return std::nullopt;
+        }
+        if(result < std::numeric_limits<int64_t>::min() ||
+           result > std::numeric_limits<int64_t>::max())
+            return std::nullopt;
+        return static_cast<int64_t>(result);
+    };
+
     if(!expr)
         return "";
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
@@ -66,8 +125,8 @@ CodeGenerator::resolveBorrowPlaceFromLValue(ExpressionNode* expr) const
         const std::string base = resolveBorrowPlaceFromLValue(index->base);
         if(base.empty())
             return "";
-        if(auto* literal = dynamic_cast<IntLiteralNode*>(index->index))
-            return base + "[" + std::to_string(literal->value) + "]";
+        if(auto indexValue = constantInteger(index->index))
+            return base + "[" + std::to_string(*indexValue) + "]";
         // Unknown indices may alias any element. Keep the wildcard in the
         // path so fields beneath the element remain conservatively tracked.
         return base + "[*]";
