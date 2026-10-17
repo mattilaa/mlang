@@ -553,14 +553,6 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                 {
                     if(futureIdents.count(kv.first))
                         continue;
-                    // Shared struct pointers remain conservative until scope
-                    // exit. Mutable struct pointers can end at their last use,
-                    // like other tracked borrows.
-                    auto peit = pointerElementTypes.find(kv.first);
-                    if(peit != pointerElementTypes.end() && peit->second &&
-                       peit->second->kind == TypeNode::TYPE_STRUCT &&
-                       !isMutBorrower(kv.first))
-                        continue;
                     toClear.push_back(kv.first);
                 }
                 for(const auto& ptr : toClear)

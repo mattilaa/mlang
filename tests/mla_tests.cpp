@@ -4677,7 +4677,7 @@ TEST_F(MLATest, OwnershipTernaryMoveStillConsumesAfterMerge)
     EXPECT_NE(out.find("use of moved value"), std::string::npos);
 }
 
-TEST_F(MLATest, OwnershipCannotMoveWhileBorrowedByPointer)
+TEST_F(MLATest, OwnershipCanMoveAfterSharedPointerLastUse)
 {
     std::string code = R"(
         struct Post {
@@ -4691,12 +4691,7 @@ TEST_F(MLATest, OwnershipCannotMoveWhileBorrowedByPointer)
             return 0;
         }
     )";
-    writeSource(code);
-    int rc = 0;
-    std::string out = compileCapture(rc);
-    EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot move"), std::string::npos);
-    EXPECT_NE(out.find("while borrowed"), std::string::npos);
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
 TEST_F(MLATest, OwnershipCannotMoveWhileMutablyBorrowedByPointer)
@@ -4933,7 +4928,7 @@ TEST_F(MLATest, OwnershipCannotCreateSecondActiveBorrow)
             let a: Post = Post { content: [1] };
             var p: ptr<Post> = &a;
             var q: ptr<Post> = &a;
-            return 0;
+            unsafe { return (*p).content[0] + (*q).content[0]; }
         }
     )";
     writeSource(code);
@@ -5020,7 +5015,25 @@ TEST_F(MLATest, OwnershipMutableBorrowEndsBeforeOwnerMove)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-TEST_F(MLATest, OwnershipOuterPointerBorrowRestoredAfterShadowedPointerScope)
+TEST_F(MLATest, OwnershipSharedBorrowEndsAfterLastUseBeforeOwnerMove)
+{
+    std::string code = R"(
+        struct Post {
+            var content: list<i32>;
+        };
+
+        fn main() -> i32 {
+            let a: Post = Post { content: [1] };
+            let p: ptr<Post> = &a;
+            unsafe { println!("{}", (*p).content[0]); }
+            let moved: Post = a;
+            return moved.content[0] - 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, OwnershipOuterSharedPointerBorrowEndsAfterLastUse)
 {
     std::string code = R"(
         struct Post {
@@ -5038,12 +5051,7 @@ TEST_F(MLATest, OwnershipOuterPointerBorrowRestoredAfterShadowedPointerScope)
             return 0;
         }
     )";
-    writeSource(code);
-    int rc = 0;
-    std::string out = compileCapture(rc);
-    EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot move"), std::string::npos);
-    EXPECT_NE(out.find("while borrowed"), std::string::npos);
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
 TEST_F(MLATest, OwnershipLoopLocalPointerBorrowDoesNotLeakAfterLoop)
@@ -5113,7 +5121,7 @@ TEST_F(MLATest, OwnershipNonEmptyRangeLoopStillMovesOuterValue)
     EXPECT_NE(out.find("use of moved value"), std::string::npos);
 }
 
-TEST_F(MLATest, OwnershipOuterPointerBorrowSurvivesLoopLocalPointer)
+TEST_F(MLATest, OwnershipOuterSharedPointerBorrowEndsAfterLastUseAcrossLoop)
 {
     std::string code = R"(
         struct Post {
@@ -5131,12 +5139,7 @@ TEST_F(MLATest, OwnershipOuterPointerBorrowSurvivesLoopLocalPointer)
             return 0;
         }
     )";
-    writeSource(code);
-    int rc = 0;
-    std::string out = compileCapture(rc);
-    EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot move"), std::string::npos);
-    EXPECT_NE(out.find("while borrowed"), std::string::npos);
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
 TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocal)
@@ -6709,7 +6712,7 @@ TEST_F(MLATest, OwnershipCannotBorrowSameOwnerTwiceInSingleCall)
     EXPECT_NE(out.find("overlapping parts"), std::string::npos);
 }
 
-TEST_F(MLATest, OwnershipCannotBorrowCallArgWhenOwnerAlreadyBorrowed)
+TEST_F(MLATest, OwnershipCanBorrowCallArgAfterSharedPointerLastUse)
 {
     std::string code = R"(
         struct Post {
@@ -6726,11 +6729,7 @@ TEST_F(MLATest, OwnershipCannotBorrowCallArgWhenOwnerAlreadyBorrowed)
             return inspect(&p);
         }
     )";
-    writeSource(code);
-    int rc = 0;
-    std::string out = compileCapture(rc);
-    EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while already borrowed"), std::string::npos);
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
 TEST_F(MLATest, OwnershipCanBorrowDisjointFieldsInSingleCall)
@@ -7126,7 +7125,7 @@ TEST_F(MLATest, OwnershipCannotBorrowPointerVarAndAddressSameOwnerInCall)
     EXPECT_NE(out.find("cannot borrow 'p'"), std::string::npos);
 }
 
-TEST_F(MLATest, OwnershipCannotBorrowMutInCallWhenSharedBorrowActive)
+TEST_F(MLATest, OwnershipCanBorrowMutInCallAfterSharedPointerLastUse)
 {
     std::string code = R"(
         struct Post {
@@ -7143,16 +7142,10 @@ TEST_F(MLATest, OwnershipCannotBorrowMutInCallWhenSharedBorrowActive)
             return inspect_one(&mut p);
         }
     )";
-    writeSource(code);
-    int rc = 0;
-    std::string out = compileCapture(rc);
-    EXPECT_NE(rc, 0);
-    EXPECT_NE(
-        out.find("cannot borrow 'p' as mutable because it is already borrowed"),
-        std::string::npos);
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-TEST_F(MLATest, OwnershipCannotAssignFieldWhileOwnerBorrowed)
+TEST_F(MLATest, OwnershipCanAssignFieldAfterSharedPointerLastUse)
 {
     std::string code = R"(
         struct Box {
@@ -7166,11 +7159,7 @@ TEST_F(MLATest, OwnershipCannotAssignFieldWhileOwnerBorrowed)
             return b.value;
         }
     )";
-    writeSource(code);
-    int rc = 0;
-    std::string out = compileCapture(rc);
-    EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed"), std::string::npos);
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
 TEST_F(MLATest, OwnershipCanAssignFieldAfterBorrowScopeEnds)
