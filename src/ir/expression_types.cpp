@@ -590,6 +590,20 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
         return new TupleTypeNode(typeList);
     }
 
+    if(auto* tupleAccess = dynamic_cast<TupleAccessNode*>(expr))
+    {
+        TypeNode* tupleType = inferExpressionTypeNode(tupleAccess->tuple, line);
+        if(auto* tuple = dynamic_cast<TupleTypeNode*>(tupleType))
+        {
+            if(tuple->elementTypes && tupleAccess->index >= 0 &&
+               static_cast<size_t>(tupleAccess->index) <
+                   tuple->elementTypes->types.size())
+                return cloneTypeNode(
+                    tuple->elementTypes->types[tupleAccess->index]);
+        }
+        return nullptr;
+    }
+
     if(auto* listLit = dynamic_cast<ListLiteralNode*>(expr))
     {
         if(!listLit->elements || listLit->elements->elements.empty())

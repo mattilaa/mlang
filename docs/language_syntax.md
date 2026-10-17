@@ -1135,7 +1135,8 @@ When another argument determines a generic callback's input type, an
 unannotated closure can also infer a result from chained struct fields such as
 `item.point.x`, including fields whose types come from generic structs. Indexing
 a list or map, methods with known signatures (including user-defined methods
-on structs), and basic unary operators are also supported in inferred results.
+on structs), tuple projections such as `value.0`, and basic unary operators
+are also supported in inferred results.
 List and array-fill literals infer their element type from the closure
 parameters. Ternary expressions are supported when both branches have the same
 type, and `match` expressions when every arm has the same result type.

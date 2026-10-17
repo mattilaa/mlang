@@ -475,6 +475,19 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                     }
                 return new TupleTypeNode(elementTypes);
             }
+            if(auto* access = dynamic_cast<TupleAccessNode*>(expr))
+            {
+                TypeNode* tupleType = inferClosureExpr(access->tuple);
+                if(auto* tuple = dynamic_cast<TupleTypeNode*>(tupleType))
+                {
+                    if(tuple->elementTypes && access->index >= 0 &&
+                       static_cast<size_t>(access->index) <
+                           tuple->elementTypes->types.size())
+                        return cloneTypeNode(
+                            tuple->elementTypes->types[access->index]);
+                }
+                return nullptr;
+            }
             if(auto* list = dynamic_cast<ListLiteralNode*>(expr))
             {
                 if(!list->elements || list->elements->elements.empty())
@@ -4390,6 +4403,10 @@ llvm::Function* CodeGenerator::generateClosureFn(
                             dynamic_cast<MapTypeNode*>(parameter->type))
                     mapKeyValueTypes[parameter->name] = {
                         mapType->keyType, mapType->valueType};
+                else if(auto* tupleType =
+                            dynamic_cast<TupleTypeNode*>(parameter->type))
+                    tupleElementTypes[parameter->name] =
+                        tupleType->elementTypes->types;
             }
         }
     }

@@ -4565,6 +4565,21 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultFromArrayFill)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromTupleAccess)
+{
+    std::string code = R"(
+        generic<T, U> fn apply(mapper: fn(tuple<T, i64>) -> U,
+                               value: tuple<T, i64>) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let pair: tuple<i64, i64> = (8, 2);
+            return apply(|value| { return value.0; }, pair);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 8);
+}
+
 TEST_F(MLATest, GenericFunctionInfersClosureResultFromMatchExpression)
 {
     std::string code = R"(
