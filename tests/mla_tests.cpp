@@ -7930,6 +7930,47 @@ TEST_F(MLATest, ListPushTracksBorrowOrigin)
         << out;
 }
 
+TEST_F(MLATest, PointerExtractedFromListRetainsBorrowOrigin)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&value);
+            let pointer = pointers[0];
+            value = 9;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
+}
+
+TEST_F(MLATest, PointerExtractionRejectsAmbiguousAggregateOrigins)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&first);
+            pointers.push(&second);
+            let pointer = pointers[0];
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("aggregate with multiple borrow origins"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, StructFieldListPushTracksBorrowOrigin)
 {
     std::string code = R"(

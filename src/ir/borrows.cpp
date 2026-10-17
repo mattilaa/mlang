@@ -945,6 +945,28 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         }
     }
 
+    if(!dynamic_cast<IdentifierNode*>(expr) &&
+       !dynamic_cast<UnaryOpNode*>(expr))
+    {
+        const std::string container = resolveBorrowOwnerFromLValue(expr);
+        auto origins = aggregateBorrowOrigins.find(container);
+        if(origins != aggregateBorrowOrigins.end())
+        {
+            if(origins->second.size() != 1)
+            {
+                reportError(
+                    line,
+                    "cannot extract pointer from aggregate with multiple "
+                    "borrow origins; preserve the aggregate or narrow the "
+                    "source first");
+                return;
+            }
+            borrowPlace = *origins->second.begin();
+            (void)registerOwnerBorrow(borrowPlace, false);
+            return;
+        }
+    }
+
     auto* unary = dynamic_cast<UnaryOpNode*>(expr);
     if(!unary || (unary->op != UnaryOpNode::OP_ADDR &&
                   unary->op != UnaryOpNode::OP_ADDR_MUT))
