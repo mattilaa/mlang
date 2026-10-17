@@ -196,7 +196,8 @@ bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
     auto* parameter = function->parameters->parameters[parameterIndex];
     if(!parameter ||
        (!dynamic_cast<StructTypeRefNode*>(parameter->type) &&
-        !dynamic_cast<GenericStructTypeRefNode*>(parameter->type)))
+        !dynamic_cast<GenericStructTypeRefNode*>(parameter->type) &&
+        !dynamic_cast<GenericListTypeNode*>(parameter->type)))
         return false;
 
     const std::string parameterName = parameter->name;
@@ -221,6 +222,8 @@ bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
                 return field->object
                            ? isParameterFieldPath(field->object)
                            : field->structName == parameterName;
+            if(auto* index = dynamic_cast<IndexExpressionNode*>(expression))
+                return isParameterFieldPath(index->base);
             return false;
         };
     std::function<TypeNode*(ExpressionNode*)> parameterFieldType =
@@ -228,6 +231,12 @@ bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
             if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
                 return identifier->name == parameterName ? parameter->type
                                                           : nullptr;
+            if(auto* index = dynamic_cast<IndexExpressionNode*>(expression))
+            {
+                auto* listType = dynamic_cast<GenericListTypeNode*>(
+                    parameterFieldType(index->base));
+                return listType ? listType->elementType : nullptr;
+            }
             auto* field = dynamic_cast<FieldAccessNode*>(expression);
             if(!field)
                 return nullptr;
@@ -2319,8 +2328,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 bool hasMatchingVisibleOverload = false;
                 bool everyMatchingOverloadIsSafe = true;
                 auto overloads = functionOverloads.find(node->name);
-                if(argumentType && argumentType->kind == TypeNode::TYPE_STRUCT &&
-                   !containsExclusiveBorrow(argument) &&
+                if(argumentType && !containsExclusiveBorrow(argument) &&
                    overloads != functionOverloads.end())
                 {
                     for(const auto& overload : overloads->second)

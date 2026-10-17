@@ -11005,6 +11005,48 @@ TEST_F(MLATest, OwnershipAggregateArgumentReturnedPointerKeepsBorrowLive)
         << out;
 }
 
+// A list borrow may be passed to a helper that only dereferences it to read.
+TEST_F(MLATest, ReadOnlyListBorrowCanPassThroughScalarReader)
+{
+    std::string code = R"(
+        fn read_first(pointers: list<ptr<i32>>) -> i32 {
+            unsafe { return *pointers[0]; }
+        }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let pointers: list<ptr<i32>> = [&value];
+            let snapshot = read_first(pointers);
+            value = 9;
+            return snapshot + value - 16;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A list containing a borrow cannot be passed to a helper that mutates it.
+TEST_F(MLATest, BorrowingListArgumentRejectsMutatingCallee)
+{
+    std::string code = R"(
+        fn append(pointers: list<ptr<i32>>, extra: ptr<i32>) -> i32 {
+            pointers.push(extra);
+            return 0;
+        }
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var extra: i32 = 8;
+            let pointers: list<ptr<i32>> = [&value];
+            return append(pointers, &extra);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass aggregate 'pointers' containing a borrow"),
+              std::string::npos)
+        << out;
+}
+
 // Pointer provenance must propagate through multiple visible forwarding calls.
 TEST_F(MLATest, OwnershipNestedFunctionReturnedPointerKeepsBorrowLive)
 {
