@@ -9414,6 +9414,35 @@ TEST_F(MLATest, OwnershipCannotReturnTernaryPointerBorrowingLocal)
         << out;
 }
 
+// A branch-merged pointer cannot escape if any reachable arm borrows locally.
+TEST_F(MLATest, OwnershipCannotReturnBranchMergedPointerBorrowingLocal)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+        fn choose(flag: bool) -> ptr<i32> {
+            var local_value: i32 = 7;
+            var pointer: ptr<i32> = &global_value;
+            if flag {
+                pointer = &global_value;
+            } else {
+                pointer = &local_value;
+            }
+            return pointer;
+        }
+        fn main() -> i32 {
+            let pointer: ptr<i32> = choose(false);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
+              std::string::npos)
+        << out;
+}
+
 // Returning a match-produced pointer must reject a local borrow in any arm.
 TEST_F(MLATest, OwnershipCannotReturnMatchPointerBorrowingLocal)
 {
