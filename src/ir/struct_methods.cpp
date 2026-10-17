@@ -2348,9 +2348,76 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     {
         std::set<std::string> wholeOwnersInCall;
         std::map<std::string, std::set<std::string>> subpathsInCall;
+        std::set<std::string> sharedWholeOwnersInCall;
+        std::map<std::string, std::set<std::string>> sharedSubpathsInCall;
         std::set<std::string> movedOwnersInCall;
         if(!implicitWholeOwner.empty())
-            wholeOwnersInCall.insert(implicitWholeOwner);
+        {
+            if(implicitReceiverShared)
+                sharedWholeOwnersInCall.insert(implicitWholeOwner);
+            else
+                wholeOwnersInCall.insert(implicitWholeOwner);
+        }
+        auto pathsOverlap = [](const std::string& lhs,
+                               const std::string& rhs) {
+            return lhs == rhs ||
+                   (lhs.size() > rhs.size() &&
+                    lhs.compare(0, rhs.size(), rhs) == 0 &&
+                    lhs[rhs.size()] == '.') ||
+                   (rhs.size() > lhs.size() &&
+                    rhs.compare(0, lhs.size(), lhs) == 0 &&
+                    rhs[lhs.size()] == '.');
+        };
+        auto registerBorrowInCall =
+            [&](const std::string& owner, const std::string& path,
+                bool isWholeOwner, bool isShared) -> bool {
+            auto overlapsPaths = [&](const auto& pathMap) {
+                auto it = pathMap.find(owner);
+                if(it == pathMap.end())
+                    return false;
+                return std::any_of(it->second.begin(), it->second.end(),
+                                   [&](const auto& existing) {
+                                       return pathsOverlap(path, existing);
+                                   });
+            };
+            auto failOverlap = [&]() {
+                reportError(node->line,
+                            "cannot borrow overlapping parts of '" + owner +
+                                "' in call to '" + calleeName + "'");
+                return false;
+            };
+
+            if(isShared)
+            {
+                if(wholeOwnersInCall.count(owner) ||
+                   subpathsInCall.count(owner))
+                    return failOverlap();
+                if(isWholeOwner)
+                    sharedWholeOwnersInCall.insert(owner);
+                else
+                    sharedSubpathsInCall[owner].insert(path);
+                return true;
+            }
+
+            if(isWholeOwner)
+            {
+                if(wholeOwnersInCall.count(owner) ||
+                   sharedWholeOwnersInCall.count(owner) ||
+                   subpathsInCall.count(owner) ||
+                   sharedSubpathsInCall.count(owner))
+                    return failOverlap();
+                wholeOwnersInCall.insert(owner);
+                return true;
+            }
+
+            if(wholeOwnersInCall.count(owner) ||
+               sharedWholeOwnersInCall.count(owner) ||
+               overlapsPaths(subpathsInCall) ||
+               overlapsPaths(sharedSubpathsInCall))
+                return failOverlap();
+            subpathsInCall[owner].insert(path);
+            return true;
+        };
         auto describeBorrowPath =
             [&](ExpressionNode* expr, std::string& ownerOut,
                 std::string& pathOut, bool& isWholeOwnerOut) -> bool
@@ -2501,79 +2568,6 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 sharedReferenceArgs[argIndex];
             collectMovedOwners(arg, false);
 
-            auto registerBorrowInCall = [&](const std::string& owner,
-                                            const std::string& path,
-                                            bool isWholeOwner) -> bool
-            {
-                if(isWholeOwner)
-                {
-                    // A shared receiver and an explicitly shared reference
-                    // argument may safely observe the same object during one
-                    // call. Keep raw pointers and mutable references on the
-                    // existing exclusive path.
-                    if(implicitReceiverShared && sharedReferenceArg &&
-                       owner == implicitWholeOwner)
-                        return true;
-                    if(wholeOwnersInCall.count(owner) ||
-                       (subpathsInCall.count(owner) &&
-                        !subpathsInCall[owner].empty()))
-                    {
-                        reportError(node->line,
-                                    "cannot borrow overlapping parts of '" +
-                                        owner + "' in call to '" + calleeName +
-                                        "'");
-                        return false;
-                    }
-                    wholeOwnersInCall.insert(owner);
-                    return true;
-                }
-
-                if(wholeOwnersInCall.count(owner))
-                {
-                    if(implicitReceiverShared && sharedReferenceArg &&
-                       owner == implicitWholeOwner)
-                        return true;
-                    reportError(node->line,
-                                "cannot borrow overlapping parts of '" + owner +
-                                    "' in call to '" + calleeName + "'");
-                    return false;
-                }
-                auto& paths = subpathsInCall[owner];
-                bool overlaps = false;
-                for(const auto& existing : paths)
-                {
-                    if(existing == path)
-                    {
-                        overlaps = true;
-                        break;
-                    }
-                    if(path.size() > existing.size() &&
-                       path.compare(0, existing.size(), existing) == 0 &&
-                       path[existing.size()] == '.')
-                    {
-                        overlaps = true;
-                        break;
-                    }
-                    if(existing.size() > path.size() &&
-                       existing.compare(0, path.size(), path) == 0 &&
-                       existing[path.size()] == '.')
-                    {
-                        overlaps = true;
-                        break;
-                    }
-                }
-                if(overlaps)
-                {
-                    reportError(node->line,
-                                "cannot borrow '" + owner + "." + path +
-                                    "' multiple times in call to '" +
-                                    calleeName + "'");
-                    return false;
-                }
-                paths.insert(path);
-                return true;
-            };
-
             if(auto* idArg = dynamic_cast<IdentifierNode*>(arg))
             {
                 auto pit = pointerBorrowTarget.find(idArg->name);
@@ -2589,7 +2583,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     {
                         continue;
                     }
-                    if(!registerBorrowInCall(pit->second, "", true))
+                    if(!registerBorrowInCall(pit->second, "", true, false))
                         return false;
                     continue;
                 }
@@ -2659,14 +2653,18 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 }
             }
 
-            if(!registerBorrowInCall(owner, path, isWholeOwner))
+            if(!registerBorrowInCall(owner, path, isWholeOwner,
+                                     sharedReferenceArg))
                 return false;
         }
 
         for(const auto& movedOwner : movedOwnersInCall)
         {
             if(wholeOwnersInCall.count(movedOwner) ||
-               subpathsInCall.find(movedOwner) != subpathsInCall.end())
+               subpathsInCall.find(movedOwner) != subpathsInCall.end() ||
+               sharedWholeOwnersInCall.count(movedOwner) ||
+               sharedSubpathsInCall.find(movedOwner) !=
+                   sharedSubpathsInCall.end())
             {
                 reportError(node->line, "cannot move '" + movedOwner +
                                             "' while borrowed in call to '" +

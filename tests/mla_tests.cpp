@@ -5946,6 +5946,45 @@ TEST_F(MLATest, OwnershipCanPassAlreadySharedFieldToSharedMethod)
     EXPECT_EQ(compileAndRunExitCode(code), 8);
 }
 
+TEST_F(MLATest, MethodAllowsAliasedImmutableReferenceArguments)
+{
+    std::string code = R"(
+        struct Counter { var value: i32; };
+        impl Counter {
+            fn sum(&self, left: &i32, right: &i32) -> i32 {
+                return left + right;
+            }
+        }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 6 };
+            return counter.sum(&counter.value, &counter.value);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 12);
+}
+
+TEST_F(MLATest, MethodRejectsAliasedSharedAndMutableReferenceArguments)
+{
+    std::string code = R"(
+        struct Counter { var value: i32; };
+        impl Counter {
+            fn update(&self, read: &i32, write: &mut i32) -> void {
+                write = read;
+            }
+        }
+        fn main() -> i32 {
+            var counter: Counter = Counter { value: 6 };
+            counter.update(&counter.value, &mut counter.value);
+            return counter.value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("overlapping parts"), std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipCanBorrowMethodReceiverAndArgFromDifferentObject)
 {
     std::string code = R"(
