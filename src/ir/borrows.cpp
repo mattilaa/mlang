@@ -321,6 +321,13 @@ bool CodeGenerator::validateBorrowRead(ExpressionNode* expr, int line)
     if(owner.empty() || place.empty())
         return true;
 
+    for(const auto& movedPlace : movedVariables)
+        if(borrowPlacesOverlap(place, movedPlace))
+        {
+            reportError(line, "use of moved value: '" + movedPlace + "'");
+            return false;
+        }
+
     std::function<bool(ExpressionNode*, const std::string&)> accessedThrough =
         [&](ExpressionNode* current, const std::string& pointer) -> bool {
         if(auto* unary = dynamic_cast<UnaryOpNode*>(current))

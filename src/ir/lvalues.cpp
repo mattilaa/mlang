@@ -821,6 +821,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         consumeMoveFromExpression(node->expression, node->line,
                                   "assigning tuple element");
         builder.CreateStore(applyStructCopySemantics(value), targetPtr);
+        clearMovedVariable(targetPlace);
         retainAggregateStoreOrigins(owner);
         return;
     }
@@ -1304,6 +1305,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
     storeStructFieldValue(structTypeName, structPtr, fieldIndex, fieldType,
                           value, fieldName, node->line);
+    clearMovedVariable(targetPlace);
     retainAggregateStoreOrigins(ownerName);
 }
 

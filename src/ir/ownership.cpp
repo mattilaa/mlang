@@ -217,7 +217,17 @@ bool CodeGenerator::validateVariableAccessible(const std::string& name,
 
 void CodeGenerator::clearMovedVariable(const std::string& name)
 {
-    movedVariables.erase(name);
+    for(auto moved = movedVariables.begin(); moved != movedVariables.end();)
+    {
+        const bool isDescendant =
+            moved->size() > name.size() &&
+            moved->compare(0, name.size(), name) == 0 &&
+            (moved->at(name.size()) == '.' || moved->at(name.size()) == '[');
+        if(*moved == name || isDescendant)
+            moved = movedVariables.erase(moved);
+        else
+            ++moved;
+    }
 }
 
 void CodeGenerator::clearPointerBorrow(const std::string& pointerVar)

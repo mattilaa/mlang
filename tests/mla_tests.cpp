@@ -8803,6 +8803,98 @@ TEST_F(MLATest, OwnershipCannotMoveFieldWhileItIsBorrowed)
     EXPECT_NE(out.find("cannot move"), std::string::npos);
 }
 
+// Moving a non-Copy field makes that field unavailable until it is replaced.
+TEST_F(MLATest, OwnershipRejectsUseAfterMovingStructField)
+{
+    std::string code = R"(
+        struct Holder {
+            var items: list<i32>;
+            var marker: i32;
+        };
+
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var holder: Holder = Holder { items: [1, 2], marker: 3 };
+            let moved = consume(holder.items);
+            return consume(holder.items) + moved;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("use of moved value: 'holder.items'"),
+              std::string::npos)
+        << out;
+}
+
+// A partial move leaves disjoint fields usable and permits field reinitialization.
+TEST_F(MLATest, OwnershipPartialStructMoveAllowsSiblingAndReinitialization)
+{
+    std::string code = R"(
+        struct Holder {
+            var items: list<i32>;
+            var spare: list<i32>;
+        };
+
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var holder: Holder = Holder { items: [1, 2], spare: [3, 4, 5] };
+            let moved = consume(holder.items);
+            let sibling = consume(holder.spare);
+            holder.items = [6, 7, 8, 9];
+            return consume(holder.items) + moved + sibling - 9;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A whole aggregate read is rejected if any non-Copy field was moved out.
+TEST_F(MLATest, OwnershipRejectsWholeAggregateReadAfterPartialMove)
+{
+    std::string code = R"(
+        struct Holder {
+            var items: list<i32>;
+            var marker: i32;
+        };
+
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var holder: Holder = Holder { items: [1, 2], marker: 3 };
+            let moved = consume(holder.items);
+            let copy = holder;
+            return moved + copy.marker;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("use of moved value: 'holder.items'"),
+              std::string::npos)
+        << out;
+}
+
+// Tuple partial moves preserve sibling access and allow replacing the element.
+TEST_F(MLATest, OwnershipTuplePartialMoveAllowsSiblingAndReinitialization)
+{
+    std::string code = R"(
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var pair: tuple<list<i32>, list<i32>> = ([1, 2], [3]);
+            let moved = consume(pair.0);
+            let sibling = consume(pair.1);
+            pair.0 = [4, 5, 6];
+            return consume(pair.0) + moved + sibling - 6;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, OwnershipCanMoveDisjointFieldWhileSiblingIsBorrowed)
 {
     std::string code = R"(
