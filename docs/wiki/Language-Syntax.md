@@ -1143,7 +1143,7 @@ a list or map, methods with known signatures (including user-defined methods
 on structs), and basic unary operators are also supported in inferred results.
 List and array-fill literals infer their element type from the closure
 parameters. Ternary expressions are supported when both branches have the same
-type.
+type, and `match` expressions when every arm has the same result type.
 The inferred result may also be returned through a local binding inside the
 closure body, including one declared in a nested block (for example,
 `let result = value * value; return result;`).

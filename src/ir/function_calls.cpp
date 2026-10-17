@@ -568,6 +568,25 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                     return nullptr;
                 return trueType ? trueType : falseType;
             }
+            if(auto* match = dynamic_cast<MatchExpressionNode*>(expr))
+            {
+                TypeNode* resultType = nullptr;
+                if(match->arms.empty())
+                    return nullptr;
+                for(auto* arm : match->arms)
+                {
+                    if(!arm || !arm->expression)
+                        return nullptr;
+                    TypeNode* armType = inferClosureExpr(arm->expression);
+                    if(!armType ||
+                       (resultType && typeMangle(resultType) !=
+                                          typeMangle(armType)))
+                        return nullptr;
+                    if(!resultType)
+                        resultType = armType;
+                }
+                return resultType;
+            }
             if(auto* binary = dynamic_cast<BinaryOpNode*>(expr))
             {
                 switch(binary->op)

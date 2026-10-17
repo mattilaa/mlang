@@ -4565,6 +4565,43 @@ TEST_F(MLATest, GenericFunctionInfersClosureResultFromArrayFill)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, GenericFunctionInfersClosureResultFromMatchExpression)
+{
+    std::string code = R"(
+        generic<T, U> fn apply(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            return apply(|value| {
+                return match value {
+                    0 => 21,
+                    _ => value + 1
+                };
+            }, 8);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
+TEST_F(MLATest, GenericFunctionRejectsInconsistentClosureMatchResults)
+{
+    std::string code = R"(
+        generic<T, U> fn apply(mapper: fn(T) -> U, value: T) -> U {
+            return mapper(value);
+        }
+        fn main() -> i32 {
+            let invalid = apply(|value| {
+                return match value {
+                    0 => 21,
+                    _ => true
+                };
+            }, 8);
+            return 0;
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, GenericFunctionInfersClosureResultFromNestedFields)
 {
     std::string code = R"(

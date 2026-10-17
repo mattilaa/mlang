@@ -555,6 +555,25 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
         return inferExpressionTypeNode(ternary->falseExpr, line);
     }
 
+    if(auto* matchExpr = dynamic_cast<MatchExpressionNode*>(expr))
+    {
+        TypeNode* resultType = nullptr;
+        if(matchExpr->arms.empty())
+            return nullptr;
+        for(auto* arm : matchExpr->arms)
+        {
+            if(!arm || !arm->expression)
+                return nullptr;
+            TypeNode* armType = inferExpressionTypeNode(arm->expression, line);
+            if(!armType ||
+               (resultType && typeMangle(resultType) != typeMangle(armType)))
+                return nullptr;
+            if(!resultType)
+                resultType = armType;
+        }
+        return resultType;
+    }
+
     if(auto* tupleLit = dynamic_cast<TupleLiteralNode*>(expr))
     {
         auto* typeList = new TypeListNode();
