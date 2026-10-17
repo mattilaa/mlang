@@ -4365,6 +4365,44 @@ TEST_F(MLATest, RuntimeClosureRejectsSharedAndMutableAliasing)
     EXPECT_NE(out.find("cannot borrow"), std::string::npos);
 }
 
+TEST_F(MLATest, RuntimeClosureRespectsExistingSharedBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 1;
+            let held = &value;
+            let update: fn(&mut i32) -> void = |item| { item = 9; };
+            update(&mut value);
+            unsafe { return *held; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow 'value' as mutable"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, RuntimeClosureRespectsExistingMutableBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 1;
+            let held = &mut value;
+            let read: fn(&i32) -> i32 = |item| { return item; };
+            let result: i32 = read(&value);
+            unsafe { return *held + result; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow 'value' as immutable"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, RuntimeClosureRequiresExplicitMutableReferenceArgument)
 {
     std::string code = R"(
