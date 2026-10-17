@@ -5699,6 +5699,29 @@ TEST_F(MLATest, MutableSlotCannotUpgradeStoredSharedPointer)
               std::string::npos) << out;
 }
 
+// Keeps a stored shared pointer read-only through an indirect slot after its
+// last direct use.
+TEST_F(MLATest, MutableSlotCannotUpgradeStoredSharedPointerAfterLastDirectUse)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var pointer: ptr<i32> = &first;
+            var slot: ptr<ptr<i32>> = &pointer;
+            let mutable_slot: ptr<ptr<ptr<i32>>> = &mut slot;
+            unsafe { *(*mutable_slot) = &mut second; }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
 // Verifies that a shared borrow remains read-only when stored in an aggregate.
 TEST_F(MLATest, SharedBorrowCannotWriteThroughAggregatePointerField)
 {

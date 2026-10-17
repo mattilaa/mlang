@@ -279,6 +279,17 @@ void CodeGenerator::clearMovedVariable(const std::string& name)
 
 void CodeGenerator::clearPointerBorrow(const std::string& pointerVar)
 {
+    // A pointer's value can itself be stored in a borrowed pointer slot. Its
+    // last direct use does not end the borrow while that slot is still live:
+    // indirect reads/writes must retain the pointer's original provenance.
+    for(const auto& borrow : pointerBorrowTarget)
+        if(borrow.first != pointerVar && borrow.second == pointerVar)
+            return;
+
+    auto borrowedOwner = pointerBorrowTarget.find(pointerVar);
+    const std::string owner = borrowedOwner == pointerBorrowTarget.end()
+                                  ? std::string{}
+                                  : borrowedOwner->second;
     for(auto it = activeBorrowers.begin(); it != activeBorrowers.end();)
     {
         it->second.erase(pointerVar);
@@ -319,6 +330,21 @@ void CodeGenerator::clearPointerBorrow(const std::string& pointerVar)
     pointerBorrowTarget.erase(pointerVar);
     pointerBorrowPlace.erase(pointerVar);
     pointerBorrowParent.erase(pointerVar);
+
+    // If this pointer was the final borrow of another pointer variable's
+    // storage, that variable may have reached its last direct use earlier and
+    // had its cleanup deferred above. Finish that cleanup now.
+    if(!owner.empty() && owner != pointerVar &&
+       pointerBorrowTarget.find(owner) != pointerBorrowTarget.end())
+    {
+        const bool stillBorrowed = std::any_of(
+            pointerBorrowTarget.begin(), pointerBorrowTarget.end(),
+            [&](const auto& borrow) {
+                return borrow.first != owner && borrow.second == owner;
+            });
+        if(!stillBorrowed)
+            clearPointerBorrow(owner);
+    }
 }
 
 bool CodeGenerator::isMutBorrower(const std::string& ptrVar) const
