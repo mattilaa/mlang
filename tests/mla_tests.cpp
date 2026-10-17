@@ -7952,6 +7952,47 @@ TEST_F(MLATest, StructFieldListPushTracksBorrowOrigin)
         << out;
 }
 
+TEST_F(MLATest, ListExtendTracksBorrowOrigins)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let source: list<ptr<i32>> = [&value];
+            var pointers: list<ptr<i32>> = [];
+            pointers.extend(source);
+            value = 9;
+            let pointer = pointers[0];
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'pointers'"), std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, FixedArrayFillTracksBorrowOrigin)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointers: array<ptr<i32>, 1> = {null};
+            pointers.fill(&value);
+            value = 9;
+            let pointer = pointers[0];
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'pointers'"), std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, OwnershipCannotStoreBorrowingAggregateInGlobal)
 {
     std::string code = R"(

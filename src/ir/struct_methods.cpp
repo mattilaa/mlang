@@ -3936,6 +3936,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         builder.CreateCall(
                             fn, {allocaPtr2, val2, arrayCapacity2});
                         updateKnownArrayLength2(arrayCapIt2->second);
+                        retainInsertedAggregateBorrow(node->arguments[0]);
                         return successfulVoidExpression(context);
                     }
                     if(elemIsI64)
@@ -3951,6 +3952,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         builder.CreateCall(
                             fn, {allocaPtr2, val2, arrayCapacity2});
                         updateKnownArrayLength2(arrayCapIt2->second);
+                        retainInsertedAggregateBorrow(node->arguments[0]);
                         return successfulVoidExpression(context);
                     }
                     if(elemKind2 == TypeNode::TYPE_INT ||
@@ -3973,6 +3975,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         builder.CreateCall(
                             fn, {allocaPtr2, val2, arrayCapacity2});
                         updateKnownArrayLength2(arrayCapIt2->second);
+                        retainInsertedAggregateBorrow(node->arguments[0]);
                         return successfulVoidExpression(context);
                     }
 
@@ -4006,6 +4009,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                        {allocaPtr2, elemPtrAsOpaque, elemSize,
                                         arrayCapacity2});
                     updateKnownArrayLength2(arrayCapIt2->second);
+                    retainInsertedAggregateBorrow(node->arguments[0]);
                     return successfulVoidExpression(context);
                 }
                 // --- push(val) ---
@@ -4291,6 +4295,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             else
                                 updateKnownArrayLength2(std::nullopt);
                         }
+                        retainInsertedAggregateBorrow(node->arguments[0]);
                         return successfulVoidExpression(context);
                     }
                     llvm::FunctionType* ft = llvm::FunctionType::get(
@@ -4318,6 +4323,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         else
                             updateKnownArrayLength2(std::nullopt);
                     }
+                    retainInsertedAggregateBorrow(node->arguments[0]);
                     return successfulVoidExpression(context);
                 }
                 // --- pop() ---
@@ -5048,6 +5054,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee fn = module->getOrInsertFunction(
                         "__mlang_std_array_fill_str", ft);
                     builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
+                    retainInsertedAggregateBorrow(node->arguments[0]);
                     return successfulVoidExpression(context);
                 }
                 if(elemIsI64)
@@ -5059,6 +5066,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee fn = module->getOrInsertFunction(
                         "__mlang_std_array_fill_i64", ft);
                     builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
+                    retainInsertedAggregateBorrow(node->arguments[0]);
                     return successfulVoidExpression(context);
                 }
                 if(elemIsI32Like)
@@ -5070,6 +5078,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee fn = module->getOrInsertFunction(
                         "__mlang_std_array_fill_i32", ft);
                     builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
+                    retainInsertedAggregateBorrow(node->arguments[0]);
                     return successfulVoidExpression(context);
                 }
 
@@ -5101,6 +5110,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 builder.CreateCall(fnRaw,
                                    {recvPtr, elemPtrAsOpaque, elemSize,
                                     arrayCapacity});
+                retainInsertedAggregateBorrow(node->arguments[0]);
                 return successfulVoidExpression(context);
             }
             if(node->methodName == "push")
@@ -5355,6 +5365,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                             arrayCapacity});
                     else
                         builder.CreateCall(fnRaw, {recvPtr, srcPtr, elemSize});
+                    retainInsertedAggregateBorrow(node->arguments[0]);
                     return successfulVoidExpression(context);
                 }
                 llvm::FunctionType* ft = llvm::FunctionType::get(
@@ -5371,6 +5382,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     builder.CreateCall(fn, {recvPtr, srcPtr, arrayCapacity});
                 else
                     builder.CreateCall(fn, {recvPtr, srcPtr});
+                retainInsertedAggregateBorrow(node->arguments[0]);
                 return successfulVoidExpression(context);
             }
             if(node->methodName == "first")
