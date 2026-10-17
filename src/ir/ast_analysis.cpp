@@ -30,9 +30,32 @@ void collect_used_idents(ASTNode* node, std::set<std::string>& out)
         collect_used_idents(tern->falseExpr, out);
         return;
     }
+    if(auto* match = dynamic_cast<MatchExpressionNode*>(node))
+    {
+        collect_used_idents(match->target, out);
+        for(auto* arm : match->arms)
+        {
+            if(!arm)
+                continue;
+            if(arm->pattern)
+                collect_used_idents(arm->pattern->literal, out);
+            collect_used_idents(arm->expression, out);
+        }
+        return;
+    }
     if(auto* call = dynamic_cast<FunctionCallNode*>(node))
     {
+        // The callee may be a local callable value (for example a closure),
+        // not just a globally named function.
+        out.insert(call->name);
         for(auto* arg : call->arguments)
+            collect_used_idents(arg, out);
+        return;
+    }
+    if(auto* invoke = dynamic_cast<CallableInvokeNode*>(node))
+    {
+        collect_used_idents(invoke->callable, out);
+        for(auto* arg : invoke->arguments)
             collect_used_idents(arg, out);
         return;
     }

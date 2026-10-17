@@ -7173,7 +7173,32 @@ TEST_F(MLATest, OwnershipCanAssignFieldAfterSharedPointerLastUse)
             return b.value;
         }
     )";
-    EXPECT_EQ(compileAndRunExitCode(code), 0);
+    EXPECT_EQ(compileAndRunExitCode(code), 2);
+}
+
+TEST_F(MLATest, OwnershipKeepsBorrowLiveForMatchExpressionUse)
+{
+    std::string code = R"(
+        struct Box {
+            var value: i32;
+        };
+
+        fn main() -> i32 {
+            var box: Box = Box { value: 1 };
+            let p: ptr<Box> = &box;
+            box.value = 2;
+            let matched: i32 = match (*p).value {
+                1 => 10,
+                _ => 20
+            };
+            return matched;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos);
 }
 
 TEST_F(MLATest, OwnershipCanAssignFieldAfterBorrowScopeEnds)
