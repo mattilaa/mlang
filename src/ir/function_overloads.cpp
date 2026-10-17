@@ -125,6 +125,23 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 path = identifier->name;
                 return true;
             }
+            if(auto* index = dynamic_cast<IndexExpressionNode*>(current))
+            {
+                if(!getFieldPath(index->base, path))
+                    return false;
+                int64_t constantIndex = 0;
+                if(!evaluateCompileTimeInt(index->index, constantIndex))
+                    return false;
+                path += "[" + std::to_string(constantIndex) + "]";
+                return true;
+            }
+            if(auto* tuple = dynamic_cast<TupleAccessNode*>(current))
+            {
+                if(!getFieldPath(tuple->tuple, path))
+                    return false;
+                path += "." + std::to_string(tuple->index);
+                return true;
+            }
             auto* field = dynamic_cast<FieldAccessNode*>(current);
             if(!field)
                 return false;
@@ -152,15 +169,19 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                            ? std::set<size_t>{}
                            : alias->second;
             }
-            if(auto* field = dynamic_cast<FieldAccessNode*>(expression))
+            if(dynamic_cast<FieldAccessNode*>(expression) ||
+               dynamic_cast<IndexExpressionNode*>(expression) ||
+               dynamic_cast<TupleAccessNode*>(expression))
             {
                 std::string path;
-                if(getFieldPath(field, path))
+                if(getFieldPath(expression, path))
                 {
                     auto alias = pointerFieldAliases.find(path);
                     if(alias != pointerFieldAliases.end())
                         return alias->second;
                 }
+                // Untracked aggregate paths, including dynamic indexes, may
+                // carry any pointer argument and must stay conservative.
                 hasUnknownReturnOrigin = true;
                 return {};
             }
@@ -222,15 +243,6 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     hasUnknownReturnOrigin = true;
                 return arguments;
             }
-            if(dynamic_cast<IndexExpressionNode*>(expression) ||
-               dynamic_cast<TupleAccessNode*>(expression))
-            {
-                // A pointer loaded from aggregate storage is not yet tracked
-                // by parameter path. Preserve safety at callers by making the
-                // summary incomplete rather than claiming no borrow origin.
-                hasUnknownReturnOrigin = true;
-                return {};
-            }
             if(auto* address = dynamic_cast<UnaryOpNode*>(expression))
             {
                 if((address->op == UnaryOpNode::OP_ADDR ||
@@ -248,12 +260,18 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             return {};
         };
 
+        auto isPointerFieldAliasWithin = [](const std::string& path,
+                                            const std::string& candidate) {
+            return candidate.size() > path.size() &&
+                   candidate.compare(0, path.size(), path) == 0 &&
+                   (candidate[path.size()] == '.' ||
+                    candidate[path.size()] == '[');
+        };
         auto clearPointerFieldAliasSubtree = [&](const std::string& path) {
-            const std::string prefix = path + ".";
             for(auto alias = pointerFieldAliases.begin();
                 alias != pointerFieldAliases.end();)
                 if(alias->first == path ||
-                   alias->first.compare(0, prefix.size(), prefix) == 0)
+                   isPointerFieldAliasWithin(path, alias->first))
                     alias = pointerFieldAliases.erase(alias);
                 else
                     ++alias;
@@ -261,15 +279,11 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
         auto copyPointerFieldAliases = [&](const std::string& source,
                                            const std::string& destination,
                                            auto& output) {
-            const std::string sourcePrefix = source + ".";
-            const std::string destinationPrefix = destination + ".";
             bool copiedAny = false;
             for(const auto& alias : pointerFieldAliases)
-                if(alias.first.compare(0, sourcePrefix.size(),
-                                       sourcePrefix) == 0)
+                if(isPointerFieldAliasWithin(source, alias.first))
                 {
-                    output[destinationPrefix +
-                           alias.first.substr(sourcePrefix.size())] =
+                    output[destination + alias.first.substr(source.size())] =
                         alias.second;
                     copiedAny = true;
                 }
@@ -287,6 +301,28 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                             collectPointerFieldAliases(
                                 path + "." + field.first, field.second,
                                 output);
+                        return;
+                    }
+                    if(auto* literal =
+                           dynamic_cast<ListLiteralNode*>(expression))
+                    {
+                        if(literal->elements)
+                            for(size_t i = 0;
+                                i < literal->elements->elements.size(); ++i)
+                                collectPointerFieldAliases(
+                                    path + "[" + std::to_string(i) + "]",
+                                    literal->elements->elements[i], output);
+                        return;
+                    }
+                    if(auto* literal =
+                           dynamic_cast<TupleLiteralNode*>(expression))
+                    {
+                        if(literal->elements)
+                            for(size_t i = 0;
+                                i < literal->elements->elements.size(); ++i)
+                                collectPointerFieldAliases(
+                                    path + "." + std::to_string(i),
+                                    literal->elements->elements[i], output);
                         return;
                     }
                     std::string sourcePath;
@@ -308,16 +344,17 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             pointerFieldAliases.insert(replacement.begin(), replacement.end());
         };
         auto hasPointerFieldAliases = [&](const std::string& path) {
-            const std::string prefix = path + ".";
             return std::any_of(
                 pointerFieldAliases.begin(), pointerFieldAliases.end(),
                 [&](const auto& alias) {
-                    return alias.first.compare(0, prefix.size(), prefix) == 0;
+                    return isPointerFieldAliasWithin(path, alias.first);
                 });
         };
         auto shouldTrackAggregateAliases = [&](const std::string& path,
                                                ExpressionNode* expression) {
             if(dynamic_cast<StructLiteralNode*>(expression) ||
+               dynamic_cast<ListLiteralNode*>(expression) ||
+               dynamic_cast<TupleLiteralNode*>(expression) ||
                hasPointerFieldAliases(path))
                 return true;
             std::string sourcePath;
@@ -355,10 +392,9 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     aliasesNotPreviouslyPresent.insert(name);
                 else
                     previousAliases.emplace(name, previous->second);
-                const std::string prefix = name + ".";
                 auto& saved = previousFieldAliases[name];
                 for(const auto& fieldAlias : pointerFieldAliases)
-                    if(fieldAlias.first.compare(0, prefix.size(), prefix) == 0)
+                    if(isPointerFieldAliasWithin(name, fieldAlias.first))
                         saved.insert(fieldAlias);
             };
             bool fallsThrough = true;
@@ -369,10 +405,10 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
                 {
                     rememberShadow(declaration->name);
-                    const std::string prefix = declaration->name + ".";
                     for(auto alias = pointerFieldAliases.begin();
                         alias != pointerFieldAliases.end();)
-                        if(alias->first.compare(0, prefix.size(), prefix) == 0)
+                        if(isPointerFieldAliasWithin(declaration->name,
+                                                     alias->first))
                             alias = pointerFieldAliases.erase(alias);
                         else
                             ++alias;
@@ -381,10 +417,10 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                             dynamic_cast<VarDeclNode*>(statement))
                 {
                     rememberShadow(declaration->name);
-                    const std::string prefix = declaration->name + ".";
                     for(auto alias = pointerFieldAliases.begin();
                         alias != pointerFieldAliases.end();)
-                        if(alias->first.compare(0, prefix.size(), prefix) == 0)
+                        if(isPointerFieldAliasWithin(declaration->name,
+                                                     alias->first))
                             alias = pointerFieldAliases.erase(alias);
                         else
                             ++alias;
@@ -401,10 +437,9 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 pointerAliases[previous.first] = std::move(previous.second);
             for(const auto& name : shadowedNames)
             {
-                const std::string prefix = name + ".";
                 for(auto alias = pointerFieldAliases.begin();
                     alias != pointerFieldAliases.end();)
-                    if(alias->first.compare(0, prefix.size(), prefix) == 0)
+                    if(isPointerFieldAliasWithin(name, alias->first))
                         alias = pointerFieldAliases.erase(alias);
                     else
                         ++alias;

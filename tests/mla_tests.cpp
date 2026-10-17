@@ -10820,6 +10820,94 @@ TEST_F(MLATest, OwnershipAggregateReassignmentReplacesPointerFieldOrigin)
         << out;
 }
 
+// A list used as a local forwarding container must preserve pointer parameters.
+TEST_F(MLATest, OwnershipListForwardedPointerParameterKeepsBorrowLive)
+{
+    std::string code = R"(
+        fn relay(unused: ptr<i32>, selected: ptr<i32>) -> ptr<i32> {
+            let pointers: list<ptr<i32>> = [selected];
+            return pointers[0];
+        }
+        fn main() -> i32 {
+            var first: i32 = 7;
+            var second: i32 = 8;
+            let forwarded: ptr<i32> = relay(&first, &second);
+            second = 9;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'second' while borrowed by 'forwarded'"),
+              std::string::npos)
+        << out;
+}
+
+// List indexing should borrow only the pointer stored at that constant index.
+TEST_F(MLATest, OwnershipListForwardedPointerTracksSelectedElementOrigin)
+{
+    std::string code = R"(
+        fn relay(unused: ptr<i32>, selected: ptr<i32>) -> ptr<i32> {
+            let pointers: list<ptr<i32>> = [selected];
+            return pointers[0];
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded: ptr<i32> = relay(&first, &second);
+            first = 3;
+            unsafe { return *forwarded + first - 5; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// Tuple access should preserve only the selected pointer element's origin.
+TEST_F(MLATest, OwnershipTupleForwardedPointerTracksSelectedElementOrigin)
+{
+    std::string code = R"(
+        fn relay(unused: ptr<i32>, selected: ptr<i32>) -> ptr<i32> {
+            let pointers = (unused, selected);
+            return pointers.1;
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded: ptr<i32> = relay(&first, &second);
+            first = 3;
+            unsafe { return *forwarded + first - 5; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// Dynamic list indexes retain every possible pointer argument origin.
+TEST_F(MLATest, OwnershipListForwardedPointerDynamicIndexKeepsAllOrigins)
+{
+    std::string code = R"(
+        fn relay(index: i32, first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+            let pointers: list<ptr<i32>> = [first, second];
+            return pointers[index];
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded: ptr<i32> = relay(0, &first, &second);
+            first = 3;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'first' while borrowed by 'forwarded'"),
+              std::string::npos)
+        << out;
+}
+
 // Pointer provenance must propagate through multiple visible forwarding calls.
 TEST_F(MLATest, OwnershipNestedFunctionReturnedPointerKeepsBorrowLive)
 {
