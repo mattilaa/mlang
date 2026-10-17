@@ -5033,6 +5033,73 @@ TEST_F(MLATest, OwnershipSharedBorrowEndsAfterLastUseBeforeOwnerMove)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, OwnershipLoopLocalBorrowEndsAfterLastUseInWhileBody)
+{
+    std::string code = R"(
+        struct Box {
+            var value: i32;
+        };
+
+        fn main() -> i32 {
+            var box: Box = Box { value: 1 };
+            var index: i32 = 0;
+            while index < 1 {
+                let p: ptr<Box> = &box;
+                let observed: i32 = (*p).value;
+                box.value = observed + 1;
+                index += 1;
+            }
+            return box.value - 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, OwnershipLoopLocalBorrowEndsAfterLastUseInRangeBody)
+{
+    std::string code = R"(
+        struct Box {
+            var value: i32;
+        };
+
+        fn main() -> i32 {
+            var box: Box = Box { value: 1 };
+            for index in 0..1 {
+                let p: ptr<Box> = &box;
+                let observed: i32 = (*p).value;
+                box.value = observed + 1;
+            }
+            return box.value - 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, OwnershipLoopLocalBorrowRemainsLiveUntilLastUse)
+{
+    std::string code = R"(
+        struct Box {
+            var value: i32;
+        };
+
+        fn main() -> i32 {
+            var box: Box = Box { value: 1 };
+            for index in 0..1 {
+                let p: ptr<Box> = &box;
+                box.value = 2;
+                let observed: i32 = (*p).value;
+                if observed == 0 { return 1; }
+            }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipOuterSharedPointerBorrowEndsAfterLastUse)
 {
     std::string code = R"(

@@ -9,8 +9,40 @@
 #include <cstdint>
 
 using mlang::ir_detail::ast_analysis::contains_unsupported_try_control_flow;
+using mlang::ir_detail::ast_analysis::collect_used_idents;
 using mlang::ir_detail::ast_analysis::strip_iter_methods;
 using mlang::ir_detail::common::Helpers;
+
+void CodeGenerator::expireUnusedLocalBorrows(
+    const std::vector<StatementNode*>& statements, size_t statementIndex,
+    int scopeDepth)
+{
+    std::set<std::string> futureIdents;
+    for(size_t index = statementIndex + 1; index < statements.size(); ++index)
+        collect_used_idents(statements[index], futureIdents);
+
+    std::vector<std::string> toClear;
+    for(const auto& borrow : pointerBorrowTarget)
+    {
+        auto depth = variableScopeDepth.find(borrow.first);
+        if(depth != variableScopeDepth.end() && depth->second == scopeDepth &&
+           !futureIdents.count(borrow.first))
+            toClear.push_back(borrow.first);
+    }
+    for(const auto& pointer : toClear)
+        clearPointerBorrow(pointer);
+
+    std::vector<std::string> closuresToRelease;
+    for(const auto& closure : runtimeClosureBorrowOwners)
+    {
+        auto depth = variableScopeDepth.find(closure.first);
+        if(depth != variableScopeDepth.end() && depth->second == scopeDepth &&
+           !futureIdents.count(closure.first))
+            closuresToRelease.push_back(closure.first);
+    }
+    for(const auto& closure : closuresToRelease)
+        releaseRuntimeClosureBorrows(closure);
+}
 
 void CodeGenerator::generateReturnStatement(ReturnNode* node)
 {
@@ -1037,11 +1069,15 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     if(node->body)
     {
         enterCleanupScope();
-        for(auto* stmt : node->body->statements)
+        const int bodyScopeDepth = currentScopeDepth();
+        for(size_t index = 0; index < node->body->statements.size(); ++index)
         {
+            auto* stmt = node->body->statements[index];
             generateStatement(stmt);
             if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
+            expireUnusedLocalBorrows(node->body->statements, index,
+                                     bodyScopeDepth);
         }
         exitCleanupScope();
     }
@@ -1268,11 +1304,15 @@ void CodeGenerator::generateForStatement(ForNode* node)
         if(node->body)
         {
             enterCleanupScope();
-            for(auto stmt : node->body->statements)
+            const int bodyScopeDepth = currentScopeDepth();
+            for(size_t index = 0; index < node->body->statements.size(); ++index)
             {
+                auto stmt = node->body->statements[index];
                 generateStatement(stmt);
                 if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                     break;
+                expireUnusedLocalBorrows(node->body->statements, index,
+                                         bodyScopeDepth);
             }
             exitCleanupScope();
         }

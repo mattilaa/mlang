@@ -631,6 +631,9 @@ private:
                                     int col = 0);
     void clearMovedVariable(const std::string& name);
     void clearPointerBorrow(const std::string& pointerVar);
+    void expireUnusedLocalBorrows(
+        const std::vector<StatementNode*>& statements, size_t statementIndex,
+        int scopeDepth);
     void registerPointerBorrow(const std::string& pointerVar,
                                ExpressionNode* expr, int line,
                                bool isMutable = false);
