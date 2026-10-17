@@ -2479,7 +2479,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             for(size_t i = 0; i < closureType->parameterTypes->types.size(); ++i)
             {
                 TypeNode* parameter = closureType->parameterTypes->types[i];
-                llvm::Type* parameterType = getLLVMTypeFromNode(parameter);
+                llvm::Type* parameterType = parameterLLVMType(parameter);
                 llvm::Value* argument = generateExpression(node->arguments[i]);
                 if(!parameterType || !argument)
                 {
@@ -4473,7 +4473,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
         for(auto* parameter : node->parameters->parameters)
         {
             llvm::Type* parameterType =
-                parameter ? getLLVMTypeFromNode(parameter->type) : nullptr;
+                parameter ? parameterLLVMType(parameter->type) : nullptr;
             if(!parameterType)
             {
                 reportError(node->line,
@@ -4536,6 +4536,10 @@ llvm::Function* CodeGenerator::generateClosureFn(
     auto savedClosureCaptureReferenceAliases = closureCaptureReferenceAliases;
     auto savedActiveInline = activeInlineClosures;
     auto savedSemanticReturnType = currentSemanticReturnType;
+    auto savedInoutParams = inoutParams;
+    llvm::Function* savedInoutFunction = inoutFunction;
+    inoutParams.clear();
+    inoutFunction = closureFn;
 
     // Initialise a fresh scope for the closure body
     namedValues.clear();
@@ -4662,23 +4666,42 @@ llvm::Function* CodeGenerator::generateClosureFn(
         {
             llvm::Argument* argument = closureFn->getArg(parameterIndex++);
             argument->setName(parameter->name);
-            llvm::Type* localType = argument->getType();
+            auto* inoutType = dynamic_cast<ReferenceTypeNode*>(parameter->type);
+            if(inoutType && !inoutType->isMutable)
+                inoutType = nullptr;
+            llvm::Type* localType =
+                inoutType ? getLLVMTypeFromNode(inoutType->elementType)
+                          : argument->getType();
             llvm::AllocaInst* local = builder.CreateAlloca(
                 localType, nullptr, parameter->name + ".addr");
             llvm::Value* incoming = &*argument;
-            if(localType->isStructTy())
+            if(inoutType)
+            {
+                incoming = builder.CreateLoad(
+                    localType, argument, parameter->name + ".in");
+                inoutParams.push_back({argument, parameter->name});
+            }
+            else if(localType->isStructTy())
                 incoming = applyStructCopySemantics(incoming);
             builder.CreateStore(incoming, local);
             namedValues[parameter->name] = local;
             recordVariableScopeDepth(parameter->name);
             if(parameter->type)
             {
-                variableTypes[parameter->name] = parameter->type->kind;
+                TypeNode* semanticType = parameter->type;
+                if(auto* reference =
+                       dynamic_cast<ReferenceTypeNode*>(semanticType))
+                {
+                    semanticType = reference->elementType;
+                    if(!reference->isMutable)
+                        constantVariables.insert(parameter->name);
+                }
+                variableTypes[parameter->name] = semanticType->kind;
                 if(auto* functionType =
-                       dynamic_cast<FunctionTypeNode*>(parameter->type))
+                       dynamic_cast<FunctionTypeNode*>(semanticType))
                     functionTypeVariables[parameter->name] = functionType;
                 if(auto* structType =
-                       dynamic_cast<StructTypeRefNode*>(parameter->type))
+                       dynamic_cast<StructTypeRefNode*>(semanticType))
                 {
                     std::string enumName =
                         resolveVisibleEnumName(structType->structName);
@@ -4693,11 +4716,11 @@ llvm::Function* CodeGenerator::generateClosureFn(
                 }
                 else if(auto* genericStruct =
                             dynamic_cast<GenericStructTypeRefNode*>(
-                                parameter->type))
+                                semanticType))
                     structVariableTypes[parameter->name] =
                         genericStruct->getMangledName();
                 else if(auto* listType =
-                            dynamic_cast<GenericListTypeNode*>(parameter->type))
+                            dynamic_cast<GenericListTypeNode*>(semanticType))
                 {
                     listElementTypes[parameter->name] = listType->elementType;
                     if(auto* arrayType =
@@ -4710,15 +4733,15 @@ llvm::Function* CodeGenerator::generateClosureFn(
                             multiarrayType->elementsMutable;
                 }
                 else if(auto* mapType =
-                            dynamic_cast<MapTypeNode*>(parameter->type))
+                            dynamic_cast<MapTypeNode*>(semanticType))
                     mapKeyValueTypes[parameter->name] = {
                         mapType->keyType, mapType->valueType};
                 else if(auto* tupleType =
-                            dynamic_cast<TupleTypeNode*>(parameter->type))
+                            dynamic_cast<TupleTypeNode*>(semanticType))
                     tupleElementTypes[parameter->name] =
                         tupleType->elementTypes->types;
                 else if(auto* pointerType =
-                            dynamic_cast<PointerTypeNode*>(parameter->type))
+                            dynamic_cast<PointerTypeNode*>(semanticType))
                     pointerElementTypes[parameter->name] =
                         pointerType->elementType;
             }
@@ -4736,6 +4759,8 @@ llvm::Function* CodeGenerator::generateClosureFn(
         }
     }
 
+    if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
+        emitInoutWriteBack();
     exitCleanupScope();
 
     if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
@@ -4788,6 +4813,8 @@ llvm::Function* CodeGenerator::generateClosureFn(
         std::move(savedClosureCaptureReferenceAliases);
     activeInlineClosures = std::move(savedActiveInline);
     currentSemanticReturnType = savedSemanticReturnType;
+    inoutParams = std::move(savedInoutParams);
+    inoutFunction = savedInoutFunction;
     builder.restoreIP(savedIP);
 
     return closureFn;

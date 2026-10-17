@@ -58,19 +58,23 @@ bool CodeGenerator::getRuntimeClosureCaptures(
                 parameter->name + ".infer.addr");
             namedValues[parameter->name] = slot;
             variableScopeDepth[parameter->name] = currentScopeDepth();
-            variableTypes[parameter->name] = parameter->type->kind;
+            TypeNode* semanticType = parameter->type;
+            if(auto* reference =
+                   dynamic_cast<ReferenceTypeNode*>(semanticType))
+                semanticType = reference->elementType;
+            variableTypes[parameter->name] = semanticType->kind;
             if(auto* functionType =
-                   dynamic_cast<FunctionTypeNode*>(parameter->type))
+                   dynamic_cast<FunctionTypeNode*>(semanticType))
                 functionTypeVariables[parameter->name] = functionType;
             if(auto* structType =
-                   dynamic_cast<StructTypeRefNode*>(parameter->type))
+                   dynamic_cast<StructTypeRefNode*>(semanticType))
                 structVariableTypes[parameter->name] = structType->structName;
             else if(auto* genericStruct =
-                        dynamic_cast<GenericStructTypeRefNode*>(parameter->type))
+                        dynamic_cast<GenericStructTypeRefNode*>(semanticType))
                 structVariableTypes[parameter->name] =
                     genericStruct->getMangledName();
             if(auto* listType =
-                   dynamic_cast<GenericListTypeNode*>(parameter->type))
+                   dynamic_cast<GenericListTypeNode*>(semanticType))
             {
                 listElementTypes[parameter->name] = listType->elementType;
                 if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(listType))
@@ -80,15 +84,15 @@ bool CodeGenerator::getRuntimeClosureCaptures(
                     multiarrayMutability[parameter->name] =
                         multiarrayType->elementsMutable;
             }
-            if(auto* mapType = dynamic_cast<MapTypeNode*>(parameter->type))
+            if(auto* mapType = dynamic_cast<MapTypeNode*>(semanticType))
                 mapKeyValueTypes[parameter->name] = {
                     mapType->keyType, mapType->valueType};
             if(auto* tupleType =
-                   dynamic_cast<TupleTypeNode*>(parameter->type))
+                   dynamic_cast<TupleTypeNode*>(semanticType))
                 tupleElementTypes[parameter->name] =
                     tupleType->elementTypes->types;
             if(auto* pointerType =
-                   dynamic_cast<PointerTypeNode*>(parameter->type))
+                   dynamic_cast<PointerTypeNode*>(semanticType))
                 pointerElementTypes[parameter->name] =
                     pointerType->elementType;
         }

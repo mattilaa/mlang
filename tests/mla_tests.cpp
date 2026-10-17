@@ -4238,6 +4238,70 @@ TEST_F(MLATest, RuntimeClosureAcceptsTypedArguments)
     EXPECT_EQ(compileAndRunExitCode(code), 7);
 }
 
+TEST_F(MLATest, RuntimeClosurePreservesMutableReferenceParameterSemantics)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let bump: fn(&mut i32) -> void = |value| {
+                value += 1;
+            };
+            var count: i32 = 2;
+            bump(&mut count);
+            return count;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 3);
+}
+
+TEST_F(MLATest, RuntimeClosureWritesBackMutableReferenceBeforeReturn)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let bump: fn(&mut i32) -> i32 = |value| {
+                value += 1;
+                return value;
+            };
+            var count: i32 = 2;
+            let result: i32 = bump(&mut count);
+            return count + result;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 6);
+}
+
+TEST_F(MLATest, RuntimeClosureReadsImmutableReferenceParameter)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let increment: fn(&i32) -> i32 = |value| {
+                return value + 1;
+            };
+            let count: i32 = 4;
+            return increment(count);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 5);
+}
+
+TEST_F(MLATest, RuntimeClosureRejectsMutationThroughImmutableReference)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let mutate: fn(&i32) -> void = |value| {
+                value += 1;
+            };
+            let count: i32 = 4;
+            mutate(count);
+            return count;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign"), std::string::npos);
+}
+
 TEST_F(MLATest, RuntimeClosurePreservesFixedArrayParameterMetadata)
 {
     std::string code = R"(
