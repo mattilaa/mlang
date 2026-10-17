@@ -396,9 +396,148 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                isPointerFieldAliasWithin(path, alias.first);
                     });
             };
+        std::map<std::string, bool> closureMayMutatePointerAggregate;
         std::function<void(ExpressionNode*)> scanCallEffects;
+        std::function<void(StatementNode*)> scanClosureEffects;
+        std::function<void(StatementListNode*)> scanClosureList;
+        scanClosureList = [&](StatementListNode* statements) {
+            if(statements)
+                for(auto* statement : statements->statements)
+                    scanClosureEffects(statement);
+        };
+        scanClosureEffects = [&](StatementNode* statement) {
+            if(!statement)
+                return;
+            if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
+            {
+                if(hasTrackedPointerAggregateAtOrBelow(assignment->name))
+                    hasUnknownReturnOrigin = true;
+                scanCallEffects(assignment->expression);
+            }
+            else if(auto* assignment =
+                        dynamic_cast<FieldAssignmentNode*>(statement))
+            {
+                std::string path;
+                bool hasPath = false;
+                if(assignment->target)
+                    hasPath = getFieldPath(assignment->target, path);
+                else if(!assignment->structName.empty() &&
+                        !assignment->fieldName.empty())
+                {
+                    path = assignment->structName + "." +
+                           assignment->fieldName;
+                    hasPath = true;
+                }
+                if(hasPath && hasTrackedPointerAggregateAtOrBelow(path))
+                    hasUnknownReturnOrigin = true;
+                else if(!hasPath)
+                    hasUnknownReturnOrigin = true;
+                scanCallEffects(assignment->expression);
+            }
+            else if(auto* returned = dynamic_cast<ReturnNode*>(statement))
+                scanCallEffects(returned->expression);
+            else if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
+                scanCallEffects(declaration->expression);
+            else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
+                scanCallEffects(declaration->initExpr);
+            else if(auto* expression =
+                        dynamic_cast<ExpressionStatementNode*>(statement))
+                scanCallEffects(expression->expression);
+            else if(auto* assignment =
+                        dynamic_cast<DerefAssignmentNode*>(statement))
+            {
+                scanCallEffects(assignment->pointerExpr);
+                scanCallEffects(assignment->value);
+            }
+            else if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+                scanClosureList(block->statements);
+            else if(auto* branch = dynamic_cast<IfNode*>(statement))
+            {
+                scanCallEffects(branch->condition);
+                scanClosureList(branch->thenBranch);
+                scanClosureEffects(branch->elseIfBranch);
+                scanClosureList(branch->elseBranch);
+            }
+            else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+            {
+                scanCallEffects(branch->condition);
+                scanClosureList(branch->thenBranch);
+                scanClosureEffects(branch->elseIfBranch);
+                scanClosureList(branch->elseBranch);
+            }
+            else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+            {
+                scanCallEffects(loop->condition);
+                scanClosureList(loop->body);
+            }
+            else if(auto* loop = dynamic_cast<ForNode*>(statement))
+            {
+                scanCallEffects(loop->iterable);
+                scanClosureList(loop->body);
+            }
+            else if(auto* attempt = dynamic_cast<TryCatchNode*>(statement))
+            {
+                scanClosureEffects(attempt->tryBlock);
+                scanClosureEffects(attempt->catchBlock);
+            }
+        };
+        auto closureMutatesPointerAggregate = [&](ClosureNode* closure) {
+            const bool previousUnknown = hasUnknownReturnOrigin;
+            hasUnknownReturnOrigin = false;
+            scanClosureList(closure ? closure->body : nullptr);
+            const bool mutates = hasUnknownReturnOrigin;
+            hasUnknownReturnOrigin = previousUnknown;
+            return mutates;
+        };
+        auto recordClosureEffect = [&](const std::string& name,
+                                       ExpressionNode* expression,
+                                       bool replace) {
+            bool knownClosure = false;
+            bool mutatesAggregate = false;
+            if(auto* closure = dynamic_cast<ClosureNode*>(expression))
+            {
+                knownClosure = true;
+                mutatesAggregate =
+                    closureMutatesPointerAggregate(closure);
+            }
+            else if(auto* identifier =
+                        dynamic_cast<IdentifierNode*>(expression))
+            {
+                auto source = closureMayMutatePointerAggregate.find(
+                    identifier->name);
+                if(source != closureMayMutatePointerAggregate.end())
+                {
+                    knownClosure = true;
+                    mutatesAggregate = source->second;
+                }
+            }
+            if(!knownClosure)
+                return;
+            auto existing = closureMayMutatePointerAggregate.find(name);
+            if(replace || existing == closureMayMutatePointerAggregate.end())
+                closureMayMutatePointerAggregate[name] = mutatesAggregate;
+            else
+                existing->second = existing->second || mutatesAggregate;
+        };
+        auto argumentMayInvokeMutatingClosure =
+            [&](ExpressionNode* argument) {
+                if(auto* identifier =
+                       dynamic_cast<IdentifierNode*>(argument))
+                {
+                    auto effect = closureMayMutatePointerAggregate.find(
+                        identifier->name);
+                    return effect !=
+                               closureMayMutatePointerAggregate.end() &&
+                           effect->second;
+                }
+                if(auto* closure = dynamic_cast<ClosureNode*>(argument))
+                    return closureMutatesPointerAggregate(closure);
+                return false;
+            };
         scanCallEffects = [&](ExpressionNode* expression) {
             if(!expression)
+                return;
+            if(dynamic_cast<ClosureNode*>(expression))
                 return;
             auto invalidateMutableAggregateArgument =
                 [&](ExpressionNode* argument) {
@@ -412,9 +551,16 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 };
             if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
             {
+                auto closureEffect =
+                    closureMayMutatePointerAggregate.find(call->name);
+                if(closureEffect != closureMayMutatePointerAggregate.end() &&
+                   closureEffect->second)
+                    hasUnknownReturnOrigin = true;
                 for(auto* argument : call->arguments)
                 {
                     invalidateMutableAggregateArgument(argument);
+                    if(argumentMayInvokeMutatingClosure(argument))
+                        hasUnknownReturnOrigin = true;
                     scanCallEffects(argument);
                 }
                 return;
@@ -427,14 +573,31 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                     hasUnknownReturnOrigin = true;
                 scanCallEffects(method->object);
                 for(auto* argument : method->arguments)
+                {
+                    if(argumentMayInvokeMutatingClosure(argument))
+                        hasUnknownReturnOrigin = true;
                     scanCallEffects(argument);
+                }
                 return;
             }
             if(auto* invoke = dynamic_cast<CallableInvokeNode*>(expression))
             {
+                if(auto* callable =
+                       dynamic_cast<IdentifierNode*>(invoke->callable))
+                {
+                    auto closureEffect =
+                        closureMayMutatePointerAggregate.find(
+                            callable->name);
+                    if(closureEffect !=
+                           closureMayMutatePointerAggregate.end() &&
+                       closureEffect->second)
+                        hasUnknownReturnOrigin = true;
+                }
                 for(auto* argument : invoke->arguments)
                 {
                     invalidateMutableAggregateArgument(argument);
+                    if(argumentMayInvokeMutatingClosure(argument))
+                        hasUnknownReturnOrigin = true;
                     scanCallEffects(argument);
                 }
                 scanCallEffects(invoke->callable);
@@ -504,6 +667,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             std::map<std::string,
                      std::map<std::string, std::set<size_t>>>
                 previousFieldAliases;
+            std::map<std::string, bool> previousClosureEffects;
+            std::set<std::string> closureNamesNotPreviouslyPresent;
             std::set<std::string> shadowedNames;
             auto rememberShadow = [&](const std::string& name) {
                 if(!shadowedNames.insert(name).second)
@@ -517,6 +682,14 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 for(const auto& fieldAlias : pointerFieldAliases)
                     if(isPointerFieldAliasWithin(name, fieldAlias.first))
                         saved.insert(fieldAlias);
+                auto previousClosure =
+                    closureMayMutatePointerAggregate.find(name);
+                if(previousClosure ==
+                   closureMayMutatePointerAggregate.end())
+                    closureNamesNotPreviouslyPresent.insert(name);
+                else
+                    previousClosureEffects.emplace(name,
+                                                   previousClosure->second);
             };
             bool fallsThrough = true;
             for(auto* statement : statements->statements)
@@ -556,6 +729,11 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 pointerAliases.erase(name);
             for(auto& previous : previousAliases)
                 pointerAliases[previous.first] = std::move(previous.second);
+            for(const auto& name : closureNamesNotPreviouslyPresent)
+                closureMayMutatePointerAggregate.erase(name);
+            for(const auto& previous : previousClosureEffects)
+                closureMayMutatePointerAggregate[previous.first] =
+                    previous.second;
             for(const auto& name : shadowedNames)
             {
                 for(auto alias = pointerFieldAliases.begin();
@@ -626,6 +804,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             }
             if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
             {
+                recordClosureEffect(declaration->name,
+                                    declaration->expression, true);
                 auto values = origins(declaration->expression);
                 if(!values.empty())
                     pointerAliases[declaration->name] = std::move(values);
@@ -638,6 +818,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             }
             else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
             {
+                recordClosureEffect(declaration->name, declaration->initExpr,
+                                    true);
                 auto values = origins(declaration->initExpr);
                 if(!values.empty())
                     pointerAliases[declaration->name] = std::move(values);
@@ -651,6 +833,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             else if(auto* assignment =
                         dynamic_cast<AssignmentNode*>(statement))
             {
+                recordClosureEffect(assignment->name, assignment->expression,
+                                    false);
                 auto values = origins(assignment->expression);
                 if(values.empty())
                     pointerAliases.erase(assignment->name);

@@ -11036,6 +11036,51 @@ TEST_F(MLATest, OwnershipListForwardedDynamicHelperMutationKeepsNewOrigin)
     EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
 }
 
+// A closure that mutates a tracked pointer list must invalidate its summary.
+TEST_F(MLATest, OwnershipListForwardedClosureMutationKeepsNewOrigin)
+{
+    std::string code = R"(
+        fn relay(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+            var pointers: list<ptr<i32>> = [first];
+            let replace = || { pointers[0] = second; };
+            replace();
+            return pointers[0];
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded = relay(&mut first, &mut second);
+            second = 3;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
+}
+
+// An uncalled closure must not make unrelated returned-pointer origins escape.
+TEST_F(MLATest, OwnershipListUnusedMutatingClosurePreservesOriginPrecision)
+{
+    std::string code = R"(
+        fn relay(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+            var pointers: list<ptr<i32>> = [first];
+            let replace = || { pointers[0] = second; };
+            return pointers[0];
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded = relay(&mut first, &mut second);
+            second = 3;
+            unsafe { return *forwarded + second - 4; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 // Returning a pointer extracted from an aggregate argument retains its borrow.
 TEST_F(MLATest, OwnershipAggregateArgumentReturnedPointerKeepsBorrowLive)
 {
