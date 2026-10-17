@@ -5138,6 +5138,46 @@ TEST_F(MLATest, OwnershipLoopLocalBorrowExpiresAcrossIteratorKinds)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, ClosureCaptureBorrowExpiresAfterLastUseInLoopBody)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var index: i32 = 0;
+            var total: i32 = 0;
+            while index < 1 {
+                let bump = || { total += 1; };
+                bump();
+                total += 1;
+                index += 1;
+            }
+            return total - 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ClosureCaptureBorrowRemainsLiveThroughLoopLastUse)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var index: i32 = 0;
+            var total: i32 = 0;
+            while index < 1 {
+                let bump = || { total += 1; };
+                total += 1;
+                bump();
+                index += 1;
+            }
+            return total;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'bump'"), std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipOuterSharedPointerBorrowEndsAfterLastUse)
 {
     std::string code = R"(
