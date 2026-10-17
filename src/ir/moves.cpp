@@ -40,7 +40,8 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
 
         if(auto* unary = dynamic_cast<UnaryOpNode*>(e))
         {
-            if(unary->op == UnaryOpNode::OP_ADDR)
+            if(unary->op == UnaryOpNode::OP_ADDR ||
+               unary->op == UnaryOpNode::OP_ADDR_MUT)
             {
                 consume(unary->operand, true);
             }

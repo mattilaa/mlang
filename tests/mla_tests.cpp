@@ -3020,8 +3020,8 @@ TEST_F(MLATest, TraitObjectSharedMethodRejectsLiveMutableBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_TRUE(out.find("use of moved value") != std::string::npos ||
-                out.find("cannot borrow moved value") != std::string::npos)
+    EXPECT_NE(out.find("cannot call method on 'item' while borrowed"),
+              std::string::npos)
         << out;
 }
 
@@ -4697,6 +4697,43 @@ TEST_F(MLATest, OwnershipCannotMoveWhileBorrowedByPointer)
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("cannot move"), std::string::npos);
     EXPECT_NE(out.find("while borrowed"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCannotMoveWhileMutablyBorrowedByPointer)
+{
+    std::string code = R"(
+        struct Post {
+            var content: list<i32>;
+        };
+
+        fn main() -> i32 {
+            var a: Post = Post { content: [1] };
+            let p: ptr<Post> = &mut a;
+            let moved: Post = a;
+            unsafe { return (*p).content[0]; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("mutably borrowed"), std::string::npos) << out;
+}
+
+TEST_F(MLATest, MutableBorrowDoesNotMoveMoveOnlyOwner)
+{
+    std::string code = R"(
+        struct Post {
+            var content: list<i32>;
+        };
+
+        fn main() -> i32 {
+            var a: Post = Post { content: [7] };
+            let p: ptr<Post> = &mut a;
+            unsafe { return (*p).content[0]; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
 }
 
 TEST_F(MLATest, OwnershipStringDoubleFreeReportsError)
