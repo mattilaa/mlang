@@ -539,7 +539,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 return;
             if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
             {
-                if(hasTrackedPointerAggregateAtOrBelow(assignment->name))
+                if(pointerAliases.count(assignment->name) ||
+                   hasTrackedPointerAggregateAtOrBelow(assignment->name))
                     hasUnknownReturnOrigin = true;
                 scanCallEffects(assignment->expression);
             }
