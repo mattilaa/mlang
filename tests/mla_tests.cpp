@@ -6957,6 +6957,52 @@ TEST_F(MLATest, OwnershipCanBorrowDisjointFieldsInSingleCall)
     EXPECT_EQ(compileAndRunExitCode(code), 5);
 }
 
+TEST_F(MLATest, OwnershipCanCallWithDisjointFieldWhileAnotherFieldIsMutablyBorrowed)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+
+        fn inspect(value: ptr<i32>) -> i32 { return 0; }
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 2, right: 3 };
+            let left = &mut pair.left;
+            let result = inspect(&pair.right);
+            *left = 7;
+            return pair.left + pair.right + result;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 10);
+}
+
+TEST_F(MLATest, OwnershipCannotCallWithFieldOverlappingActiveMutableBorrow)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+
+        fn inspect(value: ptr<i32>) -> i32 { return 0; }
+
+        fn main() -> i32 {
+            var pair: Pair = Pair { left: 2, right: 3 };
+            let left = &mut pair.left;
+            let result = inspect(&pair.left);
+            *left = 7;
+            return result;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("borrowed as mutable"), std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipCannotBorrowWholeAndFieldInSingleCall)
 {
     std::string code = R"(

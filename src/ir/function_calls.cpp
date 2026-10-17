@@ -2165,11 +2165,43 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
             const bool wantsMutable = (unary->op == UnaryOpNode::OP_ADDR_MUT);
             auto activeIt = activeBorrowers.find(owner);
-            auto mutIt = activeMutBorrower.find(owner);
+            auto overlapsActiveBorrower = [&](const std::string& borrower) {
+                auto ownerIt = pointerBorrowTarget.find(borrower);
+                if(ownerIt == pointerBorrowTarget.end() ||
+                   ownerIt->second != owner)
+                    return false;
+                auto placeIt = pointerBorrowPlace.find(borrower);
+                std::string activePath =
+                    placeIt == pointerBorrowPlace.end() ? owner
+                                                        : placeIt->second;
+                if(activePath.compare(0, owner.size(), owner) == 0)
+                {
+                    activePath.erase(0, owner.size());
+                    if(!activePath.empty() && activePath.front() == '.')
+                        activePath.erase(0, 1);
+                }
+                return borrowPlacesOverlap(activePath,
+                                           isWholeOwner ? std::string{} : path);
+            };
+            auto hasOverlappingSharedBorrow = [&]() {
+                if(activeIt == activeBorrowers.end())
+                    return false;
+                return std::any_of(activeIt->second.begin(),
+                                   activeIt->second.end(),
+                                   overlapsActiveBorrower);
+            };
+            std::string overlappingMutableBorrower;
+            for(const auto& activeMutable : activeMutBorrower)
+            {
+                if(overlapsActiveBorrower(activeMutable.second))
+                {
+                    overlappingMutableBorrower = activeMutable.second;
+                    break;
+                }
+            }
             if(wantsMutable)
             {
-                if(activeIt != activeBorrowers.end() &&
-                   !activeIt->second.empty())
+                if(hasOverlappingSharedBorrow())
                 {
                     reportError(
                         node->line,
@@ -2177,7 +2209,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             "' as mutable because it is already borrowed");
                     return false;
                 }
-                if(mutIt != activeMutBorrower.end())
+                if(!overlappingMutableBorrower.empty())
                 {
                     reportError(node->line,
                                 "cannot borrow '" + owner +
@@ -2187,20 +2219,25 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
             else
             {
-                if(mutIt != activeMutBorrower.end())
+                if(!overlappingMutableBorrower.empty())
                 {
                     reportError(
                         node->line,
                         "cannot borrow '" + owner +
                             "' as immutable because it is also borrowed "
                             "as mutable by '" +
-                            mutIt->second + "'");
+                            overlappingMutableBorrower + "'");
                     return false;
                 }
-                if(!sharedReference && activeIt != activeBorrowers.end() &&
-                   !activeIt->second.empty())
+                if(!sharedReference && hasOverlappingSharedBorrow())
                 {
-                    std::string by = *activeIt->second.begin();
+                    std::string by;
+                    for(const auto& borrower : activeIt->second)
+                        if(overlapsActiveBorrower(borrower))
+                        {
+                            by = borrower;
+                            break;
+                        }
                     reportError(node->line,
                                 "cannot borrow '" + owner +
                                     "' while already borrowed by '" + by + "'");
