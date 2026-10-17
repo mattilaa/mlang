@@ -2980,6 +2980,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 ++argIndex;
             }
 
+            if(returnType->isVoidTy())
+                return builder.CreateCall(fnType, fn, callArgs);
             return builder.CreateCall(fnType, fn, callArgs, "traitcall");
         }
     }
@@ -3224,7 +3226,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
 
             if(returnType->isVoidTy())
-                return builder.CreateCall(fnType, fn, callArgs, "traitcall");
+                return builder.CreateCall(fnType, fn, callArgs);
             return builder.CreateCall(fnType, fn, callArgs, "traitcall");
         }
 

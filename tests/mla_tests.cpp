@@ -2951,6 +2951,51 @@ TEST_F(MLATest, TraitObjectSharedMethodWorksOnImmutableReceiver)
     EXPECT_EQ(compileAndRunExitCode(code), 9);
 }
 
+TEST_F(MLATest, TraitObjectVoidMutatingMethodRuns)
+{
+    std::string code = R"(
+        trait CounterOps {
+            fn bump(self: &mut Self) -> void;
+            fn get(&self) -> i32;
+        }
+        struct Counter { var value: i32; };
+        impl CounterOps for Counter {
+            fn bump(self: &mut Counter) -> void { self.value += 1; }
+            fn get(&self) -> i32 { return self.value; }
+        }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 8 };
+            var item: dyn CounterOps = counter;
+            item.bump();
+            return item.get();
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
+TEST_F(MLATest, TraitObjectFieldVoidMutatingMethodRuns)
+{
+    std::string code = R"(
+        trait CounterOps {
+            fn bump(self: &mut Self) -> void;
+            fn get(&self) -> i32;
+        }
+        struct Counter { var value: i32; };
+        struct Holder { var item: dyn CounterOps; };
+        impl CounterOps for Counter {
+            fn bump(self: &mut Counter) -> void { self.value += 1; }
+            fn get(&self) -> i32 { return self.value; }
+        }
+        fn main() -> i32 {
+            let counter: Counter = Counter { value: 8 };
+            var holder: Holder = Holder { item: counter };
+            holder.item.bump();
+            return holder.item.get();
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
+}
+
 // ============================================================================
 // Type Cast Tests
 // ============================================================================
