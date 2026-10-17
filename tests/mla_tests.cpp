@@ -7863,6 +7863,27 @@ TEST_F(MLATest, AggregateBorrowKeepsOwnerBorrowedUntilLastUse)
         << out;
 }
 
+TEST_F(MLATest, OwnershipCannotStoreBorrowingAggregateInGlobal)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+
+        fn main() -> i32 {
+            static var saved: PointerBox;
+            var value: i32 = 7;
+            let boxed = PointerBox { value: &value };
+            saved = boxed;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot store in global/static"), std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, OwnershipCannotStorePointerBorrowingLocalFieldInGlobalPointer)
 {
     std::string code = R"(

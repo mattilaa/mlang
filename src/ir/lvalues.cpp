@@ -539,17 +539,17 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         }
     }
 
+    if(targetGlobal &&
+       !validateNoEscapingBorrow(
+           node->expression, node->line,
+           "store in global/static '" + node->name + "'"))
+        return;
+
     value = applyStructCopySemantics(value);
     builder.CreateStore(value, variable);
     clearMovedVariable(node->name);
     if(targetType->isPointerTy())
     {
-        if(targetGlobal && !validateNoEscapingBorrow(
-                               node->expression, node->line,
-                               "store in global/static '" + node->name + "'"))
-        {
-            return;
-        }
         {
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
             bool _is_mut_borrow =
@@ -1078,7 +1078,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
     consumeMoveFromExpression(node->expression, node->line,
                               "assigning to field '" + fieldName + "'");
 
-    if(targetType->isPointerTy() && targetGlobalStorage &&
+    if(targetGlobalStorage &&
        !validateNoEscapingBorrow(node->expression, node->line,
                                  "store in global/static field '" + fieldName +
                                      "'"))

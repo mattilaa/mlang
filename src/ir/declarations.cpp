@@ -1834,8 +1834,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         if(node->initExpr)
         {
-            if((kind == TypeNode::TYPE_PTR || targetType->isPointerTy()) &&
-               !validateNoEscapingBorrow(node->initExpr, node->line,
+            if(!validateNoEscapingBorrow(node->initExpr, node->line,
                                          "store in global/static '" +
                                              node->name + "'"))
             {
