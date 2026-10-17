@@ -528,11 +528,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 std::string path;
                 bool hasPath = false;
                 if(assignment->target)
-                {
                     hasPath = getFieldPath(assignment->target, path);
-                    if(hasPath)
-                        path += "." + assignment->fieldName;
-                }
                 else if(!assignment->structName.empty() &&
                         !assignment->fieldName.empty())
                 {

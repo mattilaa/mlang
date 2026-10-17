@@ -10955,6 +10955,32 @@ TEST_F(MLATest, OwnershipListForwardedPointerMutationKeepsNewOrigin)
         << out;
 }
 
+// Replacing a tracked list element must replace its prior pointer origin.
+TEST_F(MLATest, OwnershipListForwardedPointerElementAssignmentKeepsNewOrigin)
+{
+    std::string code = R"(
+        fn relay(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+            var pointers: list<ptr<i32>> = [first];
+            pointers[0] = second;
+            return pointers[0];
+        }
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            let forwarded = relay(&mut first, &mut second);
+            second = 3;
+            unsafe { return *forwarded; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'second' directly while mutably borrowed by 'forwarded'"),
+              std::string::npos)
+        << out;
+}
+
 // Pointer provenance must propagate through multiple visible forwarding calls.
 TEST_F(MLATest, OwnershipNestedFunctionReturnedPointerKeepsBorrowLive)
 {
