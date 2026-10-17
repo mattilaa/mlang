@@ -936,6 +936,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         consumeMoveFromExpression(node->expression, node->line,
                                   "assigning mutable multiarray element");
         builder.CreateStore(value, elementPointer);
+        clearMovedVariable(targetPlace);
         retainAggregateStoreOrigins(ownerName);
         return;
     }

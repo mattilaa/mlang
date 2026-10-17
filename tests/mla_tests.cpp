@@ -8895,6 +8895,66 @@ TEST_F(MLATest, OwnershipTuplePartialMoveAllowsSiblingAndReinitialization)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// Moving a non-Copy list element prevents later reads of the same element.
+TEST_F(MLATest, OwnershipRejectsUseAfterMovingListElement)
+{
+    std::string code = R"(
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var items: list<list<i32>> = [[1, 2], [3]];
+            let moved = consume(items[0]);
+            return consume(items[0]) + moved;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("use of moved value: 'items[0]'"),
+              std::string::npos)
+        << out;
+}
+
+// Constant-index moves preserve sibling elements and allow reinitialization.
+TEST_F(MLATest, OwnershipListPartialMoveAllowsSiblingAndReinitialization)
+{
+    std::string code = R"(
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var items: list<list<i32>> = [[1, 2], [3]];
+            let moved = consume(items[0]);
+            let sibling = consume(items[1]);
+            items[0] = [4, 5, 6];
+            return consume(items[0]) + moved + sibling - 6;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// Moving through a dynamic index conservatively invalidates every element.
+TEST_F(MLATest, OwnershipDynamicIndexMoveInvalidatesPossibleElements)
+{
+    std::string code = R"(
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var items: list<list<i32>> = [[1, 2], [3]];
+            let index: i32 = 0;
+            let moved = consume(items[index]);
+            return consume(items[1]) + moved;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("use of moved value: 'items[*]'"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, OwnershipCanMoveDisjointFieldWhileSiblingIsBorrowed)
 {
     std::string code = R"(

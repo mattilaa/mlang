@@ -223,7 +223,9 @@ void CodeGenerator::clearMovedVariable(const std::string& name)
             moved->size() > name.size() &&
             moved->compare(0, name.size(), name) == 0 &&
             (moved->at(name.size()) == '.' || moved->at(name.size()) == '[');
-        if(*moved == name || isDescendant)
+        const bool isUnresolvedIndexMove =
+            *moved == name && moved->find("[*]") != std::string::npos;
+        if((*moved == name && !isUnresolvedIndexMove) || isDescendant)
             moved = movedVariables.erase(moved);
         else
             ++moved;

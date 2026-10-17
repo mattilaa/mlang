@@ -139,6 +139,16 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
         {
             if(!borrowed && !validateMoveFromBorrowedPlace(e))
                 return;
+            if(!borrowed)
+            {
+                TypeNode* elementType = getLValueType(e, line);
+                const std::string owner = resolveBorrowOwnerFromLValue(e);
+                const std::string place = resolveBorrowPlaceFromLValue(e);
+                if(elementType && !isCopyType(elementType) &&
+                   !place.empty() &&
+                   globalNamedValues.find(owner) == globalNamedValues.end())
+                    movedVariables.insert(place);
+            }
             consume(index->base, true);
             consume(index->index, false);
             return;
