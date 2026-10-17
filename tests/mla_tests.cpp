@@ -8155,9 +8155,211 @@ TEST_F(MLATest, ListPushRejectsStoringMutableBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("aggregate exclusive-borrow tracking is not supported"),
-              std::string::npos)
-        << out;
+    EXPECT_NE(out.find("use of moved value: 'exclusive'"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, ListRetainsExclusiveBorrowUntilItsLastUse)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let exclusive: ptr<i32> = &mut value;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(exclusive);
+            value = 9;
+            let count: i64 = pointers.len();
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while mutably borrowed by 'pointers'"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, ListPushTracksInlineExclusiveBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&mut value);
+            value = 9;
+            let count: i64 = pointers.len();
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while mutably borrowed by 'pointers'"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, StructRetainsExclusiveBorrowUntilItsLastUse)
+{
+    std::string code = R"(
+        struct PointerBox {
+            var value: ptr<i32>;
+        };
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let boxed: PointerBox = PointerBox { value: &mut value };
+            value = 9;
+            unsafe { return *boxed.value; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while mutably borrowed by 'boxed'"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, ListCannotRetainMultipleExclusiveBorrows)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&mut first);
+            pointers.push(&mut second);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot store multiple mutable borrows in one "
+                       "aggregate"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, ListCannotOutliveItsExclusiveBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var pointers: list<ptr<i32>> = [];
+            {
+                var value: i32 = 7;
+                pointers.push(&mut value);
+            }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot store mutable borrow of 'value' in "
+                       "longer-lived aggregate 'pointers'"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, ListCannotCopyOutExclusiveBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&mut value);
+            let extracted: ptr<i32> = pointers[0];
+            unsafe { return *extracted; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot extract a mutable borrow from aggregate "
+                       "'pointers'"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, ListCannotPopExclusiveBorrowOut)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&mut value);
+            let extracted: ptr<i32> = pointers.pop();
+            unsafe { return *extracted; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot extract a mutable borrow from aggregate "
+                       "'pointers'"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, CannotPassExclusiveBorrowOutOfAggregateToFunction)
+{
+    std::string code = R"(
+        fn consume(pointer: ptr<i32>) -> i32 {
+            unsafe { return *pointer; }
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&mut value);
+            return consume(pointers[0]);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass a mutable borrow out of aggregate "
+                       "'pointers'"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, CannotCopyAggregateContainingExclusiveBorrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(&mut value);
+            let copied: list<ptr<i32>> = std::copy(pointers);
+            return copied.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("std::copy cannot duplicate a mutable borrow"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, ExclusiveBorrowInListExpiresAfterContainerLastUse)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 7;
+            let exclusive: ptr<i32> = &mut value;
+            var pointers: list<ptr<i32>> = [];
+            pointers.push(exclusive);
+            let count: i64 = pointers.len();
+            value = 9;
+            return value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 9);
 }
 
 TEST_F(MLATest, PointerExtractedFromListRetainsBorrowOrigin)

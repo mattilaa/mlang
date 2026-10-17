@@ -1641,6 +1641,27 @@ llvm::Value* CodeGenerator::generateCallableInvocation(
 
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
+    for(auto* argument : node->arguments)
+    {
+        // Passing the borrow variable itself is covered by the normal pointer
+        // borrow escape checks. This guard is specifically for extracting a
+        // pointer from an aggregate that still owns the borrow.
+        if(dynamic_cast<IdentifierNode*>(argument))
+            continue;
+        const std::string aggregate =
+            resolveBorrowOwnerFromLValue(argument);
+        if(aggregate.empty() || !isMutBorrower(aggregate))
+            continue;
+        if(dynamic_cast<PointerTypeNode*>(
+               inferExpressionTypeNode(argument, node->line)))
+        {
+            reportError(node->line,
+                        "cannot pass a mutable borrow out of aggregate '" +
+                            aggregate + "' because the callee may retain it");
+            return nullptr;
+        }
+    }
+
     if(auto overloads = functionOverloads.find(node->name);
        overloads != functionOverloads.end())
     {
@@ -1714,6 +1735,18 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         }
 
         ExpressionNode* sourceExpr = node->arguments.front();
+        const std::string sourceOwner =
+            resolveBorrowOwnerFromLValue(sourceExpr);
+        if((!sourceOwner.empty() && isMutBorrower(sourceOwner)) ||
+           (dynamic_cast<IdentifierNode*>(sourceExpr) &&
+            isMutBorrower(
+                static_cast<IdentifierNode*>(sourceExpr)->name)))
+        {
+            reportError(node->line,
+                        "std::copy cannot duplicate a mutable borrow or an "
+                        "aggregate that contains one");
+            return nullptr;
+        }
         TypeNode* sourceType = inferExpressionTypeNode(sourceExpr, node->line);
         if(!sourceType)
         {

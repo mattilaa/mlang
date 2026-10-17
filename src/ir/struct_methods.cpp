@@ -2225,6 +2225,21 @@ CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
     const std::string& method = node->methodName;
+    if(method == "first" || method == "last" || method == "pop")
+    {
+        const std::string aggregate =
+            resolveBorrowOwnerFromLValue(node->object);
+        TypeNode* resultType = getLValueType(node, node->line);
+        if(!aggregate.empty() && isMutBorrower(aggregate) &&
+           dynamic_cast<PointerTypeNode*>(resultType))
+        {
+            reportError(node->line,
+                        "cannot extract a mutable borrow from aggregate '" +
+                            aggregate + "' because that would duplicate its "
+                            "exclusive reference");
+            return nullptr;
+        }
+    }
     auto retainInsertedAggregateBorrow = [&](ExpressionNode* value,
                                              bool replacesAllContents = false) {
         const std::string owner = resolveBorrowOwnerFromLValue(node->object);
@@ -2244,7 +2259,44 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         auto previousPlaceInfo = aggregateBorrowPlaces.find(owner);
         if(previousPlaceInfo != aggregateBorrowPlaces.end())
             previousPlaces = previousPlaceInfo->second;
+        const bool hadExclusiveBorrow = isMutBorrower(owner);
+        std::string previousExclusiveOwner;
+        std::string previousExclusivePlace;
+        std::string previousExclusiveKey;
+        if(hadExclusiveBorrow)
+        {
+            auto target = pointerBorrowTarget.find(owner);
+            if(target != pointerBorrowTarget.end())
+                previousExclusiveOwner = target->second;
+            auto place = pointerBorrowPlace.find(owner);
+            if(place != pointerBorrowPlace.end())
+                previousExclusivePlace = place->second;
+            for(const auto& active : activeMutBorrower)
+                if(active.second == owner)
+                {
+                    previousExclusiveKey = active.first;
+                    break;
+                }
+        }
         trackAggregateBorrowOrigins(owner, value);
+        if(hadExclusiveBorrow && !replacesAllContents)
+        {
+            if(isMutBorrower(owner))
+            {
+                reportError(node->line,
+                            "cannot store multiple mutable borrows in one "
+                            "aggregate; use separate aggregates so each "
+                            "exclusive borrow has an independent lifetime");
+                return;
+            }
+            pointerBorrowTarget[owner] = previousExclusiveOwner;
+            if(!previousExclusivePlace.empty())
+                pointerBorrowPlace[owner] = previousExclusivePlace;
+            const std::string key =
+                previousExclusiveKey.empty() ? previousExclusiveOwner
+                                             : previousExclusiveKey;
+            activeMutBorrower[key] = owner;
+        }
         auto& currentOrigins = aggregateBorrowOrigins[owner];
         currentOrigins.insert(previousOrigins.begin(), previousOrigins.end());
         if(!previousOrigins.empty())

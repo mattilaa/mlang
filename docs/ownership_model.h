@@ -3,16 +3,19 @@
 
 /**
  * @file ownership_model.h
- * @brief Ownership and move semantics model for Mlang (phase 1).
+ * @brief Ownership and borrow-checking model for Mlang.
  */
 
 /**
  * @defgroup ownership_model Ownership Model
  * @ingroup language_reference
- * @brief Foundational ownership rules used as a base for borrow checking.
+ * @brief Ownership, moves, and local borrow lifetimes enforced by the compiler.
  *
- * This describes the initial `Copy` vs `move-only` classification that the
- * compiler uses before full borrow-lifetime analysis is implemented.
+ * The compiler tracks local shared and exclusive borrows, rejects overlapping
+ * conflicts, and releases a local borrow after its last use. Aggregate values
+ * that retain a borrow keep the source protected for the aggregate's live
+ * range. Some aggregate operations remain conservative; see the language
+ * syntax reference for current restrictions.
  */
 
 /**
@@ -57,10 +60,18 @@
  * types, and other move-only values, are rejected. There is currently no
  * general `Clone` trait or user-defined copy hook.
  *
- * Mlang closures are currently inline compiler constructs, not storable
- * callable values. Rust-style borrowed-by-default captures with lifetime
- * checks, and explicit owned/move captures, are a design direction rather
- * than implemented behavior.
+ * Mutable borrows stored in aggregates transfer from their source pointer and
+ * keep the borrowed place exclusively reserved while the aggregate is live.
+ * At present, an aggregate may retain only one mutable borrow; copying or
+ * extracting that borrow is rejected. Shared aggregate borrows retain their
+ * tracked source places, including disjoint fields where the compiler can
+ * identify them.
+ *
+ * Callable values, runtime closure environments, function-type annotations,
+ * and named-function items are implemented. A closure that borrows locals
+ * across a boundary is conservatively rejected unless the compiler can prove
+ * the callee does not let it escape. General closure copying and explicit
+ * owned/move captures are not part of the current ownership model.
  */
 
 /**

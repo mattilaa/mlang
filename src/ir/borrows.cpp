@@ -687,6 +687,11 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
 void CodeGenerator::clearAggregateBorrowOrigins(const std::string& variable)
 {
     aggregateBorrowPlaces.erase(variable);
+    // An aggregate that owns a moved `&mut` pointer uses the same exclusive
+    // borrow bookkeeping as a local pointer. Release that borrow whenever the
+    // aggregate is replaced, goes out of scope, or reaches its last use.
+    if(isMutBorrower(variable))
+        clearPointerBorrow(variable);
     auto origins = aggregateBorrowOrigins.find(variable);
     if(origins == aggregateBorrowOrigins.end())
     {
@@ -721,6 +726,14 @@ void CodeGenerator::trackAggregateBorrowOrigins(
     std::map<std::string,
              std::map<std::string, std::set<std::string>>>
         fieldOriginPlaces;
+    struct ExclusiveBorrow
+    {
+        std::string source;
+        std::string owner;
+        std::string place;
+        ExpressionNode* expression = nullptr;
+    };
+    std::vector<ExclusiveBorrow> exclusiveBorrows;
     auto addOrigin = [&](const std::string& owner, const std::string& place) {
         if(owner.empty())
             return;
@@ -733,33 +746,43 @@ void CodeGenerator::trackAggregateBorrowOrigins(
         if(auto* identifier = dynamic_cast<IdentifierNode*>(current))
         {
             if(isMutBorrower(identifier->name))
-                reportError(
-                    current->line,
-                    "cannot store mutable borrow '" + identifier->name +
-                        "' inside an aggregate; aggregate exclusive-borrow "
-                        "tracking is not supported yet");
-            auto pointer = pointerBorrowTarget.find(identifier->name);
-            if(pointer != pointerBorrowTarget.end())
             {
-                auto place = pointerBorrowPlace.find(identifier->name);
-                addOrigin(pointer->second,
-                          place == pointerBorrowPlace.end()
-                              ? pointer->second
-                              : place->second);
-            }
-            for(const auto& active : activeBorrowers)
-                if(active.second.count(identifier->name) != 0 &&
-                   aggregateBorrowOrigins.find(identifier->name) ==
-                       aggregateBorrowOrigins.end())
+                auto owner = pointerBorrowTarget.find(identifier->name);
+                if(owner != pointerBorrowTarget.end())
                 {
                     auto place = pointerBorrowPlace.find(identifier->name);
-                    addOrigin(active.first,
-                              pointer != pointerBorrowTarget.end() &&
-                                      pointer->second == active.first &&
-                                      place != pointerBorrowPlace.end()
-                                  ? place->second
-                                  : active.first);
+                    exclusiveBorrows.push_back(
+                        {identifier->name, owner->second,
+                         place == pointerBorrowPlace.end() ? owner->second
+                                                           : place->second,
+                         nullptr});
                 }
+            }
+            else
+            {
+                auto pointer = pointerBorrowTarget.find(identifier->name);
+                if(pointer != pointerBorrowTarget.end())
+                {
+                    auto place = pointerBorrowPlace.find(identifier->name);
+                    addOrigin(pointer->second,
+                              place == pointerBorrowPlace.end()
+                                  ? pointer->second
+                                  : place->second);
+                }
+                for(const auto& active : activeBorrowers)
+                    if(active.second.count(identifier->name) != 0 &&
+                       aggregateBorrowOrigins.find(identifier->name) ==
+                           aggregateBorrowOrigins.end())
+                    {
+                        auto place = pointerBorrowPlace.find(identifier->name);
+                        addOrigin(active.first,
+                                  pointer != pointerBorrowTarget.end() &&
+                                          pointer->second == active.first &&
+                                          place != pointerBorrowPlace.end()
+                                      ? place->second
+                                      : active.first);
+                    }
+            }
             auto aggregate = aggregateBorrowOrigins.find(identifier->name);
             if(aggregate != aggregateBorrowOrigins.end())
             {
@@ -805,14 +828,7 @@ void CodeGenerator::trackAggregateBorrowOrigins(
                     const bool isMutable =
                         unary->op == UnaryOpNode::OP_ADDR_MUT;
                     if(isMutable)
-                    {
-                        reportError(
-                            current->line,
-                            "cannot store a mutable borrow inside an "
-                            "aggregate; aggregate exclusive-borrow tracking "
-                            "is not supported yet");
                         return;
-                    }
                     auto conflicts = [&](const std::string& borrower) {
                         return borrowerPlaceOverlaps(
                             borrower, owner, place.empty() ? owner : place);
@@ -940,14 +956,17 @@ void CodeGenerator::trackAggregateBorrowOrigins(
         };
         if(auto* identifier = dynamic_cast<IdentifierNode*>(current))
         {
-            auto pointer = pointerBorrowTarget.find(identifier->name);
-            if(pointer != pointerBorrowTarget.end())
+            if(!isMutBorrower(identifier->name))
             {
-                auto place = pointerBorrowPlace.find(identifier->name);
-                addFieldOrigin(pointer->second,
-                               place == pointerBorrowPlace.end()
-                                   ? pointer->second
-                                   : place->second);
+                auto pointer = pointerBorrowTarget.find(identifier->name);
+                if(pointer != pointerBorrowTarget.end())
+                {
+                    auto place = pointerBorrowPlace.find(identifier->name);
+                    addFieldOrigin(pointer->second,
+                                   place == pointerBorrowPlace.end()
+                                       ? pointer->second
+                                       : place->second);
+                }
             }
             auto aggregate = aggregateBorrowFieldPlaces.find(identifier->name);
             if(aggregate != aggregateBorrowFieldPlaces.end())
@@ -961,8 +980,17 @@ void CodeGenerator::trackAggregateBorrowOrigins(
         }
         if(auto* unary = dynamic_cast<UnaryOpNode*>(current))
         {
-            if(unary->op == UnaryOpNode::OP_ADDR ||
-               unary->op == UnaryOpNode::OP_ADDR_MUT)
+            if(unary->op == UnaryOpNode::OP_ADDR_MUT)
+            {
+                const auto owner =
+                    resolveBorrowOwnerFromLValue(unary->operand);
+                const auto place =
+                    resolveBorrowPlaceFromLValue(unary->operand);
+                if(!owner.empty())
+                    exclusiveBorrows.push_back(
+                        {"", owner, place.empty() ? owner : place, unary});
+            }
+            else if(unary->op == UnaryOpNode::OP_ADDR)
             {
                 const auto owner =
                     resolveBorrowOwnerFromLValue(unary->operand);
@@ -1108,6 +1136,32 @@ void CodeGenerator::trackAggregateBorrowOrigins(
         }
     };
     collectFields(expression, "");
+    if(exclusiveBorrows.size() > 1)
+    {
+        reportError(expression ? expression->line : 0,
+                    "cannot store multiple mutable borrows in one aggregate; "
+                    "use separate aggregates so each exclusive borrow has "
+                    "an independent lifetime");
+        return;
+    }
+    for(const auto& borrow : exclusiveBorrows)
+    {
+        auto aggregateDepth = variableScopeDepth.find(variable);
+        auto ownerDepth = variableScopeDepth.find(borrow.owner);
+        const bool aggregateOutlivesOwner =
+            ownerDepth != variableScopeDepth.end() &&
+            (globalNamedValues.count(variable) != 0 ||
+             (aggregateDepth != variableScopeDepth.end() &&
+              aggregateDepth->second < ownerDepth->second));
+        if(aggregateOutlivesOwner)
+        {
+            reportError(expression ? expression->line : 0,
+                        "cannot store mutable borrow of '" + borrow.owner +
+                            "' in longer-lived aggregate '" + variable +
+                            "'");
+            return;
+        }
+    }
     clearAggregateBorrowOrigins(variable);
     for(auto it = origins.begin(); it != origins.end();)
         if(variableScopeDepth.find(*it) == variableScopeDepth.end())
@@ -1117,40 +1171,79 @@ void CodeGenerator::trackAggregateBorrowOrigins(
         }
         else
             ++it;
-    if(origins.empty())
+    if(origins.empty() && exclusiveBorrows.empty())
         return;
-    aggregateBorrowOrigins[variable] = origins;
-    auto& trackedPlaces = aggregateBorrowPlaces[variable];
-    for(const auto& owner : origins)
+    if(!origins.empty())
     {
-        auto places = originPlaces.find(owner);
-        if(places != originPlaces.end())
-            trackedPlaces[owner] = places->second;
-    }
-    for(auto field = fieldOriginPlaces.begin();
-        field != fieldOriginPlaces.end();)
-    {
-        for(auto owner = field->second.begin(); owner != field->second.end();)
-            if(origins.count(owner->first) == 0)
-                owner = field->second.erase(owner);
+        aggregateBorrowOrigins[variable] = origins;
+        auto& trackedPlaces = aggregateBorrowPlaces[variable];
+        for(const auto& owner : origins)
+        {
+            auto places = originPlaces.find(owner);
+            if(places != originPlaces.end())
+                trackedPlaces[owner] = places->second;
+        }
+        for(auto field = fieldOriginPlaces.begin();
+            field != fieldOriginPlaces.end();)
+        {
+            for(auto owner = field->second.begin();
+                owner != field->second.end();)
+                if(origins.count(owner->first) == 0)
+                    owner = field->second.erase(owner);
+                else
+                    ++owner;
+            if(field->second.empty())
+                field = fieldOriginPlaces.erase(field);
             else
-                ++owner;
-        if(field->second.empty())
-            field = fieldOriginPlaces.erase(field);
-        else
-            ++field;
+                ++field;
+        }
+        aggregateBorrowFieldPlaces[variable] =
+            std::move(fieldOriginPlaces);
+        for(const auto& owner : origins)
+            activeBorrowers[owner].insert(variable);
+        if(origins.size() == 1 && originPlaces.begin()->second.size() == 1 &&
+           !isMutBorrower(variable))
+            pointerBorrowPlace[variable] =
+                *originPlaces.begin()->second.begin();
     }
-    aggregateBorrowFieldPlaces[variable] = std::move(fieldOriginPlaces);
-    for(const auto& owner : origins)
-        activeBorrowers[owner].insert(variable);
-    if(origins.size() == 1 && originPlaces.begin()->second.size() == 1)
-        pointerBorrowPlace[variable] = *originPlaces.begin()->second.begin();
+
+    if(!exclusiveBorrows.empty())
+    {
+        const auto& borrow = exclusiveBorrows.front();
+        if(borrow.source.empty())
+            registerPointerBorrow(
+                variable, borrow.expression,
+                borrow.expression ? borrow.expression->line : 0, true);
+        else
+        {
+            clearPointerBorrow(borrow.source);
+            movedVariables.insert(borrow.source);
+            pointerBorrowTarget[variable] = borrow.owner;
+            pointerBorrowPlace[variable] = borrow.place;
+            std::string borrowKey = borrow.owner;
+            if(activeMutBorrower.find(borrowKey) != activeMutBorrower.end())
+                borrowKey = borrow.place;
+            activeMutBorrower[borrowKey] = variable;
+        }
+    }
 }
 
 void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                                           ExpressionNode* expr, int line,
                                           bool isMutable)
 {
+    if(!dynamic_cast<IdentifierNode*>(expr))
+    {
+        const std::string container = resolveBorrowOwnerFromLValue(expr);
+        if(!container.empty() && isMutBorrower(container))
+        {
+            reportError(line,
+                        "cannot extract a mutable borrow from aggregate '" +
+                            container + "' because that would duplicate its "
+                            "exclusive reference");
+            return;
+        }
+    }
     clearPointerBorrow(pointerVar);
     std::string borrowPlace;
 

@@ -387,6 +387,21 @@ Dereferencing a raw pointer requires `unsafe`, but `unsafe` does not disable
 null checks. A pointer known to be null is rejected at compile time; unknown raw
 pointers are checked at runtime before load or store.
 
+### Local Borrow Checking
+
+Taking `&value` creates a shared borrow, while `&mut value` creates an
+exclusive borrow. The compiler tracks their source places, rejects conflicting
+reads, writes, moves, or overlapping borrows, and releases local borrows after
+their last use. It can distinguish disjoint struct fields when their paths are
+known.
+
+An aggregate that stores a borrow keeps the borrowed place reserved while that
+aggregate remains live. Currently, one aggregate can retain at most one
+exclusive borrow. Copying that aggregate with `std::copy` or extracting its
+exclusive pointer is rejected, and the aggregate cannot outlive the borrowed
+local. Shared borrows in aggregates continue to track their individual source
+places.
+
 Struct values follow the same rule: every field starts at its zero value.
 The explicit `{}` form requests zero-initialized storage in the same style as
 C++ value-initialization.
