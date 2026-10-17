@@ -8858,6 +8858,32 @@ TEST_F(MLATest, OwnershipRejectsPartialMoveFromTypeWithDropMethod)
         << out;
 }
 
+// A type-level cleanup function also makes its aggregate non-partially-movable.
+TEST_F(MLATest, OwnershipRejectsPartialMoveFromTypeWithCleanupFunction)
+{
+    std::string code = R"(
+        struct Holder {
+            var items: list<i32>;
+            var marker: i32;
+        };
+
+        fn free(holder: Holder) -> void { return; }
+        fn consume(items: list<i32>) -> i32 { return items.len(); }
+
+        fn main() -> i32 {
+            var holder: Holder = Holder { items: [1, 2], marker: 3 };
+            return consume(holder.items);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot partially move 'holder.items'"),
+              std::string::npos)
+        << out;
+}
+
 // A runtime closure cannot capture aggregate storage after one field moved.
 TEST_F(MLATest, OwnershipRejectsClosureCaptureOfPartiallyMovedAggregate)
 {
