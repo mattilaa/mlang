@@ -15902,6 +15902,36 @@ TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
         << out;
 }
 
+// Every possible owner in a mutable pointer join must remain protected.
+TEST_F(MLATest, PointerBorrowOriginsProtectSecondIfOwnerAfterJoin)
+{
+    std::string code = R"(
+        var outside: i32 = 3;
+
+        fn main() -> i32 {
+            var value: i32 = 7;
+            var other: i32 = 5;
+            var pointer: ptr<i32> = &mut outside;
+            let flag: bool = true;
+            if flag {
+                pointer = &mut value;
+            } else {
+                pointer = &mut other;
+            }
+            other = 9;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'other' directly while mutably "
+                      "borrowed by 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
 // Borrow state from a loop path ending in break must be joined at loop exit.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossWhileBreak)
 {
