@@ -13849,6 +13849,60 @@ TEST_F(MLATest, OwnershipCannotStoreJoinedGlobalOrLocalPointerGlobally)
         << out;
 }
 
+// A shared local origin in a branch join must block mutation of its owner.
+TEST_F(MLATest, JoinedSharedPointerKeepsLocalOwnerBorrowActive)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            var flag: bool = true;
+            var selected: ptr<i32> = &global_value;
+            if flag {
+                selected = &global_value;
+            } else {
+                selected = &local_value;
+            }
+            local_value = 8;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'local_value' while borrowed by 'selected'"),
+              std::string::npos)
+        << out;
+}
+
+// An exclusive local origin in a branch join must block direct owner writes.
+TEST_F(MLATest, JoinedExclusivePointerKeepsLocalOwnerBorrowActive)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            var flag: bool = true;
+            var selected: ptr<i32> = &mut global_value;
+            if flag {
+                selected = &mut global_value;
+            } else {
+                selected = &mut local_value;
+            }
+            local_value = 8;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to 'local_value' directly while mutably borrowed"),
+              std::string::npos)
+        << out;
+}
+
 // A joined exclusive pointer must retain local origins when it escapes.
 TEST_F(MLATest, OwnershipCannotStoreJoinedExclusivePointerWithLocalOriginGlobally)
 {
