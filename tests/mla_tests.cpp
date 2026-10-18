@@ -5740,6 +5740,30 @@ TEST_F(MLATest, SharedBorrowReturnedThroughCallableCannotBeWrittenThrough)
               std::string::npos) << out;
 }
 
+// A returned pointer must retain shared provenance from a list element
+// argument.
+TEST_F(MLATest, SharedBorrowFromListCannotBeWrittenThroughReturnedPointer)
+{
+    std::string code = R"(
+        fn identity(pointer: ptr<i32>) -> ptr<i32> {
+            return pointer;
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let pointers: list<ptr<i32>> = [&value];
+            unsafe { *identity(pointers[0]) = 9; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
 // A nested dereference must retain the shared borrow restriction on its place.
 TEST_F(MLATest, SharedBorrowCannotWriteThroughNestedPointer)
 {
