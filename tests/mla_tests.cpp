@@ -13584,6 +13584,63 @@ TEST_F(MLATest, OwnershipCannotStoreTernaryPointerBorrowGlobally)
         << out;
 }
 
+// A joined pointer must retain local-borrow provenance from every branch.
+TEST_F(MLATest, OwnershipCannotStoreJoinedGlobalOrLocalPointerGlobally)
+{
+    std::string code = R"(
+        var saved: ptr<i32>;
+        var global_value: i32 = 11;
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            var flag: bool = true;
+            var selected: ptr<i32> = &global_value;
+            if flag {
+                selected = &local_value;
+            } else {
+                selected = &global_value;
+            }
+            saved = selected;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot store in global/static"), std::string::npos)
+        << out;
+}
+
+// A joined exclusive pointer must retain local origins when it escapes.
+TEST_F(MLATest, OwnershipCannotStoreJoinedExclusivePointerWithLocalOriginGlobally)
+{
+    std::string code = R"(
+        var saved: ptr<i32>;
+        var global_value: i32 = 11;
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            var flag: bool = true;
+            var selected: ptr<i32> = &mut global_value;
+            if flag {
+                selected = &mut global_value;
+            } else {
+                selected = &mut local_value;
+            }
+            saved = selected;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_TRUE(out.find("cannot store in global/static") !=
+                    std::string::npos ||
+                out.find("cannot alias mutable borrow") !=
+                    std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, OwnershipCannotReturnPointerLoadedThroughBorrowedPointer)
 {
     std::string code = R"(
