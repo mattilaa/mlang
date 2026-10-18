@@ -16279,6 +16279,36 @@ TEST_F(MLATest, NestedSharedJoinedBorrowPreservesDisjointAccess)
     EXPECT_EQ(compileAndRunExitCode(code), 4);
 }
 
+// A nested shared reborrow must retain local origins for opaque-call checks.
+TEST_F(MLATest, NestedSharedJoinedBorrowCannotEscapeLocalOrigin)
+{
+    std::string code = R"(
+        extern fn retain_pointer(pointer: ptr<i32>) -> void;
+
+        var global_value: i32 = 11;
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            let flag: bool = true;
+            var parent: ptr<i32> = &global_value;
+            if flag {
+                parent = &global_value;
+            } else {
+                parent = &local_value;
+            }
+            let child: ptr<i32> = &*parent;
+            retain_pointer(child);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
+              std::string::npos)
+        << out;
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
