@@ -6412,6 +6412,35 @@ TEST_F(MLATest, TernaryReborrowOfLocalParentCannotEscapeToOpaqueCall)
         << out;
 }
 
+// Loop-exit joins must retain local owners before a later child reborrow.
+TEST_F(MLATest, LoopJoinedPointerReborrowCannotEscapeLocalOrigin)
+{
+    std::string code = R"(
+        extern fn retain_pointer(pointer: ptr<i32>) -> void;
+
+        var global_value: i32 = 11;
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            var again: bool = true;
+            var parent: ptr<i32> = &mut global_value;
+            while again {
+                parent = &mut local_value;
+                again = false;
+            }
+            let child: ptr<i32> = &mut *parent;
+            retain_pointer(child);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
+              std::string::npos)
+        << out;
+}
+
 // Verifies a conditional expression cannot hide a shared borrow from a
 // writer.
 TEST_F(MLATest, SharedBorrowInTernaryCannotPassToMutatingPointerParameter)
