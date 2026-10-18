@@ -3063,6 +3063,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         bool hasUnknownPointerReturn = false;
         std::vector<ExpressionNode*> directBorrowReturns;
         std::map<std::string, std::vector<ExpressionNode*>> localBorrowAliases;
+        std::map<std::string, TypeNode*> localBorrowTypes;
         bool inConditionalRegion = false;
         auto eraseLocalBorrowAliasSubtree = [&](const std::string& path) {
             for(auto alias = localBorrowAliases.begin();
@@ -3323,6 +3324,8 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             }
             else if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
             {
+                if(declaration->type)
+                    localBorrowTypes[declaration->name] = declaration->type;
                 std::vector<ExpressionNode*> origins;
                 collectBorrowOrigins(declaration->expression, origins);
                 if(!origins.empty())
@@ -3333,6 +3336,8 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             }
             else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
             {
+                if(declaration->type)
+                    localBorrowTypes[declaration->name] = declaration->type;
                 std::vector<ExpressionNode*> origins;
                 collectBorrowOrigins(declaration->initExpr, origins);
                 if(!origins.empty())
@@ -3389,86 +3394,253 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             {
                 auto* call = dynamic_cast<FunctionCallNode*>(
                     expressionStatement->expression);
-                if(!call)
+                auto* method = dynamic_cast<MethodCallNode*>(
+                    expressionStatement->expression);
+                if(!call && !method)
                     return;
+                const std::vector<ExpressionNode*>& arguments =
+                    call ? call->arguments : method->arguments;
                 std::set<size_t> mutatedSlots;
                 std::set<size_t> definiteSlots;
-                bool sawOverload = false;
-                for(const auto& calledName :
-                    getFunctionItemTargetsForName(call->name))
+                if(call)
                 {
-                    auto overloads = functionOverloads.find(calledName);
-                    if(overloads == functionOverloads.end())
-                        continue;
-                    for(const auto& overload : overloads->second)
+                    bool sawOverload = false;
+                    for(const auto& calledName :
+                        getFunctionItemTargetsForName(call->name))
                     {
-                        if(!overload.node)
+                        auto overloads = functionOverloads.find(calledName);
+                        if(overloads == functionOverloads.end())
                             continue;
-                        sawOverload = true;
-                        std::set<size_t> overloadMutated;
-                        auto summary =
-                            functionPointerSlotMutationParameters.find(
-                                overload.symbolName);
-                        if(summary !=
-                           functionPointerSlotMutationParameters.end())
-                            overloadMutated = summary->second;
-                        mutatedSlots.insert(overloadMutated.begin(),
-                                            overloadMutated.end());
-                        for(size_t parameterIndex : overloadMutated)
-                            if(functionDefinitelyWritesPointerSlot(
-                                   overload.node, parameterIndex))
-                                definiteSlots.insert(parameterIndex);
+                        for(const auto& overload : overloads->second)
+                        {
+                            if(!overload.node)
+                                continue;
+                            sawOverload = true;
+                            std::set<size_t> overloadMutated;
+                            auto summary =
+                                functionPointerSlotMutationParameters.find(
+                                    overload.symbolName);
+                            if(summary !=
+                               functionPointerSlotMutationParameters.end())
+                                overloadMutated = summary->second;
+                            mutatedSlots.insert(overloadMutated.begin(),
+                                                overloadMutated.end());
+                            for(size_t parameterIndex : overloadMutated)
+                                if(functionDefinitelyWritesPointerSlot(
+                                       overload.node, parameterIndex))
+                                    definiteSlots.insert(parameterIndex);
+                        }
+                    }
+                    // An index is definite only if every possible overload
+                    // writes it unconditionally.
+                    if(sawOverload)
+                    {
+                        for(size_t slot : mutatedSlots)
+                        {
+                            bool writtenByEveryCandidate = true;
+                            for(const auto& calledName :
+                                getFunctionItemTargetsForName(call->name))
+                            {
+                                auto overloads =
+                                    functionOverloads.find(calledName);
+                                if(overloads == functionOverloads.end())
+                                    continue;
+                                for(const auto& overload : overloads->second)
+                                {
+                                    if(!overload.node)
+                                        continue;
+                                    auto summary =
+                                        functionPointerSlotMutationParameters.find(
+                                            overload.symbolName);
+                                    if(summary ==
+                                           functionPointerSlotMutationParameters.end() ||
+                                       summary->second.count(slot) == 0 ||
+                                       !functionDefinitelyWritesPointerSlot(
+                                           overload.node, slot))
+                                        writtenByEveryCandidate = false;
+                                }
+                            }
+                            if(!writtenByEveryCandidate)
+                                definiteSlots.erase(slot);
+                        }
                     }
                 }
-                // An index is definite only if every possible overload writes
-                // it unconditionally; the may-write summary remains the safe
-                // fallback for ambiguous or conditional calls.
-                if(sawOverload)
-                    for(size_t slot : mutatedSlots)
+                else
+                {
+                    TypeNode* receiverType = nullptr;
+                    if(auto* receiver =
+                           dynamic_cast<IdentifierNode*>(method->object))
                     {
-                        bool writtenByEveryCandidate = true;
-                        for(const auto& calledName :
-                            getFunctionItemTargetsForName(call->name))
-                        {
-                            auto overloads = functionOverloads.find(calledName);
-                            if(overloads == functionOverloads.end())
-                                continue;
-                            for(const auto& overload : overloads->second)
-                            {
-                                if(!overload.node)
-                                    continue;
-                                auto summary =
-                                    functionPointerSlotMutationParameters.find(
-                                        overload.symbolName);
-                                if(summary ==
-                                       functionPointerSlotMutationParameters.end() ||
-                                   summary->second.count(slot) == 0 ||
-                                   !functionDefinitelyWritesPointerSlot(
-                                       overload.node, slot))
-                                    writtenByEveryCandidate = false;
-                            }
-                        }
-                        if(!writtenByEveryCandidate)
-                            definiteSlots.erase(slot);
+                        auto localType = localBorrowTypes.find(receiver->name);
+                        if(localType != localBorrowTypes.end())
+                            receiverType = localType->second;
                     }
+                    std::string receiverStruct;
+                    if(auto* structure =
+                           dynamic_cast<StructTypeRefNode*>(receiverType))
+                        receiverStruct = structure->structName;
+                    else if(auto* generic =
+                                dynamic_cast<GenericStructTypeRefNode*>(
+                                    receiverType))
+                        receiverStruct = generic->getMangledName();
+                    auto methods = structMethods.find(receiverStruct);
+                    StructMethodNode* definition = nullptr;
+                    if(methods != structMethods.end())
+                    {
+                        auto found =
+                            methods->second.find(method->methodName);
+                        if(found != methods->second.end())
+                            definition = found->second.second;
+                    }
+                    if(!definition)
+                    {
+                        // When the receiver's local type is unavailable in
+                        // this out-of-context body scan, conservatively treat
+                        // pointer-to-pointer arguments as possibly mutated.
+                        for(size_t index = 0; index < arguments.size(); ++index)
+                        {
+                            TypeNode* argumentType =
+                                inferExpressionTypeNode(arguments[index], line);
+                            auto* pointer =
+                                dynamic_cast<PointerTypeNode*>(argumentType);
+                            if(pointer && dynamic_cast<PointerTypeNode*>(
+                                              pointer->elementType))
+                                mutatedSlots.insert(index);
+                        }
+                    }
+                    if(definition)
+                    {
+                        std::map<std::string, size_t> slotParameterArguments;
+                        size_t argumentIndex = 0;
+                        if(definition->parameters)
+                            for(auto* parameter :
+                                definition->parameters->parameters)
+                            {
+                                if(!parameter || parameter->name == "self")
+                                    continue;
+                                auto* pointer = dynamic_cast<PointerTypeNode*>(
+                                    parameter->type);
+                                if(pointer &&
+                                   dynamic_cast<PointerTypeNode*>(
+                                       pointer->elementType) &&
+                                   argumentIndex < arguments.size())
+                                    slotParameterArguments[parameter->name] =
+                                        argumentIndex;
+                                ++argumentIndex;
+                            }
+                        std::map<std::string, size_t> slotAliases =
+                            slotParameterArguments;
+                        bool conditionalWrite = false;
+                        std::function<void(StatementListNode*, bool)> scanList;
+                        std::function<void(StatementNode*, bool)> scanStatement;
+                        scanList = [&](StatementListNode* statements,
+                                       bool conditional) {
+                            if(statements)
+                                for(auto* child : statements->statements)
+                                    scanStatement(child, conditional);
+                        };
+                        scanStatement = [&](StatementNode* child,
+                                            bool conditional) {
+                            if(!child)
+                                return;
+                            if(auto* assignment =
+                                   dynamic_cast<DerefAssignmentNode*>(child))
+                            {
+                                auto* identifier = dynamic_cast<IdentifierNode*>(
+                                    assignment->pointerExpr);
+                                if(identifier)
+                                {
+                                    auto alias =
+                                        slotAliases.find(identifier->name);
+                                    if(alias != slotAliases.end())
+                                    {
+                                        mutatedSlots.insert(alias->second);
+                                        if(!conditional)
+                                            definiteSlots.insert(alias->second);
+                                        else
+                                            conditionalWrite = true;
+                                    }
+                                }
+                                return;
+                            }
+                            auto copySlotAlias = [&](const std::string& name,
+                                                     ExpressionNode* value) {
+                                auto* identifier =
+                                    dynamic_cast<IdentifierNode*>(value);
+                                if(!identifier)
+                                    return;
+                                auto alias =
+                                    slotAliases.find(identifier->name);
+                                if(alias != slotAliases.end())
+                                    slotAliases[name] = alias->second;
+                            };
+                            if(auto* declaration =
+                                   dynamic_cast<LetDeclNode*>(child))
+                                copySlotAlias(declaration->name,
+                                              declaration->expression);
+                            else if(auto* declaration =
+                                        dynamic_cast<VarDeclNode*>(child))
+                                copySlotAlias(declaration->name,
+                                              declaration->initExpr);
+                            else if(auto* assignment =
+                                        dynamic_cast<AssignmentNode*>(child))
+                                copySlotAlias(assignment->name,
+                                              assignment->expression);
+                            if(auto* block =
+                                   dynamic_cast<BlockStatementNode*>(child))
+                                scanList(block->statements, conditional);
+                            else if(auto* branch =
+                                        dynamic_cast<IfNode*>(child))
+                            {
+                                conditionalWrite = true;
+                                scanList(branch->thenBranch, true);
+                                scanStatement(branch->elseIfBranch, true);
+                                scanList(branch->elseBranch, true);
+                            }
+                            else if(auto* branch =
+                                        dynamic_cast<CexprIfNode*>(child))
+                            {
+                                conditionalWrite = true;
+                                scanList(branch->thenBranch, true);
+                                scanStatement(branch->elseIfBranch, true);
+                                scanList(branch->elseBranch, true);
+                            }
+                            else if(auto* loop =
+                                        dynamic_cast<WhileNode*>(child))
+                            {
+                                conditionalWrite = true;
+                                scanList(loop->body, true);
+                            }
+                            else if(auto* loop =
+                                        dynamic_cast<ForNode*>(child))
+                            {
+                                conditionalWrite = true;
+                                scanList(loop->body, true);
+                            }
+                        };
+                        scanList(definition->body, false);
+                        if(conditionalWrite)
+                            definiteSlots.clear();
+                    }
+                }
                 for(size_t slot : mutatedSlots)
                 {
-                    if(slot >= call->arguments.size())
+                    if(slot >= arguments.size())
                         continue;
                     const auto targetPaths =
-                        localBorrowDereferencePaths(call->arguments[slot]);
+                        localBorrowDereferencePaths(arguments[slot]);
                     std::vector<ExpressionNode*> replacementOrigins;
                     for(size_t argument = 0;
-                        argument < call->arguments.size(); ++argument)
+                        argument < arguments.size(); ++argument)
                     {
                         if(mutatedSlots.count(argument) != 0)
                             continue;
                         TypeNode* argumentType = inferExpressionTypeNode(
-                            call->arguments[argument], line);
+                            arguments[argument], line);
                         if(!argumentType ||
                            argumentType->kind != TypeNode::TYPE_PTR)
                             continue;
-                        collectBorrowOrigins(call->arguments[argument],
+                        collectBorrowOrigins(arguments[argument],
                                              replacementOrigins);
                     }
                     for(const auto& path : targetPaths)
