@@ -16949,6 +16949,68 @@ TEST_F(MLATest, AggregateFieldOfSameOwnerJoinedPointerPreservesDisjointField)
     EXPECT_EQ(compileAndRunExitCode(code), 1);
 }
 
+// Nested aggregate fields must carry every owner of a joined shared pointer.
+TEST_F(MLATest, NestedAggregateFieldOfJoinedSharedPointerRejectsOverlap)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct InnerBox { var value: ptr<i32>; };
+        struct OuterBox { var inner: InnerBox; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            let flag: bool = true;
+            if flag {
+                parent = &first.left;
+            } else {
+                parent = &second.left;
+            }
+            let boxed: OuterBox = OuterBox {
+                inner: InnerBox { value: parent }
+            };
+            let copied: ptr<i32> = boxed.inner.value;
+            second.left = 8;
+            unsafe { return *copied; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
+// Nested aggregate paths still allow siblings outside the joined pointer.
+TEST_F(MLATest, NestedAggregateFieldOfJoinedSharedPointerPreservesDisjoint)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct InnerBox { var value: ptr<i32>; };
+        struct OuterBox { var inner: InnerBox; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            let flag: bool = true;
+            if flag {
+                parent = &first.left;
+            } else {
+                parent = &second.left;
+            }
+            let boxed: OuterBox = OuterBox {
+                inner: InnerBox { value: parent }
+            };
+            let copied: ptr<i32> = boxed.inner.value;
+            second.right = 8;
+            unsafe { return *copied; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
