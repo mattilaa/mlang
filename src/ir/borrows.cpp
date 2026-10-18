@@ -2208,7 +2208,14 @@ void CodeGenerator::trackAggregateBorrowOrigins(
             else
             {
                 auto pointer = pointerBorrowTarget.find(identifier->name);
-                if(pointer != pointerBorrowTarget.end())
+                auto precise = aggregateBorrowPlaces.find(identifier->name);
+                if(precise != aggregateBorrowPlaces.end())
+                    for(const auto& owner : precise->second)
+                        for(const auto& place : owner.second)
+                            addOrigin(owner.first, place);
+                if(pointer != pointerBorrowTarget.end() &&
+                   (precise == aggregateBorrowPlaces.end() ||
+                    precise->second.count(pointer->second) == 0))
                 {
                     auto place = pointerBorrowPlace.find(identifier->name);
                     addOrigin(pointer->second,
@@ -2218,6 +2225,8 @@ void CodeGenerator::trackAggregateBorrowOrigins(
                 }
                 for(const auto& active : activeBorrowers)
                     if(active.second.count(identifier->name) != 0 &&
+                       (precise == aggregateBorrowPlaces.end() ||
+                        precise->second.count(active.first) == 0) &&
                        aggregateBorrowOrigins.find(identifier->name) ==
                            aggregateBorrowOrigins.end())
                     {
@@ -4464,17 +4473,35 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                 return;
             const std::string primaryOwner = *origins->second.begin();
             auto containerPlace = pointerBorrowPlace.find(container);
-            const bool hasPrecisePlace = origins->second.size() == 1 &&
-                                         containerPlace != pointerBorrowPlace.end();
+            auto containerPlaces = aggregateBorrowPlaces.find(container);
+            std::string primaryPlace = primaryOwner;
             for(const auto& owner : origins->second)
             {
-                borrowPlace = hasPrecisePlace ? containerPlace->second : owner;
-                if(!registerOwnerBorrow(owner, false))
-                    return;
+                std::set<std::string> places;
+                if(containerPlaces != aggregateBorrowPlaces.end())
+                {
+                    auto ownerPlaces = containerPlaces->second.find(owner);
+                    if(ownerPlaces != containerPlaces->second.end())
+                        places = ownerPlaces->second;
+                }
+                if(places.empty())
+                    places.insert(origins->second.size() == 1 &&
+                                          containerPlace !=
+                                              pointerBorrowPlace.end()
+                                      ? containerPlace->second
+                                      : owner);
+                for(const auto& place : places)
+                {
+                    borrowPlace = place;
+                    if(!registerOwnerBorrow(owner, false))
+                        return;
+                    aggregateBorrowPlaces[pointerVar][owner].insert(place);
+                    if(owner == primaryOwner && primaryPlace == primaryOwner)
+                        primaryPlace = place;
+                }
             }
             pointerBorrowTarget[pointerVar] = primaryOwner;
-            pointerBorrowPlace[pointerVar] =
-                hasPrecisePlace ? containerPlace->second : primaryOwner;
+            pointerBorrowPlace[pointerVar] = primaryPlace;
             return;
         }
     }
