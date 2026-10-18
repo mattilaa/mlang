@@ -4925,6 +4925,30 @@ TEST_F(MLATest, OwnershipFreeAliasDoubleFreeReportsError)
     EXPECT_NE(out.find("double free or use-after-free"), std::string::npos);
 }
 
+// Calling free() explicitly consumes the value and suppresses its scope-exit
+// cleanup.
+TEST_F(MLATest, OwnershipExplicitFreeRunsCleanupExactlyOnce)
+{
+    std::string code = R"(
+        struct Owned {
+            var marker: i32;
+        };
+
+        impl Owned {
+            fn free(self: Owned) -> void {
+                println!("free {}", self.marker);
+            }
+        }
+
+        fn main() -> i32 {
+            let owned: Owned = Owned { marker: 7 };
+            owned.free();
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "free 7\n");
+}
+
 TEST_F(MLATest, OwnershipScopeExitFreeMethodConsumesValue)
 {
     std::string code = R"(

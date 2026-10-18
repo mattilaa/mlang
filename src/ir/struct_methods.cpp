@@ -6665,7 +6665,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
     if(callee->getReturnType()->isVoidTy())
     {
-        return builder.CreateCall(callee, args);
+        llvm::CallInst* call = builder.CreateCall(callee, args);
+        if(consumesReceiver)
+            setActiveDropFlag(receiverOwner, false);
+        return call;
     }
-    return builder.CreateCall(callee, args, "methodcall");
+    llvm::CallInst* call =
+        builder.CreateCall(callee, args, "methodcall");
+    if(consumesReceiver)
+        setActiveDropFlag(receiverOwner, false);
+    return call;
 }
