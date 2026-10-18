@@ -3571,15 +3571,20 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                                 // provenance here can incorrectly classify a
                                 // write through the new value as a definite
                                 // overwrite of the old caller slot.
+                                auto alias = [&]() -> std::optional<size_t> {
+                                    auto* identifier =
+                                        dynamic_cast<IdentifierNode*>(value);
+                                    if(!identifier)
+                                        return std::nullopt;
+                                    auto found =
+                                        slotAliases.find(identifier->name);
+                                    if(found == slotAliases.end())
+                                        return std::nullopt;
+                                    return found->second;
+                                }();
                                 slotAliases.erase(name);
-                                auto* identifier =
-                                    dynamic_cast<IdentifierNode*>(value);
-                                if(!identifier)
-                                    return;
-                                auto alias =
-                                    slotAliases.find(identifier->name);
-                                if(alias != slotAliases.end())
-                                    slotAliases[name] = alias->second;
+                                if(alias)
+                                    slotAliases[name] = *alias;
                             };
                             if(auto* declaration =
                                    dynamic_cast<LetDeclNode*>(child))

@@ -120,6 +120,47 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             if(pointer && dynamic_cast<PointerTypeNode*>(pointer->elementType))
                 pointerSlotAliases[parameter->name].insert(i);
         }
+        auto collectPointerSlotAliases =
+            [](ExpressionNode* expression,
+               const std::map<std::string, std::set<size_t>>& aliases) {
+                std::set<size_t> result;
+                std::function<void(ExpressionNode*)> collect =
+                    [&](ExpressionNode* value) {
+                        if(auto* identifier =
+                               dynamic_cast<IdentifierNode*>(value))
+                        {
+                            auto found = aliases.find(identifier->name);
+                            if(found != aliases.end())
+                                result.insert(found->second.begin(),
+                                              found->second.end());
+                        }
+                        else if(auto* ternary =
+                                    dynamic_cast<TernaryNode*>(value))
+                        {
+                            collect(ternary->trueExpr);
+                            collect(ternary->falseExpr);
+                        }
+                        else if(auto* match =
+                                    dynamic_cast<MatchExpressionNode*>(value))
+                        {
+                            for(auto* arm : match->arms)
+                                if(arm)
+                                    collect(arm->expression);
+                        }
+                        else if(auto* cast =
+                                    dynamic_cast<CastExpressionNode*>(value))
+                            collect(cast->expression);
+                        else if(auto* attempt =
+                                    dynamic_cast<TryExpressionNode*>(value))
+                            collect(attempt->expression);
+                        else if(auto* binary =
+                                    dynamic_cast<BinaryOpNode*>(value))
+                            if(binary->op == BinaryOpNode::OP_COMMA)
+                                collect(binary->right);
+                    };
+                collect(expression);
+                return result;
+            };
         std::function<void(StatementListNode*)> scanPointerSlotWrites;
         std::function<void(StatementNode*)> scanPointerSlotStatement;
         scanPointerSlotWrites = [&](StatementListNode* statements) {
@@ -144,37 +185,26 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             }
             else if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
             {
-                if(auto* identifier = dynamic_cast<IdentifierNode*>(
-                       declaration->expression))
-                {
-                    auto aliases = pointerSlotAliases.find(identifier->name);
-                    if(aliases != pointerSlotAliases.end())
-                        pointerSlotAliases[declaration->name] = aliases->second;
-                }
+                pointerSlotAliases[declaration->name] =
+                    collectPointerSlotAliases(declaration->expression,
+                                              pointerSlotAliases);
             }
             else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
             {
-                if(auto* identifier = dynamic_cast<IdentifierNode*>(
-                       declaration->initExpr))
-                {
-                    auto aliases = pointerSlotAliases.find(identifier->name);
-                    if(aliases != pointerSlotAliases.end())
-                        pointerSlotAliases[declaration->name] = aliases->second;
-                }
+                pointerSlotAliases[declaration->name] =
+                    collectPointerSlotAliases(declaration->initExpr,
+                                              pointerSlotAliases);
             }
             else if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
             {
                 // Kill stale slot provenance before examining the new value;
                 // otherwise writes through a reassigned local alias can be
                 // attributed to the caller's old slot.
+                auto aliases = collectPointerSlotAliases(
+                    assignment->expression, pointerSlotAliases);
                 pointerSlotAliases.erase(assignment->name);
-                if(auto* identifier = dynamic_cast<IdentifierNode*>(
-                       assignment->expression))
-                {
-                    auto aliases = pointerSlotAliases.find(identifier->name);
-                    if(aliases != pointerSlotAliases.end())
-                        pointerSlotAliases[assignment->name] = aliases->second;
-                }
+                if(!aliases.empty())
+                    pointerSlotAliases[assignment->name] = std::move(aliases);
             }
             else if(auto* expressionStatement =
                         dynamic_cast<ExpressionStatementNode*>(statement))
@@ -207,16 +237,10 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                    address &&
                                    address->op == UnaryOpNode::OP_ADDR_MUT)
                                     argument = address->operand;
-                                auto* identifier =
-                                    dynamic_cast<IdentifierNode*>(argument);
-                                if(!identifier)
-                                    continue;
-                                auto aliases =
-                                    pointerSlotAliases.find(identifier->name);
-                                if(aliases != pointerSlotAliases.end())
-                                    mutatingParameters.insert(
-                                        aliases->second.begin(),
-                                        aliases->second.end());
+                                auto aliases = collectPointerSlotAliases(
+                                    argument, pointerSlotAliases);
+                                mutatingParameters.insert(aliases.begin(),
+                                                         aliases.end());
                             }
                         }
                     }
@@ -287,47 +311,32 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 if(aliases == definiteSlotAliases.end())
                     return;
                 wroteSlot = true;
-                definitelyMutatingParameters.insert(aliases->second.begin(),
-                                                     aliases->second.end());
+                if(aliases->second.size() == 1)
+                    definitelyMutatingParameters.insert(
+                        aliases->second.begin(), aliases->second.end());
                 return;
             }
             if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
             {
-                if(auto* identifier = dynamic_cast<IdentifierNode*>(
-                       declaration->expression))
-                {
-                    auto aliases =
-                        definiteSlotAliases.find(identifier->name);
-                    if(aliases != definiteSlotAliases.end())
-                        definiteSlotAliases[declaration->name] =
-                            aliases->second;
-                }
+                definiteSlotAliases[declaration->name] =
+                    collectPointerSlotAliases(declaration->expression,
+                                              definiteSlotAliases);
             }
             else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
             {
-                if(auto* identifier = dynamic_cast<IdentifierNode*>(
-                       declaration->initExpr))
-                {
-                    auto aliases =
-                        definiteSlotAliases.find(identifier->name);
-                    if(aliases != definiteSlotAliases.end())
-                        definiteSlotAliases[declaration->name] =
-                            aliases->second;
-                }
+                definiteSlotAliases[declaration->name] =
+                    collectPointerSlotAliases(declaration->initExpr,
+                                              definiteSlotAliases);
             }
             else if(auto* assignment =
                         dynamic_cast<AssignmentNode*>(statement))
             {
+                auto aliases = collectPointerSlotAliases(
+                    assignment->expression, definiteSlotAliases);
                 definiteSlotAliases.erase(assignment->name);
-                if(auto* identifier = dynamic_cast<IdentifierNode*>(
-                       assignment->expression))
-                {
-                    auto aliases =
-                        definiteSlotAliases.find(identifier->name);
-                    if(aliases != definiteSlotAliases.end())
-                        definiteSlotAliases[assignment->name] =
-                            aliases->second;
-                }
+                if(!aliases.empty())
+                    definiteSlotAliases[assignment->name] =
+                        std::move(aliases);
             }
             if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
             {
@@ -396,21 +405,17 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 {
                     if(parameterIndex >= call->arguments.size())
                         continue;
-                    ExpressionNode* argument =
-                        call->arguments[parameterIndex];
+                    ExpressionNode* argument = call->arguments[parameterIndex];
                     if(auto* address = dynamic_cast<UnaryOpNode*>(argument);
                        address && address->op == UnaryOpNode::OP_ADDR_MUT)
                         argument = address->operand;
-                    auto* identifier =
-                        dynamic_cast<IdentifierNode*>(argument);
-                    if(!identifier)
-                        continue;
-                    auto aliases = definiteSlotAliases.find(identifier->name);
-                    if(aliases == definiteSlotAliases.end())
+                    auto aliases = collectPointerSlotAliases(
+                        argument, definiteSlotAliases);
+                    if(aliases.size() != 1)
                         continue;
                     wroteSlot = true;
-                    definitelyMutatingParameters.insert(aliases->second.begin(),
-                                                         aliases->second.end());
+                    definitelyMutatingParameters.insert(aliases.begin(),
+                                                         aliases.end());
                 }
             }
         };
