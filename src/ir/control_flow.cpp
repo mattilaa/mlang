@@ -1494,6 +1494,7 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     auto bodyPointerBorrowTarget = pointerBorrowTarget;
     auto bodyPointerBorrowParent = pointerBorrowParent;
     auto bodyAggregateBorrowOrigins = aggregateBorrowOrigins;
+    auto bodyAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto bodyPointerBorrowPlace = pointerBorrowPlace;
     auto bodyActiveBorrowers = activeBorrowers;
     auto bodyActiveMutBorrower = activeMutBorrower;
@@ -1575,9 +1576,42 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
                 activeMutBorrower[kv.first] = kv.second;
             }
         }
-        // The loop may execute zero or multiple times; aggregate path sets
-        // from a single body pass are not a sound summary of the final value.
-        aggregateBorrowPlaces.clear();
+        // Preserve precise paths for live exclusive pointers across the
+        // zero-or-more-iterations join. Other aggregate path sets remain
+        // conservative because a loop may replace them on later iterations.
+        std::map<std::string, std::map<std::string, std::set<std::string>>>
+            loopPointerBorrowPlaces;
+        auto mergeLoopPointerPlaces = [&](const auto& branchPlaces) {
+            for(const auto& borrower : branchPlaces)
+            {
+                if(!isMutBorrower(borrower.first))
+                    continue;
+                for(const auto& owner : borrower.second)
+                    loopPointerBorrowPlaces[borrower.first][owner.first]
+                        .insert(owner.second.begin(), owner.second.end());
+            }
+        };
+        mergeLoopPointerPlaces(incomingAggregateBorrowPlaces);
+        mergeLoopPointerPlaces(bodyAggregateBorrowPlaces);
+        auto addLoopPointerPlace = [&](const auto& targets,
+                                       const auto& places) {
+            for(const auto& target : targets)
+            {
+                if(!isMutBorrower(target.first))
+                    continue;
+                auto& ownerPlaces =
+                    loopPointerBorrowPlaces[target.first][target.second];
+                if(!ownerPlaces.empty())
+                    continue;
+                auto place = places.find(target.first);
+                ownerPlaces.insert(place == places.end() ? target.second
+                                                         : place->second);
+            }
+        };
+        addLoopPointerPlace(incomingPointerBorrowTarget,
+                            incomingPointerBorrowPlace);
+        addLoopPointerPlace(bodyPointerBorrowTarget, bodyPointerBorrowPlace);
+        aggregateBorrowPlaces = std::move(loopPointerBorrowPlaces);
         aggregateBorrowFieldPlaces.clear();
         for(const auto& closure : bodyRuntimeClosureBorrowOwners)
         {
@@ -1650,6 +1684,33 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     }
     if(!breakBorrowStates.empty())
     {
+        // Break exits may carry a mutable pointer assignment that does not
+        // occur on the ordinary loop back-edge. Preserve its exact owner
+        // place separately from the single representative pointer target.
+        for(const auto& state : breakBorrowStates)
+        {
+            auto survivesState = [&](const std::string& name) {
+                auto depth = state.variableScopeDepth.find(name);
+                return depth == state.variableScopeDepth.end() ||
+                       depth->second <= loopScopeDepth;
+            };
+            std::set<std::string> mutablePointers;
+            for(const auto& borrow : state.activeMutBorrower)
+                mutablePointers.insert(borrow.second);
+            for(const auto& pointer : mutablePointers)
+            {
+                auto target = state.pointerBorrowTarget.find(pointer);
+                if(target == state.pointerBorrowTarget.end() ||
+                   !survivesState(pointer) || !survivesState(target->second))
+                    continue;
+                auto place = state.pointerBorrowPlace.find(pointer);
+                aggregateBorrowPlaces[pointer][target->second].insert(
+                    place == state.pointerBorrowPlace.end()
+                        ? target->second
+                        : place->second);
+            }
+        }
+
         // A reborrow's parent/place is only precise when every exiting path
         // agrees. Keep only refinements present on all recorded break paths.
         for(auto parent = pointerBorrowParent.begin();
@@ -1683,7 +1744,12 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
             else
                 ++place;
         }
-        aggregateBorrowPlaces.clear();
+        for(auto places = aggregateBorrowPlaces.begin();
+            places != aggregateBorrowPlaces.end();)
+            if(!isMutBorrower(places->first))
+                places = aggregateBorrowPlaces.erase(places);
+            else
+                ++places;
         aggregateBorrowFieldPlaces.clear();
     }
 }

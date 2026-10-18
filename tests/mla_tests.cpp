@@ -15962,6 +15962,75 @@ TEST_F(MLATest, PointerBorrowOriginsMergeAcrossWhileLoop)
         << out;
 }
 
+// A loop join must keep a mutable pointer's field path on its possible owner.
+TEST_F(MLATest, LoopJoinedFieldBorrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        var outside: i32 = 0;
+        fn main() -> i32 {
+            var value: Pair = Pair { left: 4, right: 5 };
+            var pointer: ptr<i32> = &mut outside;
+            var flag: bool = true;
+            while flag {
+                pointer = &mut value.left;
+                flag = false;
+            }
+            value.right = 8;
+            unsafe { return *pointer; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
+// A break exit must preserve the same field-sensitive mutable-borrow path.
+TEST_F(MLATest, LoopBreakJoinedFieldBorrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        var outside: i32 = 0;
+        fn main() -> i32 {
+            var value: Pair = Pair { left: 4, right: 5 };
+            var pointer: ptr<i32> = &mut outside;
+            var flag: bool = true;
+            while flag {
+                pointer = &mut value.left;
+                break;
+            }
+            value.right = 8;
+            unsafe { return *pointer; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
+// A loop break must also keep writes to the borrowed field forbidden.
+TEST_F(MLATest, LoopBreakJoinedFieldBorrowRejectsOverlappingAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        var outside: i32 = 0;
+        fn main() -> i32 {
+            var value: Pair = Pair { left: 4, right: 5 };
+            var pointer: ptr<i32> = &mut outside;
+            var flag: bool = true;
+            while flag {
+                pointer = &mut value.left;
+                break;
+            }
+            value.left = 8;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'value' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
