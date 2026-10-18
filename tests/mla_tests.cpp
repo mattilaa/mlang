@@ -11210,6 +11210,112 @@ TEST_F(MLATest, OwnershipFunctionReturnedPointerKeepsConditionalFieldBorrow)
         << out;
 }
 
+// Replacing a list element must discard its old pointer-borrow origin.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerDropsOverwrittenListBorrow)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+
+        fn select_global() -> ptr<i32> {
+            var local_value: i32 = 7;
+            var pointers: list<ptr<i32>> = [&local_value];
+            pointers[0] = &global_value;
+            return pointers[0];
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = select_global();
+            local_value = 4;
+            unsafe { return *selected - 11; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A branch-dependent list-element borrow must remain in return provenance.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerKeepsConditionalListBorrow)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+
+        fn maybe_local(flag: bool) -> ptr<i32> {
+            var local_value: i32 = 7;
+            var pointers: list<ptr<i32>> = [&global_value];
+            if flag {
+                pointers[0] = &local_value;
+            }
+            return pointers[0];
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = maybe_local(true);
+            local_value = 4;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'selected'"), std::string::npos)
+        << out;
+}
+
+// Replacing a map value must discard its old pointer-borrow origin.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerDropsOverwrittenMapBorrow)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+
+        fn select_global() -> ptr<i32> {
+            var local_value: i32 = 7;
+            var pointers: map<str8, ptr<i32>> = {"value": &local_value};
+            pointers = {"value": &global_value};
+            return pointers["value"];
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = select_global();
+            local_value = 4;
+            unsafe { return *selected - 11; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A conditional map-value borrow must remain in returned pointer provenance.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerKeepsConditionalMapBorrow)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+
+        fn maybe_local(flag: bool) -> ptr<i32> {
+            var local_value: i32 = 7;
+            var pointers: map<str8, ptr<i32>> = {"value": &global_value};
+            if flag {
+                pointers = {"value": &local_value};
+            }
+            return pointers["value"];
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = maybe_local(true);
+            local_value = 4;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'selected'"), std::string::npos)
+        << out;
+}
+
 // Conditional pointer assignments must conservatively retain both origins.
 TEST_F(MLATest, OwnershipFunctionReturnedPointerMergesBranchOrigins)
 {
