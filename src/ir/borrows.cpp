@@ -2919,19 +2919,14 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
     clearPointerBorrow(pointerVar);
     std::string borrowPlace;
     std::string exclusiveReborrowParent;
-    if(isMutable)
+    if(auto* address = dynamic_cast<UnaryOpNode*>(expr))
     {
-        if(auto* address = dynamic_cast<UnaryOpNode*>(expr))
-        {
-            auto* dereference = dynamic_cast<UnaryOpNode*>(address->operand);
-            if(dereference && dereference->op == UnaryOpNode::OP_DEREF)
-            {
-                if(auto* parent =
-                       dynamic_cast<IdentifierNode*>(dereference->operand))
-                    if(isMutBorrower(parent->name))
-                        exclusiveReborrowParent = parent->name;
-            }
-        }
+        auto* dereference = dynamic_cast<UnaryOpNode*>(address->operand);
+        if(dereference && dereference->op == UnaryOpNode::OP_DEREF)
+            if(auto* parent =
+                   dynamic_cast<IdentifierNode*>(dereference->operand))
+                if(isMutBorrower(parent->name))
+                    exclusiveReborrowParent = parent->name;
     }
 
     auto registerOwnerBorrow = [&](const std::string& ownerName,
@@ -3028,6 +3023,11 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         // Shared borrow: reject only an overlapping mutable borrow.
         for(const auto& mutBorrow : activeMutBorrower)
         {
+            if(!exclusiveReborrowParent.empty() &&
+               (mutBorrow.second == exclusiveReborrowParent ||
+                isPointerBorrowAncestor(mutBorrow.second,
+                                        exclusiveReborrowParent)))
+                continue;
             if(borrowerPlaceOverlaps(mutBorrow.second, ownerName, borrowPlace))
             {
                 reportError(line,
@@ -4491,8 +4491,11 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         for(const auto& possibleOwner : possibleOwners)
             if(!possibleOwner.empty())
             {
-                activeMutBorrower["@reborrow:" + pointerVar + ":" +
-                                  possibleOwner] = pointerVar;
+                if(isMutable)
+                    activeMutBorrower["@reborrow:" + pointerVar + ":" +
+                                      possibleOwner] = pointerVar;
+                else
+                    activeBorrowers[possibleOwner].insert(pointerVar);
                 if(parentPlaces != aggregateBorrowPlaces.end())
                 {
                     auto precisePlaces =

@@ -16147,6 +16147,86 @@ TEST_F(MLATest, JoinedFieldReborrowRejectsOverlappingAccess)
         << out;
 }
 
+// A shared child reborrow must block writes to every possible joined owner.
+TEST_F(MLATest, JoinedSharedFieldReborrowRejectsOverlappingAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var pointer: ptr<i32> = &mut first.left;
+            let flag: bool = true;
+            if flag {
+                pointer = &mut first.left;
+            } else {
+                pointer = &mut second.left;
+            }
+            let child: ptr<i32> = &*pointer;
+            second.left = 8;
+            unsafe { return *child; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
+// A shared reborrow of a joined pointer may leave sibling fields mutable.
+TEST_F(MLATest, JoinedSharedFieldReborrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var pointer: ptr<i32> = &mut first.left;
+            let flag: bool = true;
+            if flag {
+                pointer = &mut first.left;
+            } else {
+                pointer = &mut second.left;
+            }
+            let child: ptr<i32> = &*pointer;
+            second.right = 8;
+            unsafe { return *child; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
+// A shared joined reborrow must also suspend writes through its parent pointer.
+TEST_F(MLATest, JoinedSharedFieldReborrowBlocksParentWrite)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var pointer: ptr<i32> = &mut first.left;
+            let flag: bool = true;
+            if flag {
+                pointer = &mut first.left;
+            } else {
+                pointer = &mut second.left;
+            }
+            let child: ptr<i32> = &*pointer;
+            unsafe { *pointer = 8; }
+            unsafe { return *child; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'child'"), std::string::npos)
+        << out;
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
