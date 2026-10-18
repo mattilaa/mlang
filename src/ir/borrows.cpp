@@ -2896,6 +2896,20 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                     ownerPlace = owner + place->second.substr(owner.size());
                 aggregateBorrowPlaces[pointerVar][owner].insert(ownerPlace);
             }
+            for(const auto& ownerBorrowers : branchShared[branch])
+                if(ownerBorrowers.second.count(pointerVar) &&
+                   borrowTarget != branchTargets[branch].end() &&
+                   borrowTarget->second == ownerBorrowers.first)
+                {
+                    std::string ownerPlace = ownerBorrowers.first;
+                    auto place = branchPlaces[branch].find(pointerVar);
+                    if(place != branchPlaces[branch].end() &&
+                       place->second.compare(0, ownerPlace.size(),
+                                             ownerPlace) == 0)
+                        ownerPlace += place->second.substr(ownerPlace.size());
+                    aggregateBorrowPlaces[pointerVar][ownerBorrowers.first]
+                        .insert(ownerPlace);
+                }
         }
         if(commonPlace && !placeValue.empty())
             pointerBorrowPlace[pointerVar] = placeValue;
@@ -4688,6 +4702,20 @@ void CodeGenerator::registerPointerBorrowAlternatives(
                 ownerPlace = owner + place->second.substr(owner.size());
             aggregateBorrowPlaces[pointerVar][owner].insert(ownerPlace);
         }
+        for(const auto& ownerBorrowers : branchShared[branch])
+            if(ownerBorrowers.second.count(pointerVar) &&
+               borrowTarget != branchTargets[branch].end() &&
+               borrowTarget->second == ownerBorrowers.first)
+            {
+                std::string ownerPlace = ownerBorrowers.first;
+                auto place = branchPlaces[branch].find(pointerVar);
+                if(place != branchPlaces[branch].end() &&
+                   place->second.compare(0, ownerPlace.size(),
+                                         ownerPlace) == 0)
+                    ownerPlace += place->second.substr(ownerPlace.size());
+                aggregateBorrowPlaces[pointerVar][ownerBorrowers.first]
+                    .insert(ownerPlace);
+            }
     }
     if(commonPlace && !placeValue.empty())
         pointerBorrowPlace[pointerVar] = placeValue;

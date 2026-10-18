@@ -16309,6 +16309,48 @@ TEST_F(MLATest, NestedSharedJoinedBorrowCannotEscapeLocalOrigin)
         << out;
 }
 
+// A ternary shared join must preserve field precision through reborrowing.
+TEST_F(MLATest, NestedTernarySharedJoinedBorrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            let flag: bool = true;
+            let parent: ptr<i32> = flag ? &first.left : &second.left;
+            let child: ptr<i32> = &*parent;
+            second.right = 8;
+            unsafe { return *child; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
+// A ternary shared join must reject writes to any possible borrowed field.
+TEST_F(MLATest, NestedTernarySharedJoinedBorrowRejectsOverlappingAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            let flag: bool = true;
+            let parent: ptr<i32> = flag ? &first.left : &second.left;
+            let child: ptr<i32> = &*parent;
+            second.left = 8;
+            unsafe { return *child; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
