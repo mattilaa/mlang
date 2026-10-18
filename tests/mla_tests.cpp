@@ -6254,6 +6254,33 @@ TEST_F(MLATest, SharedBorrowInTernaryCannotPassToMutatingPointerParameter)
               std::string::npos) << out;
 }
 
+// A joined pointer with any shared origin cannot reach a mutating parameter.
+TEST_F(MLATest, MixedSharedAndExclusivePointerCannotPassToMutatingParameter)
+{
+    std::string code = R"(
+        fn write_value(pointer: ptr<i32>) -> void {
+            unsafe { *pointer = 9; }
+        }
+
+        fn main() -> i32 {
+            var exclusive_value: i32 = 4;
+            var shared_value: i32 = 5;
+            let flag: bool = true;
+            let pointer: ptr<i32> =
+                flag ? &mut exclusive_value : &shared_value;
+            write_value(pointer);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("to mutating pointer parameter 'pointer'"),
+              std::string::npos)
+        << out;
+}
+
 // Verifies a shared pointer extracted from a list is not passed to a writer.
 TEST_F(MLATest, SharedBorrowExtractedFromListCannotReachWriter)
 {

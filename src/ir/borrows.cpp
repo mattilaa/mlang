@@ -805,12 +805,12 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
                expressionIsKnownSharedBorrow(address->operand);
     if(auto* identifier = dynamic_cast<IdentifierNode*>(expr))
     {
-        auto owner = pointerBorrowTarget.find(identifier->name);
-        if(owner == pointerBorrowTarget.end() || isMutBorrower(identifier->name))
-            return false;
-        auto borrowers = activeBorrowers.find(owner->second);
-        return borrowers != activeBorrowers.end() &&
-               borrowers->second.count(identifier->name) != 0;
+        // A joined pointer may be exclusive on one path and shared on
+        // another. Any retained shared origin makes a mutating call unsafe.
+        for(const auto& owner : activeBorrowers)
+            if(owner.second.count(identifier->name) != 0)
+                return true;
+        return false;
     }
     auto bodyReturnsSharedBorrow = [&](StatementListNode* body,
                                        bool allowTrackedIdentifiers) {
