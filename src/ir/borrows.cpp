@@ -4016,15 +4016,40 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                                           pointerVar + "'");
                     return;
                 }
-                (void)registerOwnerBorrow(borrowIt->second, false);
-                std::string primaryOwner = borrowIt->second;
+                const std::string primaryOwner = borrowIt->second;
+                std::map<std::string, std::set<std::string>> sourcePlaces;
+                auto sourceAggregatePlaces =
+                    aggregateBorrowPlaces.find(idExpr->name);
+                if(sourceAggregatePlaces != aggregateBorrowPlaces.end())
+                    sourcePlaces = sourceAggregatePlaces->second;
+                std::set<std::string> possibleOwners = {primaryOwner};
                 for(const auto& ownerBorrowers : activeBorrowers)
+                    if(ownerBorrowers.second.count(idExpr->name))
+                        possibleOwners.insert(ownerBorrowers.first);
+                for(const auto& owner : sourcePlaces)
+                    if(!owner.second.empty())
+                        possibleOwners.insert(owner.first);
+
+                for(const auto& owner : possibleOwners)
                 {
-                    if(ownerBorrowers.first == primaryOwner ||
-                       ownerBorrowers.second.count(idExpr->name) == 0)
-                        continue;
-                    borrowPlace = ownerBorrowers.first;
-                    (void)registerOwnerBorrow(ownerBorrowers.first, false);
+                    std::set<std::string> ownerPaths;
+                    auto precisePlaces = sourcePlaces.find(owner);
+                    if(precisePlaces != sourcePlaces.end() &&
+                       !precisePlaces->second.empty())
+                        ownerPaths = precisePlaces->second;
+                    else if(owner == primaryOwner &&
+                            sourcePlace != pointerBorrowPlace.end())
+                        ownerPaths.insert(sourcePlace->second);
+                    else
+                        ownerPaths.insert(owner);
+                    for(const auto& ownerPlace : ownerPaths)
+                    {
+                        borrowPlace = ownerPlace;
+                        if(!registerOwnerBorrow(owner, false))
+                            return;
+                        aggregateBorrowPlaces[pointerVar][owner].insert(
+                            ownerPlace);
+                    }
                 }
                 borrowPlace = sourcePlace == pointerBorrowPlace.end()
                                   ? primaryOwner

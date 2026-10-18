@@ -16737,6 +16737,108 @@ TEST_F(MLATest, NestedListContinueSharedBorrowRejectsOverlappingAccess)
         << out;
 }
 
+// Copying a joined shared pointer must retain every possible owner.
+TEST_F(MLATest, AliasOfJoinedSharedPointerRejectsOverlappingAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            let flag: bool = true;
+            if flag {
+                parent = &first.left;
+            } else {
+                parent = &second.left;
+            }
+            let copied: ptr<i32> = parent;
+            second.left = 8;
+            unsafe { return *copied; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
+// A copied joined shared pointer should still allow disjoint field access.
+TEST_F(MLATest, AliasOfJoinedSharedPointerPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            let flag: bool = true;
+            if flag {
+                parent = &first.left;
+            } else {
+                parent = &second.left;
+            }
+            let copied: ptr<i32> = parent;
+            second.right = 8;
+            unsafe { return *copied; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
+// Copying a joined pointer to multiple fields must retain every field path.
+TEST_F(MLATest, AliasOfSameOwnerJoinedSharedPointerRejectsEitherField)
+{
+    std::string code = R"(
+        struct Triple { var first: i32; var second: i32; var third: i32; };
+        fn main() -> i32 {
+            var value: Triple = Triple { first: 1, second: 2, third: 3 };
+            let flag: bool = true;
+            var parent: ptr<i32> = &value.first;
+            if flag {
+                parent = &value.first;
+            } else {
+                parent = &value.second;
+            }
+            let copied: ptr<i32> = parent;
+            value.second = 9;
+            unsafe { return *copied; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'value' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
+// Multiple possible fields in one owner must not block a disjoint sibling.
+TEST_F(MLATest, AliasOfSameOwnerJoinedSharedPointerPreservesDisjointField)
+{
+    std::string code = R"(
+        struct Triple { var first: i32; var second: i32; var third: i32; };
+        fn main() -> i32 {
+            var value: Triple = Triple { first: 1, second: 2, third: 3 };
+            let flag: bool = true;
+            var parent: ptr<i32> = &value.first;
+            if flag {
+                parent = &value.first;
+            } else {
+                parent = &value.second;
+            }
+            let copied: ptr<i32> = parent;
+            value.third = 9;
+            unsafe { return *copied; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 1);
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
