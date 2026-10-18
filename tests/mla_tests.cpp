@@ -16095,6 +16095,58 @@ TEST_F(MLATest, ListLoopJoinedFieldBorrowPreservesDisjointAccess)
     EXPECT_EQ(compileAndRunExitCode(code), 4);
 }
 
+// A child reborrow of a joined pointer must preserve owner-specific field paths.
+TEST_F(MLATest, JoinedFieldReborrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var pointer: ptr<i32> = &mut first.left;
+            let flag: bool = true;
+            if flag {
+                pointer = &mut first.left;
+            } else {
+                pointer = &mut second.left;
+            }
+            let child: ptr<i32> = &mut *pointer;
+            second.right = 8;
+            unsafe { return *child; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
+// A child reborrow of a joined pointer must block every possible borrowed field.
+TEST_F(MLATest, JoinedFieldReborrowRejectsOverlappingAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var pointer: ptr<i32> = &mut first.left;
+            let flag: bool = true;
+            if flag {
+                pointer = &mut first.left;
+            } else {
+                pointer = &mut second.left;
+            }
+            let child: ptr<i32> = &mut *pointer;
+            second.left = 8;
+            unsafe { return *child; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {

@@ -4486,10 +4486,41 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             else if(!borrow.first.empty() && borrow.first.front() != '@')
                 possibleOwners.insert(borrow.first);
         }
+        auto parentPlaces = aggregateBorrowPlaces.find(exclusiveReborrowParent);
+        auto parentPlace = pointerBorrowPlace.find(exclusiveReborrowParent);
         for(const auto& possibleOwner : possibleOwners)
             if(!possibleOwner.empty())
+            {
                 activeMutBorrower["@reborrow:" + pointerVar + ":" +
                                   possibleOwner] = pointerVar;
+                if(parentPlaces != aggregateBorrowPlaces.end())
+                {
+                    auto precisePlaces =
+                        parentPlaces->second.find(possibleOwner);
+                    if(precisePlaces != parentPlaces->second.end() &&
+                       !precisePlaces->second.empty())
+                    {
+                        aggregateBorrowPlaces[pointerVar][possibleOwner]
+                            .insert(precisePlaces->second.begin(),
+                                    precisePlaces->second.end());
+                        continue;
+                    }
+                }
+                if(parentTarget != pointerBorrowTarget.end() &&
+                   parentTarget->second == possibleOwner &&
+                   parentPlace != pointerBorrowPlace.end())
+                {
+                    aggregateBorrowPlaces[pointerVar][possibleOwner].insert(
+                        parentPlace->second);
+                }
+                else
+                {
+                    // Missing place metadata must remain conservative for
+                    // this owner instead of silently dropping the reborrow.
+                    aggregateBorrowPlaces[pointerVar][possibleOwner].insert(
+                        possibleOwner);
+                }
+            }
     }
 }
 
