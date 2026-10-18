@@ -3064,6 +3064,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         std::vector<ExpressionNode*> directBorrowReturns;
         std::map<std::string, std::vector<ExpressionNode*>> localBorrowAliases;
         std::map<std::string, TypeNode*> localBorrowTypes;
+        std::map<std::string, std::string> localBorrowStructNames;
         bool inConditionalRegion = false;
         auto eraseLocalBorrowAliasSubtree = [&](const std::string& path) {
             for(auto alias = localBorrowAliases.begin();
@@ -3325,7 +3326,27 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             else if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
             {
                 if(declaration->type)
+                {
                     localBorrowTypes[declaration->name] = declaration->type;
+                    localBorrowStructNames.erase(declaration->name);
+                }
+                else if(auto* structure = dynamic_cast<StructLiteralNode*>(
+                            declaration->expression))
+                    localBorrowStructNames[declaration->name] =
+                        structure->structName;
+                else if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                            declaration->expression))
+                {
+                    auto inferred =
+                        localBorrowStructNames.find(identifier->name);
+                    if(inferred != localBorrowStructNames.end())
+                        localBorrowStructNames[declaration->name] =
+                            inferred->second;
+                    else
+                        localBorrowStructNames.erase(declaration->name);
+                }
+                else
+                    localBorrowStructNames.erase(declaration->name);
                 std::vector<ExpressionNode*> origins;
                 collectBorrowOrigins(declaration->expression, origins);
                 if(!origins.empty())
@@ -3337,7 +3358,27 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
             {
                 if(declaration->type)
+                {
                     localBorrowTypes[declaration->name] = declaration->type;
+                    localBorrowStructNames.erase(declaration->name);
+                }
+                else if(auto* structure = dynamic_cast<StructLiteralNode*>(
+                            declaration->initExpr))
+                    localBorrowStructNames[declaration->name] =
+                        structure->structName;
+                else if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                            declaration->initExpr))
+                {
+                    auto inferred =
+                        localBorrowStructNames.find(identifier->name);
+                    if(inferred != localBorrowStructNames.end())
+                        localBorrowStructNames[declaration->name] =
+                            inferred->second;
+                    else
+                        localBorrowStructNames.erase(declaration->name);
+                }
+                else
+                    localBorrowStructNames.erase(declaration->name);
                 std::vector<ExpressionNode*> origins;
                 collectBorrowOrigins(declaration->initExpr, origins);
                 if(!origins.empty())
@@ -3485,6 +3526,10 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                         if(auto* identifier =
                                dynamic_cast<IdentifierNode*>(value))
                         {
+                            auto inferred =
+                                localBorrowStructNames.find(identifier->name);
+                            if(inferred != localBorrowStructNames.end())
+                                return inferred->second;
                             auto localType =
                                 localBorrowTypes.find(identifier->name);
                             return localType == localBorrowTypes.end()
@@ -3502,13 +3547,20 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                                     structNameFromExpression(field->object);
                             else
                             {
-                                auto localType =
-                                    localBorrowTypes.find(field->structName);
-                                baseStruct =
-                                    localType == localBorrowTypes.end()
-                                        ? field->structName
-                                        : structNameFromType(
-                                              localType->second);
+                                auto inferred = localBorrowStructNames.find(
+                                    field->structName);
+                                if(inferred != localBorrowStructNames.end())
+                                    baseStruct = inferred->second;
+                                else
+                                {
+                                    auto localType = localBorrowTypes.find(
+                                        field->structName);
+                                    baseStruct =
+                                        localType == localBorrowTypes.end()
+                                            ? field->structName
+                                            : structNameFromType(
+                                                  localType->second);
+                                }
                             }
                             auto members = structMembers.find(baseStruct);
                             if(members == structMembers.end())
