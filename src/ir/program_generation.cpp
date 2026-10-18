@@ -922,6 +922,10 @@ void CodeGenerator::generateCode(ProgramNode* program)
             functionPointerReturnParameters;
         const auto previousCompleteSummaries =
             functionPointerReturnSummaryComplete;
+        const auto previousPointerSlotMutationSummaries =
+            functionPointerSlotMutationParameters;
+        const auto previousDefinitePointerSlotMutationSummaries =
+            functionPointerSlotDefiniteMutationParameters;
 
         for(const auto& namedOverloads : functionOverloads)
             for(const auto& overload : namedOverloads.second)
@@ -929,7 +933,11 @@ void CodeGenerator::generateCode(ProgramNode* program)
                     registerFunctionOverload(overload.node, overload.function);
 
         if(functionPointerReturnParameters == previousParameterSummaries &&
-           functionPointerReturnSummaryComplete == previousCompleteSummaries)
+           functionPointerReturnSummaryComplete == previousCompleteSummaries &&
+           functionPointerSlotMutationParameters ==
+               previousPointerSlotMutationSummaries &&
+           functionPointerSlotDefiniteMutationParameters ==
+               previousDefinitePointerSlotMutationSummaries)
             break;
     }
 

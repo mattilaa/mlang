@@ -12102,6 +12102,77 @@ TEST_F(MLATest, OwnershipHelperConditionalSlotWriteKeepsLocalBorrowOrigin)
         << out;
 }
 
+// Pointer-slot mutation summaries must propagate through unconditional wrappers.
+TEST_F(MLATest, OwnershipNestedHelperSlotOverwriteDropsLocalBorrowOrigin)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+
+        fn z_replace_inner(slot: ptr<ptr<i32>>, replacement: ptr<i32>) -> void {
+            unsafe { *slot = replacement; }
+        }
+        fn a_replace_wrapper(slot: ptr<ptr<i32>>,
+                           replacement: ptr<i32>) -> void {
+            z_replace_inner(slot, replacement);
+        }
+
+        fn select_global() -> ptr<i32> {
+            var local_value: i32 = 7;
+            var selected: ptr<i32> = &local_value;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            a_replace_wrapper(slot, &global_value);
+            return selected;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = select_global();
+            local_value = 4;
+            unsafe { return *selected - 11; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// Conditional slot mutations must propagate through helper wrappers as may-writes.
+TEST_F(MLATest, OwnershipNestedHelperConditionalSlotWriteKeepsLocalBorrowOrigin)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+
+        fn z_replace_inner(slot: ptr<ptr<i32>>, replacement: ptr<i32>) -> void {
+            unsafe { *slot = replacement; }
+        }
+        fn a_maybe_replace(flag: bool, slot: ptr<ptr<i32>>,
+                         replacement: ptr<i32>) -> void {
+            if flag {
+                z_replace_inner(slot, replacement);
+            }
+        }
+
+        fn maybe_local(flag: bool) -> ptr<i32> {
+            var local_value: i32 = 7;
+            var selected: ptr<i32> = &global_value;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            a_maybe_replace(flag, slot, &local_value);
+            return selected;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = maybe_local(true);
+            local_value = 4;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'selected'"), std::string::npos)
+        << out;
+}
+
 // A helper's indirect pointer write must update the caller's returned origin.
 TEST_F(MLATest, OwnershipHelperIndirectPointerAssignmentKeepsNewOrigin)
 {

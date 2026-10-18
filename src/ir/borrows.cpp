@@ -3288,94 +3288,22 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         };
         auto functionDefinitelyWritesPointerSlot =
             [&](FunctionDefNode* function, size_t parameterIndex) {
-                if(!function || !function->parameters || !function->body)
+                if(!function)
                     return false;
-                std::map<std::string, std::set<size_t>> slotAliases;
-                for(size_t index = 0;
-                    index < function->parameters->parameters.size(); ++index)
-                {
-                    auto* parameter = function->parameters->parameters[index];
-                    auto* pointer = parameter
-                                        ? dynamic_cast<PointerTypeNode*>(
-                                              parameter->type)
-                                        : nullptr;
-                    if(pointer &&
-                       dynamic_cast<PointerTypeNode*>(pointer->elementType))
-                        slotAliases[parameter->name].insert(index);
-                }
-                bool hasConditionalFlow = false;
-                bool definitelyWritten = false;
-                std::function<void(StatementListNode*)> scan;
-                std::function<void(StatementNode*)> scanStatement;
-                scan = [&](StatementListNode* statements) {
-                    if(statements)
-                        for(auto* child : statements->statements)
-                            scanStatement(child);
-                };
-                scanStatement = [&](StatementNode* child) {
-                    if(!child || definitelyWritten)
-                        return;
-                    if(auto* assignment =
-                           dynamic_cast<DerefAssignmentNode*>(child))
+                auto overloads = functionOverloads.find(function->name);
+                if(overloads == functionOverloads.end())
+                    return false;
+                for(const auto& overload : overloads->second)
+                    if(overload.node == function)
                     {
-                        auto* identifier = dynamic_cast<IdentifierNode*>(
-                            assignment->pointerExpr);
-                        if(!identifier)
-                            return;
-                        auto aliases = slotAliases.find(identifier->name);
-                        if(aliases != slotAliases.end() &&
-                           aliases->second.count(parameterIndex))
-                            definitelyWritten = true;
-                        return;
+                        auto summary =
+                            functionPointerSlotDefiniteMutationParameters.find(
+                                overload.symbolName);
+                        return summary !=
+                                   functionPointerSlotDefiniteMutationParameters.end() &&
+                               summary->second.count(parameterIndex) != 0;
                     }
-                    if(auto* declaration = dynamic_cast<LetDeclNode*>(child))
-                    {
-                        if(auto* identifier = dynamic_cast<IdentifierNode*>(
-                               declaration->expression))
-                        {
-                            auto aliases = slotAliases.find(identifier->name);
-                            if(aliases != slotAliases.end())
-                                slotAliases[declaration->name] =
-                                    aliases->second;
-                        }
-                    }
-                    else if(auto* declaration =
-                                dynamic_cast<VarDeclNode*>(child))
-                    {
-                        if(auto* identifier = dynamic_cast<IdentifierNode*>(
-                               declaration->initExpr))
-                        {
-                            auto aliases = slotAliases.find(identifier->name);
-                            if(aliases != slotAliases.end())
-                                slotAliases[declaration->name] =
-                                    aliases->second;
-                        }
-                    }
-                    else if(auto* assignment =
-                                dynamic_cast<AssignmentNode*>(child))
-                    {
-                        if(auto* identifier = dynamic_cast<IdentifierNode*>(
-                               assignment->expression))
-                        {
-                            auto aliases = slotAliases.find(identifier->name);
-                            if(aliases != slotAliases.end())
-                                slotAliases[assignment->name] =
-                                    aliases->second;
-                        }
-                    }
-                    if(auto* block = dynamic_cast<BlockStatementNode*>(child))
-                        scan(block->statements);
-                    else if(dynamic_cast<IfNode*>(child) ||
-                            dynamic_cast<CexprIfNode*>(child) ||
-                            dynamic_cast<WhileNode*>(child) ||
-                            dynamic_cast<ForNode*>(child) ||
-                            dynamic_cast<TryCatchNode*>(child))
-                        hasConditionalFlow = true;
-                    else if(dynamic_cast<ReturnNode*>(child))
-                        hasConditionalFlow = true;
-                };
-                scan(function->body);
-                return definitelyWritten && !hasConditionalFlow;
+                return false;
             };
         std::function<void(StatementNode*)> collectReturns;
         std::function<void(StatementListNode*)> collectReturnList;

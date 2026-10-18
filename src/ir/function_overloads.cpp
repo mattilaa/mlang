@@ -172,6 +172,51 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                         pointerSlotAliases[assignment->name] = aliases->second;
                 }
             }
+            else if(auto* expressionStatement =
+                        dynamic_cast<ExpressionStatementNode*>(statement))
+            {
+                auto* call = dynamic_cast<FunctionCallNode*>(
+                    expressionStatement->expression);
+                if(call)
+                    for(const auto& calledName :
+                        getFunctionItemTargetsForName(call->name))
+                    {
+                        auto overloads = functionOverloads.find(calledName);
+                        if(overloads == functionOverloads.end())
+                            continue;
+                        for(const auto& overload : overloads->second)
+                        {
+                            auto summary =
+                                functionPointerSlotMutationParameters.find(
+                                    overload.symbolName);
+                            if(summary ==
+                               functionPointerSlotMutationParameters.end())
+                                continue;
+                            for(size_t parameterIndex : summary->second)
+                            {
+                                if(parameterIndex >= call->arguments.size())
+                                    continue;
+                                ExpressionNode* argument =
+                                    call->arguments[parameterIndex];
+                                if(auto* address =
+                                       dynamic_cast<UnaryOpNode*>(argument);
+                                   address &&
+                                   address->op == UnaryOpNode::OP_ADDR_MUT)
+                                    argument = address->operand;
+                                auto* identifier =
+                                    dynamic_cast<IdentifierNode*>(argument);
+                                if(!identifier)
+                                    continue;
+                                auto aliases =
+                                    pointerSlotAliases.find(identifier->name);
+                                if(aliases != pointerSlotAliases.end())
+                                    mutatingParameters.insert(
+                                        aliases->second.begin(),
+                                        aliases->second.end());
+                            }
+                        }
+                    }
+            }
             if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                 scanPointerSlotWrites(block->statements);
             else if(auto* branch = dynamic_cast<IfNode*>(statement))
@@ -201,6 +246,172 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             }
         };
         scanPointerSlotWrites(node->body);
+
+        auto& definitelyMutatingParameters =
+            functionPointerSlotDefiniteMutationParameters[symbol];
+        definitelyMutatingParameters.clear();
+        std::map<std::string, std::set<size_t>> definiteSlotAliases;
+        for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
+        {
+            auto* parameter = node->parameters->parameters[i];
+            auto* pointer = parameter
+                                ? dynamic_cast<PointerTypeNode*>(parameter->type)
+                                : nullptr;
+            if(pointer && dynamic_cast<PointerTypeNode*>(pointer->elementType))
+                definiteSlotAliases[parameter->name].insert(i);
+        }
+        bool conditionalControlFlow = false;
+        bool wroteSlot = false;
+        std::function<void(StatementListNode*)> scanDefiniteSlotWrites;
+        std::function<void(StatementNode*)> scanDefiniteSlotStatement;
+        scanDefiniteSlotWrites = [&](StatementListNode* statements) {
+            if(statements)
+                for(auto* statement : statements->statements)
+                    scanDefiniteSlotStatement(statement);
+        };
+        scanDefiniteSlotStatement = [&](StatementNode* statement) {
+            if(!statement)
+                return;
+            if(auto* assignment =
+                   dynamic_cast<DerefAssignmentNode*>(statement))
+            {
+                auto* identifier =
+                    dynamic_cast<IdentifierNode*>(assignment->pointerExpr);
+                if(!identifier)
+                    return;
+                auto aliases = definiteSlotAliases.find(identifier->name);
+                if(aliases == definiteSlotAliases.end())
+                    return;
+                wroteSlot = true;
+                definitelyMutatingParameters.insert(aliases->second.begin(),
+                                                     aliases->second.end());
+                return;
+            }
+            if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
+            {
+                if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                       declaration->expression))
+                {
+                    auto aliases =
+                        definiteSlotAliases.find(identifier->name);
+                    if(aliases != definiteSlotAliases.end())
+                        definiteSlotAliases[declaration->name] =
+                            aliases->second;
+                }
+            }
+            else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
+            {
+                if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                       declaration->initExpr))
+                {
+                    auto aliases =
+                        definiteSlotAliases.find(identifier->name);
+                    if(aliases != definiteSlotAliases.end())
+                        definiteSlotAliases[declaration->name] =
+                            aliases->second;
+                }
+            }
+            else if(auto* assignment =
+                        dynamic_cast<AssignmentNode*>(statement))
+            {
+                if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                       assignment->expression))
+                {
+                    auto aliases =
+                        definiteSlotAliases.find(identifier->name);
+                    if(aliases != definiteSlotAliases.end())
+                        definiteSlotAliases[assignment->name] =
+                            aliases->second;
+                }
+            }
+            if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+            {
+                scanDefiniteSlotWrites(block->statements);
+                return;
+            }
+            if(dynamic_cast<IfNode*>(statement) ||
+               dynamic_cast<CexprIfNode*>(statement) ||
+               dynamic_cast<WhileNode*>(statement) ||
+               dynamic_cast<ForNode*>(statement) ||
+               dynamic_cast<TryCatchNode*>(statement))
+            {
+                conditionalControlFlow = true;
+                return;
+            }
+            if(auto* returned = dynamic_cast<ReturnNode*>(statement))
+            {
+                if(!wroteSlot)
+                    conditionalControlFlow = true;
+                (void)returned;
+                return;
+            }
+            if(auto* expression =
+                   dynamic_cast<ExpressionStatementNode*>(statement))
+            {
+                auto* call =
+                    dynamic_cast<FunctionCallNode*>(expression->expression);
+                if(!call)
+                    return;
+                std::set<size_t> commonWrites;
+                bool foundCandidate = false;
+                for(const auto& calledName :
+                    getFunctionItemTargetsForName(call->name))
+                {
+                    auto overloads = functionOverloads.find(calledName);
+                    if(overloads == functionOverloads.end())
+                        continue;
+                    for(const auto& overload : overloads->second)
+                    {
+                        auto summary =
+                            functionPointerSlotDefiniteMutationParameters.find(
+                                overload.symbolName);
+                        const std::set<size_t> candidateWrites =
+                            summary ==
+                                    functionPointerSlotDefiniteMutationParameters.end()
+                                ? std::set<size_t>{}
+                                : summary->second;
+                        if(!foundCandidate)
+                        {
+                            commonWrites = candidateWrites;
+                            foundCandidate = true;
+                        }
+                        else
+                        {
+                            std::set<size_t> intersection;
+                            std::set_intersection(
+                                commonWrites.begin(), commonWrites.end(),
+                                candidateWrites.begin(), candidateWrites.end(),
+                                std::inserter(intersection,
+                                              intersection.begin()));
+                            commonWrites = std::move(intersection);
+                        }
+                    }
+                }
+                for(size_t parameterIndex : commonWrites)
+                {
+                    if(parameterIndex >= call->arguments.size())
+                        continue;
+                    ExpressionNode* argument =
+                        call->arguments[parameterIndex];
+                    if(auto* address = dynamic_cast<UnaryOpNode*>(argument);
+                       address && address->op == UnaryOpNode::OP_ADDR_MUT)
+                        argument = address->operand;
+                    auto* identifier =
+                        dynamic_cast<IdentifierNode*>(argument);
+                    if(!identifier)
+                        continue;
+                    auto aliases = definiteSlotAliases.find(identifier->name);
+                    if(aliases == definiteSlotAliases.end())
+                        continue;
+                    wroteSlot = true;
+                    definitelyMutatingParameters.insert(aliases->second.begin(),
+                                                         aliases->second.end());
+                }
+            }
+        };
+        scanDefiniteSlotWrites(node->body);
+        if(conditionalControlFlow)
+            definitelyMutatingParameters.clear();
     }
 
     if(function && node->body && node->returnType &&

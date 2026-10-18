@@ -253,6 +253,10 @@ private:
     // through, allowing callers to distinguish read-only helpers from escapes.
     std::map<std::string, std::set<size_t>>
         functionPointerSlotMutationParameters;
+    // A subset of slot mutations guaranteed on every straight-line path;
+    // callers can discard the slot's previous provenance for these writes.
+    std::map<std::string, std::set<size_t>>
+        functionPointerSlotDefiniteMutationParameters;
     // Owner variables borrowed by each runtime closure's stack environment.
     std::map<std::string, std::set<std::string>> runtimeClosureBorrowOwners;
     // Generic closure parameter -> captured local name -> hidden parameter
