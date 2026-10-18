@@ -16031,6 +16031,50 @@ TEST_F(MLATest, LoopBreakJoinedFieldBorrowRejectsOverlappingAccess)
         << out;
 }
 
+// A range-loop join must retain field precision for a mutable pointer.
+TEST_F(MLATest, RangeLoopJoinedFieldBorrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        var outside: i32 = 0;
+        fn main() -> i32 {
+            var value: Pair = Pair { left: 4, right: 5 };
+            var pointer: ptr<i32> = &mut outside;
+            for i in 0..1 {
+                pointer = &mut value.left;
+            }
+            value.right = 8;
+            unsafe { return *pointer; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
+// A range-loop join must not allow writes through the borrowed field path.
+TEST_F(MLATest, RangeLoopJoinedFieldBorrowRejectsOverlappingAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        var outside: i32 = 0;
+        fn main() -> i32 {
+            var value: Pair = Pair { left: 4, right: 5 };
+            var pointer: ptr<i32> = &mut outside;
+            for i in 0..1 {
+                pointer = &mut value.left;
+            }
+            value.left = 8;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'value' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
