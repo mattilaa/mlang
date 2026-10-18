@@ -3472,6 +3472,46 @@ TEST_F(MLATest, JoinedFieldBorrowPreservesDisjointAccess)
     EXPECT_EQ(compileAndRunExitCode(code), 4);
 }
 
+// A ternary mutable borrow must preserve each owner's precise field path.
+TEST_F(MLATest, TernaryJoinedFieldBorrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            let flag: bool = true;
+            let pointer: ptr<i32> = flag ? &mut first.left : &mut second.left;
+            second.right = 8;
+            unsafe { return *pointer; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
+// A ternary mutable borrow must still reject writes to its borrowed field.
+TEST_F(MLATest, TernaryJoinedFieldBorrowRejectsOverlappingAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            let flag: bool = true;
+            let pointer: ptr<i32> = flag ? &mut first.left : &mut second.left;
+            second.left = 8;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, StructListBorrowAllowsDisjointFieldsAndElements)
 {
     std::string code = R"(

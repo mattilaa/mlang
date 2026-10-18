@@ -2074,6 +2074,8 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
     auto incomingPointerBorrowParent = pointerBorrowParent;
+    auto incomingPointerBorrowPlace = pointerBorrowPlace;
+    auto incomingAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingActiveMutBorrower = activeMutBorrower;
 
@@ -2132,6 +2134,8 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
     pointerBorrowParent = incomingPointerBorrowParent;
+    pointerBorrowPlace = incomingPointerBorrowPlace;
+    aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
     llvm::Value* thenVal = generateExpression(node->trueExpr, expectedType);
@@ -2140,6 +2144,8 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
     auto thenMoved = movedVariables;
     auto thenPointerBorrowTarget = pointerBorrowTarget;
     auto thenPointerBorrowParent = pointerBorrowParent;
+    auto thenPointerBorrowPlace = pointerBorrowPlace;
+    auto thenAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto thenActiveBorrowers = activeBorrowers;
     auto thenActiveMutBorrower = activeMutBorrower;
     if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
@@ -2152,6 +2158,8 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
     pointerBorrowParent = incomingPointerBorrowParent;
+    pointerBorrowPlace = incomingPointerBorrowPlace;
+    aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
     llvm::Value* elseVal = generateExpression(node->falseExpr, expectedType);
@@ -2160,6 +2168,8 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
     auto elseMoved = movedVariables;
     auto elsePointerBorrowTarget = pointerBorrowTarget;
     auto elsePointerBorrowParent = pointerBorrowParent;
+    auto elsePointerBorrowPlace = pointerBorrowPlace;
+    auto elseAggregateBorrowPlaces = aggregateBorrowPlaces;
     auto elseActiveBorrowers = activeBorrowers;
     auto elseActiveMutBorrower = activeMutBorrower;
     if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
@@ -2343,6 +2353,27 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
         }
     }
     pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
+
+    std::map<std::string, std::string> mergedPointerBorrowPlace;
+    for(const auto& place : thenPointerBorrowPlace)
+    {
+        auto other = elsePointerBorrowPlace.find(place.first);
+        if(other != elsePointerBorrowPlace.end() &&
+           other->second == place.second)
+            mergedPointerBorrowPlace.emplace(place.first, place.second);
+    }
+    pointerBorrowPlace = std::move(mergedPointerBorrowPlace);
+
+    aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
+    auto mergeBorrowPlaces = [&](const auto& branchPlaces) {
+        for(const auto& borrower : branchPlaces)
+            for(const auto& owner : borrower.second)
+                aggregateBorrowPlaces[borrower.first][owner.first].insert(
+                    owner.second.begin(), owner.second.end());
+    };
+    mergeBorrowPlaces(thenAggregateBorrowPlaces);
+    mergeBorrowPlaces(elseAggregateBorrowPlaces);
+
     pointerBorrowParent = thenPointerBorrowParent;
     for(auto it = pointerBorrowParent.begin(); it != pointerBorrowParent.end();)
     {
@@ -2370,6 +2401,29 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
     for(const auto& kv : elseActiveMutBorrower)
         mergedActiveMutBorrower.emplace(kv.first, kv.second);
     activeMutBorrower = std::move(mergedActiveMutBorrower);
+
+    auto mergeJoinedPointerPlaces = [&](const auto& branchTargets,
+                                        const auto& branchPlaces,
+                                        const auto& branchMutBorrowers) {
+        for(const auto& borrow : branchMutBorrowers)
+        {
+            const std::string& pointer = borrow.second;
+            auto target = branchTargets.find(pointer);
+            if(target == branchTargets.end())
+                continue;
+            const std::string& owner = target->second;
+            auto place = branchPlaces.find(pointer);
+            std::string ownerPlace = owner;
+            if(place != branchPlaces.end() &&
+               place->second.compare(0, owner.size(), owner) == 0)
+                ownerPlace = owner + place->second.substr(owner.size());
+            aggregateBorrowPlaces[pointer][owner].insert(ownerPlace);
+        }
+    };
+    mergeJoinedPointerPlaces(thenPointerBorrowTarget, thenPointerBorrowPlace,
+                             thenActiveMutBorrower);
+    mergeJoinedPointerPlaces(elsePointerBorrowTarget, elsePointerBorrowPlace,
+                             elseActiveMutBorrower);
 
     return phi;
 }

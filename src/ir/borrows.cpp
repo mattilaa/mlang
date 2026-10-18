@@ -2778,12 +2778,14 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         const auto baseParents = pointerBorrowParent;
         const auto baseShared = activeBorrowers;
         const auto baseMutable = activeMutBorrower;
+        const auto baseAggregatePlaces = aggregateBorrowPlaces;
         std::vector<std::map<std::string, std::string>> branchTargets;
         std::vector<std::map<std::string, std::string>> branchPlaces;
         std::vector<std::map<std::string, std::string>> branchParents;
         std::vector<std::map<std::string, std::set<std::string>>>
             branchShared;
         std::vector<std::map<std::string, std::string>> branchMutable;
+        std::vector<decltype(aggregateBorrowPlaces)> branchAggregatePlaces;
 
         for(auto* alternative : alternatives)
         {
@@ -2792,6 +2794,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             pointerBorrowParent = baseParents;
             activeBorrowers = baseShared;
             activeMutBorrower = baseMutable;
+            aggregateBorrowPlaces = baseAggregatePlaces;
 
             bool alternativeIsMutable = isMutable;
             if(auto* address = dynamic_cast<UnaryOpNode*>(alternative))
@@ -2807,6 +2810,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             branchParents.push_back(pointerBorrowParent);
             branchShared.push_back(activeBorrowers);
             branchMutable.push_back(activeMutBorrower);
+            branchAggregatePlaces.push_back(aggregateBorrowPlaces);
         }
 
         pointerBorrowTarget = baseTargets;
@@ -2817,6 +2821,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         pointerBorrowParent.erase(pointerVar);
         activeBorrowers = baseShared;
         activeMutBorrower = baseMutable;
+        aggregateBorrowPlaces = baseAggregatePlaces;
         for(auto it = activeBorrowers.begin(); it != activeBorrowers.end();)
         {
             it->second.erase(pointerVar);
@@ -2867,6 +2872,30 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             for(const auto& borrow : branchMutable[branch])
                 if(borrow.second == pointerVar)
                     activeMutBorrower.emplace(borrow.first, pointerVar);
+
+            for(const auto& aggregate : branchAggregatePlaces[branch])
+                for(const auto& owner : aggregate.second)
+                    aggregateBorrowPlaces[aggregate.first][owner.first].insert(
+                        owner.second.begin(), owner.second.end());
+            bool branchHasExclusiveBorrow = false;
+            for(const auto& borrow : branchMutable[branch])
+                if(borrow.second == pointerVar)
+                {
+                    branchHasExclusiveBorrow = true;
+                    break;
+                }
+            auto borrowTarget = branchTargets[branch].find(pointerVar);
+            if(branchHasExclusiveBorrow &&
+               borrowTarget != branchTargets[branch].end())
+            {
+                const std::string& owner = borrowTarget->second;
+                auto place = branchPlaces[branch].find(pointerVar);
+                std::string ownerPlace = owner;
+                if(place != branchPlaces[branch].end() &&
+                   place->second.compare(0, owner.size(), owner) == 0)
+                    ownerPlace = owner + place->second.substr(owner.size());
+                aggregateBorrowPlaces[pointerVar][owner].insert(ownerPlace);
+            }
         }
         if(commonPlace && !placeValue.empty())
             pointerBorrowPlace[pointerVar] = placeValue;
@@ -4477,11 +4506,13 @@ void CodeGenerator::registerPointerBorrowAlternatives(
     const auto baseParents = pointerBorrowParent;
     const auto baseShared = activeBorrowers;
     const auto baseMutable = activeMutBorrower;
+    const auto baseAggregatePlaces = aggregateBorrowPlaces;
     std::vector<std::map<std::string, std::string>> branchTargets;
     std::vector<std::map<std::string, std::string>> branchPlaces;
     std::vector<std::map<std::string, std::string>> branchParents;
     std::vector<std::map<std::string, std::set<std::string>>> branchShared;
     std::vector<std::map<std::string, std::string>> branchMutable;
+    std::vector<decltype(aggregateBorrowPlaces)> branchAggregatePlaces;
 
     if(preserveIncoming)
     {
@@ -4490,6 +4521,7 @@ void CodeGenerator::registerPointerBorrowAlternatives(
         branchParents.push_back(baseParents);
         branchShared.push_back(baseShared);
         branchMutable.push_back(baseMutable);
+        branchAggregatePlaces.push_back(baseAggregatePlaces);
     }
 
     for(auto* alternative : alternatives)
@@ -4499,6 +4531,7 @@ void CodeGenerator::registerPointerBorrowAlternatives(
         pointerBorrowParent = baseParents;
         activeBorrowers = baseShared;
         activeMutBorrower = baseMutable;
+        aggregateBorrowPlaces = baseAggregatePlaces;
 
         bool alternativeIsMutable = isMutable;
         if(auto* address = dynamic_cast<UnaryOpNode*>(alternative))
@@ -4514,6 +4547,7 @@ void CodeGenerator::registerPointerBorrowAlternatives(
         branchParents.push_back(pointerBorrowParent);
         branchShared.push_back(activeBorrowers);
         branchMutable.push_back(activeMutBorrower);
+        branchAggregatePlaces.push_back(aggregateBorrowPlaces);
     }
 
     pointerBorrowTarget = baseTargets;
@@ -4524,6 +4558,7 @@ void CodeGenerator::registerPointerBorrowAlternatives(
     pointerBorrowParent.erase(pointerVar);
     activeBorrowers = baseShared;
     activeMutBorrower = baseMutable;
+    aggregateBorrowPlaces = baseAggregatePlaces;
     for(auto it = activeBorrowers.begin(); it != activeBorrowers.end();)
     {
         it->second.erase(pointerVar);
@@ -4574,6 +4609,33 @@ void CodeGenerator::registerPointerBorrowAlternatives(
         for(const auto& borrow : branchMutable[branch])
             if(borrow.second == pointerVar)
                 activeMutBorrower.emplace(borrow.first, pointerVar);
+
+        // A pointer selected from several alternatives can borrow distinct
+        // owner places. Keep each exact path rather than relying on the single
+        // representative pointerBorrowTarget stored above.
+        for(const auto& aggregate : branchAggregatePlaces[branch])
+            for(const auto& owner : aggregate.second)
+                aggregateBorrowPlaces[aggregate.first][owner.first].insert(
+                    owner.second.begin(), owner.second.end());
+        bool branchHasExclusiveBorrow = false;
+        for(const auto& borrow : branchMutable[branch])
+            if(borrow.second == pointerVar)
+            {
+                branchHasExclusiveBorrow = true;
+                break;
+            }
+        auto borrowTarget = branchTargets[branch].find(pointerVar);
+        if(branchHasExclusiveBorrow &&
+           borrowTarget != branchTargets[branch].end())
+        {
+            const std::string& owner = borrowTarget->second;
+            auto place = branchPlaces[branch].find(pointerVar);
+            std::string ownerPlace = owner;
+            if(place != branchPlaces[branch].end() &&
+               place->second.compare(0, owner.size(), owner) == 0)
+                ownerPlace = owner + place->second.substr(owner.size());
+            aggregateBorrowPlaces[pointerVar][owner].insert(ownerPlace);
+        }
     }
     if(commonPlace && !placeValue.empty())
         pointerBorrowPlace[pointerVar] = placeValue;
