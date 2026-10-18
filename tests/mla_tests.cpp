@@ -16451,6 +16451,102 @@ TEST_F(MLATest, NestedLoopBreakSharedBorrowRejectsOverlappingAccess)
         << out;
 }
 
+// A range-loop break must keep precise shared-pointer owner paths.
+TEST_F(MLATest, NestedRangeBreakSharedBorrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            for i in 0..2 {
+                parent = &second.left;
+                break;
+            }
+            let child: ptr<i32> = &*parent;
+            second.right = 8;
+            unsafe { return *child; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 6);
+}
+
+// A range-loop break must still reject writes to the borrowed field.
+TEST_F(MLATest, NestedRangeBreakSharedBorrowRejectsOverlappingAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            for i in 0..2 {
+                parent = &second.left;
+                break;
+            }
+            let child: ptr<i32> = &*parent;
+            second.left = 8;
+            unsafe { return *child; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
+// A match-joined shared pointer must preserve precise paths when reborrowed.
+TEST_F(MLATest, NestedMatchSharedBorrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            let choice: i32 = 1;
+            let parent: ptr<i32> = match choice {
+                1 => &first.left,
+                _ => &second.left
+            };
+            let child: ptr<i32> = &*parent;
+            second.right = 8;
+            unsafe { return *child; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
+// A match-joined shared pointer must also reject overlap on each alternative.
+TEST_F(MLATest, NestedMatchSharedBorrowRejectsOverlappingAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            let choice: i32 = 1;
+            let parent: ptr<i32> = match choice {
+                1 => &first.left,
+                _ => &second.left
+            };
+            let child: ptr<i32> = &*parent;
+            second.left = 8;
+            unsafe { return *child; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
