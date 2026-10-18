@@ -2413,7 +2413,14 @@ void CodeGenerator::trackAggregateBorrowOrigins(
             if(!isMutBorrower(identifier->name))
             {
                 auto pointer = pointerBorrowTarget.find(identifier->name);
-                if(pointer != pointerBorrowTarget.end())
+                auto precise = aggregateBorrowPlaces.find(identifier->name);
+                if(precise != aggregateBorrowPlaces.end())
+                    for(const auto& owner : precise->second)
+                        for(const auto& place : owner.second)
+                            addFieldOrigin(owner.first, place);
+                if(pointer != pointerBorrowTarget.end() &&
+                   (precise == aggregateBorrowPlaces.end() ||
+                    precise->second.count(pointer->second) == 0))
                 {
                     auto place = pointerBorrowPlace.find(identifier->name);
                     addFieldOrigin(pointer->second,
@@ -2421,6 +2428,20 @@ void CodeGenerator::trackAggregateBorrowOrigins(
                                        ? pointer->second
                                        : place->second);
                 }
+                for(const auto& owner : activeBorrowers)
+                    if(owner.second.count(identifier->name) &&
+                       (precise == aggregateBorrowPlaces.end() ||
+                        precise->second.count(owner.first) == 0))
+                    {
+                        auto place = pointerBorrowPlace.find(identifier->name);
+                        addFieldOrigin(
+                            owner.first,
+                            pointer != pointerBorrowTarget.end() &&
+                                    pointer->second == owner.first &&
+                                    place != pointerBorrowPlace.end()
+                                ? place->second
+                                : owner.first);
+                    }
             }
             auto aggregate = aggregateBorrowFieldPlaces.find(identifier->name);
             if(aggregate != aggregateBorrowFieldPlaces.end())
@@ -4405,14 +4426,33 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             if(aggregateFields != aggregateBorrowFieldPlaces.end())
             {
                 auto field = aggregateFields->second.find(relativePath);
-                if(field != aggregateFields->second.end() &&
-                   field->second.size() == 1 &&
-                   field->second.begin()->second.size() == 1)
+                if(field != aggregateFields->second.end())
                 {
-                    const auto& owner = field->second.begin()->first;
-                    borrowPlace =
-                        *field->second.begin()->second.begin();
-                    (void)registerOwnerBorrow(owner, false);
+                    if(field->second.empty())
+                        return;
+                    const std::string primaryOwner =
+                        field->second.begin()->first;
+                    std::string primaryPlace = primaryOwner;
+                    for(const auto& owner : field->second)
+                    {
+                        const std::set<std::string> ownerPaths =
+                            owner.second.empty()
+                                ? std::set<std::string>{owner.first}
+                                : owner.second;
+                        for(const auto& place : ownerPaths)
+                        {
+                            borrowPlace = place;
+                            if(!registerOwnerBorrow(owner.first, false))
+                                return;
+                            aggregateBorrowPlaces[pointerVar][owner.first]
+                                .insert(place);
+                            if(owner.first == primaryOwner &&
+                               primaryPlace == primaryOwner)
+                                primaryPlace = place;
+                        }
+                    }
+                    pointerBorrowTarget[pointerVar] = primaryOwner;
+                    pointerBorrowPlace[pointerVar] = primaryPlace;
                     return;
                 }
             }

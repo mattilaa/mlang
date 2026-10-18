@@ -16839,6 +16839,116 @@ TEST_F(MLATest, AliasOfSameOwnerJoinedSharedPointerPreservesDisjointField)
     EXPECT_EQ(compileAndRunExitCode(code), 1);
 }
 
+// A pointer field must preserve every owner of a joined shared pointer.
+TEST_F(MLATest, AggregateFieldOfJoinedSharedPointerRejectsOverlap)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct PointerBox { var value: ptr<i32>; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            let flag: bool = true;
+            if flag {
+                parent = &first.left;
+            } else {
+                parent = &second.left;
+            }
+            let boxed: PointerBox = PointerBox { value: parent };
+            let copied: ptr<i32> = boxed.value;
+            second.left = 8;
+            unsafe { return *copied; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
+// A stored joined pointer should keep disjoint fields writable after reading.
+TEST_F(MLATest, AggregateFieldOfJoinedSharedPointerPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        struct PointerBox { var value: ptr<i32>; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            let flag: bool = true;
+            if flag {
+                parent = &first.left;
+            } else {
+                parent = &second.left;
+            }
+            let boxed: PointerBox = PointerBox { value: parent };
+            let copied: ptr<i32> = boxed.value;
+            second.right = 8;
+            unsafe { return *copied; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
+// Aggregate fields must retain multiple possible places in one owner.
+TEST_F(MLATest, AggregateFieldOfSameOwnerJoinedPointerRejectsEitherField)
+{
+    std::string code = R"(
+        struct Triple { var first: i32; var second: i32; var third: i32; };
+        struct PointerBox { var value: ptr<i32>; };
+        fn main() -> i32 {
+            var value: Triple = Triple { first: 1, second: 2, third: 3 };
+            let flag: bool = true;
+            var parent: ptr<i32> = &value.first;
+            if flag {
+                parent = &value.first;
+            } else {
+                parent = &value.second;
+            }
+            let boxed: PointerBox = PointerBox { value: parent };
+            let copied: ptr<i32> = boxed.value;
+            value.second = 9;
+            unsafe { return *copied; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'value' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
+// Aggregate paths should allow a third field outside every possible borrow.
+TEST_F(MLATest, AggregateFieldOfSameOwnerJoinedPointerPreservesDisjointField)
+{
+    std::string code = R"(
+        struct Triple { var first: i32; var second: i32; var third: i32; };
+        struct PointerBox { var value: ptr<i32>; };
+        fn main() -> i32 {
+            var value: Triple = Triple { first: 1, second: 2, third: 3 };
+            let flag: bool = true;
+            var parent: ptr<i32> = &value.first;
+            if flag {
+                parent = &value.first;
+            } else {
+                parent = &value.second;
+            }
+            let boxed: PointerBox = PointerBox { value: parent };
+            let copied: ptr<i32> = boxed.value;
+            value.third = 9;
+            unsafe { return *copied; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 1);
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
