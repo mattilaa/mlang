@@ -1035,6 +1035,34 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
                 else
                     localBorrowAliases[assignment->name] = std::move(origins);
             }
+            else if(auto* assignment =
+                        dynamic_cast<FieldAssignmentNode*>(statement))
+            {
+                const std::string path =
+                    assignment->target
+                        ? localBorrowPlacePath(assignment->target)
+                        : assignment->structName + "." + assignment->fieldName;
+                std::vector<ExpressionNode*> origins;
+                collectBorrowOrigins(assignment->expression, origins);
+                if(!path.empty())
+                {
+                    if(inConditionalRegion)
+                    {
+                        if(!origins.empty())
+                        {
+                            auto& existing = localBorrowAliases[path];
+                            existing.insert(existing.end(), origins.begin(),
+                                            origins.end());
+                        }
+                    }
+                    else if(origins.empty())
+                        localBorrowAliases.erase(path);
+                    else
+                        localBorrowAliases[path] = std::move(origins);
+                    collectAggregateBorrowFields(assignment->expression,
+                                                 path);
+                }
+            }
             else if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                 collectList(block->statements);
             else if(auto* branch = dynamic_cast<IfNode*>(statement))
@@ -1872,6 +1900,7 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
 void CodeGenerator::clearAggregateBorrowOrigins(const std::string& variable)
 {
     aggregateBorrowPlaces.erase(variable);
+    aggregateBorrowFieldPlaces.erase(variable);
     // An aggregate that owns a moved `&mut` pointer uses the same exclusive
     // borrow bookkeeping as a local pointer. Release that borrow whenever the
     // aggregate is replaced, goes out of scope, or reaches its last use.
@@ -3081,6 +3110,34 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                     localBorrowAliases.erase(assignment->name);
                 else
                     localBorrowAliases[assignment->name] = std::move(origins);
+            }
+            else if(auto* assignment =
+                        dynamic_cast<FieldAssignmentNode*>(statement))
+            {
+                const std::string path =
+                    assignment->target
+                        ? localBorrowPlacePath(assignment->target)
+                        : assignment->structName + "." + assignment->fieldName;
+                std::vector<ExpressionNode*> origins;
+                collectBorrowOrigins(assignment->expression, origins);
+                if(!path.empty())
+                {
+                    if(inConditionalRegion)
+                    {
+                        if(!origins.empty())
+                        {
+                            auto& existing = localBorrowAliases[path];
+                            existing.insert(existing.end(), origins.begin(),
+                                            origins.end());
+                        }
+                    }
+                    else if(origins.empty())
+                        localBorrowAliases.erase(path);
+                    else
+                        localBorrowAliases[path] = std::move(origins);
+                    collectAggregateBorrowFields(assignment->expression,
+                                                 path);
+                }
             }
             else if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                 collectReturnList(block->statements);

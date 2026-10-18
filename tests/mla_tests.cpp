@@ -11155,6 +11155,61 @@ TEST_F(MLATest, OwnershipFunctionReturnedPointerKeepsConditionalLocalBorrow)
         << out;
 }
 
+// Replacing a pointer field must discard its previously stored local origin.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerDropsOverwrittenFieldBorrow)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        var global_value: i32 = 11;
+
+        fn select_global() -> ptr<i32> {
+            var local_value: i32 = 7;
+            var box: PointerBox = PointerBox { value: &local_value };
+            box.value = &global_value;
+            return box.value;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = select_global();
+            local_value = 4;
+            unsafe { return *selected - 11; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A branch-dependent pointer-field origin must still be retained.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerKeepsConditionalFieldBorrow)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        var global_value: i32 = 11;
+
+        fn maybe_local(flag: bool) -> ptr<i32> {
+            var local_value: i32 = 7;
+            var box: PointerBox = PointerBox { value: &global_value };
+            if flag {
+                box.value = &local_value;
+            }
+            return box.value;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = maybe_local(true);
+            local_value = 4;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'selected'"), std::string::npos)
+        << out;
+}
+
 // Conditional pointer assignments must conservatively retain both origins.
 TEST_F(MLATest, OwnershipFunctionReturnedPointerMergesBranchOrigins)
 {
