@@ -12372,6 +12372,86 @@ TEST_F(MLATest, OwnershipMethodPointerSlotEffectPropagatesThroughFunction)
     EXPECT_NE(out.find("borrowed by 'selected'"), std::string::npos) << out;
 }
 
+// An unconditional method overwrite must remain definite through a wrapper.
+TEST_F(MLATest, OwnershipMethodDefiniteSlotEffectPropagatesThroughFunction)
+{
+    std::string code = R"(
+        struct Replacer { var value: i32; };
+        var global_value: i32 = 11;
+        impl Replacer {
+            fn replace(self: &mut Replacer, slot: ptr<ptr<i32>>,
+                       replacement: ptr<i32>) -> void {
+                unsafe { *slot = replacement; }
+            }
+        }
+
+        fn replace_through_method(slot: ptr<ptr<i32>>,
+                                  replacement: ptr<i32>) -> void {
+            var replacer: Replacer = Replacer { value: 0 };
+            replacer.replace(slot, replacement);
+        }
+
+        fn select_global() -> ptr<i32> {
+            var local_value: i32 = 7;
+            var selected: ptr<i32> = &local_value;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            replace_through_method(slot, &global_value);
+            return selected;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = select_global();
+            local_value = 4;
+            unsafe { return *selected - 11; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A conditionally invoked method must not become a definite wrapper effect.
+TEST_F(MLATest, OwnershipConditionalMethodCallKeepsPossibleBorrowOrigin)
+{
+    std::string code = R"(
+        struct Replacer { var value: i32; };
+        var global_value: i32 = 11;
+        impl Replacer {
+            fn replace(self: &mut Replacer, slot: ptr<ptr<i32>>,
+                       replacement: ptr<i32>) -> void {
+                unsafe { *slot = replacement; }
+            }
+        }
+
+        fn maybe_replace(flag: bool, slot: ptr<ptr<i32>>,
+                         replacement: ptr<i32>) -> void {
+            var replacer: Replacer = Replacer { value: 0 };
+            if flag {
+                replacer.replace(slot, replacement);
+            }
+        }
+
+        fn maybe_local(flag: bool) -> ptr<i32> {
+            var local_value: i32 = 7;
+            var selected: ptr<i32> = &global_value;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            maybe_replace(flag, slot, &local_value);
+            return selected;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = maybe_local(true);
+            local_value = 4;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("borrowed by 'selected'"), std::string::npos) << out;
+}
+
 // Function summaries must kill a caller-slot alias when its local copy is reassigned.
 TEST_F(MLATest, OwnershipHelperSlotAliasReassignmentKeepsUnchangedBorrow)
 {

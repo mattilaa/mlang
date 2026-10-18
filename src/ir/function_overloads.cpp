@@ -112,6 +112,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
         mutatingParameters.clear();
         std::map<std::string, std::set<size_t>> pointerSlotAliases;
         std::map<std::string, TypeNode*> localTypes;
+        std::set<size_t> definitePointerSlotWritesThroughMethods;
         for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
         {
             auto* parameter = node->parameters->parameters[i];
@@ -166,6 +167,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             };
         std::function<void(StatementListNode*)> scanPointerSlotWrites;
         std::function<void(StatementNode*)> scanPointerSlotStatement;
+        bool pointerSlotScanConditional = false;
         scanPointerSlotWrites = [&](StatementListNode* statements) {
             if(statements)
                 for(auto* statement : statements->statements)
@@ -312,16 +314,20 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                 }
 
                             std::set<size_t> methodMutatedArguments;
-                            std::function<void(StatementListNode*)>
+                            std::set<size_t> methodDefinitelyMutatedArguments;
+                            bool methodHasConditionalControlFlow = false;
+                            std::function<void(StatementListNode*, bool)>
                                 scanMethodList;
-                            std::function<void(StatementNode*)>
+                            std::function<void(StatementNode*, bool)>
                                 scanMethodStatement;
-                            scanMethodList = [&](StatementListNode* statements) {
+                            scanMethodList = [&](StatementListNode* statements,
+                                                 bool conditional) {
                                 if(statements)
                                     for(auto* child : statements->statements)
-                                        scanMethodStatement(child);
+                                        scanMethodStatement(child, conditional);
                             };
-                            scanMethodStatement = [&](StatementNode* child) {
+                            scanMethodStatement = [&](StatementNode* child,
+                                                      bool conditional) {
                                 if(!child)
                                     return;
                                 if(auto* assignment =
@@ -333,6 +339,12 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                         methodSlotAliases);
                                     methodMutatedArguments.insert(
                                         aliases.begin(), aliases.end());
+                                    if(aliases.size() == 1 && !conditional)
+                                        methodDefinitelyMutatedArguments
+                                            .insert(aliases.begin(),
+                                                    aliases.end());
+                                    else if(conditional)
+                                        methodHasConditionalControlFlow = true;
                                     return;
                                 }
                                 if(auto* declaration =
@@ -366,6 +378,9 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                         dynamic_cast<FunctionCallNode*>(
                                             expression->expression);
                                     if(nestedCall)
+                                    {
+                                        std::set<size_t> commonWrites;
+                                        bool foundCandidate = false;
                                         for(const auto& calledName :
                                             getFunctionItemTargetsForName(
                                                 nestedCall->name))
@@ -404,44 +419,123 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                                     }
                                             }
                                         }
+                                        for(const auto& calledName :
+                                            getFunctionItemTargetsForName(
+                                                nestedCall->name))
+                                        {
+                                            auto overloads =
+                                                functionOverloads.find(
+                                                    calledName);
+                                            if(overloads ==
+                                               functionOverloads.end())
+                                                continue;
+                                            for(const auto& overload :
+                                                overloads->second)
+                                            {
+                                                auto summary =
+                                                    functionPointerSlotDefiniteMutationParameters
+                                                        .find(overload.symbolName);
+                                                const std::set<size_t>
+                                                    candidateWrites =
+                                                        summary ==
+                                                                functionPointerSlotDefiniteMutationParameters
+                                                                    .end()
+                                                            ? std::set<size_t>{}
+                                                            : summary->second;
+                                                if(!foundCandidate)
+                                                {
+                                                    commonWrites =
+                                                        candidateWrites;
+                                                    foundCandidate = true;
+                                                }
+                                                else
+                                                {
+                                                    std::set<size_t>
+                                                        intersection;
+                                                    std::set_intersection(
+                                                        commonWrites.begin(),
+                                                        commonWrites.end(),
+                                                        candidateWrites.begin(),
+                                                        candidateWrites.end(),
+                                                        std::inserter(
+                                                            intersection,
+                                                            intersection.begin()));
+                                                    commonWrites =
+                                                        std::move(intersection);
+                                                }
+                                            }
+                                        }
+                                        for(size_t index : commonWrites)
+                                            if(index < nestedCall->arguments.size())
+                                            {
+                                                auto aliases =
+                                                    collectPointerSlotAliases(
+                                                        nestedCall->arguments[index],
+                                                        methodSlotAliases);
+                                                if(aliases.size() == 1 &&
+                                                   !conditional)
+                                                    methodDefinitelyMutatedArguments
+                                                        .insert(aliases.begin(),
+                                                                aliases.end());
+                                                else if(conditional)
+                                                    methodHasConditionalControlFlow =
+                                                        true;
+                                            }
+                                    }
                                 }
                                 if(auto* block =
                                        dynamic_cast<BlockStatementNode*>(child))
-                                    scanMethodList(block->statements);
+                                    scanMethodList(block->statements,
+                                                   conditional);
                                 else if(auto* branch =
                                             dynamic_cast<IfNode*>(child))
                                 {
-                                    scanMethodList(branch->thenBranch);
-                                    scanMethodStatement(branch->elseIfBranch);
-                                    scanMethodList(branch->elseBranch);
+                                    methodHasConditionalControlFlow = true;
+                                    scanMethodList(branch->thenBranch, true);
+                                    scanMethodStatement(branch->elseIfBranch,
+                                                        true);
+                                    scanMethodList(branch->elseBranch, true);
                                 }
                                 else if(auto* branch =
                                             dynamic_cast<CexprIfNode*>(child))
                                 {
-                                    scanMethodList(branch->thenBranch);
-                                    scanMethodStatement(branch->elseIfBranch);
-                                    scanMethodList(branch->elseBranch);
+                                    methodHasConditionalControlFlow = true;
+                                    scanMethodList(branch->thenBranch, true);
+                                    scanMethodStatement(branch->elseIfBranch,
+                                                        true);
+                                    scanMethodList(branch->elseBranch, true);
                                 }
                                 else if(auto* loop =
                                             dynamic_cast<WhileNode*>(child))
-                                    scanMethodList(loop->body);
+                                {
+                                    methodHasConditionalControlFlow = true;
+                                    scanMethodList(loop->body, true);
+                                }
                                 else if(auto* loop =
                                             dynamic_cast<ForNode*>(child))
-                                    scanMethodList(loop->body);
+                                {
+                                    methodHasConditionalControlFlow = true;
+                                    scanMethodList(loop->body, true);
+                                }
                                 else if(auto* attempt =
                                             dynamic_cast<TryCatchNode*>(child))
                                 {
+                                    methodHasConditionalControlFlow = true;
                                     scanMethodList(
                                         attempt->tryBlock
                                             ? attempt->tryBlock->statements
-                                            : nullptr);
+                                            : nullptr,
+                                        true);
                                     scanMethodList(
                                         attempt->catchBlock
                                             ? attempt->catchBlock->statements
-                                            : nullptr);
+                                            : nullptr,
+                                        true);
                                 }
                             };
-                            scanMethodList(definition->body);
+                            scanMethodList(definition->body, false);
+                            if(methodHasConditionalControlFlow)
+                                methodDefinitelyMutatedArguments.clear();
                             for(size_t index : methodMutatedArguments)
                                 if(index < methodCall->arguments.size())
                                 {
@@ -451,6 +545,19 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                     mutatingParameters.insert(aliases.begin(),
                                                              aliases.end());
                                 }
+                            for(size_t index :
+                                methodDefinitelyMutatedArguments)
+                                if(index < methodCall->arguments.size())
+                                {
+                                    auto aliases = collectPointerSlotAliases(
+                                        methodCall->arguments[index],
+                                        pointerSlotAliases);
+                                    if(!pointerSlotScanConditional &&
+                                       aliases.size() == 1)
+                                        definitePointerSlotWritesThroughMethods
+                                            .insert(aliases.begin(),
+                                                    aliases.end());
+                                }
                         }
                     }
                 }
@@ -459,35 +566,54 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 scanPointerSlotWrites(block->statements);
             else if(auto* branch = dynamic_cast<IfNode*>(statement))
             {
+                const bool wasConditional = pointerSlotScanConditional;
+                pointerSlotScanConditional = true;
                 scanPointerSlotWrites(branch->thenBranch);
                 scanPointerSlotStatement(branch->elseIfBranch);
                 scanPointerSlotWrites(branch->elseBranch);
+                pointerSlotScanConditional = wasConditional;
             }
             else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
             {
+                const bool wasConditional = pointerSlotScanConditional;
+                pointerSlotScanConditional = true;
                 scanPointerSlotWrites(branch->thenBranch);
                 scanPointerSlotStatement(branch->elseIfBranch);
                 scanPointerSlotWrites(branch->elseBranch);
+                pointerSlotScanConditional = wasConditional;
             }
             else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+            {
+                const bool wasConditional = pointerSlotScanConditional;
+                pointerSlotScanConditional = true;
                 scanPointerSlotWrites(loop->body);
+                pointerSlotScanConditional = wasConditional;
+            }
             else if(auto* loop = dynamic_cast<ForNode*>(statement))
+            {
+                const bool wasConditional = pointerSlotScanConditional;
+                pointerSlotScanConditional = true;
                 scanPointerSlotWrites(loop->body);
+                pointerSlotScanConditional = wasConditional;
+            }
             else if(auto* attempt = dynamic_cast<TryCatchNode*>(statement))
             {
+                const bool wasConditional = pointerSlotScanConditional;
+                pointerSlotScanConditional = true;
                 scanPointerSlotWrites(attempt->tryBlock
                                           ? attempt->tryBlock->statements
                                           : nullptr);
                 scanPointerSlotWrites(attempt->catchBlock
                                           ? attempt->catchBlock->statements
                                           : nullptr);
+                pointerSlotScanConditional = wasConditional;
             }
         };
         scanPointerSlotWrites(node->body);
 
         auto& definitelyMutatingParameters =
             functionPointerSlotDefiniteMutationParameters[symbol];
-        definitelyMutatingParameters.clear();
+        definitelyMutatingParameters = definitePointerSlotWritesThroughMethods;
         std::map<std::string, std::set<size_t>> definiteSlotAliases;
         for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
         {
@@ -499,7 +625,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 definiteSlotAliases[parameter->name].insert(i);
         }
         bool conditionalControlFlow = false;
-        bool wroteSlot = false;
+        bool wroteSlot = !definitePointerSlotWritesThroughMethods.empty();
         std::function<void(StatementListNode*)> scanDefiniteSlotWrites;
         std::function<void(StatementNode*)> scanDefiniteSlotStatement;
         scanDefiniteSlotWrites = [&](StatementListNode* statements) {
