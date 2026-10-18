@@ -1747,7 +1747,7 @@ run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
 int main(int argc, char** argv)
 {
 #ifndef MLANG_VERSION
-#define MLANG_VERSION "0.3.0"
+#define MLANG_VERSION "0.4.0"
 #endif
 
     std::vector<std::string> filteredArgStorage;
