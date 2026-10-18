@@ -6343,7 +6343,7 @@ TEST_F(MLATest, ConditionalExclusiveBorrowBlocksOwnerMutationAfterMerge)
         fn main() -> i32 {
             var value: i32 = 4;
             var flag: bool = true;
-            var pointer: ptr<i32> = &global_value;
+            var pointer: ptr<i32> = &mut global_value;
             if flag {
                 pointer = &mut value;
             }
@@ -6368,7 +6368,7 @@ TEST_F(MLATest, ConditionalExclusiveBorrowRemainsUsableAfterMerge)
         fn main() -> i32 {
             var value: i32 = 4;
             var flag: bool = true;
-            var pointer: ptr<i32> = &global_value;
+            var pointer: ptr<i32> = &mut global_value;
             if flag {
                 pointer = &mut value;
             }
@@ -6389,7 +6389,7 @@ TEST_F(MLATest, TernaryExclusiveBorrowBlocksOwnerMutationAfterMerge)
             var value: i32 = 4;
             var flag: bool = true;
             var pointer: ptr<i32> = &global_value;
-            pointer = flag ? &mut value : &global_value;
+            pointer = flag ? &mut value : &mut global_value;
             value = 9;
             unsafe { *pointer = 10; }
             return value;
@@ -6412,12 +6412,35 @@ TEST_F(MLATest, TernaryExclusiveBorrowRemainsUsableAfterMerge)
             var value: i32 = 4;
             var flag: bool = true;
             var pointer: ptr<i32> = &global_value;
-            pointer = flag ? &mut value : &global_value;
+            pointer = flag ? &mut value : &mut global_value;
             unsafe { *pointer = 10; }
             return value;
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 10);
+}
+
+// A conditional pointer with a shared branch must not be writable through.
+TEST_F(MLATest, TernaryMixedSharedAndExclusiveBorrowCannotWriteThrough)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var exclusive_value: i32 = 1;
+            var shared_value: i32 = 2;
+            let flag: bool = true;
+            let pointer: ptr<i32> =
+                flag ? &mut exclusive_value : &shared_value;
+            unsafe { *pointer = 3; }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos)
+        << out;
 }
 
 // Verifies even a single-arm match result registers its exclusive borrow.

@@ -460,15 +460,16 @@ bool CodeGenerator::validateBorrowWriteThroughPointer(ExpressionNode* expr,
     if(ownerIt == pointerBorrowTarget.end())
         return true;
 
-    auto sharedBorrowers = activeBorrowers.find(ownerIt->second);
-    if(!isMutBorrower(pointer->name) &&
-       sharedBorrowers != activeBorrowers.end() &&
-       sharedBorrowers->second.count(pointer->name) != 0)
-    {
-        reportError(line, "cannot write through shared borrow '" +
-                              pointer->name + "'");
-        return false;
-    }
+    // A conditional join can make this pointer shared on one path and
+    // exclusive on another. Check all retained owners rather than relying on
+    // the first target or the pointer's merged mutability bit.
+    for(const auto& sharedBorrowers : activeBorrowers)
+        if(sharedBorrowers.second.count(pointer->name) != 0)
+        {
+            reportError(line, "cannot write through shared borrow '" +
+                                  pointer->name + "'");
+            return false;
+        }
 
     std::set<std::string> owners{ownerIt->second};
     for(const auto& active : activeBorrowers)
