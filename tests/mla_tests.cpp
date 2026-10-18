@@ -5719,6 +5719,55 @@ TEST_F(MLATest, GlobalSharedBorrowReturnedFromFunctionCannotBeWrittenThrough)
               std::string::npos) << out;
 }
 
+// A local alias must not erase a shared borrow created inside a function.
+TEST_F(MLATest, GlobalSharedBorrowAliasReturnedFromFunctionCannotBeWrittenThrough)
+{
+    std::string code = R"(
+        var global_value: i32 = 4;
+
+        fn get_shared() -> ptr<i32> {
+            let saved_pointer: ptr<i32> = &global_value;
+            return saved_pointer;
+        }
+
+        fn main() -> i32 {
+            unsafe { *get_shared() = 9; }
+            return global_value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
+// A shared borrow returned through a local alias stays read-only when stored.
+TEST_F(MLATest, StoredGlobalSharedBorrowAliasReturnedFromFunctionCannotBeWrittenThrough)
+{
+    std::string code = R"(
+        var global_value: i32 = 4;
+
+        fn get_shared() -> ptr<i32> {
+            let saved_pointer: ptr<i32> = &global_value;
+            return saved_pointer;
+        }
+
+        fn main() -> i32 {
+            let pointer: ptr<i32> = get_shared();
+            unsafe { *pointer = 9; }
+            return global_value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
 // A returned global shared borrow remains read-only after storing it locally.
 TEST_F(MLATest, StoredGlobalSharedBorrowReturnedFromFunctionCannotBeWrittenThrough)
 {
@@ -5762,6 +5811,54 @@ TEST_F(MLATest, GlobalExclusiveBorrowReturnedFromFunctionCanBeWrittenThrough)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_EQ(rc, 0) << out;
+}
+
+// A function-local alias of an exclusive global borrow remains writable.
+TEST_F(MLATest, StoredGlobalExclusiveBorrowAliasRemainsWritable)
+{
+    std::string code = R"(
+        var global_value: i32 = 4;
+
+        fn get_mutable() -> ptr<i32> {
+            let saved_pointer: ptr<i32> = &mut global_value;
+            return saved_pointer;
+        }
+
+        fn main() -> i32 {
+            let pointer: ptr<i32> = get_mutable();
+            unsafe { *pointer = 9; }
+            return global_value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 0) << out;
+}
+
+// A stored exclusive return alias prevents a second mutable borrow.
+TEST_F(MLATest, StoredGlobalExclusiveBorrowAliasBlocksSecondBorrow)
+{
+    std::string code = R"(
+        var global_value: i32 = 4;
+
+        fn get_mutable() -> ptr<i32> {
+            let saved_pointer: ptr<i32> = &mut global_value;
+            return saved_pointer;
+        }
+
+        fn main() -> i32 {
+            let pointer: ptr<i32> = get_mutable();
+            let second: ptr<i32> = &mut global_value;
+            unsafe { return *pointer + *second; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow 'global_value' as mutable more than once"),
+              std::string::npos) << out;
 }
 
 // Returning an exclusive argument remains writable through the call result.
