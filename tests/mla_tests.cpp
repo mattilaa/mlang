@@ -5764,6 +5764,47 @@ TEST_F(MLATest, SharedBorrowFromListCannotBeWrittenThroughReturnedPointer)
               std::string::npos) << out;
 }
 
+// A closure returning a captured shared pointer must not hide a direct write.
+TEST_F(MLATest, SharedBorrowReturnedFromClosureCannotBeWrittenThrough)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            let callback: fn() -> ptr<i32> = || { return shared; };
+            unsafe { *callback() = 9; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
+// A closure forwarding its pointer argument must preserve shared provenance.
+TEST_F(MLATest, SharedBorrowForwardedThroughClosureCannotBeWrittenThrough)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            let callback: fn(ptr<i32>) -> ptr<i32> =
+                |pointer: ptr<i32>| { return pointer; };
+            unsafe { *callback(shared) = 9; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
 // A nested dereference must retain the shared borrow restriction on its place.
 TEST_F(MLATest, SharedBorrowCannotWriteThroughNestedPointer)
 {

@@ -394,7 +394,8 @@ bool CodeGenerator::validateBorrowWriteThroughPointer(ExpressionNode* expr,
             return false;
         }
     }
-    if(dynamic_cast<FunctionCallNode*>(expr) &&
+    if((dynamic_cast<FunctionCallNode*>(expr) ||
+        dynamic_cast<CallableInvokeNode*>(expr)) &&
        expressionIsKnownSharedBorrow(expr))
     {
         reportError(line,
@@ -810,8 +811,100 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
         return borrowers != activeBorrowers.end() &&
                borrowers->second.count(identifier->name) != 0;
     }
+    auto closureReturnsSharedBorrow = [&](const std::string& name) {
+        auto runtimeClosure = runtimeClosureVariables.find(name);
+        auto functionItems = functionItemVariables.find(name);
+        const bool hasFunctionItems = functionItems != functionItemVariables.end() &&
+                                      !functionItems->second.empty();
+        if(runtimeClosure == runtimeClosureVariables.end() ||
+           !runtimeClosure->second || hasFunctionItems)
+            return false;
+
+        std::vector<ExpressionNode*> returns;
+        std::function<void(StatementNode*)> collectStatement;
+        std::function<void(StatementListNode*)> collectList;
+        collectList = [&](StatementListNode* statements) {
+            if(!statements)
+                return;
+            for(auto* statement : statements->statements)
+                collectStatement(statement);
+        };
+        collectStatement = [&](StatementNode* statement) {
+            if(auto* returned = dynamic_cast<ReturnNode*>(statement))
+                returns.push_back(returned->expression);
+            else if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+                collectList(block->statements);
+            else if(auto* branch = dynamic_cast<IfNode*>(statement))
+            {
+                collectList(branch->thenBranch);
+                collectStatement(branch->elseIfBranch);
+                collectList(branch->elseBranch);
+            }
+            else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+            {
+                collectList(branch->thenBranch);
+                collectStatement(branch->elseIfBranch);
+                collectList(branch->elseBranch);
+            }
+            else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+                collectList(loop->body);
+            else if(auto* loop = dynamic_cast<ForNode*>(statement))
+                collectList(loop->body);
+        };
+        collectList(runtimeClosure->second->body);
+        for(auto* returned : returns)
+            if(expressionIsKnownSharedBorrow(returned))
+                return true;
+        return false;
+    };
+    if(auto* invoke = dynamic_cast<CallableInvokeNode*>(expr))
+    {
+        auto* callable = dynamic_cast<IdentifierNode*>(invoke->callable);
+        if(!callable)
+            return false;
+        if(closureReturnsSharedBorrow(callable->name))
+            return true;
+
+        bool hasUnknownSummary = false;
+        for(const auto& calledName :
+            getFunctionItemTargetsForName(callable->name))
+        {
+            auto overloads = functionOverloads.find(calledName);
+            if(overloads == functionOverloads.end())
+            {
+                hasUnknownSummary = true;
+                continue;
+            }
+            for(const auto& overload : overloads->second)
+            {
+                if(!overload.node || !overload.node->returnType ||
+                   overload.node->returnType->kind != TypeNode::TYPE_PTR)
+                    continue;
+                if(!functionPointerReturnSummaryComplete.count(
+                       overload.symbolName))
+                {
+                    hasUnknownSummary = true;
+                    continue;
+                }
+                auto summary = functionPointerReturnParameters.find(
+                    overload.symbolName);
+                if(summary == functionPointerReturnParameters.end())
+                    continue;
+                for(size_t index : summary->second)
+                    if(index < invoke->arguments.size() &&
+                       expressionIsKnownSharedBorrow(invoke->arguments[index]))
+                        return true;
+            }
+        }
+        if(hasUnknownSummary)
+            for(auto* argument : invoke->arguments)
+                if(expressionIsKnownSharedBorrow(argument))
+                    return true;
+    }
     if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
     {
+        if(closureReturnsSharedBorrow(call->name))
+            return true;
         bool hasUnknownSummary = false;
         for(const auto& calledName :
             getFunctionItemTargetsForName(call->name))
