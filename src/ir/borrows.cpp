@@ -281,7 +281,17 @@ bool CodeGenerator::borrowerPlaceOverlaps(const std::string& borrower,
     auto borrowedOwner = pointerBorrowTarget.find(borrower);
     if(borrowedOwner != pointerBorrowTarget.end() &&
        borrowedOwner->second != owner)
-        return false;
+    {
+        // A control-flow join can leave the pointer's primary target pointing
+        // at one branch while activeMutBorrower retains an entry for another
+        // possible owner. Honor that joined owner before rejecting it based on
+        // the representative pointerBorrowTarget.
+        auto joinedOwner = activeMutBorrower.find(owner);
+        if(joinedOwner == activeMutBorrower.end() ||
+           joinedOwner->second != borrower)
+            return false;
+        return true;
+    }
     auto borrowedPlace = pointerBorrowPlace.find(borrower);
     return borrowPlacesOverlap(
         borrowedPlace == pointerBorrowPlace.end() ? owner

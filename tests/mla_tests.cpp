@@ -3422,6 +3422,33 @@ TEST_F(MLATest, IndexedAssignmentRejectsOverlappingLiveElementBorrow)
         << out;
 }
 
+// A joined mutable element borrow must protect each possible list owner.
+TEST_F(MLATest, JoinedElementBorrowProtectsSecondListOwner)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var first: list<i32> = [4, 5];
+            var second: list<i32> = [6, 7];
+            var pointer: ptr<i32> = &mut first[0];
+            let flag: bool = true;
+            if flag {
+                pointer = &mut first[0];
+            } else {
+                pointer = &mut second[0];
+            }
+            second[0] = 8;
+            unsafe { return *pointer; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot mutate indexed element of 'second'"),
+              std::string::npos)
+        << out;
+}
+
 TEST_F(MLATest, StructListBorrowAllowsDisjointFieldsAndElements)
 {
     std::string code = R"(
