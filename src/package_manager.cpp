@@ -32,7 +32,7 @@
 #include <llvm/Support/SHA256.h>
 
 #ifndef MLANG_VERSION
-#define MLANG_VERSION "0.4.0"
+#define MLANG_VERSION "0.4.1"
 #endif
 
 static std::string package_semantic_version()

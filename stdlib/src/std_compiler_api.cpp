@@ -6,7 +6,7 @@
 #include <unordered_map>
 
 #ifndef MLANG_VERSION
-#define MLANG_VERSION "0.3.0"
+#define MLANG_VERSION "0.4.1"
 #endif
 
 extern "C" {

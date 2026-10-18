@@ -1,3 +1,14 @@
+# MLang 0.4.1
+
+MLang 0.4.1 is a maintenance release that corrects compiler version reporting
+and updates the release instructions and metadata to match the 0.4.1 release.
+
+## Fixes
+
+- Corrected fallback version strings used when the compiler and compiler API
+  are built outside the standard CMake configuration.
+- Updated release examples and artifact names to use `v0.4.1`.
+
 # MLang 0.4.0
 
 MLang 0.4.0 is a major language release centered on safer borrowing and

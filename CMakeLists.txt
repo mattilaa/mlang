@@ -42,7 +42,7 @@ endif()
 
 set(MLANG_VERSION_MAJOR 0)
 set(MLANG_VERSION_MINOR 4)
-set(MLANG_VERSION_BUGFIX 0)
+set(MLANG_VERSION_BUGFIX 1)
 set(MLANG_RELEASE_VERSION "" CACHE STRING
     "Exact MAJOR.MINOR.BUGFIX[.BUILD] version for a reproducible release build")
 option(MLANG_AUTO_INCREMENT_BUILD "Auto-increment build number on each CMake configure" ON)
