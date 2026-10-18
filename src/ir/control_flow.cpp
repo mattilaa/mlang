@@ -1731,9 +1731,9 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     }
     if(!breakBorrowStates.empty())
     {
-        // Break exits may carry a mutable pointer assignment that does not
-        // occur on the ordinary loop back-edge. Preserve its exact owner
-        // place separately from the single representative pointer target.
+        // Break exits may carry a pointer assignment that does not occur on
+        // the ordinary loop back-edge. Preserve its exact owner place
+        // separately from the single representative pointer target.
         for(const auto& state : breakBorrowStates)
         {
             auto survivesState = [&](const std::string& name) {
@@ -1741,20 +1741,47 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
                 return depth == state.variableScopeDepth.end() ||
                        depth->second <= loopScopeDepth;
             };
-            std::set<std::string> mutablePointers;
+            std::map<std::string, std::set<std::string>> pointerOwners;
             for(const auto& borrow : state.activeMutBorrower)
-                mutablePointers.insert(borrow.second);
-            for(const auto& pointer : mutablePointers)
+                pointerOwners[borrow.second];
+            for(const auto& owner : state.activeBorrowers)
+                for(const auto& borrower : owner.second)
+                    if(state.pointerBorrowTarget.count(borrower))
+                        pointerOwners[borrower].insert(owner.first);
+            for(auto& pointer : pointerOwners)
             {
-                auto target = state.pointerBorrowTarget.find(pointer);
-                if(target == state.pointerBorrowTarget.end() ||
-                   !survivesState(pointer) || !survivesState(target->second))
+                auto target = state.pointerBorrowTarget.find(pointer.first);
+                if(!survivesState(pointer.first))
                     continue;
-                auto place = state.pointerBorrowPlace.find(pointer);
-                aggregateBorrowPlaces[pointer][target->second].insert(
-                    place == state.pointerBorrowPlace.end()
-                        ? target->second
-                        : place->second);
+                if(target != state.pointerBorrowTarget.end())
+                    pointer.second.insert(target->second);
+                for(const auto& owner : pointer.second)
+                {
+                    if(!survivesState(owner))
+                        continue;
+                    auto aggregate = state.aggregateBorrowPlaces.find(
+                        pointer.first);
+                    if(aggregate != state.aggregateBorrowPlaces.end())
+                    {
+                        auto places = aggregate->second.find(owner);
+                        if(places != aggregate->second.end() &&
+                           !places->second.empty())
+                        {
+                            aggregateBorrowPlaces[pointer.first][owner]
+                                .insert(places->second.begin(),
+                                        places->second.end());
+                            continue;
+                        }
+                    }
+                    std::string place = owner;
+                    auto pointerPlace =
+                        state.pointerBorrowPlace.find(pointer.first);
+                    if(target != state.pointerBorrowTarget.end() &&
+                       target->second == owner &&
+                       pointerPlace != state.pointerBorrowPlace.end())
+                        place = pointerPlace->second;
+                    aggregateBorrowPlaces[pointer.first][owner].insert(place);
+                }
             }
         }
 
@@ -1793,10 +1820,20 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
         }
         for(auto places = aggregateBorrowPlaces.begin();
             places != aggregateBorrowPlaces.end();)
-            if(!isMutBorrower(places->first))
+        {
+            bool sharedPointer = false;
+            if(pointerBorrowTarget.count(places->first))
+                for(const auto& owner : activeBorrowers)
+                    if(owner.second.count(places->first))
+                    {
+                        sharedPointer = true;
+                        break;
+                    }
+            if(!isMutBorrower(places->first) && !sharedPointer)
                 places = aggregateBorrowPlaces.erase(places);
             else
                 ++places;
+        }
         aggregateBorrowFieldPlaces.clear();
     }
 }

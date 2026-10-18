@@ -16401,6 +16401,56 @@ TEST_F(MLATest, NestedLoopSharedJoinedBorrowRejectsOverlappingAccess)
         << out;
 }
 
+// A break-carried shared pointer must preserve its disjoint field path.
+TEST_F(MLATest, NestedLoopBreakSharedBorrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            let again: bool = true;
+            var parent: ptr<i32> = &first.left;
+            while again {
+                parent = &second.left;
+                break;
+            }
+            let child: ptr<i32> = &*parent;
+            second.right = 8;
+            unsafe { return *child; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 6);
+}
+
+// A break-carried shared pointer must still reject overlapping writes.
+TEST_F(MLATest, NestedLoopBreakSharedBorrowRejectsOverlappingAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            let again: bool = true;
+            var parent: ptr<i32> = &first.left;
+            while again {
+                parent = &second.left;
+                break;
+            }
+            let child: ptr<i32> = &*parent;
+            second.left = 8;
+            unsafe { return *child; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
