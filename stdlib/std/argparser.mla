@@ -135,9 +135,10 @@ impl ArgParser {
     /// handle remains valid and can be used with `print_help()`.
     ///
     /// @param argc  Argument count from main (including argv[0]).
-    /// @param args  Argument list from main (list<str8>).
+    /// @param args  Borrowed argument list from main (list<str8>); its argv
+    ///              storage remains owned by the process.
     /// @return ParseResult — always valid; check ok()/has_error().
-    pub fn parse(self: ArgParser, argc: i32, args: list<str8>) -> ParseResult {
+    pub fn parse(self: ArgParser, argc: i32, args: &list<str8>) -> ParseResult {
         let rh: i64 = __mlang_std_argparser_parse_begin(self.handle);
         var i: i32 = 0;
         for arg in args {

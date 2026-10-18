@@ -258,7 +258,8 @@ Mutable Borrow Call Arg Rejected While Shared Borrow Active
     ...    fn main() -> i32 {
     ...        var p: Post = Post { content: "x" };
     ...        let q: ptr<Post> = &p;
-    ...        return inspect_one(&mut p);
+    ...        let result: i32 = inspect_one(&mut p);
+    ...        return result + inspect_one(q);
     ...    }
     Create File    ${src}    ${code}
     ${build}=    Run Process    ${MLANG}    ${src}    -o    ${ARTIFACT DIR}/borrow_mut_call_shared_fail_bin
@@ -391,7 +392,7 @@ Closure Tests Pass
     ...    cwd=${ARTIFACT DIR}    env:PATH=${ARTIFACT DIR}:%{PATH}
     Should Be Equal As Integers    ${run.rc}    0
     ...    msg=closure_tests failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
-    Should Contain    ${run.stdout}    pass=17
+    Should Contain    ${run.stdout}    pass=18
 
 Inline Attrs Demo Runs Correctly
     [Documentation]    Build and run examples/inline_attrs.mla; verify that
