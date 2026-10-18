@@ -17192,6 +17192,7 @@ TEST_F(MLATest, FixedArrayElementOfJoinedSharedPointerRejectsOverlap)
             }
             let pointers: array<ptr<i32>, 1> = {parent};
             let copied: ptr<i32> = pointers[0];
+            parent = &first.right;
             second.left = 8;
             unsafe { return *copied; }
         }
@@ -17222,6 +17223,7 @@ TEST_F(MLATest, FixedArrayElementOfJoinedSharedPointerPreservesDisjoint)
             }
             let pointers: array<ptr<i32>, 1> = {parent};
             let copied: ptr<i32> = pointers[0];
+            parent = &first.right;
             second.right = 8;
             unsafe { return *copied; }
         }
