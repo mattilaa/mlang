@@ -17175,6 +17175,60 @@ TEST_F(MLATest, TupleElementOfJoinedSharedPointerPreservesDisjointAccess)
     EXPECT_EQ(compileAndRunExitCode(code), 4);
 }
 
+// A fixed-array element must retain all owners of a joined shared pointer.
+TEST_F(MLATest, FixedArrayElementOfJoinedSharedPointerRejectsOverlap)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            let flag: bool = true;
+            if flag {
+                parent = &first.left;
+            } else {
+                parent = &second.left;
+            }
+            let pointers: array<ptr<i32>, 1> = {parent};
+            let copied: ptr<i32> = pointers[0];
+            second.left = 8;
+            unsafe { return *copied; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
+// A fixed-array joined pointer should leave a disjoint sibling writable.
+TEST_F(MLATest, FixedArrayElementOfJoinedSharedPointerPreservesDisjoint)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            let flag: bool = true;
+            if flag {
+                parent = &first.left;
+            } else {
+                parent = &second.left;
+            }
+            let pointers: array<ptr<i32>, 1> = {parent};
+            let copied: ptr<i32> = pointers[0];
+            second.right = 8;
+            unsafe { return *copied; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
