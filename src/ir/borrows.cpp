@@ -3467,22 +3467,65 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                 }
                 else
                 {
-                    TypeNode* receiverType = nullptr;
-                    if(auto* receiver =
-                           dynamic_cast<IdentifierNode*>(method->object))
-                    {
-                        auto localType = localBorrowTypes.find(receiver->name);
-                        if(localType != localBorrowTypes.end())
-                            receiverType = localType->second;
-                    }
-                    std::string receiverStruct;
-                    if(auto* structure =
-                           dynamic_cast<StructTypeRefNode*>(receiverType))
-                        receiverStruct = structure->structName;
-                    else if(auto* generic =
-                                dynamic_cast<GenericStructTypeRefNode*>(
-                                    receiverType))
-                        receiverStruct = generic->getMangledName();
+                    auto structNameFromType = [](TypeNode* type) {
+                        while(auto* pointer =
+                                  dynamic_cast<PointerTypeNode*>(type))
+                            type = pointer->elementType;
+                        if(auto* structure =
+                               dynamic_cast<StructTypeRefNode*>(type))
+                            return structure->structName;
+                        if(auto* generic =
+                               dynamic_cast<GenericStructTypeRefNode*>(type))
+                            return generic->getMangledName();
+                        return std::string{};
+                    };
+                    std::function<std::string(ExpressionNode*)>
+                        structNameFromExpression;
+                    structNameFromExpression = [&](ExpressionNode* value) {
+                        if(auto* identifier =
+                               dynamic_cast<IdentifierNode*>(value))
+                        {
+                            auto localType =
+                                localBorrowTypes.find(identifier->name);
+                            return localType == localBorrowTypes.end()
+                                       ? std::string{}
+                                       : structNameFromType(localType->second);
+                        }
+                        if(auto* literal =
+                               dynamic_cast<StructLiteralNode*>(value))
+                            return literal->structName;
+                        if(auto* field = dynamic_cast<FieldAccessNode*>(value))
+                        {
+                            std::string baseStruct;
+                            if(field->object)
+                                baseStruct =
+                                    structNameFromExpression(field->object);
+                            else
+                            {
+                                auto localType =
+                                    localBorrowTypes.find(field->structName);
+                                baseStruct =
+                                    localType == localBorrowTypes.end()
+                                        ? field->structName
+                                        : structNameFromType(
+                                              localType->second);
+                            }
+                            auto members = structMembers.find(baseStruct);
+                            if(members == structMembers.end())
+                                return std::string{};
+                            auto member = std::find_if(
+                                members->second.begin(), members->second.end(),
+                                [&](const auto& entry) {
+                                    return entry.first == field->fieldName;
+                                });
+                            return member == members->second.end()
+                                       ? std::string{}
+                                       : structNameFromType(member->second);
+                        }
+                        return std::string{};
+                    };
+                    const std::string receiverStruct =
+                        structNameFromExpression(method->object);
                     auto methods = structMethods.find(receiverStruct);
                     StructMethodNode* definition = nullptr;
                     if(methods != structMethods.end())
