@@ -400,6 +400,67 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                             .insert(methodArgumentIndex);
                                     ++methodArgumentIndex;
                                 }
+                            std::map<std::string, TypeNode*> methodLocalTypes;
+                            if(definition->parameters)
+                                for(auto* parameter :
+                                    definition->parameters->parameters)
+                                    if(parameter)
+                                        methodLocalTypes[parameter->name] =
+                                            parameter->type;
+                            std::function<std::string(ExpressionNode*)>
+                                methodStructNameForExpression;
+                            methodStructNameForExpression =
+                                [&](ExpressionNode* expression) {
+                                    if(auto* identifier =
+                                           dynamic_cast<IdentifierNode*>(
+                                               expression))
+                                    {
+                                        auto type = methodLocalTypes.find(
+                                            identifier->name);
+                                        return type == methodLocalTypes.end()
+                                                   ? std::string{}
+                                                   : structNameFromType(
+                                                         type->second);
+                                    }
+                                    if(auto* field =
+                                           dynamic_cast<FieldAccessNode*>(
+                                               expression))
+                                    {
+                                        std::string baseStruct;
+                                        if(field->object)
+                                            baseStruct =
+                                                methodStructNameForExpression(
+                                                    field->object);
+                                        else
+                                        {
+                                            auto type = methodLocalTypes.find(
+                                                field->structName);
+                                            baseStruct =
+                                                type == methodLocalTypes.end()
+                                                    ? field->structName
+                                                    : structNameFromType(
+                                                          type->second);
+                                        }
+                                        auto members =
+                                            structMembers.find(baseStruct);
+                                        if(members == structMembers.end())
+                                            return std::string{};
+                                        auto member = std::find_if(
+                                            members->second.begin(),
+                                            members->second.end(),
+                                            [&](const auto& entry) {
+                                                return entry.first ==
+                                                       field->fieldName;
+                                            });
+                                        return member == members->second.end()
+                                                   ? std::string{}
+                                                   : structNameFromType(
+                                                         member->second);
+                                    }
+                                    return std::string{};
+                                };
+                            std::set<StructMethodNode*> activeMethodScans{
+                                definition};
 
                             std::set<size_t> methodMutatedArguments;
                             std::set<size_t> methodDefinitelyMutatedArguments;
@@ -437,16 +498,32 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                 }
                                 if(auto* declaration =
                                        dynamic_cast<LetDeclNode*>(child))
+                                {
+                                    if(declaration->type)
+                                        methodLocalTypes[declaration->name] =
+                                            declaration->type;
+                                    else
+                                        methodLocalTypes.erase(
+                                            declaration->name);
                                     methodSlotAliases[declaration->name] =
                                         collectPointerSlotAliases(
                                             declaration->expression,
                                             methodSlotAliases);
+                                }
                                 else if(auto* declaration =
                                             dynamic_cast<VarDeclNode*>(child))
+                                {
+                                    if(declaration->type)
+                                        methodLocalTypes[declaration->name] =
+                                            declaration->type;
+                                    else
+                                        methodLocalTypes.erase(
+                                            declaration->name);
                                     methodSlotAliases[declaration->name] =
                                         collectPointerSlotAliases(
                                             declaration->initExpr,
                                             methodSlotAliases);
+                                }
                                 else if(auto* assignment =
                                             dynamic_cast<AssignmentNode*>(child))
                                 {
@@ -569,6 +646,135 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                                     methodHasConditionalControlFlow =
                                                         true;
                                             }
+                                    }
+                                    else if(auto* nestedMethod =
+                                                dynamic_cast<MethodCallNode*>(
+                                                    expression->expression))
+                                    {
+                                        std::string nestedStruct =
+                                            methodStructNameForExpression(
+                                                nestedMethod->object);
+                                        if(nestedStruct.empty())
+                                            if(auto* receiver =
+                                                   dynamic_cast<IdentifierNode*>(
+                                                       nestedMethod->object);
+                                               receiver &&
+                                               receiver->name == "self")
+                                                nestedStruct = receiverStruct;
+                                        auto nestedMethods =
+                                            structMethods.find(nestedStruct);
+                                        StructMethodNode* nestedDefinition =
+                                            nullptr;
+                                        if(nestedMethods != structMethods.end())
+                                        {
+                                            auto found = nestedMethods->second
+                                                             .find(nestedMethod
+                                                                       ->methodName);
+                                            if(found != nestedMethods->second.end())
+                                                nestedDefinition =
+                                                    found->second.second;
+                                        }
+
+                                        auto callerAliases = methodSlotAliases;
+                                        std::map<std::string,
+                                                 std::set<size_t>>
+                                            nestedAliases;
+                                        size_t nestedArgumentIndex = 0;
+                                        if(nestedDefinition &&
+                                           nestedDefinition->parameters)
+                                            for(auto* parameter :
+                                                nestedDefinition->parameters
+                                                    ->parameters)
+                                            {
+                                                if(!parameter ||
+                                                   parameter->name == "self")
+                                                    continue;
+                                                auto* pointer =
+                                                    dynamic_cast<PointerTypeNode*>(
+                                                        parameter->type);
+                                                if(pointer &&
+                                                   dynamic_cast<PointerTypeNode*>(
+                                                       pointer->elementType) &&
+                                                   nestedArgumentIndex <
+                                                       nestedMethod->arguments
+                                                           .size())
+                                                    nestedAliases[parameter->name] =
+                                                        collectPointerSlotAliases(
+                                                            nestedMethod
+                                                                ->arguments[
+                                                                    nestedArgumentIndex],
+                                                            callerAliases);
+                                                ++nestedArgumentIndex;
+                                            }
+
+                                        if(!nestedDefinition ||
+                                           activeMethodScans.count(
+                                               nestedDefinition) != 0)
+                                        {
+                                            if(nestedDefinition &&
+                                               nestedDefinition->parameters)
+                                            {
+                                                size_t argumentIndex = 0;
+                                                for(auto* parameter :
+                                                    nestedDefinition->parameters
+                                                        ->parameters)
+                                                {
+                                                    if(!parameter ||
+                                                       parameter->name ==
+                                                           "self")
+                                                        continue;
+                                                    auto* pointer =
+                                                        dynamic_cast<
+                                                            PointerTypeNode*>(
+                                                            parameter->type);
+                                                    if(pointer &&
+                                                       dynamic_cast<
+                                                           PointerTypeNode*>(
+                                                           pointer->elementType) &&
+                                                       argumentIndex <
+                                                           nestedMethod
+                                                               ->arguments.size())
+                                                    {
+                                                        auto aliases =
+                                                            collectPointerSlotAliases(
+                                                                nestedMethod
+                                                                    ->arguments[
+                                                                        argumentIndex],
+                                                                callerAliases);
+                                                        methodMutatedArguments
+                                                            .insert(aliases.begin(),
+                                                                    aliases.end());
+                                                    }
+                                                    ++argumentIndex;
+                                                }
+                                            }
+                                        }
+                                        else
+                                        {
+                                            const auto callerTypes =
+                                                methodLocalTypes;
+                                            methodSlotAliases =
+                                                std::move(nestedAliases);
+                                            methodLocalTypes.clear();
+                                            if(nestedDefinition->parameters)
+                                                for(auto* parameter :
+                                                    nestedDefinition->parameters
+                                                        ->parameters)
+                                                    if(parameter)
+                                                        methodLocalTypes[
+                                                            parameter->name] =
+                                                            parameter->type;
+                                            activeMethodScans.insert(
+                                                nestedDefinition);
+                                            scanMethodList(
+                                                nestedDefinition->body,
+                                                conditional);
+                                            activeMethodScans.erase(
+                                                nestedDefinition);
+                                            methodSlotAliases =
+                                                std::move(callerAliases);
+                                            methodLocalTypes = callerTypes;
+                                        }
                                     }
                                 }
                                 if(auto* block =
