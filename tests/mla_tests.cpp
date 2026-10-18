@@ -3449,6 +3449,29 @@ TEST_F(MLATest, JoinedElementBorrowProtectsSecondListOwner)
         << out;
 }
 
+// A joined borrow of the same field on either owner leaves sibling fields free.
+TEST_F(MLATest, JoinedFieldBorrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        var outside: i32 = 0;
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var pointer: ptr<i32> = &mut outside;
+            let flag: bool = true;
+            if flag {
+                pointer = &mut first.left;
+            } else {
+                pointer = &mut second.left;
+            }
+            second.right = 8;
+            unsafe { return *pointer; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
 TEST_F(MLATest, StructListBorrowAllowsDisjointFieldsAndElements)
 {
     std::string code = R"(

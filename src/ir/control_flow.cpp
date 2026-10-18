@@ -1219,6 +1219,40 @@ void CodeGenerator::generateIfStatement(IfNode* node)
                 mergedPointerBorrowPlace.emplace(borrow.first, commonPlace);
         }
         pointerBorrowPlace = std::move(mergedPointerBorrowPlace);
+
+        // Retain owner-specific paths for mutable pointers whose targets
+        // differ across the branches. The single pointerBorrowTarget entry is
+        // only a representative; without these paths, checks either miss a
+        // possible owner or must conservatively block its whole object.
+        auto mergeJoinedPointerPlaces = [&](const auto& branchTargets,
+                                            const auto& branchPlaces,
+                                            const auto& branchMutBorrowers) {
+            for(const auto& borrow : branchMutBorrowers)
+            {
+                const std::string& pointer = borrow.second;
+                auto target = branchTargets.find(pointer);
+                if(target == branchTargets.end())
+                    continue;
+                const std::string& owner = target->second;
+                auto place = branchPlaces.find(pointer);
+                std::string ownerPlace = owner;
+                if(place != branchPlaces.end() &&
+                   place->second.compare(0, owner.size(), owner) == 0)
+                {
+                    ownerPlace = owner + place->second.substr(owner.size());
+                }
+                aggregateBorrowPlaces[pointer][owner].insert(ownerPlace);
+            }
+        };
+        if(thenFallsThrough)
+            mergeJoinedPointerPlaces(thenPointerBorrowTarget,
+                                     thenPointerBorrowPlace,
+                                     thenActiveMutBorrower);
+        if(elseFallsThrough)
+            mergeJoinedPointerPlaces(elsePointerBorrowTarget,
+                                     elsePointerBorrowPlace,
+                                     elseActiveMutBorrower);
+
         activeBorrowers = std::move(mergedActiveBorrowers);
         // A mutable borrow on either reachable path may be live after the
         // merge. Keep the union so owner accesses cannot slip through on the
