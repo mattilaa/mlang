@@ -1613,10 +1613,21 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
         // conservative because a loop may replace them on later iterations.
         std::map<std::string, std::map<std::string, std::set<std::string>>>
             loopPointerBorrowPlaces;
+        auto isSharedPointerIn = [](const auto& borrowers,
+                                    const std::string& pointer) {
+            for(const auto& owner : borrowers)
+                if(owner.second.count(pointer))
+                    return true;
+            return false;
+        };
         auto mergeLoopPointerPlaces = [&](const auto& branchPlaces) {
             for(const auto& borrower : branchPlaces)
             {
-                if(!isMutBorrower(borrower.first))
+                const bool sharedPointer =
+                    pointerBorrowTarget.count(borrower.first) &&
+                    (isSharedPointerIn(incomingActiveBorrowers, borrower.first) ||
+                     isSharedPointerIn(bodyActiveBorrowers, borrower.first));
+                if(!isMutBorrower(borrower.first) && !sharedPointer)
                     continue;
                 for(const auto& owner : borrower.second)
                     loopPointerBorrowPlaces[borrower.first][owner.first]
@@ -1626,10 +1637,12 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
         mergeLoopPointerPlaces(incomingAggregateBorrowPlaces);
         mergeLoopPointerPlaces(bodyAggregateBorrowPlaces);
         auto addLoopPointerPlace = [&](const auto& targets,
-                                       const auto& places) {
+                                       const auto& places,
+                                       const auto& borrowers) {
             for(const auto& target : targets)
             {
-                if(!isMutBorrower(target.first))
+                if(!isMutBorrower(target.first) &&
+                   !isSharedPointerIn(borrowers, target.first))
                     continue;
                 auto& ownerPlaces =
                     loopPointerBorrowPlaces[target.first][target.second];
@@ -1641,8 +1654,10 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
             }
         };
         addLoopPointerPlace(incomingPointerBorrowTarget,
-                            incomingPointerBorrowPlace);
-        addLoopPointerPlace(bodyPointerBorrowTarget, bodyPointerBorrowPlace);
+                            incomingPointerBorrowPlace,
+                            incomingActiveBorrowers);
+        addLoopPointerPlace(bodyPointerBorrowTarget, bodyPointerBorrowPlace,
+                            bodyActiveBorrowers);
         aggregateBorrowPlaces = std::move(loopPointerBorrowPlaces);
         aggregateBorrowFieldPlaces.clear();
         for(const auto& closure : bodyRuntimeClosureBorrowOwners)
