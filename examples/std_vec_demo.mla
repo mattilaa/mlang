@@ -24,7 +24,7 @@ fn demo_construction() -> void {
     println!("--- construction ---");
 
     // Empty Vec with explicit element type
-    var a: list<i32> = new();
+    var a: Vec<i32> = Vec::new();
     println!("new() len={}", a.len());
 
     // Vec from literal with inferred type
@@ -43,7 +43,7 @@ fn demo_construction() -> void {
 
 fn demo_push_pop() -> void {
     println!("--- push / pop ---");
-    var v: list<i32> = new();
+    var v: Vec<i32> = Vec::new();
     v.push(10);
     v.push(20);
     v.push(30);
@@ -60,7 +60,7 @@ fn demo_push_pop() -> void {
 
 fn demo_first_last() -> void {
     println!("--- first / last ---");
-    var v: list<i32> = new();
+    var v: Vec<i32> = Vec::new();
     v.push(7);
     v.push(14);
     v.push(21);
@@ -74,7 +74,7 @@ fn demo_first_last() -> void {
 
 fn demo_sort() -> void {
     println!("--- sort / sort_desc / reverse / dedup ---");
-    var v: list<i32> = new();
+    var v: Vec<i32> = Vec::new();
     v.push(5);
     v.push(1);
     v.push(4);
@@ -103,7 +103,7 @@ fn demo_sort() -> void {
 
 fn demo_search() -> void {
     println!("--- contains / index_of ---");
-    var v: list<i32> = new();
+    var v: Vec<i32> = Vec::new();
     v.push(10);
     v.push(20);
     v.push(30);
@@ -124,7 +124,7 @@ fn demo_search() -> void {
 
 fn demo_clear() -> void {
     println!("--- is_empty / clear ---");
-    var v: list<i32> = new();
+    var v: Vec<i32> = Vec::new();
     println!("empty? {}", v.is_empty());
     v.push(1);
     v.push(2);
@@ -139,7 +139,7 @@ fn demo_clear() -> void {
 
 fn demo_i64() -> void {
     println!("--- Vec<i64> ---");
-    var v: list<i64> = new();
+    var v: Vec<i64> = Vec::new();
     v.push(1000000000);
     v.push(2000000000);
     v.push(3000000000);
@@ -155,7 +155,7 @@ fn demo_i64() -> void {
 
 fn demo_iteration() -> void {
     println!("--- iteration ---");
-    var primes: list<i32> = new();
+    var primes: Vec<i32> = Vec::new();
     primes.push(2);
     primes.push(3);
     primes.push(5);

@@ -12,8 +12,8 @@ fn main() -> i32 {
     (*p).value = 22;
     println!("after struct ptr: {}", foo.value);
 
-    let pi: ptr<i32> = &foo.value;
-    *pi = 7;
+    let pi: ptr<i32> = &mut foo.value;
+    unsafe { *pi = 7; }
     println!("after i32 ptr: {}", foo.value);
 
     return 0;
