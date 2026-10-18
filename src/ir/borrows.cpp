@@ -394,6 +394,13 @@ bool CodeGenerator::validateBorrowWriteThroughPointer(ExpressionNode* expr,
             return false;
         }
     }
+    if(dynamic_cast<FunctionCallNode*>(expr) &&
+       expressionIsKnownSharedBorrow(expr))
+    {
+        reportError(line,
+                    "cannot write through shared borrow returned by call");
+        return false;
+    }
 
     size_t dereferenceDepth = 0;
     auto* current = expr;
@@ -802,6 +809,44 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
         auto borrowers = activeBorrowers.find(owner->second);
         return borrowers != activeBorrowers.end() &&
                borrowers->second.count(identifier->name) != 0;
+    }
+    if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+    {
+        bool hasUnknownSummary = false;
+        for(const auto& calledName :
+            getFunctionItemTargetsForName(call->name))
+        {
+            auto overloads = functionOverloads.find(calledName);
+            if(overloads == functionOverloads.end())
+            {
+                hasUnknownSummary = true;
+                continue;
+            }
+            for(const auto& overload : overloads->second)
+            {
+                if(!overload.node || !overload.node->returnType ||
+                   overload.node->returnType->kind != TypeNode::TYPE_PTR)
+                    continue;
+                if(!functionPointerReturnSummaryComplete.count(
+                       overload.symbolName))
+                {
+                    hasUnknownSummary = true;
+                    continue;
+                }
+                auto summary = functionPointerReturnParameters.find(
+                    overload.symbolName);
+                if(summary == functionPointerReturnParameters.end())
+                    continue;
+                for(size_t index : summary->second)
+                    if(index < call->arguments.size() &&
+                       expressionIsKnownSharedBorrow(call->arguments[index]))
+                        return true;
+            }
+        }
+        if(hasUnknownSummary)
+            for(auto* argument : call->arguments)
+                if(expressionIsKnownSharedBorrow(argument))
+                    return true;
     }
     const std::string container = resolveBorrowOwnerFromLValue(expr);
     const std::string sourcePath = resolveBorrowPlaceFromLValue(expr);

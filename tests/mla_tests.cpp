@@ -5672,6 +5672,50 @@ TEST_F(MLATest, SharedBorrowCannotWriteThroughTemporaryPointer)
               std::string::npos) << out;
 }
 
+// A function returning a shared argument must not hide a write from
+// validation.
+TEST_F(MLATest, SharedBorrowReturnedFromFunctionCannotBeWrittenThrough)
+{
+    std::string code = R"(
+        fn identity(pointer: ptr<i32>) -> ptr<i32> {
+            return pointer;
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            unsafe { *identity(shared) = 9; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
+// Returning an exclusive argument remains writable through the call result.
+TEST_F(MLATest, ExclusiveBorrowReturnedFromFunctionCanBeWrittenThrough)
+{
+    std::string code = R"(
+        fn identity(pointer: ptr<i32>) -> ptr<i32> {
+            return pointer;
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            unsafe { *identity(&mut value) = 9; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 0) << out;
+}
+
 // A nested dereference must retain the shared borrow restriction on its place.
 TEST_F(MLATest, SharedBorrowCannotWriteThroughNestedPointer)
 {
