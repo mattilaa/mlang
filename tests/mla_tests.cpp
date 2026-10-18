@@ -12285,6 +12285,48 @@ TEST_F(MLATest, OwnershipMethodSlotAliasReassignmentKeepsUnchangedBorrow)
     EXPECT_NE(out.find("borrowed by 'selected'"), std::string::npos) << out;
 }
 
+// Method analysis must retain all targets of a conditional slot alias.
+TEST_F(MLATest, OwnershipMethodConditionalSlotAliasKeepsBorrowOrigins)
+{
+    std::string code = R"(
+        struct Replacer { var value: i32; };
+        var global_value: i32 = 11;
+        impl Replacer {
+            fn replace_selected(self: &mut Replacer, flag: bool,
+                                first: ptr<ptr<i32>>,
+                                second: ptr<ptr<i32>>,
+                                replacement: ptr<i32>) -> void {
+                let selected_slot = flag ? first : second;
+                unsafe { *selected_slot = replacement; }
+            }
+        }
+
+        fn maybe_local(flag: bool) -> ptr<i32> {
+            var local_value: i32 = 7;
+            var selected: ptr<i32> = &global_value;
+            var other: ptr<i32> = &global_value;
+            let first_slot: ptr<ptr<i32>> = &mut selected;
+            let second_slot: ptr<ptr<i32>> = &mut other;
+            var replacer: Replacer = Replacer { value: 0 };
+            replacer.replace_selected(flag, first_slot, second_slot,
+                                      &local_value);
+            return selected;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = maybe_local(false);
+            local_value = 4;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("borrowed by 'selected'"), std::string::npos) << out;
+}
+
 // Function summaries must kill a caller-slot alias when its local copy is reassigned.
 TEST_F(MLATest, OwnershipHelperSlotAliasReassignmentKeepsUnchangedBorrow)
 {

@@ -3510,7 +3510,8 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                     }
                     if(definition)
                     {
-                        std::map<std::string, size_t> slotParameterArguments;
+                        std::map<std::string, std::set<size_t>>
+                            slotParameterArguments;
                         size_t argumentIndex = 0;
                         if(definition->parameters)
                             for(auto* parameter :
@@ -3524,12 +3525,66 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                                    dynamic_cast<PointerTypeNode*>(
                                        pointer->elementType) &&
                                    argumentIndex < arguments.size())
-                                    slotParameterArguments[parameter->name] =
-                                        argumentIndex;
+                                    slotParameterArguments[parameter->name]
+                                        .insert(argumentIndex);
                                 ++argumentIndex;
                             }
-                        std::map<std::string, size_t> slotAliases =
+                        std::map<std::string, std::set<size_t>> slotAliases =
                             slotParameterArguments;
+                        auto collectSlotAliases =
+                            [](ExpressionNode* expression,
+                               const std::map<std::string,
+                                              std::set<size_t>>& aliases) {
+                                std::set<size_t> result;
+                                std::function<void(ExpressionNode*)> collect =
+                                    [&](ExpressionNode* value) {
+                                        if(auto* identifier =
+                                               dynamic_cast<IdentifierNode*>(
+                                                   value))
+                                        {
+                                            auto found = aliases.find(
+                                                identifier->name);
+                                            if(found != aliases.end())
+                                                result.insert(
+                                                    found->second.begin(),
+                                                    found->second.end());
+                                        }
+                                        else if(auto* ternary =
+                                                    dynamic_cast<TernaryNode*>(
+                                                        value))
+                                        {
+                                            collect(ternary->trueExpr);
+                                            collect(ternary->falseExpr);
+                                        }
+                                        else if(auto* match =
+                                                    dynamic_cast<
+                                                        MatchExpressionNode*>(
+                                                        value))
+                                        {
+                                            for(auto* arm : match->arms)
+                                                if(arm)
+                                                    collect(arm->expression);
+                                        }
+                                        else if(auto* cast =
+                                                    dynamic_cast<
+                                                        CastExpressionNode*>(
+                                                        value))
+                                            collect(cast->expression);
+                                        else if(auto* attempt =
+                                                    dynamic_cast<
+                                                        TryExpressionNode*>(
+                                                        value))
+                                            collect(attempt->expression);
+                                        else if(auto* binary =
+                                                    dynamic_cast<BinaryOpNode*>(
+                                                        value))
+                                            if(binary->op ==
+                                               BinaryOpNode::OP_COMMA)
+                                                collect(binary->right);
+                                    };
+                                collect(expression);
+                                return result;
+                            };
                         bool conditionalWrite = false;
                         std::function<void(StatementListNode*, bool)> scanList;
                         std::function<void(StatementNode*, bool)> scanStatement;
@@ -3554,10 +3609,15 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                                         slotAliases.find(identifier->name);
                                     if(alias != slotAliases.end())
                                     {
-                                        mutatedSlots.insert(alias->second);
-                                        if(!conditional)
-                                            definiteSlots.insert(alias->second);
-                                        else
+                                        mutatedSlots.insert(
+                                            alias->second.begin(),
+                                            alias->second.end());
+                                        if(!conditional &&
+                                           alias->second.size() == 1)
+                                            definiteSlots.insert(
+                                                alias->second.begin(),
+                                                alias->second.end());
+                                        else if(conditional)
                                             conditionalWrite = true;
                                     }
                                 }
@@ -3571,20 +3631,11 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                                 // provenance here can incorrectly classify a
                                 // write through the new value as a definite
                                 // overwrite of the old caller slot.
-                                auto alias = [&]() -> std::optional<size_t> {
-                                    auto* identifier =
-                                        dynamic_cast<IdentifierNode*>(value);
-                                    if(!identifier)
-                                        return std::nullopt;
-                                    auto found =
-                                        slotAliases.find(identifier->name);
-                                    if(found == slotAliases.end())
-                                        return std::nullopt;
-                                    return found->second;
-                                }();
+                                auto aliases =
+                                    collectSlotAliases(value, slotAliases);
                                 slotAliases.erase(name);
-                                if(alias)
-                                    slotAliases[name] = *alias;
+                                if(!aliases.empty())
+                                    slotAliases[name] = std::move(aliases);
                             };
                             if(auto* declaration =
                                    dynamic_cast<LetDeclNode*>(child))
