@@ -574,9 +574,17 @@ bool CodeGenerator::expressionCarriesLocalBorrow(ExpressionNode* expr) const
                isLocalOwner(owner.first))
                 return true;
         for(const auto& borrow : activeMutBorrower)
-            if(borrow.second == identifier->name &&
-               isLocalOwner(borrow.first))
-                return true;
+            if(borrow.second == identifier->name)
+            {
+                if(isLocalOwner(borrow.first))
+                    return true;
+                const std::string reborrowPrefix =
+                    "@reborrow:" + identifier->name + ":";
+                if(borrow.first.compare(0, reborrowPrefix.size(),
+                                        reborrowPrefix) == 0 &&
+                   isLocalOwner(borrow.first.substr(reborrowPrefix.size())))
+                    return true;
+            }
         auto aggregate = aggregateBorrowOrigins.find(identifier->name);
         if(aggregate != aggregateBorrowOrigins.end())
             for(const auto& owner : aggregate->second)
@@ -2972,7 +2980,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                 !hasRootMutableBorrow
                     ? ownerName
                     : (!exclusiveReborrowParent.empty()
-                           ? "@reborrow:" + pointerVar
+                           ? "@reborrow:" + pointerVar + ":" + ownerName
                            : borrowPlace);
             activeMutBorrower[borrowKey] = pointerVar;
             return true;

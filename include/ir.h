@@ -586,7 +586,7 @@ private:
         std::string previousOwner;
         std::string previousPlace;
         bool previousWasMutable = false;
-        std::string previousBorrowKey;
+        std::vector<std::string> previousBorrowKeys;
         std::string previousParent;
         std::string shadowAlias;
     };

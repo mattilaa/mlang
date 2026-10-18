@@ -231,17 +231,22 @@ void CodeGenerator::exitCleanupScope()
                 pointerBorrowPlace[it->pointerVar] = it->previousPlace;
             if(it->previousWasMutable)
             {
-                std::string borrowKey = it->previousBorrowKey.empty()
-                                            ? it->previousOwner
-                                            : it->previousBorrowKey;
-                auto rootBorrow = activeMutBorrower.find(it->previousOwner);
-                if(borrowKey == it->previousOwner &&
-                   rootBorrow != activeMutBorrower.end() &&
-                   rootBorrow->second != it->pointerVar)
-                    borrowKey = it->previousPlace.empty()
-                                    ? it->previousOwner
-                                    : it->previousPlace;
-                activeMutBorrower[borrowKey] = it->pointerVar;
+                if(it->previousBorrowKeys.empty())
+                    it->previousBorrowKeys.push_back(it->previousOwner);
+                for(std::string borrowKey : it->previousBorrowKeys)
+                {
+                    if(borrowKey == it->previousOwner)
+                    {
+                        auto rootBorrow =
+                            activeMutBorrower.find(it->previousOwner);
+                        if(rootBorrow != activeMutBorrower.end() &&
+                           rootBorrow->second != it->pointerVar)
+                            borrowKey = it->previousPlace.empty()
+                                           ? it->previousOwner
+                                           : it->previousPlace;
+                    }
+                    activeMutBorrower[borrowKey] = it->pointerVar;
+                }
             }
             else
             {

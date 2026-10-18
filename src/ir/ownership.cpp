@@ -517,8 +517,7 @@ void CodeGenerator::recordScopedPointerVariable(const std::string& pointerVar)
             if(borrow.second == pointerVar)
             {
                 entry.previousWasMutable = true;
-                entry.previousBorrowKey = borrow.first;
-                break;
+                entry.previousBorrowKeys.push_back(borrow.first);
             }
         }
 
