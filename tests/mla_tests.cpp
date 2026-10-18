@@ -6385,6 +6385,33 @@ TEST_F(MLATest, NestedReborrowOfJoinedPointerCannotEscapeLocalOrigin)
         << out;
 }
 
+// Ternary reborrow joins must retain every parent owner for escape checks.
+TEST_F(MLATest, TernaryReborrowOfLocalParentCannotEscapeToOpaqueCall)
+{
+    std::string code = R"(
+        extern fn retain_pointer(pointer: ptr<i32>) -> void;
+
+        var global_value: i32 = 11;
+        fn main() -> i32 {
+            var local_value: i32 = 7;
+            let flag: bool = true;
+            let global_parent: ptr<i32> = &mut global_value;
+            let local_parent: ptr<i32> = &mut local_value;
+            let selected: ptr<i32> =
+                flag ? &mut *global_parent : &mut *local_parent;
+            retain_pointer(selected);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
+              std::string::npos)
+        << out;
+}
+
 // Verifies a conditional expression cannot hide a shared borrow from a
 // writer.
 TEST_F(MLATest, SharedBorrowInTernaryCannotPassToMutatingPointerParameter)
