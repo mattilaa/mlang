@@ -12038,6 +12038,70 @@ TEST_F(MLATest, OwnershipIndirectPointerAssignmentTracksConditionalSlotTargets)
         << out;
 }
 
+// A helper's definite pointer-slot overwrite must replace the caller's origin.
+TEST_F(MLATest, OwnershipHelperSlotOverwriteDropsLocalBorrowOrigin)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+
+        fn replace(slot: ptr<ptr<i32>>, replacement: ptr<i32>) -> void {
+            unsafe { *slot = replacement; }
+        }
+
+        fn select_global() -> ptr<i32> {
+            var local_value: i32 = 7;
+            var selected: ptr<i32> = &local_value;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            replace(slot, &global_value);
+            return selected;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = select_global();
+            local_value = 4;
+            unsafe { return *selected - 11; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A helper that may write a local pointer into a slot must preserve that origin.
+TEST_F(MLATest, OwnershipHelperConditionalSlotWriteKeepsLocalBorrowOrigin)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+
+        fn maybe_replace(flag: bool, slot: ptr<ptr<i32>>,
+                         replacement: ptr<i32>) -> void {
+            if flag {
+                unsafe { *slot = replacement; }
+            }
+        }
+
+        fn maybe_local(flag: bool) -> ptr<i32> {
+            var local_value: i32 = 7;
+            var selected: ptr<i32> = &global_value;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            maybe_replace(flag, slot, &local_value);
+            return selected;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = maybe_local(true);
+            local_value = 4;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'selected'"), std::string::npos)
+        << out;
+}
+
 // A helper's indirect pointer write must update the caller's returned origin.
 TEST_F(MLATest, OwnershipHelperIndirectPointerAssignmentKeepsNewOrigin)
 {
