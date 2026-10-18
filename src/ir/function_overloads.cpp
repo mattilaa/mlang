@@ -401,6 +401,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                     ++methodArgumentIndex;
                                 }
                             std::map<std::string, TypeNode*> methodLocalTypes;
+                            std::map<std::string, std::string>
+                                methodLocalStructNames;
                             if(definition->parameters)
                                 for(auto* parameter :
                                     definition->parameters->parameters)
@@ -415,6 +417,12 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                            dynamic_cast<IdentifierNode*>(
                                                expression))
                                     {
+                                        auto inferred =
+                                            methodLocalStructNames.find(
+                                                identifier->name);
+                                        if(inferred !=
+                                           methodLocalStructNames.end())
+                                            return inferred->second;
                                         auto type = methodLocalTypes.find(
                                             identifier->name);
                                         return type == methodLocalTypes.end()
@@ -433,13 +441,24 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                                     field->object);
                                         else
                                         {
-                                            auto type = methodLocalTypes.find(
-                                                field->structName);
-                                            baseStruct =
-                                                type == methodLocalTypes.end()
-                                                    ? field->structName
-                                                    : structNameFromType(
-                                                          type->second);
+                                            auto inferred =
+                                                methodLocalStructNames.find(
+                                                    field->structName);
+                                            if(inferred !=
+                                               methodLocalStructNames.end())
+                                                baseStruct = inferred->second;
+                                            else
+                                            {
+                                                auto type =
+                                                    methodLocalTypes.find(
+                                                        field->structName);
+                                                baseStruct =
+                                                    type ==
+                                                            methodLocalTypes.end()
+                                                        ? field->structName
+                                                        : structNameFromType(
+                                                              type->second);
+                                            }
                                         }
                                         auto members =
                                             structMembers.find(baseStruct);
@@ -500,11 +519,42 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                        dynamic_cast<LetDeclNode*>(child))
                                 {
                                     if(declaration->type)
+                                    {
                                         methodLocalTypes[declaration->name] =
                                             declaration->type;
+                                        methodLocalStructNames.erase(
+                                            declaration->name);
+                                    }
                                     else
+                                    {
                                         methodLocalTypes.erase(
                                             declaration->name);
+                                        if(auto* literal =
+                                               dynamic_cast<StructLiteralNode*>(
+                                                   declaration->expression))
+                                            methodLocalStructNames[
+                                                declaration->name] =
+                                                literal->structName;
+                                        else if(auto* identifier =
+                                                    dynamic_cast<IdentifierNode*>(
+                                                        declaration->expression))
+                                        {
+                                            auto inferred =
+                                                methodLocalStructNames.find(
+                                                    identifier->name);
+                                            if(inferred !=
+                                               methodLocalStructNames.end())
+                                                methodLocalStructNames[
+                                                    declaration->name] =
+                                                    inferred->second;
+                                            else
+                                                methodLocalStructNames.erase(
+                                                    declaration->name);
+                                        }
+                                        else
+                                            methodLocalStructNames.erase(
+                                                declaration->name);
+                                    }
                                     methodSlotAliases[declaration->name] =
                                         collectPointerSlotAliases(
                                             declaration->expression,
@@ -514,11 +564,42 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                             dynamic_cast<VarDeclNode*>(child))
                                 {
                                     if(declaration->type)
+                                    {
                                         methodLocalTypes[declaration->name] =
                                             declaration->type;
+                                        methodLocalStructNames.erase(
+                                            declaration->name);
+                                    }
                                     else
+                                    {
                                         methodLocalTypes.erase(
                                             declaration->name);
+                                        if(auto* literal =
+                                               dynamic_cast<StructLiteralNode*>(
+                                                   declaration->initExpr))
+                                            methodLocalStructNames[
+                                                declaration->name] =
+                                                literal->structName;
+                                        else if(auto* identifier =
+                                                    dynamic_cast<IdentifierNode*>(
+                                                        declaration->initExpr))
+                                        {
+                                            auto inferred =
+                                                methodLocalStructNames.find(
+                                                    identifier->name);
+                                            if(inferred !=
+                                               methodLocalStructNames.end())
+                                                methodLocalStructNames[
+                                                    declaration->name] =
+                                                    inferred->second;
+                                            else
+                                                methodLocalStructNames.erase(
+                                                    declaration->name);
+                                        }
+                                        else
+                                            methodLocalStructNames.erase(
+                                                declaration->name);
+                                    }
                                     methodSlotAliases[declaration->name] =
                                         collectPointerSlotAliases(
                                             declaration->initExpr,
@@ -748,14 +829,29 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                                     ++argumentIndex;
                                                 }
                                             }
+                                            else
+                                                for(auto* argument :
+                                                    nestedMethod->arguments)
+                                                {
+                                                    auto aliases =
+                                                        collectPointerSlotAliases(
+                                                            argument,
+                                                            callerAliases);
+                                                    methodMutatedArguments.insert(
+                                                        aliases.begin(),
+                                                        aliases.end());
+                                                }
                                         }
                                         else
                                         {
                                             const auto callerTypes =
                                                 methodLocalTypes;
+                                            const auto callerStructNames =
+                                                methodLocalStructNames;
                                             methodSlotAliases =
                                                 std::move(nestedAliases);
                                             methodLocalTypes.clear();
+                                            methodLocalStructNames.clear();
                                             if(nestedDefinition->parameters)
                                                 for(auto* parameter :
                                                     nestedDefinition->parameters
@@ -774,6 +870,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                                             methodSlotAliases =
                                                 std::move(callerAliases);
                                             methodLocalTypes = callerTypes;
+                                            methodLocalStructNames =
+                                                callerStructNames;
                                         }
                                     }
                                 }
