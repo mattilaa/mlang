@@ -11102,6 +11102,59 @@ TEST_F(MLATest, OwnershipFunctionReturnedPointerDropsOverwrittenOrigin)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// A definite reassignment to a global pointer must discard a local borrow origin.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerDropsOverwrittenLocalBorrow)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+
+        fn select_global() -> ptr<i32> {
+            var local_value: i32 = 7;
+            var pointer: ptr<i32> = &local_value;
+            pointer = &global_value;
+            return pointer;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = select_global();
+            local_value = 4;
+            unsafe { return *selected - 11; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A branch-dependent local borrow must remain in the returned pointer origins.
+TEST_F(MLATest, OwnershipFunctionReturnedPointerKeepsConditionalLocalBorrow)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+
+        fn maybe_local(flag: bool) -> ptr<i32> {
+            var local_value: i32 = 7;
+            var pointer: ptr<i32> = &global_value;
+            if flag {
+                pointer = &local_value;
+            }
+            return pointer;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = maybe_local(true);
+            local_value = 4;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'selected'"), std::string::npos)
+        << out;
+}
+
 // Conditional pointer assignments must conservatively retain both origins.
 TEST_F(MLATest, OwnershipFunctionReturnedPointerMergesBranchOrigins)
 {

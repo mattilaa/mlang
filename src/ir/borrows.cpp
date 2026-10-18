@@ -983,6 +983,7 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
         };
         std::function<void(StatementNode*)> collectStatement;
         std::function<void(StatementListNode*)> collectList;
+        bool inConditionalRegion = false;
         collectList = [&](StatementListNode* statements) {
             if(!statements || found)
                 return;
@@ -1020,31 +1021,54 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
             {
                 std::vector<ExpressionNode*> origins;
                 collectBorrowOrigins(assignment->expression, origins);
-                if(!origins.empty())
+                if(inConditionalRegion)
                 {
-                    auto& existing = localBorrowAliases[assignment->name];
-                    existing.insert(existing.end(), origins.begin(),
-                                    origins.end());
+                    if(!origins.empty())
+                    {
+                        auto& existing = localBorrowAliases[assignment->name];
+                        existing.insert(existing.end(), origins.begin(),
+                                        origins.end());
+                    }
                 }
+                else if(origins.empty())
+                    localBorrowAliases.erase(assignment->name);
+                else
+                    localBorrowAliases[assignment->name] = std::move(origins);
             }
             else if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                 collectList(block->statements);
             else if(auto* branch = dynamic_cast<IfNode*>(statement))
             {
+                const bool wasConditional = inConditionalRegion;
+                inConditionalRegion = true;
                 collectList(branch->thenBranch);
                 collectStatement(branch->elseIfBranch);
                 collectList(branch->elseBranch);
+                inConditionalRegion = wasConditional;
             }
             else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
             {
+                const bool wasConditional = inConditionalRegion;
+                inConditionalRegion = true;
                 collectList(branch->thenBranch);
                 collectStatement(branch->elseIfBranch);
                 collectList(branch->elseBranch);
+                inConditionalRegion = wasConditional;
             }
             else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+            {
+                const bool wasConditional = inConditionalRegion;
+                inConditionalRegion = true;
                 collectList(loop->body);
+                inConditionalRegion = wasConditional;
+            }
             else if(auto* loop = dynamic_cast<ForNode*>(statement))
+            {
+                const bool wasConditional = inConditionalRegion;
+                inConditionalRegion = true;
                 collectList(loop->body);
+                inConditionalRegion = wasConditional;
+            }
         };
         collectList(body);
         return found;
@@ -3005,6 +3029,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         };
         std::function<void(StatementNode*)> collectReturns;
         std::function<void(StatementListNode*)> collectReturnList;
+        bool inConditionalRegion = false;
         collectReturnList = [&](StatementListNode* statements) {
             if(!statements)
                 return;
@@ -3043,31 +3068,54 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             {
                 std::vector<ExpressionNode*> origins;
                 collectBorrowOrigins(assignment->expression, origins);
-                if(!origins.empty())
+                if(inConditionalRegion)
                 {
-                    auto& existing = localBorrowAliases[assignment->name];
-                    existing.insert(existing.end(), origins.begin(),
-                                    origins.end());
+                    if(!origins.empty())
+                    {
+                        auto& existing = localBorrowAliases[assignment->name];
+                        existing.insert(existing.end(), origins.begin(),
+                                        origins.end());
+                    }
                 }
+                else if(origins.empty())
+                    localBorrowAliases.erase(assignment->name);
+                else
+                    localBorrowAliases[assignment->name] = std::move(origins);
             }
             else if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                 collectReturnList(block->statements);
             else if(auto* branch = dynamic_cast<IfNode*>(statement))
             {
+                const bool wasConditional = inConditionalRegion;
+                inConditionalRegion = true;
                 collectReturnList(branch->thenBranch);
                 collectReturns(branch->elseIfBranch);
                 collectReturnList(branch->elseBranch);
+                inConditionalRegion = wasConditional;
             }
             else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
             {
+                const bool wasConditional = inConditionalRegion;
+                inConditionalRegion = true;
                 collectReturnList(branch->thenBranch);
                 collectReturns(branch->elseIfBranch);
                 collectReturnList(branch->elseBranch);
+                inConditionalRegion = wasConditional;
             }
             else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+            {
+                const bool wasConditional = inConditionalRegion;
+                inConditionalRegion = true;
                 collectReturnList(loop->body);
+                inConditionalRegion = wasConditional;
+            }
             else if(auto* loop = dynamic_cast<ForNode*>(statement))
+            {
+                const bool wasConditional = inConditionalRegion;
+                inConditionalRegion = true;
                 collectReturnList(loop->body);
+                inConditionalRegion = wasConditional;
+            }
         };
         for(const auto& calledName :
             getFunctionItemTargetsForName(call->name))
