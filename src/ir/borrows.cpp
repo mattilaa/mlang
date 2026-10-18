@@ -4423,7 +4423,35 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
 
     if(registerOwnerBorrow(ownerName, enforceExclusive) &&
        !exclusiveReborrowParent.empty())
+    {
         pointerBorrowParent[pointerVar] = exclusiveReborrowParent;
+
+        // A parent pointer may represent several branch-joined owners. The
+        // legacy target map keeps one representative, so copy all retained
+        // owner keys onto the child reborrow before later joins or escapes.
+        std::set<std::string> possibleOwners;
+        auto parentTarget =
+            pointerBorrowTarget.find(exclusiveReborrowParent);
+        if(parentTarget != pointerBorrowTarget.end())
+            possibleOwners.insert(parentTarget->second);
+        const std::string parentReborrowPrefix =
+            "@reborrow:" + exclusiveReborrowParent + ":";
+        for(const auto& borrow : activeMutBorrower)
+        {
+            if(borrow.second != exclusiveReborrowParent)
+                continue;
+            if(borrow.first.compare(0, parentReborrowPrefix.size(),
+                                    parentReborrowPrefix) == 0)
+                possibleOwners.insert(
+                    borrow.first.substr(parentReborrowPrefix.size()));
+            else if(!borrow.first.empty() && borrow.first.front() != '@')
+                possibleOwners.insert(borrow.first);
+        }
+        for(const auto& possibleOwner : possibleOwners)
+            if(!possibleOwner.empty())
+                activeMutBorrower["@reborrow:" + pointerVar + ":" +
+                                  possibleOwner] = pointerVar;
+    }
 }
 
 void CodeGenerator::registerPointerBorrowAlternatives(
