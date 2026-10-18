@@ -811,6 +811,68 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
         return borrowers != activeBorrowers.end() &&
                borrowers->second.count(identifier->name) != 0;
     }
+    std::function<bool(ExpressionNode*)> hasDirectSharedAddress =
+        [&](ExpressionNode* value) {
+            if(auto* address = dynamic_cast<UnaryOpNode*>(value))
+                return address->op == UnaryOpNode::OP_ADDR
+                           ? !resolveBorrowOwnerFromLValue(address->operand)
+                                  .empty()
+                           : false;
+            if(auto* ternary = dynamic_cast<TernaryNode*>(value))
+                return hasDirectSharedAddress(ternary->trueExpr) ||
+                       hasDirectSharedAddress(ternary->falseExpr);
+            if(auto* match = dynamic_cast<MatchExpressionNode*>(value))
+                for(auto* arm : match->arms)
+                    if(arm && hasDirectSharedAddress(arm->expression))
+                        return true;
+            if(auto* cast = dynamic_cast<CastExpressionNode*>(value))
+                return hasDirectSharedAddress(cast->expression);
+            if(auto* attempt = dynamic_cast<TryExpressionNode*>(value))
+                return hasDirectSharedAddress(attempt->expression);
+            if(auto* comma = dynamic_cast<BinaryOpNode*>(value))
+                if(comma->op == BinaryOpNode::OP_COMMA)
+                    return hasDirectSharedAddress(comma->right);
+            return false;
+        };
+    auto bodyReturnsDirectSharedAddress = [&](StatementListNode* body) {
+        bool found = false;
+        std::function<void(StatementNode*)> collectStatement;
+        std::function<void(StatementListNode*)> collectList;
+        collectList = [&](StatementListNode* statements) {
+            if(!statements || found)
+                return;
+            for(auto* statement : statements->statements)
+            {
+                collectStatement(statement);
+                if(found)
+                    return;
+            }
+        };
+        collectStatement = [&](StatementNode* statement) {
+            if(auto* returned = dynamic_cast<ReturnNode*>(statement))
+                found = hasDirectSharedAddress(returned->expression);
+            else if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+                collectList(block->statements);
+            else if(auto* branch = dynamic_cast<IfNode*>(statement))
+            {
+                collectList(branch->thenBranch);
+                collectStatement(branch->elseIfBranch);
+                collectList(branch->elseBranch);
+            }
+            else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+            {
+                collectList(branch->thenBranch);
+                collectStatement(branch->elseIfBranch);
+                collectList(branch->elseBranch);
+            }
+            else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+                collectList(loop->body);
+            else if(auto* loop = dynamic_cast<ForNode*>(statement))
+                collectList(loop->body);
+        };
+        collectList(body);
+        return found;
+    };
     auto closureReturnsSharedBorrow = [&](const std::string& name) {
         auto runtimeClosure = runtimeClosureVariables.find(name);
         auto functionItems = functionItemVariables.find(name);
@@ -880,6 +942,8 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
                 if(!overload.node || !overload.node->returnType ||
                    overload.node->returnType->kind != TypeNode::TYPE_PTR)
                     continue;
+                if(bodyReturnsDirectSharedAddress(overload.node->body))
+                    return true;
                 if(!functionPointerReturnSummaryComplete.count(
                        overload.symbolName))
                 {
@@ -920,6 +984,8 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
                 if(!overload.node || !overload.node->returnType ||
                    overload.node->returnType->kind != TypeNode::TYPE_PTR)
                     continue;
+                if(bodyReturnsDirectSharedAddress(overload.node->body))
+                    return true;
                 if(!functionPointerReturnSummaryComplete.count(
                        overload.symbolName))
                 {
@@ -2684,6 +2750,61 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
     {
         std::set<size_t> returnedParameterIndices;
         bool hasUnknownPointerReturn = false;
+        std::vector<ExpressionNode*> directBorrowReturns;
+        std::function<bool(ExpressionNode*)> containsAddress =
+            [&](ExpressionNode* value) {
+                if(auto* address = dynamic_cast<UnaryOpNode*>(value))
+                    return address->op == UnaryOpNode::OP_ADDR ||
+                           address->op == UnaryOpNode::OP_ADDR_MUT;
+                if(auto* ternary = dynamic_cast<TernaryNode*>(value))
+                    return containsAddress(ternary->trueExpr) ||
+                           containsAddress(ternary->falseExpr);
+                if(auto* match = dynamic_cast<MatchExpressionNode*>(value))
+                    for(auto* arm : match->arms)
+                        if(arm && containsAddress(arm->expression))
+                            return true;
+                if(auto* cast = dynamic_cast<CastExpressionNode*>(value))
+                    return containsAddress(cast->expression);
+                if(auto* attempt = dynamic_cast<TryExpressionNode*>(value))
+                    return containsAddress(attempt->expression);
+                if(auto* comma = dynamic_cast<BinaryOpNode*>(value))
+                    if(comma->op == BinaryOpNode::OP_COMMA)
+                        return containsAddress(comma->right);
+                return false;
+            };
+        std::function<void(StatementNode*)> collectReturns;
+        std::function<void(StatementListNode*)> collectReturnList;
+        collectReturnList = [&](StatementListNode* statements) {
+            if(!statements)
+                return;
+            for(auto* statement : statements->statements)
+                collectReturns(statement);
+        };
+        collectReturns = [&](StatementNode* statement) {
+            if(auto* returned = dynamic_cast<ReturnNode*>(statement))
+            {
+                if(containsAddress(returned->expression))
+                    directBorrowReturns.push_back(returned->expression);
+            }
+            else if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
+                collectReturnList(block->statements);
+            else if(auto* branch = dynamic_cast<IfNode*>(statement))
+            {
+                collectReturnList(branch->thenBranch);
+                collectReturns(branch->elseIfBranch);
+                collectReturnList(branch->elseBranch);
+            }
+            else if(auto* branch = dynamic_cast<CexprIfNode*>(statement))
+            {
+                collectReturnList(branch->thenBranch);
+                collectReturns(branch->elseIfBranch);
+                collectReturnList(branch->elseBranch);
+            }
+            else if(auto* loop = dynamic_cast<WhileNode*>(statement))
+                collectReturnList(loop->body);
+            else if(auto* loop = dynamic_cast<ForNode*>(statement))
+                collectReturnList(loop->body);
+        };
         for(const auto& calledName :
             getFunctionItemTargetsForName(call->name))
         {
@@ -2698,6 +2819,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                 if(!overload.node || !overload.node->returnType ||
                    overload.node->returnType->kind != TypeNode::TYPE_PTR)
                     continue;
+                collectReturnList(overload.node->body);
                 auto summary =
                     functionPointerReturnParameters.find(overload.symbolName);
                 if(functionPointerReturnSummaryComplete.count(
@@ -2713,6 +2835,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             }
         }
         std::vector<ExpressionNode*> returnedArguments;
+        returnedArguments = std::move(directBorrowReturns);
         for(size_t index : returnedParameterIndices)
             if(index < call->arguments.size())
                 returnedArguments.push_back(call->arguments[index]);

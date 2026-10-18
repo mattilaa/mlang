@@ -5696,6 +5696,74 @@ TEST_F(MLATest, SharedBorrowReturnedFromFunctionCannotBeWrittenThrough)
               std::string::npos) << out;
 }
 
+// A function returning a global shared borrow must not allow direct mutation.
+TEST_F(MLATest, GlobalSharedBorrowReturnedFromFunctionCannotBeWrittenThrough)
+{
+    std::string code = R"(
+        var global_value: i32 = 4;
+
+        fn get_shared() -> ptr<i32> {
+            return &global_value;
+        }
+
+        fn main() -> i32 {
+            unsafe { *get_shared() = 9; }
+            return global_value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
+// A returned global shared borrow remains read-only after storing it locally.
+TEST_F(MLATest, StoredGlobalSharedBorrowReturnedFromFunctionCannotBeWrittenThrough)
+{
+    std::string code = R"(
+        var global_value: i32 = 4;
+
+        fn get_shared() -> ptr<i32> {
+            return &global_value;
+        }
+
+        fn main() -> i32 {
+            let pointer: ptr<i32> = get_shared();
+            unsafe { *pointer = 9; }
+            return global_value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
+// A function returning an exclusive global borrow remains writable.
+TEST_F(MLATest, GlobalExclusiveBorrowReturnedFromFunctionCanBeWrittenThrough)
+{
+    std::string code = R"(
+        var global_value: i32 = 4;
+
+        fn get_mutable() -> ptr<i32> {
+            return &mut global_value;
+        }
+
+        fn main() -> i32 {
+            unsafe { *get_mutable() = 9; }
+            return global_value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 0) << out;
+}
+
 // Returning an exclusive argument remains writable through the call result.
 TEST_F(MLATest, ExclusiveBorrowReturnedFromFunctionCanBeWrittenThrough)
 {
