@@ -555,7 +555,13 @@ bool CodeGenerator::expressionCarriesLocalBorrow(ExpressionNode* expr) const
     if(!expr)
         return false;
     auto isLocalOwner = [&](const std::string& owner) {
-        return !owner.empty() && variableScopeDepth.count(owner) != 0;
+        if(owner.empty())
+            return false;
+        if(variableScopeDepth.count(owner) != 0)
+            return true;
+        const std::size_t placeSuffix = owner.find_first_of(".[");
+        return placeSuffix != std::string::npos && placeSuffix != 0 &&
+               variableScopeDepth.count(owner.substr(0, placeSuffix)) != 0;
     };
     if(auto* identifier = dynamic_cast<IdentifierNode*>(expr))
     {
@@ -563,6 +569,14 @@ bool CodeGenerator::expressionCarriesLocalBorrow(ExpressionNode* expr) const
         if(pointer != pointerBorrowTarget.end() &&
            isLocalOwner(pointer->second))
             return true;
+        for(const auto& owner : activeBorrowers)
+            if(owner.second.count(identifier->name) != 0 &&
+               isLocalOwner(owner.first))
+                return true;
+        for(const auto& borrow : activeMutBorrower)
+            if(borrow.second == identifier->name &&
+               isLocalOwner(borrow.first))
+                return true;
         auto aggregate = aggregateBorrowOrigins.find(identifier->name);
         if(aggregate != aggregateBorrowOrigins.end())
             for(const auto& owner : aggregate->second)
