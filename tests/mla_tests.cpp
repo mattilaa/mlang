@@ -12275,6 +12275,42 @@ TEST_F(MLATest, OwnershipInferredFieldReceiverMethodOverwriteDropsLocalBorrowOri
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+// An alias of an inferred struct must retain its field receiver type.
+TEST_F(MLATest, OwnershipAliasedInferredFieldReceiverDropsOverwrittenBorrowOrigin)
+{
+    std::string code = R"(
+        struct Replacer { var value: i32; };
+        struct Holder { var inner: Replacer; };
+        var global_value: i32 = 11;
+        impl Replacer {
+            fn replace(self: &mut Replacer, slot: ptr<ptr<i32>>,
+                       replacement: ptr<i32>) -> void {
+                unsafe { *slot = replacement; }
+            }
+        }
+
+        fn select_global() -> ptr<i32> {
+            var local_value: i32 = 7;
+            var selected: ptr<i32> = &local_value;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            var holder = Holder {
+                inner: Replacer { value: 0 }
+            };
+            var holder_copy = holder;
+            holder_copy.inner.replace(slot, &global_value);
+            return selected;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = select_global();
+            local_value = 4;
+            unsafe { return *selected - 11; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 // A conditional method write must retain the possible local pointer origin.
 TEST_F(MLATest, OwnershipMethodConditionalSlotWriteKeepsLocalBorrowOrigin)
 {
