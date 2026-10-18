@@ -111,9 +111,12 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             functionPointerSlotMutationParameters[symbol];
         mutatingParameters.clear();
         std::map<std::string, std::set<size_t>> pointerSlotAliases;
+        std::map<std::string, TypeNode*> localTypes;
         for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
         {
             auto* parameter = node->parameters->parameters[i];
+            if(parameter)
+                localTypes[parameter->name] = parameter->type;
             auto* pointer = parameter
                                 ? dynamic_cast<PointerTypeNode*>(parameter->type)
                                 : nullptr;
@@ -185,12 +188,20 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             }
             else if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
             {
+                if(declaration->type)
+                    localTypes[declaration->name] = declaration->type;
+                else
+                    localTypes.erase(declaration->name);
                 pointerSlotAliases[declaration->name] =
                     collectPointerSlotAliases(declaration->expression,
                                               pointerSlotAliases);
             }
             else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
             {
+                if(declaration->type)
+                    localTypes[declaration->name] = declaration->type;
+                else
+                    localTypes.erase(declaration->name);
                 pointerSlotAliases[declaration->name] =
                     collectPointerSlotAliases(declaration->initExpr,
                                               pointerSlotAliases);
@@ -244,6 +255,205 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                             }
                         }
                     }
+                else if(auto* methodCall = dynamic_cast<MethodCallNode*>(
+                            expressionStatement->expression))
+                {
+                    TypeNode* receiverType = nullptr;
+                    if(auto* receiver =
+                           dynamic_cast<IdentifierNode*>(methodCall->object))
+                    {
+                        auto type = localTypes.find(receiver->name);
+                        if(type != localTypes.end())
+                            receiverType = type->second;
+                    }
+                    while(auto* pointer =
+                              dynamic_cast<PointerTypeNode*>(receiverType))
+                        receiverType = pointer->elementType;
+                    std::string receiverStruct;
+                    if(auto* structure =
+                           dynamic_cast<StructTypeRefNode*>(receiverType))
+                        receiverStruct = structure->structName;
+                    else if(auto* generic =
+                                dynamic_cast<GenericStructTypeRefNode*>(
+                                    receiverType))
+                        receiverStruct = generic->getMangledName();
+
+                    auto methods = structMethods.find(receiverStruct);
+                    if(methods != structMethods.end())
+                    {
+                        auto found =
+                            methods->second.find(methodCall->methodName);
+                        if(found != methods->second.end() &&
+                           found->second.second)
+                        {
+                            StructMethodNode* definition =
+                                found->second.second;
+                            std::map<std::string, std::set<size_t>>
+                                methodSlotAliases;
+                            size_t methodArgumentIndex = 0;
+                            if(definition->parameters)
+                                for(auto* parameter :
+                                    definition->parameters->parameters)
+                                {
+                                    if(!parameter ||
+                                       parameter->name == "self")
+                                        continue;
+                                    auto* pointer =
+                                        dynamic_cast<PointerTypeNode*>(
+                                            parameter->type);
+                                    if(pointer &&
+                                       dynamic_cast<PointerTypeNode*>(
+                                           pointer->elementType) &&
+                                       methodArgumentIndex <
+                                           methodCall->arguments.size())
+                                        methodSlotAliases[parameter->name]
+                                            .insert(methodArgumentIndex);
+                                    ++methodArgumentIndex;
+                                }
+
+                            std::set<size_t> methodMutatedArguments;
+                            std::function<void(StatementListNode*)>
+                                scanMethodList;
+                            std::function<void(StatementNode*)>
+                                scanMethodStatement;
+                            scanMethodList = [&](StatementListNode* statements) {
+                                if(statements)
+                                    for(auto* child : statements->statements)
+                                        scanMethodStatement(child);
+                            };
+                            scanMethodStatement = [&](StatementNode* child) {
+                                if(!child)
+                                    return;
+                                if(auto* assignment =
+                                       dynamic_cast<DerefAssignmentNode*>(
+                                           child))
+                                {
+                                    auto aliases = collectPointerSlotAliases(
+                                        assignment->pointerExpr,
+                                        methodSlotAliases);
+                                    methodMutatedArguments.insert(
+                                        aliases.begin(), aliases.end());
+                                    return;
+                                }
+                                if(auto* declaration =
+                                       dynamic_cast<LetDeclNode*>(child))
+                                    methodSlotAliases[declaration->name] =
+                                        collectPointerSlotAliases(
+                                            declaration->expression,
+                                            methodSlotAliases);
+                                else if(auto* declaration =
+                                            dynamic_cast<VarDeclNode*>(child))
+                                    methodSlotAliases[declaration->name] =
+                                        collectPointerSlotAliases(
+                                            declaration->initExpr,
+                                            methodSlotAliases);
+                                else if(auto* assignment =
+                                            dynamic_cast<AssignmentNode*>(child))
+                                {
+                                    auto aliases = collectPointerSlotAliases(
+                                        assignment->expression,
+                                        methodSlotAliases);
+                                    methodSlotAliases.erase(assignment->name);
+                                    if(!aliases.empty())
+                                        methodSlotAliases[assignment->name] =
+                                            std::move(aliases);
+                                }
+                                if(auto* expression =
+                                       dynamic_cast<ExpressionStatementNode*>(
+                                           child))
+                                {
+                                    auto* nestedCall =
+                                        dynamic_cast<FunctionCallNode*>(
+                                            expression->expression);
+                                    if(nestedCall)
+                                        for(const auto& calledName :
+                                            getFunctionItemTargetsForName(
+                                                nestedCall->name))
+                                        {
+                                            auto overloads =
+                                                functionOverloads.find(
+                                                    calledName);
+                                            if(overloads ==
+                                               functionOverloads.end())
+                                                continue;
+                                            for(const auto& overload :
+                                                overloads->second)
+                                            {
+                                                auto summary =
+                                                    functionPointerSlotMutationParameters
+                                                        .find(overload.symbolName);
+                                                if(summary ==
+                                                   functionPointerSlotMutationParameters
+                                                       .end())
+                                                    continue;
+                                                for(size_t index :
+                                                    summary->second)
+                                                    if(index < nestedCall
+                                                                     ->arguments
+                                                                     .size())
+                                                    {
+                                                        auto aliases =
+                                                            collectPointerSlotAliases(
+                                                                nestedCall
+                                                                    ->arguments[index],
+                                                                methodSlotAliases);
+                                                        methodMutatedArguments
+                                                            .insert(
+                                                                aliases.begin(),
+                                                                aliases.end());
+                                                    }
+                                            }
+                                        }
+                                }
+                                if(auto* block =
+                                       dynamic_cast<BlockStatementNode*>(child))
+                                    scanMethodList(block->statements);
+                                else if(auto* branch =
+                                            dynamic_cast<IfNode*>(child))
+                                {
+                                    scanMethodList(branch->thenBranch);
+                                    scanMethodStatement(branch->elseIfBranch);
+                                    scanMethodList(branch->elseBranch);
+                                }
+                                else if(auto* branch =
+                                            dynamic_cast<CexprIfNode*>(child))
+                                {
+                                    scanMethodList(branch->thenBranch);
+                                    scanMethodStatement(branch->elseIfBranch);
+                                    scanMethodList(branch->elseBranch);
+                                }
+                                else if(auto* loop =
+                                            dynamic_cast<WhileNode*>(child))
+                                    scanMethodList(loop->body);
+                                else if(auto* loop =
+                                            dynamic_cast<ForNode*>(child))
+                                    scanMethodList(loop->body);
+                                else if(auto* attempt =
+                                            dynamic_cast<TryCatchNode*>(child))
+                                {
+                                    scanMethodList(
+                                        attempt->tryBlock
+                                            ? attempt->tryBlock->statements
+                                            : nullptr);
+                                    scanMethodList(
+                                        attempt->catchBlock
+                                            ? attempt->catchBlock->statements
+                                            : nullptr);
+                                }
+                            };
+                            scanMethodList(definition->body);
+                            for(size_t index : methodMutatedArguments)
+                                if(index < methodCall->arguments.size())
+                                {
+                                    auto aliases = collectPointerSlotAliases(
+                                        methodCall->arguments[index],
+                                        pointerSlotAliases);
+                                    mutatingParameters.insert(aliases.begin(),
+                                                             aliases.end());
+                                }
+                        }
+                    }
+                }
             }
             if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                 scanPointerSlotWrites(block->statements);
