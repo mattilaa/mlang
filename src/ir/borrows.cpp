@@ -3565,6 +3565,13 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                             }
                             auto copySlotAlias = [&](const std::string& name,
                                                      ExpressionNode* value) {
+                                // Reassignment must kill the previous alias
+                                // even when the new value is not a tracked
+                                // pointer-slot parameter. Keeping stale
+                                // provenance here can incorrectly classify a
+                                // write through the new value as a definite
+                                // overwrite of the old caller slot.
+                                slotAliases.erase(name);
                                 auto* identifier =
                                     dynamic_cast<IdentifierNode*>(value);
                                 if(!identifier)

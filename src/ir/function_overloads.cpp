@@ -164,6 +164,10 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             }
             else if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
             {
+                // Kill stale slot provenance before examining the new value;
+                // otherwise writes through a reassigned local alias can be
+                // attributed to the caller's old slot.
+                pointerSlotAliases.erase(assignment->name);
                 if(auto* identifier = dynamic_cast<IdentifierNode*>(
                        assignment->expression))
                 {
@@ -314,6 +318,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             else if(auto* assignment =
                         dynamic_cast<AssignmentNode*>(statement))
             {
+                definiteSlotAliases.erase(assignment->name);
                 if(auto* identifier = dynamic_cast<IdentifierNode*>(
                        assignment->expression))
                 {

@@ -12245,6 +12245,81 @@ TEST_F(MLATest, OwnershipMethodConditionalSlotWriteKeepsLocalBorrowOrigin)
         << out;
 }
 
+// Reassigning a method-local slot alias must kill its old caller-slot origin.
+TEST_F(MLATest, OwnershipMethodSlotAliasReassignmentKeepsUnchangedBorrow)
+{
+    std::string code = R"(
+        struct Replacer { var value: i32; };
+        var global_value: i32 = 11;
+        impl Replacer {
+            fn replace_unrelated(self: &mut Replacer,
+                                 slot: ptr<ptr<i32>>,
+                                 replacement: ptr<i32>) -> void {
+                var slot_copy: ptr<ptr<i32>> = slot;
+                var unrelated: ptr<i32> = &global_value;
+                slot_copy = (&mut unrelated);
+                unsafe { *slot_copy = replacement; }
+            }
+        }
+
+        fn return_local() -> ptr<i32> {
+            var local_value: i32 = 7;
+            var selected: ptr<i32> = &local_value;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            var replacer: Replacer = Replacer { value: 0 };
+            replacer.replace_unrelated(slot, &global_value);
+            return selected;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = return_local();
+            local_value = 4;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("borrowed by 'selected'"), std::string::npos) << out;
+}
+
+// Function summaries must kill a caller-slot alias when its local copy is reassigned.
+TEST_F(MLATest, OwnershipHelperSlotAliasReassignmentKeepsUnchangedBorrow)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+        fn replace_unrelated(slot: ptr<ptr<i32>>,
+                             replacement: ptr<i32>) -> void {
+            var slot_copy: ptr<ptr<i32>> = slot;
+            var unrelated: ptr<i32> = &global_value;
+            slot_copy = (&mut unrelated);
+            unsafe { *slot_copy = replacement; }
+        }
+
+        fn return_local() -> ptr<i32> {
+            var local_value: i32 = 7;
+            var selected: ptr<i32> = &local_value;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            replace_unrelated(slot, &global_value);
+            return selected;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = return_local();
+            local_value = 4;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("borrowed by 'selected'"), std::string::npos) << out;
+}
+
 // A helper's indirect pointer write must update the caller's returned origin.
 TEST_F(MLATest, OwnershipHelperIndirectPointerAssignmentKeepsNewOrigin)
 {
