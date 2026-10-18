@@ -10,6 +10,7 @@ VST3 plugins) is now developed in its own repository: <https://github.com/mattil
 ## Table Of Contents
 
 - [What Is Mlang](#what-is-mlang)
+- [Release Notes](RELEASE_NOTES.md)
 - [Compile-Time Evaluation With `cexpr`](#compile-time-evaluation-with-cexpr)
 - [`likely` And `unlikely` Branch Hints](#likely-and-unlikely-branch-hints)
 - [Checked Narrow Integer Casts](#checked-narrow-integer-casts)
