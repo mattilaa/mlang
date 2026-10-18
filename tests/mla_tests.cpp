@@ -16075,6 +16075,26 @@ TEST_F(MLATest, RangeLoopJoinedFieldBorrowRejectsOverlappingAccess)
         << out;
 }
 
+// A list-iteration exit must preserve precise paths for mutable pointer borrows.
+TEST_F(MLATest, ListLoopJoinedFieldBorrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        var outside: i32 = 0;
+        fn main() -> i32 {
+            var value: Pair = Pair { left: 4, right: 5 };
+            var pointer: ptr<i32> = &mut outside;
+            let items: list<i32> = [1];
+            for item in items {
+                pointer = &mut value.left;
+            }
+            value.right = 8;
+            unsafe { return *pointer; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
