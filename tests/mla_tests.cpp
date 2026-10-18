@@ -5743,6 +5743,57 @@ TEST_F(MLATest, GlobalSharedBorrowAliasReturnedFromFunctionCannotBeWrittenThroug
               std::string::npos) << out;
 }
 
+// Returning a pointer field from a local aggregate preserves shared access.
+TEST_F(MLATest, GlobalSharedBorrowFieldReturnedFromFunctionCannotBeWrittenThrough)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        var global_value: i32 = 4;
+
+        fn get_shared() -> ptr<i32> {
+            let box: PointerBox = PointerBox { value: &global_value };
+            return box.value;
+        }
+
+        fn main() -> i32 {
+            unsafe { *get_shared() = 9; }
+            return global_value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
+// A shared pointer field returned through a function remains read-only locally.
+TEST_F(MLATest, StoredGlobalSharedBorrowFieldReturnedFromFunctionCannotBeWrittenThrough)
+{
+    std::string code = R"(
+        struct PointerBox { var value: ptr<i32>; };
+        var global_value: i32 = 4;
+
+        fn get_shared() -> ptr<i32> {
+            let box: PointerBox = PointerBox { value: &global_value };
+            return box.value;
+        }
+
+        fn main() -> i32 {
+            let pointer: ptr<i32> = get_shared();
+            unsafe { *pointer = 9; }
+            return global_value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
 // A shared borrow returned through a local alias stays read-only when stored.
 TEST_F(MLATest, StoredGlobalSharedBorrowAliasReturnedFromFunctionCannotBeWrittenThrough)
 {

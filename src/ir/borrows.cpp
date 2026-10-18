@@ -815,10 +815,32 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
                                        bool allowTrackedIdentifiers) {
         bool found = false;
         std::map<std::string, std::vector<ExpressionNode*>> localBorrowAliases;
+        std::function<std::string(ExpressionNode*)> localBorrowPlacePath;
+        localBorrowPlacePath = [&](ExpressionNode* value) -> std::string {
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(value))
+                return identifier->name;
+            if(auto* field = dynamic_cast<FieldAccessNode*>(value))
+            {
+                const std::string base = field->object
+                                             ? localBorrowPlacePath(field->object)
+                                             : field->structName;
+                return base.empty() ? std::string{}
+                                    : base + "." + field->fieldName;
+            }
+            if(auto* tuple = dynamic_cast<TupleAccessNode*>(value))
+            {
+                const std::string base = localBorrowPlacePath(tuple->tuple);
+                return base.empty() ? std::string{}
+                                    : base + "." + std::to_string(tuple->index);
+            }
+            return {};
+        };
         std::function<bool(ExpressionNode*)> isSharedBorrowExpression;
         std::function<void(ExpressionNode*,
                            std::vector<ExpressionNode*>&)>
             collectBorrowOrigins;
+        std::function<void(ExpressionNode*, const std::string&)>
+            collectAggregateBorrowFields;
         isSharedBorrowExpression = [&](ExpressionNode* value) {
             if(auto* address = dynamic_cast<UnaryOpNode*>(value))
                 return address->op == UnaryOpNode::OP_ADDR &&
@@ -832,6 +854,26 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
                             return true;
                 return allowTrackedIdentifiers &&
                        expressionIsKnownSharedBorrow(identifier);
+            }
+            if(auto* field = dynamic_cast<FieldAccessNode*>(value))
+            {
+                const std::string path = localBorrowPlacePath(field);
+                auto aliases = localBorrowAliases.find(path);
+                if(aliases != localBorrowAliases.end())
+                    for(auto* origin : aliases->second)
+                        if(isSharedBorrowExpression(origin))
+                            return true;
+                return false;
+            }
+            if(auto* tuple = dynamic_cast<TupleAccessNode*>(value))
+            {
+                const std::string path = localBorrowPlacePath(tuple);
+                auto aliases = localBorrowAliases.find(path);
+                if(aliases != localBorrowAliases.end())
+                    for(auto* origin : aliases->second)
+                        if(isSharedBorrowExpression(origin))
+                            return true;
+                return false;
             }
             if(auto* ternary = dynamic_cast<TernaryNode*>(value))
                 return isSharedBorrowExpression(ternary->trueExpr) ||
@@ -869,6 +911,24 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
                     origins.push_back(identifier);
                 return;
             }
+            if(auto* field = dynamic_cast<FieldAccessNode*>(value))
+            {
+                auto aliases = localBorrowAliases.find(
+                    localBorrowPlacePath(field));
+                if(aliases != localBorrowAliases.end())
+                    origins.insert(origins.end(), aliases->second.begin(),
+                                   aliases->second.end());
+                return;
+            }
+            if(auto* tuple = dynamic_cast<TupleAccessNode*>(value))
+            {
+                auto aliases = localBorrowAliases.find(
+                    localBorrowPlacePath(tuple));
+                if(aliases != localBorrowAliases.end())
+                    origins.insert(origins.end(), aliases->second.begin(),
+                                   aliases->second.end());
+                return;
+            }
             if(auto* ternary = dynamic_cast<TernaryNode*>(value))
             {
                 collectBorrowOrigins(ternary->trueExpr, origins);
@@ -887,6 +947,39 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
             else if(auto* comma = dynamic_cast<BinaryOpNode*>(value))
                 if(comma->op == BinaryOpNode::OP_COMMA)
                     collectBorrowOrigins(comma->right, origins);
+        };
+        collectAggregateBorrowFields = [&](ExpressionNode* value,
+                                           const std::string& path) {
+            if(auto* structure = dynamic_cast<StructLiteralNode*>(value))
+            {
+                for(const auto& member : structure->fields)
+                {
+                    const std::string fieldPath =
+                        path + "." + member.first;
+                    std::vector<ExpressionNode*> origins;
+                    collectBorrowOrigins(member.second, origins);
+                    if(!origins.empty())
+                        localBorrowAliases[fieldPath] = std::move(origins);
+                    collectAggregateBorrowFields(member.second, fieldPath);
+                }
+            }
+            else if(auto* tuple = dynamic_cast<TupleLiteralNode*>(value))
+            {
+                if(!tuple->elements)
+                    return;
+                for(size_t index = 0;
+                    index < tuple->elements->elements.size(); ++index)
+                {
+                    const std::string elementPath =
+                        path + "." + std::to_string(index);
+                    auto* element = tuple->elements->elements[index];
+                    std::vector<ExpressionNode*> origins;
+                    collectBorrowOrigins(element, origins);
+                    if(!origins.empty())
+                        localBorrowAliases[elementPath] = std::move(origins);
+                    collectAggregateBorrowFields(element, elementPath);
+                }
+            }
         };
         std::function<void(StatementNode*)> collectStatement;
         std::function<void(StatementListNode*)> collectList;
@@ -910,6 +1003,8 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
                 if(!origins.empty())
                     localBorrowAliases[declaration->name] =
                         std::move(origins);
+                collectAggregateBorrowFields(declaration->expression,
+                                             declaration->name);
             }
             else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
             {
@@ -918,6 +1013,8 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
                 if(!origins.empty())
                     localBorrowAliases[declaration->name] =
                         std::move(origins);
+                collectAggregateBorrowFields(declaration->initExpr,
+                                             declaration->name);
             }
             else if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
             {
@@ -2795,8 +2892,30 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         bool hasUnknownPointerReturn = false;
         std::vector<ExpressionNode*> directBorrowReturns;
         std::map<std::string, std::vector<ExpressionNode*>> localBorrowAliases;
+        std::function<std::string(ExpressionNode*)> localBorrowPlacePath;
+        localBorrowPlacePath = [&](ExpressionNode* value) -> std::string {
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(value))
+                return identifier->name;
+            if(auto* field = dynamic_cast<FieldAccessNode*>(value))
+            {
+                const std::string base = field->object
+                                             ? localBorrowPlacePath(field->object)
+                                             : field->structName;
+                return base.empty() ? std::string{}
+                                    : base + "." + field->fieldName;
+            }
+            if(auto* tuple = dynamic_cast<TupleAccessNode*>(value))
+            {
+                const std::string base = localBorrowPlacePath(tuple->tuple);
+                return base.empty() ? std::string{}
+                                    : base + "." + std::to_string(tuple->index);
+            }
+            return {};
+        };
         std::function<void(ExpressionNode*, std::vector<ExpressionNode*>&)>
             collectBorrowOrigins;
+        std::function<void(ExpressionNode*, const std::string&)>
+            collectAggregateBorrowFields;
         collectBorrowOrigins = [&](ExpressionNode* value,
                                    std::vector<ExpressionNode*>& origins) {
             if(auto* address = dynamic_cast<UnaryOpNode*>(value))
@@ -2809,6 +2928,24 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             if(auto* identifier = dynamic_cast<IdentifierNode*>(value))
             {
                 auto aliases = localBorrowAliases.find(identifier->name);
+                if(aliases != localBorrowAliases.end())
+                    origins.insert(origins.end(), aliases->second.begin(),
+                                   aliases->second.end());
+                return;
+            }
+            if(auto* field = dynamic_cast<FieldAccessNode*>(value))
+            {
+                auto aliases = localBorrowAliases.find(
+                    localBorrowPlacePath(field));
+                if(aliases != localBorrowAliases.end())
+                    origins.insert(origins.end(), aliases->second.begin(),
+                                   aliases->second.end());
+                return;
+            }
+            if(auto* tuple = dynamic_cast<TupleAccessNode*>(value))
+            {
+                auto aliases = localBorrowAliases.find(
+                    localBorrowPlacePath(tuple));
                 if(aliases != localBorrowAliases.end())
                     origins.insert(origins.end(), aliases->second.begin(),
                                    aliases->second.end());
@@ -2833,6 +2970,39 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                 if(comma->op == BinaryOpNode::OP_COMMA)
                     collectBorrowOrigins(comma->right, origins);
         };
+        collectAggregateBorrowFields = [&](ExpressionNode* value,
+                                           const std::string& path) {
+            if(auto* structure = dynamic_cast<StructLiteralNode*>(value))
+            {
+                for(const auto& member : structure->fields)
+                {
+                    const std::string fieldPath =
+                        path + "." + member.first;
+                    std::vector<ExpressionNode*> origins;
+                    collectBorrowOrigins(member.second, origins);
+                    if(!origins.empty())
+                        localBorrowAliases[fieldPath] = std::move(origins);
+                    collectAggregateBorrowFields(member.second, fieldPath);
+                }
+            }
+            else if(auto* tuple = dynamic_cast<TupleLiteralNode*>(value))
+            {
+                if(!tuple->elements)
+                    return;
+                for(size_t index = 0;
+                    index < tuple->elements->elements.size(); ++index)
+                {
+                    const std::string elementPath =
+                        path + "." + std::to_string(index);
+                    auto* element = tuple->elements->elements[index];
+                    std::vector<ExpressionNode*> origins;
+                    collectBorrowOrigins(element, origins);
+                    if(!origins.empty())
+                        localBorrowAliases[elementPath] = std::move(origins);
+                    collectAggregateBorrowFields(element, elementPath);
+                }
+            }
+        };
         std::function<void(StatementNode*)> collectReturns;
         std::function<void(StatementListNode*)> collectReturnList;
         collectReturnList = [&](StatementListNode* statements) {
@@ -2856,6 +3026,8 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                 if(!origins.empty())
                     localBorrowAliases[declaration->name] =
                         std::move(origins);
+                collectAggregateBorrowFields(declaration->expression,
+                                             declaration->name);
             }
             else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
             {
@@ -2864,6 +3036,8 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                 if(!origins.empty())
                     localBorrowAliases[declaration->name] =
                         std::move(origins);
+                collectAggregateBorrowFields(declaration->initExpr,
+                                             declaration->name);
             }
             else if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
             {
