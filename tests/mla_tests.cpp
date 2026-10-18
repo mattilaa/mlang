@@ -12346,7 +12346,7 @@ TEST_F(MLATest, OwnershipMethodPointerSlotEffectPropagatesThroughFunction)
         fn replace_through_method(flag: bool,
                                   slot: ptr<ptr<i32>>,
                                   replacement: ptr<i32>) -> void {
-            var replacer: Replacer = Replacer { value: 0 };
+            var replacer = Replacer { value: 0 };
             replacer.maybe_replace(flag, slot, replacement);
         }
 
@@ -12387,7 +12387,7 @@ TEST_F(MLATest, OwnershipMethodDefiniteSlotEffectPropagatesThroughFunction)
 
         fn replace_through_method(slot: ptr<ptr<i32>>,
                                   replacement: ptr<i32>) -> void {
-            var replacer: Replacer = Replacer { value: 0 };
+            var replacer = Replacer { value: 0 };
             replacer.replace(slot, replacement);
         }
 
@@ -12424,7 +12424,7 @@ TEST_F(MLATest, OwnershipConditionalMethodCallKeepsPossibleBorrowOrigin)
 
         fn maybe_replace(flag: bool, slot: ptr<ptr<i32>>,
                          replacement: ptr<i32>) -> void {
-            var replacer: Replacer = Replacer { value: 0 };
+            var replacer = Replacer { value: 0 };
             if flag {
                 replacer.replace(slot, replacement);
             }

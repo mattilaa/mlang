@@ -112,6 +112,7 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
         mutatingParameters.clear();
         std::map<std::string, std::set<size_t>> pointerSlotAliases;
         std::map<std::string, TypeNode*> localTypes;
+        std::map<std::string, std::string> inferredLocalStructNames;
         std::set<size_t> definitePointerSlotWritesThroughMethods;
         for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
         {
@@ -191,9 +192,31 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             else if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
             {
                 if(declaration->type)
+                {
                     localTypes[declaration->name] = declaration->type;
+                    inferredLocalStructNames.erase(declaration->name);
+                }
                 else
+                {
                     localTypes.erase(declaration->name);
+                    if(auto* structure = dynamic_cast<StructLiteralNode*>(
+                           declaration->expression))
+                        inferredLocalStructNames[declaration->name] =
+                            structure->structName;
+                    else if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                                declaration->expression))
+                    {
+                        auto source = inferredLocalStructNames.find(
+                            identifier->name);
+                        if(source != inferredLocalStructNames.end())
+                            inferredLocalStructNames[declaration->name] =
+                                source->second;
+                        else
+                            inferredLocalStructNames.erase(declaration->name);
+                    }
+                    else
+                        inferredLocalStructNames.erase(declaration->name);
+                }
                 pointerSlotAliases[declaration->name] =
                     collectPointerSlotAliases(declaration->expression,
                                               pointerSlotAliases);
@@ -201,9 +224,31 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
             else if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
             {
                 if(declaration->type)
+                {
                     localTypes[declaration->name] = declaration->type;
+                    inferredLocalStructNames.erase(declaration->name);
+                }
                 else
+                {
                     localTypes.erase(declaration->name);
+                    if(auto* structure = dynamic_cast<StructLiteralNode*>(
+                           declaration->initExpr))
+                        inferredLocalStructNames[declaration->name] =
+                            structure->structName;
+                    else if(auto* identifier = dynamic_cast<IdentifierNode*>(
+                                declaration->initExpr))
+                    {
+                        auto source = inferredLocalStructNames.find(
+                            identifier->name);
+                        if(source != inferredLocalStructNames.end())
+                            inferredLocalStructNames[declaration->name] =
+                                source->second;
+                        else
+                            inferredLocalStructNames.erase(declaration->name);
+                    }
+                    else
+                        inferredLocalStructNames.erase(declaration->name);
+                }
                 pointerSlotAliases[declaration->name] =
                     collectPointerSlotAliases(declaration->initExpr,
                                               pointerSlotAliases);
@@ -261,24 +306,31 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                             expressionStatement->expression))
                 {
                     TypeNode* receiverType = nullptr;
+                    std::string receiverStruct;
                     if(auto* receiver =
                            dynamic_cast<IdentifierNode*>(methodCall->object))
                     {
                         auto type = localTypes.find(receiver->name);
                         if(type != localTypes.end())
                             receiverType = type->second;
+                        auto inferred =
+                            inferredLocalStructNames.find(receiver->name);
+                        if(inferred != inferredLocalStructNames.end())
+                            receiverStruct = inferred->second;
                     }
                     while(auto* pointer =
                               dynamic_cast<PointerTypeNode*>(receiverType))
                         receiverType = pointer->elementType;
-                    std::string receiverStruct;
-                    if(auto* structure =
-                           dynamic_cast<StructTypeRefNode*>(receiverType))
-                        receiverStruct = structure->structName;
-                    else if(auto* generic =
-                                dynamic_cast<GenericStructTypeRefNode*>(
-                                    receiverType))
-                        receiverStruct = generic->getMangledName();
+                    if(receiverStruct.empty())
+                    {
+                        if(auto* structure =
+                               dynamic_cast<StructTypeRefNode*>(receiverType))
+                            receiverStruct = structure->structName;
+                        else if(auto* generic =
+                                   dynamic_cast<GenericStructTypeRefNode*>(
+                                       receiverType))
+                            receiverStruct = generic->getMangledName();
+                    }
 
                     auto methods = structMethods.find(receiverStruct);
                     if(methods != structMethods.end())
