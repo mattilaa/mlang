@@ -16595,6 +16595,50 @@ TEST_F(MLATest, NestedMatchSharedBorrowRejectsOverlappingAccess)
         << out;
 }
 
+// A list-loop break must preserve field precision for a nested shared borrow.
+TEST_F(MLATest, NestedListBreakSharedBorrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var values: list<i32> = [1];
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            for item in values {
+                parent = &second.left;
+                break;
+            }
+            let child: ptr<i32> = &*parent;
+            second.right = 8;
+            unsafe { return *child; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 6);
+}
+
+// The list-loop exit join must preserve the incoming owner's sibling path.
+TEST_F(MLATest, NestedListBreakSharedBorrowPreservesIncomingOwnerSibling)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var values: list<i32> = [1];
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            for item in values {
+                parent = &second.left;
+                break;
+            }
+            let child: ptr<i32> = &*parent;
+            first.right = 8;
+            unsafe { return *child; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 6);
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
