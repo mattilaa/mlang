@@ -2918,6 +2918,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
     }
     clearPointerBorrow(pointerVar);
     std::string borrowPlace;
+    std::string reborrowParent;
     std::string exclusiveReborrowParent;
     if(auto* address = dynamic_cast<UnaryOpNode*>(expr))
     {
@@ -2925,8 +2926,22 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         if(dereference && dereference->op == UnaryOpNode::OP_DEREF)
             if(auto* parent =
                    dynamic_cast<IdentifierNode*>(dereference->operand))
-                if(isMutBorrower(parent->name))
-                    exclusiveReborrowParent = parent->name;
+            {
+                const std::string& parentName = parent->name;
+                bool parentIsBorrowed = isMutBorrower(parentName);
+                for(const auto& borrowers : activeBorrowers)
+                    if(borrowers.second.count(parentName))
+                    {
+                        parentIsBorrowed = true;
+                        break;
+                    }
+                if(parentIsBorrowed)
+                {
+                    reborrowParent = parentName;
+                    if(isMutBorrower(parentName))
+                        exclusiveReborrowParent = parentName;
+                }
+            }
     }
 
     auto registerOwnerBorrow = [&](const std::string& ownerName,
@@ -4461,23 +4476,23 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
     }
 
     if(registerOwnerBorrow(ownerName, enforceExclusive) &&
-       !exclusiveReborrowParent.empty())
+       !reborrowParent.empty())
     {
-        pointerBorrowParent[pointerVar] = exclusiveReborrowParent;
+        pointerBorrowParent[pointerVar] = reborrowParent;
 
         // A parent pointer may represent several branch-joined owners. The
         // legacy target map keeps one representative, so copy all retained
         // owner keys onto the child reborrow before later joins or escapes.
         std::set<std::string> possibleOwners;
         auto parentTarget =
-            pointerBorrowTarget.find(exclusiveReborrowParent);
+            pointerBorrowTarget.find(reborrowParent);
         if(parentTarget != pointerBorrowTarget.end())
             possibleOwners.insert(parentTarget->second);
         const std::string parentReborrowPrefix =
-            "@reborrow:" + exclusiveReborrowParent + ":";
+            "@reborrow:" + reborrowParent + ":";
         for(const auto& borrow : activeMutBorrower)
         {
-            if(borrow.second != exclusiveReborrowParent)
+            if(borrow.second != reborrowParent)
                 continue;
             if(borrow.first.compare(0, parentReborrowPrefix.size(),
                                     parentReborrowPrefix) == 0)
@@ -4486,8 +4501,11 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             else if(!borrow.first.empty() && borrow.first.front() != '@')
                 possibleOwners.insert(borrow.first);
         }
-        auto parentPlaces = aggregateBorrowPlaces.find(exclusiveReborrowParent);
-        auto parentPlace = pointerBorrowPlace.find(exclusiveReborrowParent);
+        for(const auto& borrow : activeBorrowers)
+            if(borrow.second.count(reborrowParent))
+                possibleOwners.insert(borrow.first);
+        auto parentPlaces = aggregateBorrowPlaces.find(reborrowParent);
+        auto parentPlace = pointerBorrowPlace.find(reborrowParent);
         for(const auto& possibleOwner : possibleOwners)
             if(!possibleOwner.empty())
             {

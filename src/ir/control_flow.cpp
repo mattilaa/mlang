@@ -1253,6 +1253,38 @@ void CodeGenerator::generateIfStatement(IfNode* node)
                                      elsePointerBorrowPlace,
                                      elseActiveMutBorrower);
 
+        // Shared pointers also need an owner-specific place when their
+        // target differs by branch. A representative target alone loses the
+        // other branch during a later nested reborrow.
+        auto mergeJoinedSharedPointerPlaces = [&](const auto& branchTargets,
+                                                  const auto& branchPlaces,
+                                                  const auto& branchBorrowers) {
+            for(const auto& ownerBorrowers : branchBorrowers)
+                for(const auto& pointer : ownerBorrowers.second)
+                {
+                    auto target = branchTargets.find(pointer);
+                    if(target == branchTargets.end() ||
+                       target->second != ownerBorrowers.first)
+                        continue;
+                    auto place = branchPlaces.find(pointer);
+                    std::string ownerPlace = ownerBorrowers.first;
+                    if(place != branchPlaces.end() &&
+                       place->second.compare(0, ownerPlace.size(),
+                                             ownerPlace) == 0)
+                        ownerPlace += place->second.substr(ownerPlace.size());
+                    aggregateBorrowPlaces[pointer][ownerBorrowers.first]
+                        .insert(ownerPlace);
+                }
+        };
+        if(thenFallsThrough)
+            mergeJoinedSharedPointerPlaces(thenPointerBorrowTarget,
+                                           thenPointerBorrowPlace,
+                                           thenActiveBorrowers);
+        if(elseFallsThrough)
+            mergeJoinedSharedPointerPlaces(elsePointerBorrowTarget,
+                                           elsePointerBorrowPlace,
+                                           elseActiveBorrowers);
+
         activeBorrowers = std::move(mergedActiveBorrowers);
         // A mutable borrow on either reachable path may be live after the
         // merge. Keep the union so owner accesses cannot slip through on the
