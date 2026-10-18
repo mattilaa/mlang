@@ -12007,6 +12007,37 @@ TEST_F(MLATest, OwnershipIndirectPointerAssignmentKeepsConditionalLocalBorrow)
         << out;
 }
 
+// An indirect write through a conditional slot must update every possible target.
+TEST_F(MLATest, OwnershipIndirectPointerAssignmentTracksConditionalSlotTargets)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+        var other_global: i32 = 13;
+
+        fn maybe_local(flag: bool) -> ptr<i32> {
+            var local_value: i32 = 7;
+            var selected: ptr<i32> = &global_value;
+            var other: ptr<i32> = &other_global;
+            let slot: ptr<ptr<i32>> = flag ? &mut selected : &mut other;
+            unsafe { *slot = &local_value; }
+            return selected;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = maybe_local(true);
+            local_value = 4;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'selected'"), std::string::npos)
+        << out;
+}
+
 // A helper's indirect pointer write must update the caller's returned origin.
 TEST_F(MLATest, OwnershipHelperIndirectPointerAssignmentKeepsNewOrigin)
 {

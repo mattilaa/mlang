@@ -875,18 +875,24 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
             }
             return {};
         };
-        auto localBorrowDereferencePath = [&](ExpressionNode* pointer) {
+        auto localBorrowDereferencePaths = [&](ExpressionNode* pointer) {
+            std::set<std::string> targets;
             if(auto* address = dynamic_cast<UnaryOpNode*>(pointer))
                 if(address->op == UnaryOpNode::OP_ADDR ||
                    address->op == UnaryOpNode::OP_ADDR_MUT)
-                    return localBorrowPlacePath(address->operand);
+                {
+                    const std::string target =
+                        localBorrowPlacePath(address->operand);
+                    if(!target.empty())
+                        targets.insert(target);
+                    return targets;
+                }
             auto* identifier = dynamic_cast<IdentifierNode*>(pointer);
             if(!identifier)
-                return std::string{};
+                return targets;
             auto aliases = localBorrowAliases.find(identifier->name);
             if(aliases == localBorrowAliases.end())
-                return std::string{};
-            std::string target;
+                return targets;
             for(auto* origin : aliases->second)
             {
                 auto* originAddress = dynamic_cast<UnaryOpNode*>(origin);
@@ -898,11 +904,9 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
                     localBorrowPlacePath(originAddress->operand);
                 if(candidate.empty())
                     continue;
-                if(!target.empty() && target != candidate)
-                    return std::string{};
-                target = candidate;
+                targets.insert(candidate);
             }
-            return target;
+            return targets;
         };
         std::function<bool(ExpressionNode*)> isSharedBorrowExpression;
         std::function<void(ExpressionNode*,
@@ -1165,15 +1169,15 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
             else if(auto* assignment =
                         dynamic_cast<DerefAssignmentNode*>(statement))
             {
-                const std::string path =
-                    localBorrowDereferencePath(assignment->pointerExpr);
+                const auto paths =
+                    localBorrowDereferencePaths(assignment->pointerExpr);
                 std::vector<ExpressionNode*> origins;
                 collectBorrowOrigins(assignment->value, origins);
-                if(!path.empty())
+                for(const auto& path : paths)
                 {
                     if(!inConditionalRegion)
                         eraseLocalBorrowAliasSubtree(path);
-                    recordLocalBorrowAlias(path, std::move(origins));
+                    recordLocalBorrowAlias(path, origins);
                     collectAggregateBorrowFields(assignment->value, path);
                 }
             }
@@ -3119,18 +3123,24 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             }
             return {};
         };
-        auto localBorrowDereferencePath = [&](ExpressionNode* pointer) {
+        auto localBorrowDereferencePaths = [&](ExpressionNode* pointer) {
+            std::set<std::string> targets;
             if(auto* address = dynamic_cast<UnaryOpNode*>(pointer))
                 if(address->op == UnaryOpNode::OP_ADDR ||
                    address->op == UnaryOpNode::OP_ADDR_MUT)
-                    return localBorrowPlacePath(address->operand);
+                {
+                    const std::string target =
+                        localBorrowPlacePath(address->operand);
+                    if(!target.empty())
+                        targets.insert(target);
+                    return targets;
+                }
             auto* identifier = dynamic_cast<IdentifierNode*>(pointer);
             if(!identifier)
-                return std::string{};
+                return targets;
             auto aliases = localBorrowAliases.find(identifier->name);
             if(aliases == localBorrowAliases.end())
-                return std::string{};
-            std::string target;
+                return targets;
             for(auto* origin : aliases->second)
             {
                 auto* originAddress = dynamic_cast<UnaryOpNode*>(origin);
@@ -3142,11 +3152,9 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                     localBorrowPlacePath(originAddress->operand);
                 if(candidate.empty())
                     continue;
-                if(!target.empty() && target != candidate)
-                    return std::string{};
-                target = candidate;
+                targets.insert(candidate);
             }
-            return target;
+            return targets;
         };
         std::function<void(ExpressionNode*, std::vector<ExpressionNode*>&)>
             collectBorrowOrigins;
@@ -3345,15 +3353,15 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             else if(auto* assignment =
                         dynamic_cast<DerefAssignmentNode*>(statement))
             {
-                const std::string path =
-                    localBorrowDereferencePath(assignment->pointerExpr);
+                const auto paths =
+                    localBorrowDereferencePaths(assignment->pointerExpr);
                 std::vector<ExpressionNode*> origins;
                 collectBorrowOrigins(assignment->value, origins);
-                if(!path.empty())
+                for(const auto& path : paths)
                 {
                     if(!inConditionalRegion)
                         eraseLocalBorrowAliasSubtree(path);
-                    recordLocalBorrowAlias(path, std::move(origins));
+                    recordLocalBorrowAlias(path, origins);
                     collectAggregateBorrowFields(assignment->value, path);
                 }
             }
