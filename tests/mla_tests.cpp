@@ -11952,6 +11952,61 @@ TEST_F(MLATest, OwnershipIndirectPointerAssignmentKeepsNewOrigin)
     EXPECT_NE(out.find("cannot assign to 'second'"), std::string::npos) << out;
 }
 
+// An indirect overwrite with a global pointer must discard the local origin.
+TEST_F(MLATest, OwnershipIndirectPointerAssignmentDropsOverwrittenLocalBorrow)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+
+        fn select_global() -> ptr<i32> {
+            var local_value: i32 = 7;
+            var selected: ptr<i32> = &local_value;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            unsafe { *slot = &global_value; }
+            return selected;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = select_global();
+            local_value = 4;
+            unsafe { return *selected - 11; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+// A conditional indirect write must retain the possible local origin.
+TEST_F(MLATest, OwnershipIndirectPointerAssignmentKeepsConditionalLocalBorrow)
+{
+    std::string code = R"(
+        var global_value: i32 = 11;
+
+        fn maybe_local(flag: bool) -> ptr<i32> {
+            var local_value: i32 = 7;
+            var selected: ptr<i32> = &global_value;
+            let slot: ptr<ptr<i32>> = &mut selected;
+            if flag {
+                unsafe { *slot = &local_value; }
+            }
+            return selected;
+        }
+
+        fn main() -> i32 {
+            var local_value: i32 = 3;
+            let selected = maybe_local(true);
+            local_value = 4;
+            unsafe { return *selected; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed by 'selected'"), std::string::npos)
+        << out;
+}
+
 // A helper's indirect pointer write must update the caller's returned origin.
 TEST_F(MLATest, OwnershipHelperIndirectPointerAssignmentKeepsNewOrigin)
 {
