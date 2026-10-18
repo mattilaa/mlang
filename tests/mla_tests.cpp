@@ -16639,6 +16639,104 @@ TEST_F(MLATest, NestedListBreakSharedBorrowPreservesIncomingOwnerSibling)
     EXPECT_EQ(compileAndRunExitCode(code), 6);
 }
 
+// A range-loop continue must preserve shared-pointer field precision too.
+TEST_F(MLATest, NestedRangeContinueSharedBorrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            for i in 0..2 {
+                parent = &second.left;
+                continue;
+            }
+            let child: ptr<i32> = &*parent;
+            second.right = 8;
+            unsafe { return *child; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 6);
+}
+
+// A range-loop continue must not lose overlap checks on its pointer target.
+TEST_F(MLATest, NestedRangeContinueSharedBorrowRejectsOverlappingAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            for i in 0..2 {
+                parent = &second.left;
+                continue;
+            }
+            let child: ptr<i32> = &*parent;
+            second.left = 8;
+            unsafe { return *child; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
+// A list-loop continue must preserve shared-pointer field precision.
+TEST_F(MLATest, NestedListContinueSharedBorrowPreservesDisjointAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var values: list<i32> = [1];
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            for item in values {
+                parent = &second.left;
+                continue;
+            }
+            let child: ptr<i32> = &*parent;
+            second.right = 8;
+            unsafe { return *child; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 6);
+}
+
+// A list-loop continue must keep rejecting writes to the borrowed place.
+TEST_F(MLATest, NestedListContinueSharedBorrowRejectsOverlappingAccess)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var values: list<i32> = [1];
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            for item in values {
+                parent = &second.left;
+                continue;
+            }
+            let child: ptr<i32> = &*parent;
+            second.left = 8;
+            unsafe { return *child; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
 // An if-join must retain either possible owner of a reassigned mutable pointer.
 TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
 {
