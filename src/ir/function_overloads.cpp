@@ -166,6 +166,66 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 collect(expression);
                 return result;
             };
+        auto structNameFromType = [](TypeNode* type) {
+            while(auto* pointer = dynamic_cast<PointerTypeNode*>(type))
+                type = pointer->elementType;
+            if(auto* structure = dynamic_cast<StructTypeRefNode*>(type))
+                return structure->structName;
+            if(auto* generic =
+                   dynamic_cast<GenericStructTypeRefNode*>(type))
+                return generic->getMangledName();
+            return std::string{};
+        };
+        std::function<std::string(ExpressionNode*)> structNameFromExpression;
+        structNameFromExpression = [&](ExpressionNode* expression) {
+            if(auto* identifier =
+                   dynamic_cast<IdentifierNode*>(expression))
+            {
+                auto inferred =
+                    inferredLocalStructNames.find(identifier->name);
+                if(inferred != inferredLocalStructNames.end())
+                    return inferred->second;
+                auto type = localTypes.find(identifier->name);
+                return type == localTypes.end()
+                           ? std::string{}
+                           : structNameFromType(type->second);
+            }
+            if(auto* literal = dynamic_cast<StructLiteralNode*>(expression))
+                return literal->structName;
+            if(auto* field = dynamic_cast<FieldAccessNode*>(expression))
+            {
+                std::string baseStruct;
+                if(field->object)
+                    baseStruct = structNameFromExpression(field->object);
+                else
+                {
+                    auto inferred = inferredLocalStructNames.find(
+                        field->structName);
+                    if(inferred != inferredLocalStructNames.end())
+                        baseStruct = inferred->second;
+                    else
+                    {
+                        auto type = localTypes.find(field->structName);
+                        if(type != localTypes.end())
+                            baseStruct = structNameFromType(type->second);
+                        else
+                            baseStruct = field->structName;
+                    }
+                }
+                auto members = structMembers.find(baseStruct);
+                if(members == structMembers.end())
+                    return std::string{};
+                auto member = std::find_if(
+                    members->second.begin(), members->second.end(),
+                    [&](const auto& entry) {
+                        return entry.first == field->fieldName;
+                    });
+                return member == members->second.end()
+                           ? std::string{}
+                           : structNameFromType(member->second);
+            }
+            return std::string{};
+        };
         std::function<void(StatementListNode*)> scanPointerSlotWrites;
         std::function<void(StatementNode*)> scanPointerSlotStatement;
         bool pointerSlotScanConditional = false;
@@ -305,32 +365,8 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
                 else if(auto* methodCall = dynamic_cast<MethodCallNode*>(
                             expressionStatement->expression))
                 {
-                    TypeNode* receiverType = nullptr;
-                    std::string receiverStruct;
-                    if(auto* receiver =
-                           dynamic_cast<IdentifierNode*>(methodCall->object))
-                    {
-                        auto type = localTypes.find(receiver->name);
-                        if(type != localTypes.end())
-                            receiverType = type->second;
-                        auto inferred =
-                            inferredLocalStructNames.find(receiver->name);
-                        if(inferred != inferredLocalStructNames.end())
-                            receiverStruct = inferred->second;
-                    }
-                    while(auto* pointer =
-                              dynamic_cast<PointerTypeNode*>(receiverType))
-                        receiverType = pointer->elementType;
-                    if(receiverStruct.empty())
-                    {
-                        if(auto* structure =
-                               dynamic_cast<StructTypeRefNode*>(receiverType))
-                            receiverStruct = structure->structName;
-                        else if(auto* generic =
-                                   dynamic_cast<GenericStructTypeRefNode*>(
-                                       receiverType))
-                            receiverStruct = generic->getMangledName();
-                    }
+                    const std::string receiverStruct =
+                        structNameFromExpression(methodCall->object);
 
                     auto methods = structMethods.find(receiverStruct);
                     if(methods != structMethods.end())
