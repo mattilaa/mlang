@@ -5716,6 +5716,30 @@ TEST_F(MLATest, ExclusiveBorrowReturnedFromFunctionCanBeWrittenThrough)
     EXPECT_EQ(rc, 0) << out;
 }
 
+// Callable-value invocation must keep a returned shared argument read-only.
+TEST_F(MLATest, SharedBorrowReturnedThroughCallableCannotBeWrittenThrough)
+{
+    std::string code = R"(
+        fn identity(pointer: ptr<i32>) -> ptr<i32> {
+            return pointer;
+        }
+
+        fn main() -> i32 {
+            var value: i32 = 4;
+            let shared: ptr<i32> = &value;
+            let relay: fn(ptr<i32>) -> ptr<i32> = identity;
+            unsafe { *relay(shared) = 9; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
 // A nested dereference must retain the shared borrow restriction on its place.
 TEST_F(MLATest, SharedBorrowCannotWriteThroughNestedPointer)
 {
