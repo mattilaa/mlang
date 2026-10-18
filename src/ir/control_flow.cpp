@@ -462,9 +462,29 @@ void CodeGenerator::mergeLoopExitBorrowStates(
         else
             ++place;
     }
-    // Break paths may carry different aggregate places; owner origins above
-    // retain safety while dropping path precision avoids unsound assumptions.
-    aggregateBorrowPlaces.clear();
+    // Keep precise paths for pointers that remain live across the exit join.
+    // Aggregate values are still made conservative because their contents may
+    // have changed on a different break path.
+    for(auto places = aggregateBorrowPlaces.begin();
+        places != aggregateBorrowPlaces.end();)
+    {
+        bool livePointerBorrow = false;
+        if(pointerBorrowTarget.count(places->first))
+        {
+            livePointerBorrow = isMutBorrower(places->first);
+            if(!livePointerBorrow)
+                for(const auto& owner : activeBorrowers)
+                    if(owner.second.count(places->first))
+                    {
+                        livePointerBorrow = true;
+                        break;
+                    }
+        }
+        if(!livePointerBorrow)
+            places = aggregateBorrowPlaces.erase(places);
+        else
+            ++places;
+    }
     aggregateBorrowFieldPlaces.clear();
 }
 
@@ -1942,12 +1962,14 @@ void CodeGenerator::generateForStatement(ForNode* node)
         int oldDepth = hadOldDepth ? oldDepthIt->second : 0;
         auto stateBeforeLoopMoved = movedVariables;
         auto stateBeforeLoopPointerBorrowTarget = pointerBorrowTarget;
+        auto stateBeforeLoopPointerBorrowPlace = pointerBorrowPlace;
         auto stateBeforeLoopPointerBorrowParent = pointerBorrowParent;
         auto stateBeforeLoopAggregateBorrowOrigins = aggregateBorrowOrigins;
         auto stateBeforeLoopAggregateBorrowPlaces = aggregateBorrowPlaces;
         auto stateBeforeLoopAggregateBorrowFieldPlaces =
             aggregateBorrowFieldPlaces;
         auto stateBeforeLoopActiveBorrowers = activeBorrowers;
+        auto stateBeforeLoopActiveMutBorrower = activeMutBorrower;
         const int loopScopeDepth = currentScopeDepth();
 
         namedValues[node->varName] = loopVar;
@@ -2023,6 +2045,11 @@ void CodeGenerator::generateForStatement(ForNode* node)
             }
             exitCleanupScope();
         }
+        auto bodyPointerBorrowTarget = pointerBorrowTarget;
+        auto bodyPointerBorrowPlace = pointerBorrowPlace;
+        auto bodyAggregateBorrowPlaces = aggregateBorrowPlaces;
+        auto bodyActiveBorrowers = activeBorrowers;
+        auto bodyActiveMutBorrower = activeMutBorrower;
         auto bodyPointerBorrowParent = pointerBorrowParent;
 
         if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
@@ -2082,6 +2109,8 @@ void CodeGenerator::generateForStatement(ForNode* node)
         {
             movedVariables = std::move(stateBeforeLoopMoved);
             pointerBorrowTarget = std::move(stateBeforeLoopPointerBorrowTarget);
+            pointerBorrowPlace =
+                std::move(stateBeforeLoopPointerBorrowPlace);
             pointerBorrowParent =
                 std::move(stateBeforeLoopPointerBorrowParent);
             aggregateBorrowOrigins =
@@ -2123,6 +2152,68 @@ void CodeGenerator::generateForStatement(ForNode* node)
                 borrowers.insert(owner.second.begin(), owner.second.end());
             }
             activeBorrowers = std::move(stateBeforeLoopActiveBorrowers);
+            for(const auto& borrow : activeMutBorrower)
+                stateBeforeLoopActiveMutBorrower.emplace(borrow);
+            activeMutBorrower =
+                std::move(stateBeforeLoopActiveMutBorrower);
+
+            std::map<std::string,
+                     std::map<std::string, std::set<std::string>>>
+                loopPointerPlaces;
+            auto addBranchPointerPlaces = [&](const auto& targets,
+                                             const auto& places,
+                                             const auto& aggregatePlaces,
+                                             const auto& sharedBorrowers,
+                                             const auto& mutableBorrowers) {
+                std::map<std::string, std::set<std::string>> pointerOwners;
+                for(const auto& target : targets)
+                    pointerOwners[target.first].insert(target.second);
+                for(const auto& borrow : mutableBorrowers)
+                    pointerOwners[borrow.second];
+                for(const auto& owner : sharedBorrowers)
+                    for(const auto& pointer : owner.second)
+                        if(targets.count(pointer))
+                            pointerOwners[pointer].insert(owner.first);
+                for(const auto& pointer : pointerOwners)
+                {
+                    auto target = targets.find(pointer.first);
+                    if(target != targets.end())
+                        pointerOwners[pointer.first].insert(target->second);
+                    auto existingPaths = aggregatePlaces.find(pointer.first);
+                    if(existingPaths != aggregatePlaces.end())
+                        for(const auto& owner : existingPaths->second)
+                            loopPointerPlaces[pointer.first][owner.first]
+                                .insert(owner.second.begin(),
+                                        owner.second.end());
+                    for(const auto& owner : pointerOwners[pointer.first])
+                    {
+                        auto existingOwnerPaths =
+                            loopPointerPlaces[pointer.first].find(owner);
+                        if(existingOwnerPaths !=
+                               loopPointerPlaces[pointer.first].end() &&
+                           !existingOwnerPaths->second.empty())
+                            continue;
+                        std::string ownerPlace = owner;
+                        auto place = places.find(pointer.first);
+                        if(target != targets.end() && target->second == owner &&
+                           place != places.end())
+                            ownerPlace = place->second;
+                        loopPointerPlaces[pointer.first][owner].insert(
+                            ownerPlace);
+                    }
+                }
+            };
+            addBranchPointerPlaces(stateBeforeLoopPointerBorrowTarget,
+                                   stateBeforeLoopPointerBorrowPlace,
+                                   stateBeforeLoopAggregateBorrowPlaces,
+                                   stateBeforeLoopActiveBorrowers,
+                                   stateBeforeLoopActiveMutBorrower);
+            addBranchPointerPlaces(bodyPointerBorrowTarget,
+                                   bodyPointerBorrowPlace,
+                                   bodyAggregateBorrowPlaces,
+                                   bodyActiveBorrowers,
+                                   bodyActiveMutBorrower);
+            aggregateBorrowPlaces = std::move(loopPointerPlaces);
         }
         mergeLoopExitBorrowStates(
             breakBorrowStates, loopScopeDepth,

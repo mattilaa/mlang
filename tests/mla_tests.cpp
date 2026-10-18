@@ -16472,6 +16472,54 @@ TEST_F(MLATest, NestedRangeBreakSharedBorrowPreservesDisjointAccess)
     EXPECT_EQ(compileAndRunExitCode(code), 6);
 }
 
+// A range-loop join must retain precise paths for its zero-iteration owner.
+TEST_F(MLATest, NestedRangeBreakSharedBorrowPreservesIncomingOwnerSibling)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            for i in 0..2 {
+                parent = &second.left;
+                break;
+            }
+            let child: ptr<i32> = &*parent;
+            first.right = 8;
+            unsafe { return *child; }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 6);
+}
+
+// The zero-iteration path must retain the incoming owner's overlapping loan.
+TEST_F(MLATest, NestedRangeBreakSharedBorrowRejectsIncomingOwnerOverlap)
+{
+    std::string code = R"(
+        struct Pair { var left: i32; var right: i32; };
+        fn main() -> i32 {
+            var first: Pair = Pair { left: 4, right: 5 };
+            var second: Pair = Pair { left: 6, right: 7 };
+            var parent: ptr<i32> = &first.left;
+            for i in 0..2 {
+                parent = &second.left;
+                break;
+            }
+            let child: ptr<i32> = &*parent;
+            first.left = 8;
+            unsafe { return *child; }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot assign to field of 'first' while borrowed"),
+              std::string::npos)
+        << out;
+}
+
 // A range-loop break must still reject writes to the borrowed field.
 TEST_F(MLATest, NestedRangeBreakSharedBorrowRejectsOverlappingAccess)
 {
