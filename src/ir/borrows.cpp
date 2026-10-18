@@ -377,6 +377,24 @@ bool CodeGenerator::validateBorrowRead(ExpressionNode* expr, int line)
 bool CodeGenerator::validateBorrowWriteThroughPointer(ExpressionNode* expr,
                                                        int line)
 {
+    if(auto* address = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        if(address->op == UnaryOpNode::OP_ADDR)
+        {
+            const std::string owner =
+                resolveBorrowOwnerFromLValue(address->operand);
+            if(owner.empty())
+                return true;
+            std::string place = resolveBorrowPlaceFromLValue(address->operand);
+            if(place.empty())
+                place = owner;
+
+            reportError(line, "cannot write through shared borrow '" + place +
+                                  "'");
+            return false;
+        }
+    }
+
     size_t dereferenceDepth = 0;
     auto* current = expr;
     while(auto* dereference = dynamic_cast<UnaryOpNode*>(current))

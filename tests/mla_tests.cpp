@@ -5654,6 +5654,24 @@ TEST_F(MLATest, SharedBorrowCannotWriteThroughItsPointer)
               std::string::npos) << out;
 }
 
+// A temporary shared borrow must not be made writable by immediate dereference.
+TEST_F(MLATest, SharedBorrowCannotWriteThroughTemporaryPointer)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i32 = 4;
+            unsafe { *(&value) = 9; }
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot write through shared borrow"),
+              std::string::npos) << out;
+}
+
 // A nested dereference must retain the shared borrow restriction on its place.
 TEST_F(MLATest, SharedBorrowCannotWriteThroughNestedPointer)
 {
