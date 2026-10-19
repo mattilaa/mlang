@@ -204,3 +204,124 @@ jobs:
           path: artifacts
           if-no-files-found: ignore
           retention-days: 14
+
+  asan:
+    name: ASan build and tests (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-latest
+            cc: clang-17
+            cxx: clang++-17
+          - platform: macos
+            os: macos-latest
+            cc: clang
+            cxx: clang++
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+      # Keep address checks consistent across platforms; leak checking is separate.
+      ASAN_OPTIONS: detect_leaks=0:detect_container_overflow=1:strict_init_order=0:halt_on_error=1
+      MLANG_LINK_FLAGS: -fsanitize=address -fno-omit-frame-pointer
+      MLANG_DEFAULT_OPT_LEVEL: 0
+      MLANG_STDLIB_LIB_PATH: ${{ github.workspace }}/build
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            llvm-17 llvm-17-dev clang-17 lld-17 libclang-rt-17-dev flex bison \
+            libssl-dev libzstd-dev libz3-dev zlib1g-dev \
+            rapidjson-dev ninja-build python3 python3-venv
+          echo "/usr/lib/llvm-17/bin" >> "$GITHUB_PATH"
+
+      - name: Install macOS dependencies
+        if: matrix.platform == 'macos'
+        run: |
+          brew install llvm openssl@3 zstd z3 rapidjson ninja
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix llvm);$(brew --prefix openssl@3);$(brew --prefix zstd);$(brew --prefix z3);$(brew --prefix rapidjson)" >> "$GITHUB_ENV"
+
+      - name: Select matching ASan host linker
+        run: |
+          # The MLang backend invokes c++; use the same ASan runtime as CXX.
+          mkdir -p "$RUNNER_TEMP/asan-toolchain"
+          ln -s "$(command -v "$CXX")" "$RUNNER_TEMP/asan-toolchain/c++"
+          echo "$RUNNER_TEMP/asan-toolchain" >> "$GITHUB_PATH"
+
+      - name: Install Python test dependencies
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install -r tests/requirements.txt
+
+      - name: Configure ASan build
+        run: |
+          asan_flags="-fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls -g -O1"
+          cmake -S . -B build -G Ninja \
+            -DMLANG_VERSION_BUILD=${{ github.run_number }} \
+            -DBUILD_TESTS=ON \
+            -DMLANGD_BUILD_FORMATTER_DEPENDENCY=OFF \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="$asan_flags" \
+            -DCMAKE_CXX_FLAGS="$asan_flags" \
+            -DCMAKE_OBJC_FLAGS="$asan_flags" \
+            -DCMAKE_EXE_LINKER_FLAGS="$MLANG_LINK_FLAGS" \
+            -DCMAKE_SHARED_LINKER_FLAGS="$MLANG_LINK_FLAGS" \
+            -DCMAKE_MODULE_LINKER_FLAGS="$MLANG_LINK_FLAGS"
+
+      - name: Build compiler, runtime, tools, and unit tests with ASan
+        id: build
+        run: |
+          cmake --build build \
+            --target mlang mlang_std mlang-config mladbg mlangd-mla mlang_format mla_tests audio_render_pool_test \
+            --parallel 2
+
+      - name: Unit tests under ASan
+        run: |
+          mkdir -p artifacts/unit
+          ctest --test-dir build \
+            --output-on-failure \
+            --output-junit "$PWD/artifacts/unit/ctest.xml"
+
+      - name: Robot tests under ASan
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          MLANG_BIN: ${{ github.workspace }}/build/mlang
+          MLANG_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/robot/mlang
+          ROBOT_RESULTS_DIR: ${{ github.workspace }}/artifacts/robot
+          ROBOT_JOBS: 2
+          ROBOT_ALLOW_FLAKY_PASS: 0
+          ROBOT_COLOR_LOGS: never
+        run: ./tests/run_examples_robot.sh
+
+      - name: LSP integration transcript under ASan
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: python3 tests/lsp_integration_transcript.py --mlangd build/mlangd-mla
+
+      - name: LSP parity E2E under ASan
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: python3 tests/lsp_parity_e2e.py --mlangd build/mlangd-mla --bulk-files 180
+
+      - name: Formatter E2E under ASan
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: python3 tests/mlang_format_spacing_e2e.py --mlang-format build/mlang-format
+
+      - name: Upload ASan test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-asan-${{ matrix.platform }}
+          path: |
+            artifacts
+            build/Testing/Temporary
+          if-no-files-found: ignore
+          retention-days: 14

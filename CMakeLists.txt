@@ -536,6 +536,9 @@ if(APPLE)
 endif()
 
 # Bootstrap-built MLang formatter.
+# These tools use a custom host link instead of add_executable(), so forward
+# executable linker flags explicitly (including the AddressSanitizer runtime).
+separate_arguments(MLANG_HOST_LINK_FLAGS NATIVE_COMMAND "${CMAKE_EXE_LINKER_FLAGS}")
 set(MLANG_FORMAT_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlang-format-mla/main.mla)
 set(MLANG_FORMAT_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlang-format)
 set(MLANG_FORMAT_LL_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlang-format.ll)
@@ -556,6 +559,7 @@ add_custom_command(
             -o ${MLANG_FORMAT_IR_OBJECT_OUTPUT}
     COMMAND ${MLANG_CLANGXX_EXE}
             -o ${MLANG_FORMAT_OUTPUT}
+            ${MLANG_HOST_LINK_FLAGS}
             ${MLANG_FORMAT_IR_OBJECT_OUTPUT}
             -L${CMAKE_CURRENT_BINARY_DIR}
             -lmlang_std
@@ -609,6 +613,7 @@ add_custom_command(
             -o ${MLANGD_IR_OBJECT_OUTPUT}
     COMMAND ${MLANG_CLANGXX_EXE}
             -o ${MLANGD_MLA_OUTPUT}
+            ${MLANG_HOST_LINK_FLAGS}
             ${MLANGD_IR_OBJECT_OUTPUT}
             -L${CMAKE_CURRENT_BINARY_DIR}
             -lmlang_std
