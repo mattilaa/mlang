@@ -1,4 +1,42 @@
-# Debugging native MLang programs
+# mladbg Debugger
+
+`mladbg` is MLang's terminal debugger for native programs on macOS and Linux.
+It uses LLDB to step through source, inspect variables and stack frames, and
+stop at breakpoints or when watched values change. You can also debug MLang
+executables directly with GDB or LLDB.
+
+## Quick start
+
+With `mlang` and `mladbg` installed, run these commands from the repository root
+to try the [debugger demo](../examples/debugger_demo.mla):
+
+```sh
+mlang -g -O0 examples/debugger_demo.mla -o debugger-demo
+mladbg -ex 'b review' ./debugger-demo
+```
+
+For a local CMake build, use `build/mlang` and `build/mladbg` instead.
+The startup command sets a breakpoint in `review`; press F5 to launch and
+stop there. Press `:` to enter each of these commands, then Enter to execute:
+
+```text
+locals
+p team.lead.name
+display team.members.len
+bt
+```
+
+`locals` prints the current frame's variables, `p` inspects a value, `display`
+adds an expression that refreshes at each stop, and `bt` prints the call stack.
+Press Tab to focus the Locals pane and Right to expand a structure or collection.
+Use F6 to step over a source line, F7 to step into a call, and F8 to return
+from the current function. Step past a local's initialization before inspecting
+its value. Press F5 to continue or `q` to quit. F1 opens the built-in help.
+
+For your own program, replace the demo source and executable paths and use
+`b main`, `b FUNCTION`, or `b FILE.mla:LINE` to choose where to stop.
+
+## Build and installation
 
 Compile an executable with `-g` (or `--debug-info`) to emit DWARF debug info:
 a line table, a function for every MLang function and method, and the
@@ -31,6 +69,8 @@ On macOS, Xcode's command-line tools supply them. On Linux, distribution
 packages commonly provide `lldb`, `python3-lldb`, and `python3`.
 `MLADBG_PYTHON` selects a Python interpreter matching the installed bindings;
 `MLADBG_LLDB` selects the `lldb` executable used to locate those bindings.
+
+## Terminal navigation
 
 The TUI displays source, locals and arguments, stack frames, breakpoints, and
 program output. Press `:` to enter commands and `Tab`/`Shift-Tab` to select
@@ -124,6 +164,11 @@ those letters). Selecting a file does not execute the command: append `:LINE`
 for a breakpoint and press Enter. Existing line suffixes and paths with spaces
 are preserved. Unreadable directories and empty matches are reported; results
 are bounded to 256 entries, so narrow the prefix in very large directories.
+
+## Command reference
+
+Commands below are entered after pressing `:` in the TUI, or supplied with
+`-ex` on the command line. The `:` is not part of the command itself.
 
 | Action | Command | Key |
 | --- | --- | --- |
@@ -252,6 +297,8 @@ strings, pointers, enums, and lists have DWARF descriptions; see the type
 coverage below. Optimized code may remove variables or move statements. At
 function entry, step past initialization before inspecting local storage.
 
+## Attach and batch sessions
+
 Attach directly with `mladbg --attach PID`. Quitting detaches an attached
 process and terminates a process launched by the debugger. Inferior stdin
 defaults to `/dev/null` so it cannot consume TUI keystrokes; use LLDB's process
@@ -265,6 +312,8 @@ the executable; arguments after it are passed to the debuggee:
 mladbg --batch -ex 'b main' -ex run -ex next -ex locals -ex bt ./app
 ```
 
+## Debugger development checks
+
 Build and run debugger checks:
 
 ```sh
@@ -274,6 +323,8 @@ ctest --test-dir build -L debugger --output-on-failure
 cmake -S . -B build -DMLADBG_INTEGRATION_TESTS=ON
 ctest --test-dir build -R mladbg_integration --output-on-failure
 ```
+
+## Using GDB or LLDB directly
 
 You can also start either native debugger directly:
 

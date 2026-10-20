@@ -165,6 +165,7 @@ PAGES: list[Page] = [
     for module, filename in STDLIB_MODULE_DOCS
 ] + [
     Page(Path("bootstrap/README.md"), "Bootstrap", "Bootstrap", "Tooling"),
+    Page(Path("docs/debugging.md"), "mladbg Debugger", "Mladbg", "Tooling"),
     Page(Path("tools/mlangpkg/README.md"), "mlangpkg", "Mlangpkg", "Tooling"),
     Page(Path("docs/package_manager.md"), "Package Manager", "Package-Manager", "Tooling"),
     Page(Path("docs/registry_protocol.md"), "Registry Protocol v1", "Registry-Protocol", "Tooling"),

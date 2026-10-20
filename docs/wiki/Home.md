@@ -91,8 +91,9 @@ If you are new to MLang, read these pages in this order:
 - [Package Manager](Package-Manager)
   `mlang pkg` workflows, subcommands, manifest layout, and package build
   configuration keys.
-- [Debugging native programs](https://github.com/mattilaa/mlang/blob/main/docs/debugging.md)
-  GDB and LLDB usage with compiler-emitted DWARF source locations.
+- [mladbg Debugger](Mladbg)
+  Build a debug executable, step through source, inspect variables and stack
+  frames, set breakpoints and watchpoints, and use the LLDB-powered terminal UI.
 - [Registry Protocol v1](Registry-Protocol)
   Registry index, archive, publishing, integrity, and trust requirements.
 - [UML UI Generator Example](UML-UI-Generator)

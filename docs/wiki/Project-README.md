@@ -343,7 +343,7 @@ $ lldb ./dbg
 In GDB the same session is `break dbg.mla:3`, `run`, `info locals`,
 `print value * 10`, `bt`, `up` and `next`. An explicitly supplied optimization
 level is preserved; the existing `--debug` option is separate and enables
-verbose/debug-print behavior. See the [debugging notes](https://github.com/mattilaa/mlang/blob/main/docs/debugging.md) for
+verbose/debug-print behavior. See the [debugging notes](Mladbg) for
 what is described and its limits.
 
 ## Compile-Time Evaluation With [`cexpr`](Language-Syntax)
