@@ -1650,27 +1650,54 @@ published in the generated site as `docs/out/html/compiler_diagnostics.html`.
 
 ### GitHub Wiki Export
 
-Generate GitHub Wiki-ready Markdown pages from the current repository
-documentation with:
+#### Contributor workflow
+
+Run the generator from the repository root with Python 3.10 or newer; it uses
+only the Python standard library, so no extra packages or compiler build are
+needed.
+
+1. Edit the original Markdown or man-page source, such as `docs/debugging.md`.
+   Generated pages in `docs/wiki/` contain a notice identifying the generator;
+   make content changes in their source documents so regeneration preserves them.
+2. When adding a new page, register it in `scripts/generate_github_wiki.py`.
+   `PAGES` entries specify the source path, display title, wiki filename without
+   `.md`, and sidebar group. For example:
+
+   ```python
+   Page(Path("docs/debugging.md"), "mladbg Debugger", "Mladbg", "Tooling"),
+   ```
+
+   Use an existing sidebar group, or add a new group to `write_sidebar`'s
+   `group_order`. Standard library modules are registered in
+   `STDLIB_MODULE_DOCS`; man pages are registered in `MANPAGES`.
+3. Link to the source document from an index such as `docs/README.md`, using a
+   relative Markdown link. The generator rewrites links between registered
+   pages to wiki links and creates `_Sidebar.md` automatically.
+4. Generate the wiki pages and review the resulting changes:
 
 ```sh
 python3 scripts/generate_github_wiki.py
-```
-
-The default output directory is `docs/wiki`, so the generated wiki source lives
-inside this repository and can be reviewed and committed with normal code
-changes.
-
-To update the repo-local wiki docs after editing `README.md`, `docs/`, stdlib
-docs, tool docs, or man pages, rerun the same command:
-
-```sh
-python3 scripts/generate_github_wiki.py
+git status --short
 git diff -- docs/wiki
+git diff --check
 ```
 
-The script refreshes the generated files in place. Commit the source
-documentation changes and the refreshed `docs/wiki` files together.
+The default output is `docs/wiki/`. Generation replaces this directory, so keep
+handwritten source documents elsewhere. Open new, untracked pages separately
+when reviewing; they do not appear in `git diff` until staged. Check headings,
+code fences, links, and the sidebar, then commit the source documents, any
+generator changes, and the generated pages together.
+
+The generator also checks that every example directory is documented in
+`docs/demos.md`. If it reports a missing demo, add that directory to the demo
+index and rerun the command.
+
+To preview output without changing the tracked wiki files, choose a separate
+output directory:
+
+```sh
+python3 scripts/generate_github_wiki.py --output /tmp/mlang-wiki-preview
+```
 
 During generation, bare fenced code blocks get inferred language tags where
 possible, and inline MLang keywords, builtin types, and `std::...` references
@@ -1679,16 +1706,44 @@ MLang examples are emitted with GitHub-supported `rust` fences so GitHub Wiki
 applies syntax highlighting; GitHub does not recognize `mla` as a highlight
 language.
 
+#### Publishing the wiki
+
+Committing `docs/wiki/` to the main repository records the generated documents.
+The live GitHub Wiki uses a separate Git repository and needs its own push.
+Choose either SSH or HTTPS for authentication:
+
+- **SSH** uses an SSH key registered with your GitHub account. The example
+  below uses SSH, which is convenient if you already push the main repository
+  over SSH.
+- **HTTPS** is also supported. Replace the clone command below with
+  `git clone https://github.com/mattilaa/mlang.wiki.git /tmp/mlang.wiki`.
+  When prompted, enter your GitHub username and use a personal access token
+  as the password, or authenticate through a credential helper such as Git
+  Credential Manager. GitHub account passwords are no longer accepted for
+  Git operations over HTTPS.
+
+Both methods require write access to the wiki repository to push changes.
+See [GitHub's remote authentication documentation](https://docs.github.com/en/get-started/git-basics/managing-remote-repositories)
+for details.
+
 To publish those files to GitHub Wiki later, clone the wiki repository and use
 it as the output directory:
 
 ```sh
-git clone https://github.com/mattilaa/mlang.wiki.git /tmp/mlang.wiki
+git clone git@github.com:mattilaa/mlang.wiki.git /tmp/mlang.wiki
 python3 scripts/generate_github_wiki.py --output /tmp/mlang.wiki
 cd /tmp/mlang.wiki
 git add .
 git commit -m "Update MLang wiki documentation"
 git push
+```
+
+If an existing HTTPS clone prompts for a username and you prefer your configured
+SSH key, press Ctrl-C to cancel the prompt, then switch its remote and retry:
+
+```sh
+git -C /tmp/mlang.wiki remote set-url origin git@github.com:mattilaa/mlang.wiki.git
+git -C /tmp/mlang.wiki push
 ```
 
 Use `--repo-url` if the GitHub repository owner or URL differs from

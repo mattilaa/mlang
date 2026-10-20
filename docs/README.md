@@ -27,6 +27,7 @@ pages.
   - [DSP library](#dsp-library)
   - [Practical examples](#practical-examples)
 - [Design direction](#design-direction)
+- [Contributing documentation](#contributing-documentation)
 - [See also](#see-also)
 
 ## What MLang Is
@@ -248,6 +249,16 @@ In practical terms that means:
 - adding modern safety and ergonomics where they help most
 
 The language is intentionally pragmatic rather than ideological.
+
+## Contributing Documentation
+
+Edit the original documentation sources, then regenerate `docs/wiki/` with
+`python3 scripts/generate_github_wiki.py` from the repository root. Commit source
+and generated changes together.
+
+See the [wiki contributor workflow](../README.md#github-wiki-export) for Python
+requirements, registering new pages, reviewing output, and publishing to the
+separate GitHub Wiki repository.
 
 ## See Also
 
