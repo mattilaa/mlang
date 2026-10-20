@@ -108,6 +108,7 @@ Currently provided:
   - `std::algorithm::regex`: regex helpers mirroring `std::regex`
   - `std::algorithm::genetic`: GA helpers for genome/population evolution,
     including flat-population genome extraction/replacement.
+- [`std::ranges::views`](../docs/stdlib/std_ranges_views.md): lazy, indexable list prefix/suffix views
 - `std/esc.mla`: ANSI terminal escape helpers with named color/cursor values
   cursor control (`fg/bg/reset`, `bold_on/off`, `underline_on/off`,
   `cursor_code`, `cursor_move`), auto-disabled when `std::term::supports_ansi()`

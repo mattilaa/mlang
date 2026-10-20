@@ -39,6 +39,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::algorithm::numeric", "std_algorithm_numeric.md"),
     ("std::algorithm::order", "std_algorithm_order.md"),
     ("std::algorithm::ranges", "std_algorithm_ranges.md"),
+    ("std::ranges::views", "std_ranges_views.md"),
     ("std::argparser", "std_argparser.md"),
     ("std::array", "std_array.md"),
     ("std::audio", "std_audio.md"),

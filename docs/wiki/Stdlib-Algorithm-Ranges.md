@@ -492,11 +492,11 @@ fn example() {
   `remove_copy_if_to_heterogeneous_projected` preserve the bounded progress
   behavior while converting retained source values to a distinct output type.
 - `to_list(data)` materializes a same-typed list copy, the basic eager-list
-  counterpart to C++23 [`std::ranges::to`](Stdlib-Module-API). Use
-  `to_list_projected(data, projection)` to convert each value; the output type
-  is inferred from the projection. `to_list_nested_projected` applies that
-  conversion to nested lists while preserving row lengths, including empty
-  rows. `to_list` accepts lists and compatible flat or nested fixed arrays;
+  counterpart to C++23 [`std::ranges::to`](Stdlib-Module-API). Use `to_list_projected(data,
+  projection)` to convert each value; the output type is inferred from the
+  projection. `to_list_nested_projected` applies that conversion to nested
+  lists while preserving row lengths, including empty rows.
+  `to_list` accepts lists and compatible flat or nested fixed arrays;
   `to_list_projected` also accepts compatible flat fixed arrays, while the
   nested projected overload accepts nested lists.
 - `to_list_from_flat_set`, `to_list_from_flat_multiset`,

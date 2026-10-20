@@ -14,6 +14,7 @@ VST3 plugins) is now developed in its own repository: <https://github.com/mattil
 ## Table Of Contents
 
 - [What Is Mlang](#what-is-mlang)
+- [Release Notes](https://github.com/mattilaa/mlang/blob/main/RELEASE_NOTES.md)
 - [Compile-Time Evaluation With `cexpr`](#compile-time-evaluation-with-cexpr)
 - [`likely` And `unlikely` Branch Hints](#likely-and-unlikely-branch-hints)
 - [Checked Narrow Integer Casts](#checked-narrow-integer-casts)
@@ -1750,6 +1751,14 @@ Use `--repo-url` if the GitHub repository owner or URL differs from
 `https://github.com/mattilaa/mlang`.
 
 ## AddressSanitizer Verification
+The GitHub Actions `Build and Test` workflow runs separate ASan builds and tests
+on every CI platform (Linux and macOS) for pushes, pull requests, and manual runs.
+These jobs instrument the C/C++ compiler and runtime, including the macOS
+Objective-C audio backend, and run CTest, Robot, LSP, and formatter tests. Generated
+programs and self-hosted tools link the ASan runtime. Leak detection is disabled
+in CI; address checks remain enabled. Results are uploaded as
+`test-results-asan-linux` and `test-results-asan-macos`, including CTest logs on failure.
+
 After a clean workspace, run the helper script that configures an AddressSanitizer build and runs the unit and robot test suites under ASan:
 
 ```sh

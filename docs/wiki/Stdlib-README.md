@@ -104,13 +104,13 @@ Currently provided:
     (`accumulate_i64`, `partial_sum_i64`, `adjacent_difference_i64`,
      `inner_product_i64`)
   - [`std::algorithm::ranges`](Stdlib-Algorithm-Ranges): C++20 ranges-style helpers for [`list<i64>`](Quick-Guide#types)
-  - [`std::ranges::views`](Stdlib-Ranges-Views): lazy, indexable list prefix/suffix views
     (`unique_i64`, `unique_stable_i64`, `find_i64`, `count_i64`,
      `contains_i64`, `remove_i64`, `take_i64`, `drop_i64`)
   - [`std::algorithm::rand`](Stdlib-Module-API): random helpers mirroring [`std::rand`](Stdlib-Rand)
   - [`std::algorithm::regex`](Stdlib-Module-API): regex helpers mirroring [`std::regex`](Stdlib-Regex)
   - [`std::algorithm::genetic`](Stdlib-Algorithm-Genetic): GA helpers for genome/population evolution,
     including flat-population genome extraction/replacement.
+- [`std::ranges::views`](Stdlib-Ranges-Views): lazy, indexable list prefix/suffix views
 - `std/esc.mla`: ANSI terminal escape helpers with named color/cursor values
   cursor control (`fg/bg/reset`, `bold_on/off`, `underline_on/off`,
   `cursor_code`, `cursor_move`), auto-disabled when [`std::term::supports_ansi()`](Stdlib-Term)

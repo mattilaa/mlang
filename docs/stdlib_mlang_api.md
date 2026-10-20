@@ -151,6 +151,7 @@ The source-of-truth implementation files are:
 - [std::algorithm::genetic](stdlib/std_algorithm_genetic.md)
 - [std::algorithm::order](stdlib/std_algorithm_order.md)
 - [std::algorithm::ranges](stdlib/std_algorithm_ranges.md)
+- [std::ranges::views](stdlib/std_ranges_views.md)
 
 ## Collections and Data
 
