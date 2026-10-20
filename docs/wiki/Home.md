@@ -29,6 +29,7 @@ pages.
   - [DSP library](#dsp-library)
   - [Practical examples](#practical-examples)
 - [Design direction](#design-direction)
+- [Contributing documentation](#contributing-documentation)
 - [See also](#see-also)
 
 ## What MLang Is
@@ -91,8 +92,9 @@ If you are new to MLang, read these pages in this order:
 - [Package Manager](Package-Manager)
   `mlang pkg` workflows, subcommands, manifest layout, and package build
   configuration keys.
-- [Debugging native programs](https://github.com/mattilaa/mlang/blob/main/docs/debugging.md)
-  GDB and LLDB usage with compiler-emitted DWARF source locations.
+- [mladbg Debugger](Mladbg)
+  Build a debug executable, step through source, inspect variables and stack
+  frames, set breakpoints and watchpoints, and use the LLDB-powered terminal UI.
 - [Registry Protocol v1](Registry-Protocol)
   Registry index, archive, publishing, integrity, and trust requirements.
 - [UML UI Generator Example](UML-UI-Generator)
@@ -101,7 +103,7 @@ If you are new to MLang, read these pages in this order:
   Every multi-file project under `examples/<name>/`, with a short description
   and its build or run command.
 - [Ownership Model Notes](https://github.com/mattilaa/mlang/blob/main/docs/ownership_model.h)
-  Current ownership, move/copy rules, `std::copy` caveats, and closure status.
+  Current ownership, move/copy rules, [`std::copy`](Stdlib-Module-API) caveats, and closure status.
 
 ## First Example
 
@@ -249,6 +251,16 @@ In practical terms that means:
 - adding modern safety and ergonomics where they help most
 
 The language is intentionally pragmatic rather than ideological.
+
+## Contributing Documentation
+
+Edit the original documentation sources, then regenerate `docs/wiki/` with
+`python3 scripts/generate_github_wiki.py` from the repository root. Commit source
+and generated changes together.
+
+See the [wiki contributor workflow](Project-README#github-wiki-export) for Python
+requirements, registering new pages, reviewing output, and publishing to the
+separate GitHub Wiki repository.
 
 ## See Also
 

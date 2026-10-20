@@ -27,6 +27,7 @@ pages.
   - [DSP library](#dsp-library)
   - [Practical examples](#practical-examples)
 - [Design direction](#design-direction)
+- [Contributing documentation](#contributing-documentation)
 - [See also](#see-also)
 
 ## What MLang Is
@@ -89,8 +90,9 @@ If you are new to MLang, read these pages in this order:
 - [Package Manager](package_manager.md)
   `mlang pkg` workflows, subcommands, manifest layout, and package build
   configuration keys.
-- [Debugging native programs](debugging.md)
-  GDB and LLDB usage with compiler-emitted DWARF source locations.
+- [mladbg Debugger](debugging.md)
+  Build a debug executable, step through source, inspect variables and stack
+  frames, set breakpoints and watchpoints, and use the LLDB-powered terminal UI.
 - [Registry Protocol v1](registry_protocol.md)
   Registry index, archive, publishing, integrity, and trust requirements.
 - [UML UI Generator Example](uml_ui_generator.md)
@@ -247,6 +249,16 @@ In practical terms that means:
 - adding modern safety and ergonomics where they help most
 
 The language is intentionally pragmatic rather than ideological.
+
+## Contributing Documentation
+
+Edit the original documentation sources, then regenerate `docs/wiki/` with
+`python3 scripts/generate_github_wiki.py` from the repository root. Commit source
+and generated changes together.
+
+See the [wiki contributor workflow](../README.md#github-wiki-export) for Python
+requirements, registering new pages, reviewing output, and publishing to the
+separate GitHub Wiki repository.
 
 ## See Also
 

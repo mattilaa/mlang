@@ -39,6 +39,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::algorithm::numeric", "std_algorithm_numeric.md"),
     ("std::algorithm::order", "std_algorithm_order.md"),
     ("std::algorithm::ranges", "std_algorithm_ranges.md"),
+    ("std::ranges::views", "std_ranges_views.md"),
     ("std::argparser", "std_argparser.md"),
     ("std::array", "std_array.md"),
     ("std::audio", "std_audio.md"),
@@ -165,6 +166,7 @@ PAGES: list[Page] = [
     for module, filename in STDLIB_MODULE_DOCS
 ] + [
     Page(Path("bootstrap/README.md"), "Bootstrap", "Bootstrap", "Tooling"),
+    Page(Path("docs/debugging.md"), "mladbg Debugger", "Mladbg", "Tooling"),
     Page(Path("tools/mlangpkg/README.md"), "mlangpkg", "Mlangpkg", "Tooling"),
     Page(Path("docs/package_manager.md"), "Package Manager", "Package-Manager", "Tooling"),
     Page(Path("docs/registry_protocol.md"), "Registry Protocol v1", "Registry-Protocol", "Tooling"),

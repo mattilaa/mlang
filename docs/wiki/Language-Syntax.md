@@ -430,7 +430,7 @@ conservatively tracks the receiver and pointer arguments.
 An aggregate that stores a borrow keeps the borrowed place reserved while that
 aggregate remains live. A struct literal may retain multiple exclusive
 borrows when their source places are disjoint; overlapping borrows are
-rejected. Copying an aggregate containing an exclusive borrow with `std::copy`
+rejected. Copying an aggregate containing an exclusive borrow with [`std::copy`](Stdlib-Module-API)
 or extracting its exclusive pointer is rejected, and the aggregate cannot
 outlive the borrowed local. Appending multiple exclusive borrows to a list is
 also supported when their source places are known to be disjoint; dynamic or
@@ -1095,7 +1095,7 @@ Callable closure values can be written with Rust-like function types. The
 parameter and result types are explicit, and the value can be accepted as a
 function parameter or declared as a local:
 
-```mla
+```rust
 fn invoke(callback: fn(i32) -> void, value: i32) -> void {
     callback(value);
 }
@@ -1110,7 +1110,7 @@ fn main() -> i32 {
 When a local has an explicit callable type, omitted closure parameter types
 are inferred from that signature, both on initialization and on assignment:
 
-```mla
+```rust
 let add_one: fn(i32) -> i32 = |value| { return value + 1; };
 ```
 
@@ -1124,7 +1124,7 @@ a local that will go out of scope before the callable.
 
 Use a type alias when a callback signature is shared by several functions:
 
-```mla
+```rust
 alias IntMapper = fn(i32) -> i32;
 
 fn apply(mapper: IntMapper, value: i32) -> i32 {
@@ -1136,7 +1136,7 @@ An ordinary named function with a matching signature can also be passed
 directly as a callback. The compiler adapts it to the closure calling
 convention; overloaded names must have one unambiguous match:
 
-```mla
+```rust
 fn square(value: i32) -> i32 { return value * value; }
 fn apply(mapper: IntMapper, value: i32) -> i32 {
     return mapper(value);
@@ -1151,7 +1151,7 @@ Generic functions can also accept and invoke a named function item as a
 callable parameter. The other arguments infer its concrete signature, which
 lets an overloaded function item be selected after generic type substitution:
 
-```mla
+```rust
 generic<T> fn apply(mapper: fn(T) -> T, value: T) -> T {
     return mapper(value);
 }
@@ -1164,7 +1164,7 @@ fn main() -> i32 {
 This also supports captureless inline lambdas and bound lambdas with explicitly
 typed parameters:
 
-```mla
+```rust
 fn main() -> i32 {
     var offset: i64 = 3;
     let inline_result = apply(|value| { return value + offset; }, 8);
@@ -1184,7 +1184,7 @@ passed by reference elsewhere in the same call.
 Generic callbacks can infer their result type from the closure body, including
 returns nested in conditional branches:
 
-```mla
+```rust
 generic<T> fn provide(make: fn() -> T) -> T { return make(); }
 let result = provide(|| {
     if (condition) { return 7; }
@@ -1200,7 +1200,7 @@ on structs), tuple projections such as `value.0`, and basic unary operators
 are also supported in inferred results.
 List and array-fill literals infer their element type from the closure
 parameters. Ternary expressions are supported when both branches have the same
-type, and `match` expressions when every arm has the same result type.
+type, and [`match`](Language-Syntax) expressions when every arm has the same result type.
 The inferred result may also be returned through a local binding inside the
 closure body, including one declared in a nested block (for example,
 `let result = value * value; return result;`).
@@ -1208,7 +1208,7 @@ closure body, including one declared in a nested block (for example,
 An unambiguous named function also infers its callable type in a local. If the
 name is overloaded, add an explicit function type to select its signature:
 
-```mla
+```rust
 let square_fn = square;
 var selected: IntMapper = square;
 selected = square_fn;
@@ -1217,7 +1217,7 @@ selected = square_fn;
 Non-borrowing closures can also be returned and then invoked through a typed
 local:
 
-```mla
+```rust
 fn make_reader() -> fn() -> i32 {
     let read = || { return 17; };
     return read;
@@ -1231,7 +1231,7 @@ fn main() -> i32 {
 
 A runtime closure may also take a function-typed parameter and invoke it:
 
-```mla
+```rust
 fn invoke(callback: fn() -> i32) -> i32 {
     let wrapper: fn(fn() -> i32) -> i32 = |callable| {
         return callable();
@@ -1242,13 +1242,13 @@ fn invoke(callback: fn() -> i32) -> i32 {
 
 When a function returns a callable type, a local initialized from that call
 inherits the callable signature, so repeating the annotation is optional for
-both `let` and `var`.
+both [`let`](Language-Syntax) and [`var`](Language-Syntax).
 
 A function can also return a named function as a callable value. When that
 name is overloaded, the declared return signature selects the matching
 overload:
 
-```mla
+```rust
 fn square(value: i32) -> i32 { return value * value; }
 fn square(value: i64) -> i64 { return value * value; }
 
@@ -1264,7 +1264,7 @@ fn main() -> i32 {
 A mutable callable local can be reassigned from another compatible callable
 value and then invoked through the same signature:
 
-```mla
+```rust
 var transform = make_incrementer();
 transform = make_doubler();
 let result = transform(9);
@@ -1282,7 +1282,7 @@ or ignores that parameter; storing it, returning it, forwarding it, or passing
 it to an opaque/external function is rejected. This no-escape analysis is
 intentionally conservative. The current proof recognizes direct invocations
 including calls nested inside unary, binary, ternary, cast, or `try` expressions,
-in straight-line code, nested blocks, `if`/`else` branches, `while`/`for` loops,
+in straight-line code, nested blocks, [`if`](Language-Syntax)/[`else`](Language-Syntax) branches, [`while`](Language-Syntax)/[`for`](Language-Syntax) loops,
 `try`/`catch` blocks, and print/assert expressions; other statement forms
 remain rejected until they can be analyzed safely.
 
@@ -1390,7 +1390,7 @@ compile-time errors, while dynamic indexes keep a runtime bounds guard before
 loading.
 
 Mutable lists and fixed arrays also support indexed writes. The binding must
-be declared with `var`, or the function parameter must be `&mut`; a `let`
+be declared with [`var`](Language-Syntax), or the function parameter must be `&mut`; a [`let`](Language-Syntax)
 binding and an immutable `&list<T>` parameter remain read-only:
 
 ```rust
