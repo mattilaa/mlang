@@ -1,0 +1,146 @@
+/// \file borrowing_v040_demo.mla
+/// @ingroup examples
+/// \brief Borrowing in MLang 0.4.0: last uses, disjoint places, and aliases.
+///
+// Build and run from the repository root:
+//   build/mlang examples/borrowing_v040_demo.mla -o /tmp/mlang-borrowing-demo
+//   /tmp/mlang-borrowing-demo
+//
+// All active code should compile. Uncomment one REJECT line at a time to
+// explore a compiler diagnostic, then comment it out again before continuing.
+// These are local borrow checks, not a complete lifetime/type system.
+// Raw-pointer loads and stores require unsafe; unsafe does not erase a known
+// shared borrow or permit conflicting accesses to a borrowed place.
+
+struct Pair { var left: i32; var right: i32; };
+struct View { var pointer: ptr<i32>; };
+
+fn shared_readers() -> i32 {
+    let value: i32 = 10;
+    let first: ptr<i32> = &value;
+    let second: ptr<i32> = first; // A shared pointer can be aliased.
+    // Reuse the pointer here: the current checker conservatively rejects a
+    // second direct &value while the first direct pointer borrow is live.
+    // Several shared readers may coexist. Keep both live by using them below.
+    // REJECT: let writer: ptr<i32> = &mut value;
+    // REJECT: unsafe { *first = 20; }
+    unsafe { println!("shared readers: {} {}", *first, *second); }
+    unsafe { return *first + *second; }
+}
+
+fn exclusive_writer() -> i32 {
+    var value: i32 = 1;
+    // let makes the pointer binding immutable; it does not make its pointee
+    // read-only. &mut requires mutable source storage (a var here).
+    let writer: ptr<i32> = &mut value;
+    // While writer is live, use it to access value rather than the owner.
+    // REJECT: println!("{}", value);
+    // REJECT: value = 99;
+    unsafe { *writer = *writer + 4; } // Last use of writer.
+    value = value + 1;                // Owner is available again.
+    return value;
+}
+
+fn independent_fields() -> i32 {
+    var pair: Pair = Pair { left: 3, right: 7 };
+    let left: ptr<i32> = &mut pair.left;
+    let right: ptr<i32> = &mut pair.right;
+    // Disjoint fields can be borrowed exclusively at the same time.
+    // REJECT: pair.left = 99;
+    unsafe {
+        *left = *left + 1;
+        *right = *right + 2;
+    }
+    return pair.left + pair.right;
+}
+
+fn independent_elements() -> i32 {
+    var values: list<i32> = [2, 4, 6];
+    let first: ptr<i32> = &mut values[0];
+    let second: ptr<i32> = &mut values[1];
+    // Constant indices prove these elements differ. Unknown/dynamic indices
+    // are checked conservatively when the compiler cannot prove separation.
+    values[2] = 8; // A third, disjoint element can still be assigned.
+    // Growing the list could reallocate its storage and invalidate first.
+    // REJECT: values.push(10);
+    unsafe { return *first + *second + values[2]; }
+}
+
+fn temporary_reborrow() -> i32 {
+    var value: i32 = 4;
+    let parent: ptr<i32> = &mut value;
+    let child: ptr<i32> = &mut *parent;
+    // The child temporarily reserves the parent's access to this place.
+    // REJECT: unsafe { *parent = 8; }
+    unsafe { *child = 12; } // Child's last use restores parent access.
+    // The parent's original exclusive borrow is still active here.
+    // REJECT: value = 99;
+    unsafe { *parent = *parent + 1; }
+    return value;
+}
+
+// Visible forwarding functions preserve a pointer's borrow origin. Returning
+// a pointer parameter does not create independent storage or shorten a borrow.
+fn relay(pointer: ptr<i32>) -> ptr<i32> { return pointer; }
+
+fn forwarded_borrow() -> i32 {
+    var value: i32 = 5;
+    let forwarded: ptr<i32> = relay(&value);
+    // REJECT: value = 99;
+    unsafe { println!("forwarded reader: {}", *forwarded); }
+    value = 6; // Returned pointer's last use has ended the shared borrow.
+    return value;
+}
+
+fn stored_borrow() -> i32 {
+    var value: i32 = 7;
+    let view: View = View { pointer: &value };
+    // A struct field retains the pointer's origin and access restrictions.
+    // Putting a borrow in a container does not hide it from the checker.
+    // REJECT: value = 99;
+    // REJECT: unsafe { *view.pointer = 99; }
+    unsafe { return *view.pointer; }
+}
+
+fn borrowed_capture() -> i32 {
+    var value: i32 = 9;
+    let reader: ptr<i32> = &value;
+    // A closure capturing the reader keeps its borrow alive until last use.
+    let read_value: fn() -> i32 = || { unsafe { return *reader; } };
+    // REJECT: value = 99;
+    let observed: i32 = read_value();
+    value = 10; // No later use of the closure or reader.
+    return observed + value;
+}
+
+// A pointer into a local cannot escape through a forwarding helper either.
+// To try this diagnostic, uncomment this entire function:
+// fn dangling_pointer() -> ptr<i32> {
+//     var local_value: i32 = 7;
+//     return relay(&local_value); // Rejected: local dies when function returns.
+// }
+//
+// External/opaque pointer-taking functions need an explicit unsafe boundary
+// for local borrows because the compiler cannot prove whether they retain a
+// pointer. That boundary leaves lifetime correctness to the caller; it does
+// not permit passing a known shared borrow to a mutating pointer parameter.
+
+fn main() -> i32 {
+    let shared: i32 = shared_readers();
+    let exclusive: i32 = exclusive_writer();
+    let fields: i32 = independent_fields();
+    let elements: i32 = independent_elements();
+    let reborrow: i32 = temporary_reborrow();
+    let forwarded: i32 = forwarded_borrow();
+    let stored: i32 = stored_borrow();
+    let captured: i32 = borrowed_capture();
+    println!("results: {} {} {} {} {} {} {} {}",
+        shared, exclusive, fields, elements, reborrow, forwarded, stored, captured);
+    // Expected: 20 6 13 14 13 6 7 19. Nonzero means a result was unexpected.
+    if shared != 20 || exclusive != 6 || fields != 13 || elements != 14 ||
+        reborrow != 13 || forwarded != 6 || stored != 7 || captured != 19 {
+        return 1;
+    }
+    println!("All borrowing examples passed.");
+    return 0;
+}

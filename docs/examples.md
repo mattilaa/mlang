@@ -192,6 +192,10 @@ for sequential output.
   (up to `10x10`) for a larger rectangular TUI, or combine it with `--batch`
   for sequential output. Pass `--usesquarefloats --size=4x4` to enable the
   inverse, determinant, and eigen operations on a sized square `f64` matrix.
+- `examples/borrowing_v040_demo.mla` — commented, runnable 0.4.0 borrowing
+  walkthrough: shared/exclusive access, last uses, disjoint fields and elements,
+  reborrows, forwarded pointers, aggregates, and closure captures. Commented-out
+  rejection examples show the corresponding safety checks.
 - `examples/borrowing_demo.mla` — borrowing syntax and compiler-enforced
   ownership behavior.
 - `examples/borrow_patterns.mla` — practical borrow patterns for containers
