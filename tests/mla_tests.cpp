@@ -8820,6 +8820,40 @@ TEST_F(MLATest, FunctionRejectsSharedAndMutableAliasing)
     EXPECT_NE(out.find("cannot borrow"), std::string::npos);
 }
 
+TEST_F(MLATest, NestedMutableReferenceDoesNotAcceptSingleBorrow)
+{
+    writeSource(R"(
+        fn set(value: &mut &mut i32) -> void { value = 42; }
+        fn main() -> i32 {
+            var value: i32 = 1;
+            set(&mut value);
+            return 0;
+        }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("no matching overload for function 'set'"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, NestedPointerDemoReplacesInnerPointer)
+{
+    const fs::path example = fs::path(__FILE__).parent_path().parent_path() /
+                             "examples/nested_pointer_demo.mla";
+    std::ifstream input(example);
+    ASSERT_TRUE(input.is_open()) << example;
+    std::ostringstream source;
+    source << input.rdbuf();
+    writeSource(source.str());
+    for(const std::string options : {"-O0", "-O2"})
+    {
+        SCOPED_TRACE(options);
+        ASSERT_TRUE(compile(true, options));
+        EXPECT_EQ(runExitCode(), 0);
+    }
+}
+
 TEST_F(MLATest, FunctionRejectsMutableBorrowWhileSharedBorrowIsLive)
 {
     std::string code = R"(

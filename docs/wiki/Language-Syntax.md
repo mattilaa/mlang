@@ -404,6 +404,30 @@ i ^= 2;  // 10
 i &= 7;  // 2
 ```
 
+### Nested References and Pointers
+
+The parser accepts nested reference types such as `&mut &mut i32`, but nested
+reference semantics are not currently supported. Do not treat this spelling as
+a working reference to a mutable reference. In particular, a function parameter
+of type `&mut &mut i32` does not accept `&mut value` when `value` is an `i32`.
+
+For explicit pointer indirection, use `ptr<ptr<T>>`. The outer pointer addresses
+storage containing an inner `ptr<T>`; assigning through the outer pointer
+replaces the inner pointer. Pointer dereferences require `unsafe` and remain
+subject to borrow checking.
+
+```mla
+fn select_second(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+    var selected: ptr<i32> = first;
+    let slot: ptr<ptr<i32>> = &mut selected;
+    unsafe { *slot = second; }
+    return selected;
+}
+```
+
+See @ref examples/nested_pointer_demo.mla "nested_pointer_demo.mla" for a
+runnable example. This demonstrates explicit pointers, not nested `&mut` types.
+
 ### Local Borrow Checking
 
 Taking `&value` creates a shared borrow, while `&mut value` creates an

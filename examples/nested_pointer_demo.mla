@@ -1,0 +1,27 @@
+/// \file nested_pointer_demo.mla
+/// @ingroup examples
+/// \brief Replaces an inner pointer through a pointer to its storage.
+///
+/// `&mut &mut i32` is parsed, but nested reference semantics are not currently
+/// supported. Use explicit ptr<ptr<i32>> for two levels of pointer indirection.
+
+fn select_second(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
+    var selected: ptr<i32> = first;
+    // The outer pointer addresses the slot holding the inner pointer.
+    let slot: ptr<ptr<i32>> = &mut selected;
+    unsafe {
+        // Replace the inner pointer, rather than changing the pointed-to i32.
+        *slot = second;
+    }
+    return selected;
+}
+
+fn main() -> i32 {
+    var first: i32 = 1;
+    var second: i32 = 42;
+    let selected = select_second(&mut first, &mut second);
+    unsafe {
+        let actual: i32 = *selected;
+        return actual == 42 ? 0 : 1;
+    }
+}
