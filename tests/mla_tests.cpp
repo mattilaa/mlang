@@ -261,6 +261,63 @@ TEST_F(MLATest, MainReturnsValue)
     EXPECT_EQ(compileAndRunExitCode(code), 42);
 }
 
+TEST_F(MLATest, CompoundAssignmentOperators)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        fn main() -> i32 {
+            var i: i32 = 3;
+            i += 1;
+            if i != 4 { return 1; }
+            i *= 2;
+            if i != 8 { return 2; }
+            i ^= 2;
+            if i != 10 { return 3; }
+            i &= 7;
+            if i != 2 { return 4; }
+            i |= 8;
+            if i != 10 { return 5; }
+            i -= 2;
+            if i != 8 { return 6; }
+            i /= 2;
+            if i != 4 { return 7; }
+            i %= 3;
+            if i != 1 { return 8; }
+            i <<= 4;
+            if i != 16 { return 9; }
+            i >>= 2;
+            return i == 4 ? 0 : 10;
+        }
+    )"), 0);
+}
+
+TEST_F(MLATest, BitwiseAndAssignmentOnMutableTargets)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        struct Flags { var value: u32; };
+        fn main() -> i32 {
+            var flags = Flags { value: 15u32 };
+            flags.value &= 6u32;
+            var values: mutmultiarray<i32, 2> = {15, 7};
+            values[0] &= 5;
+            var narrow: u8 = 15u8;
+            narrow &= 3u8;
+            return flags.value == 6u32 && values[0] == 5 && narrow == 3u8 ? 0 : 1;
+        }
+    )"), 0);
+}
+
+TEST_F(MLATest, BitwiseAndAssignmentRejectsImmutableTarget)
+{
+    writeSource(R"(
+        fn main() -> i32 {
+            let flags: i32 = 15;
+            flags &= 7;
+            return flags;
+        }
+    )");
+    EXPECT_TRUE(compile(false));
+}
+
 TEST_F(MLATest, MainReturnsExpression)
 {
     std::string code = R"(

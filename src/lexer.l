@@ -490,6 +490,7 @@ static int mla_lex_peek_branch_declaration()
 "*="            { return MULTIPLY_ASSIGN; }
 "/="            { return DIVIDE_ASSIGN; }
 "%="            { return MODULO_ASSIGN; }
+"&="            { return AMP_ASSIGN; }
 "|="            { return PIPE_ASSIGN; }
 "^="            { return CARET_ASSIGN; }
 "<<="           { return SHL_ASSIGN; }
