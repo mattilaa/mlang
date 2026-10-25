@@ -2016,7 +2016,7 @@ enum UpdatePosition
 %token PLUS_PLUS MINUS_MINUS
 %token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE PIPE_GT CARET NOT TILDE SHL SHR
 %token PLUS_ELLIPSIS MULTIPLY_ELLIPSIS AMP_AMP_ELLIPSIS PIPE_PIPE_ELLIPSIS COMMA_ELLIPSIS
-%token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN PIPE_ASSIGN CARET_ASSIGN SHL_ASSIGN SHR_ASSIGN
+%token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN AMP_ASSIGN PIPE_ASSIGN CARET_ASSIGN SHL_ASSIGN SHR_ASSIGN
 %token <sval> DEREF_ASSIGN_IDENT
 %token LT GT LE GE EQ NE SPACESHIP
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT COLON_BLOCK
@@ -3180,6 +3180,10 @@ assignment_statement
         { $$ = make_compound_assign($1, MODULO, $3, yylineno); }
     | condition_postfix MODULO_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, MODULO, $3, yylineno); }
+    | postfix_expression AMP_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, AMP, $3, yylineno); }
+    | condition_postfix AMP_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, AMP, $3, yylineno); }
     | postfix_expression PIPE_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, PIPE, $3, yylineno); }
     | condition_postfix PIPE_ASSIGN expression SEMICOLON

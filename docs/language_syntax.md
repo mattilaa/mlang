@@ -386,6 +386,20 @@ accepts a pointer expression, including a pointer stored in a struct field;
 the pointer can be used in place without copying it out of a borrow-owning
 aggregate.
 
+### Compound Assignment
+
+Mutable targets support `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`,
+`<<=`, and `>>=` with the corresponding binary operator type rules.
+`^=` performs bitwise XOR.
+
+```mla
+var i: i32 = 3;
+i += 1;  // 4
+i *= 2;  // 8
+i ^= 2;  // 10
+i &= 7;  // 2
+```
+
 ### Local Borrow Checking
 
 Taking `&value` creates a shared borrow, while `&mut value` creates an
