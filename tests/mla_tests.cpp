@@ -290,6 +290,109 @@ TEST_F(MLATest, CompoundAssignmentOperators)
     )"), 0);
 }
 
+TEST_F(MLATest, BitShiftsAcrossIntegerWidths)
+{
+    for(const std::string type : {"i8", "i16", "i32", "i64",
+                                  "u8", "u16", "u32", "u64"})
+    {
+        SCOPED_TRACE(type);
+        EXPECT_EQ(compileAndRunExitCode(
+            "fn main() -> i32 {"
+            "    let value: " + type + " = 12;"
+            "    if (value << 2) != 48 { return 1; }"
+            "    if (value >> 2) != 3 { return 2; }"
+            "    if (value << 0) != value { return 3; }"
+            "    if (value >> 0) != value { return 4; }"
+            "    if (value << 1) != 24 { return 5; }"
+            "    if (value << 3) != 96 { return 6; }"
+            "    if (value >> 1) != 6 { return 7; }"
+            "    if (value >> 3) != 1 { return 8; }"
+            "    if (value >> 4) != 0 { return 9; }"
+            "    return 0;"
+            "}"), 0);
+    }
+}
+
+TEST_F(MLATest, BitShiftRightSignedAndUnsigned)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        fn main() -> i32 {
+            let signed32: i32 = -8;
+            let signed64: i64 = -8;
+            let unsigned32: u32 = 0x80000000u32;
+            // Construct the high bit without an out-of-range signed literal.
+            let unsigned64: u64 = 0x4000000000000000u64 + 0x4000000000000000u64;
+            if (signed32 >> 1) != -4 { return 1; }
+            if (signed64 >> 1i64) != -4i64 { return 2; }
+            if (unsigned32 >> 1u32) != 0x40000000u32 { return 3; }
+            if (unsigned64 >> 1u64) != 0x4000000000000000u64 { return 4; }
+            if (unsigned32 >> 31u32) != 1u32 { return 5; }
+            if (unsigned64 >> 63u64) != 1u64 { return 6; }
+            if (1u32 << 31u32) != unsigned32 { return 7; }
+            if (1u64 << 63u64) != unsigned64 { return 8; }
+            if (0x80u8 >> 7u8) != 1u8 { return 9; }
+            if (1u8 << 7u8) != 0x80u8 { return 10; }
+            if (0x8000u16 >> 15u16) != 1u16 { return 11; }
+            if (1u16 << 15u16) != 0x8000u16 { return 12; }
+            return 0;
+        }
+    )"), 0);
+}
+
+TEST_F(MLATest, BitShiftsWithRuntimeCountsAndCompoundAssignments)
+{
+    writeSource(R"(
+        fn check(count: i64, wide_count: u64, expected_signed: i32,
+                 expected_unsigned: u32, expected_narrow: u8) -> i32 {
+            var signed_value: i32 = -16;
+            var unsigned_value: u32 = 0x80000000u32;
+            var narrow: u8 = 3u8;
+            if (signed_value >> count) != expected_signed { return 1; }
+            if (unsigned_value >> wide_count) != expected_unsigned { return 2; }
+            if (narrow << count) != expected_narrow { return 3; }
+            signed_value >>= count;
+            unsigned_value >>= wide_count;
+            narrow <<= count;
+            if signed_value != expected_signed { return 4; }
+            if unsigned_value != expected_unsigned { return 5; }
+            if narrow != expected_narrow { return 6; }
+            narrow >>= count;
+            unsigned_value <<= wide_count;
+            return narrow == 3u8 && unsigned_value == 0x80000000u32 ? 0 : 7;
+        }
+        fn main() -> i32 {
+            if check(0i64, 0u64, -16, 0x80000000u32, 3u8) != 0 { return 1; }
+            if check(1i64, 1u64, -8, 0x40000000u32, 6u8) != 0 { return 2; }
+            if check(2i64, 2u64, -4, 0x20000000u32, 12u8) != 0 { return 3; }
+            if check(3i64, 3u64, -2, 0x10000000u32, 24u8) != 0 { return 4; }
+            if check(4i64, 4u64, -1, 0x08000000u32, 48u8) != 0 { return 5; }
+            return 0;
+        }
+    )");
+    for(const std::string options : {"-O0", "-O2"})
+    {
+        SCOPED_TRACE(options);
+        ASSERT_TRUE(compile(true, options));
+        EXPECT_EQ(runExitCode(), 0);
+    }
+}
+
+TEST_F(MLATest, BitShiftsRejectFloatingPointOperands)
+{
+    for(const std::string expression : {"1.0 << 2", "1 >> 2.0",
+                                         "1.0 >> 2", "1 << 2.0"})
+    {
+        SCOPED_TRACE(expression);
+        writeSource("fn main() -> i32 { let value = " + expression +
+                    "; return 0; }");
+        int rc = 0;
+        const std::string out = compileCapture(rc);
+        EXPECT_NE(rc, 0);
+        EXPECT_NE(out.find("bitwise operations require integer operands"),
+                  std::string::npos) << out;
+    }
+}
+
 TEST_F(MLATest, BitwiseAndAssignmentOnMutableTargets)
 {
     EXPECT_EQ(compileAndRunExitCode(R"(
