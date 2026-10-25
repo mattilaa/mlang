@@ -108,7 +108,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                 list->addType(t);
             return new TupleTypeNode(list);
         }
-        if(kind == TypeNode::TYPE_PTR)
+        if(kind == TypeNode::TYPE_PTR || kind == TypeNode::TYPE_REF ||
+           kind == TypeNode::TYPE_REF_MUT)
         {
             auto ptrIt = pointerElementTypes.find(id->name);
             if(ptrIt == pointerElementTypes.end())
@@ -117,6 +118,9 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                                       id->name + "'");
                 return nullptr;
             }
+            if(kind != TypeNode::TYPE_PTR)
+                return new ReferenceTypeNode(ptrIt->second,
+                                             kind == TypeNode::TYPE_REF_MUT);
             return new PointerTypeNode(ptrIt->second);
         }
         if(kind == TypeNode::TYPE_TRAIT_OBJECT)
@@ -456,6 +460,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             TypeNode* ptrType = getLValueType(unary->operand, line);
             if(auto* ptrNode = dynamic_cast<PointerTypeNode*>(ptrType))
                 return ptrNode->elementType;
+            if(auto* reference = dynamic_cast<ReferenceTypeNode*>(ptrType))
+                return reference->elementType;
 
             reportError(line, "dereference requires a pointer value");
             return nullptr;

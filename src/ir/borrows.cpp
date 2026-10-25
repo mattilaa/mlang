@@ -387,6 +387,13 @@ bool CodeGenerator::validateBorrowRead(ExpressionNode* expr, int line)
 bool CodeGenerator::validateBorrowWriteThroughPointer(ExpressionNode* expr,
                                                        int line)
 {
+    if(auto* reference =
+           dynamic_cast<ReferenceTypeNode*>(getLValueType(expr, line)))
+        if(!reference->isMutable)
+        {
+            reportError(line, "cannot write through shared reference");
+            return false;
+        }
     if(auto* address = dynamic_cast<UnaryOpNode*>(expr))
     {
         if(address->op == UnaryOpNode::OP_ADDR)
@@ -423,6 +430,12 @@ bool CodeGenerator::validateBorrowWriteThroughPointer(ExpressionNode* expr,
         current = dereference->operand;
     }
     auto* pointer = dynamic_cast<IdentifierNode*>(current);
+    if(pointer && immutableReferenceVariables.count(pointer->name))
+    {
+        reportError(line, "cannot write through shared reference parameter '" +
+                              pointer->name + "'");
+        return false;
+    }
     // A write through `*outer` mutates the pointer value stored in outer's
     // referent. Validate each pointer in that chain too: an exclusive borrow
     // of the slot does not upgrade a shared pointer stored inside the slot.
@@ -1387,6 +1400,13 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
     TypeNode* escapingValueType = getLValueType(expr, line);
     if(!escapingValueType)
         escapingValueType = inferExpressionTypeNode(expr, line);
+    if(dynamic_cast<ReferenceTypeNode*>(escapingValueType))
+    {
+        reportError(
+            line, "cannot " + action +
+                      " a stored reference before its lifetime is proven safe");
+        return false;
+    }
     const bool isAggregateValue = escapingValueType &&
         (escapingValueType->kind == TypeNode::TYPE_STRUCT ||
          escapingValueType->kind == TypeNode::TYPE_LIST ||
@@ -1622,7 +1642,8 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
     }
     else if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
     {
-        if(unary->op == UnaryOpNode::OP_ADDR)
+        if(unary->op == UnaryOpNode::OP_ADDR ||
+           unary->op == UnaryOpNode::OP_ADDR_MUT)
         {
             const std::string owner =
                 resolveBorrowOwnerFromLValue(unary->operand);
@@ -2951,7 +2972,14 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
     if(!dynamic_cast<IdentifierNode*>(expr))
     {
         const std::string container = resolveBorrowOwnerFromLValue(expr);
-        if(!container.empty() && isMutBorrower(container))
+        auto* address = dynamic_cast<UnaryOpNode*>(expr);
+        bool borrowsReferenceSlot = address &&
+                                    (address->op == UnaryOpNode::OP_ADDR_MUT ||
+                                     address->op == UnaryOpNode::OP_ADDR) &&
+                                    dynamic_cast<ReferenceTypeNode*>(
+                                        getLValueType(address->operand, line));
+        if(!container.empty() && isMutBorrower(container) &&
+           !borrowsReferenceSlot)
         {
             reportError(line,
                         "cannot extract a mutable borrow from aggregate '" +

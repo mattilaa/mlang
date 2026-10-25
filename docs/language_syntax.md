@@ -402,10 +402,46 @@ i &= 7;  // 2
 
 ### Nested References and Pointers
 
-The parser accepts nested reference types such as `&mut &mut i32`, but nested
-reference semantics are not currently supported. Do not treat this spelling as
-a working reference to a mutable reference. In particular, a function parameter
-of type `&mut &mut i32` does not accept `&mut value` when `value` is an `i32`.
+Nested mutable references work for both primitive values and structs. A local
+`&mut T` binding stores a checked reference to `T`; borrowing that binding with
+`&mut` supplies a parameter of type `&mut &mut T`.
+
+```mla
+struct Counter { var value: i32; };
+
+fn increment(reference: &mut &mut Counter) -> void {
+    (*reference).value += 1;
+}
+
+fn main() -> i32 {
+    var counter = Counter { value: 9 };
+    var reference: &mut Counter = &mut counter;
+    increment(&mut reference);
+    return counter.value == 10 ? 0 : 1;
+}
+```
+
+As with other `&mut` parameters, the parameter name accesses the borrowed slot's
+contents. Here those contents are the inner reference: `*reference` accesses
+`T`, and `(*reference).field` accesses a struct field. This requires no `unsafe`
+block. Further nesting and forwarding through named functions are supported.
+Each level preserves its pointee type and mutability; neither a shared inner
+reference nor a shared outer parameter grants write access to the value.
+
+Declare the inner binding with `var` to borrow its storage mutably. Reference
+bindings require a matching `&value` or `&mut value` initializer and cannot be
+null or implicitly zero initialized. A single `&mut value` for an `i32` does not
+match an `&mut &mut i32` parameter. Borrow checking keeps the original value
+reserved while the nested borrow remains in use.
+
+The current support allows mutation of the referenced value. Rebinding the
+inner reference through a nested parameter or borrowed slot is rejected until
+the compiler can track the replacement's lifetime at the caller. Stored
+references cannot escape through returns or global stores without a proven
+lifetime. Use explicit pointers for existing pointer replacement operations.
+
+See @ref examples/nested_mutable_references_demo.mla
+"nested_mutable_references_demo.mla" for a runnable integer and struct example.
 
 For explicit pointer indirection, use `ptr<ptr<T>>`. The outer pointer addresses
 storage containing an inner `ptr<T>`; assigning through the outer pointer
@@ -422,7 +458,7 @@ fn select_second(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
 ```
 
 See @ref examples/nested_pointer_demo.mla "nested_pointer_demo.mla" for a
-runnable example. This demonstrates explicit pointers, not nested `&mut` types.
+runnable example of explicit pointer replacement.
 
 ### Local Borrow Checking
 

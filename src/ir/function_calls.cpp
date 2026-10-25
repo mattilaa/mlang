@@ -2072,7 +2072,7 @@ llvm::Value* CodeGenerator::generateCallableInvocation(
         for(size_t i = 0; i < expectedCount; ++i)
         {
             TypeNode* parameter = callableType->parameterTypes->types[i];
-            llvm::Type* parameterType = getLLVMTypeFromNode(parameter);
+            llvm::Type* parameterType = parameterLLVMType(parameter);
             llvm::Value* argument = generateArgumentValue(
                 node->arguments[i], parameter);
             if(!parameterType || !argument)
@@ -2104,7 +2104,7 @@ llvm::Value* CodeGenerator::generateCallableInvocation(
             callArguments.push_back(argument);
         }
     }
-    llvm::Type* returnType = getLLVMTypeFromNode(callableType->returnType);
+    llvm::Type* returnType = parameterLLVMType(callableType->returnType);
     if(!returnType)
     {
         reportError(node->line, "callable return type is not known");
@@ -2379,7 +2379,72 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 !dynamic_cast<IdentifierNode*>(argument) &&
                 dynamic_cast<PointerTypeNode*>(
                     inferExpressionTypeNode(argument, node->line));
-            if(extractsPointer)
+            bool borrowsReferenceSlot = false;
+            if(auto* address = dynamic_cast<UnaryOpNode*>(argument))
+                if(address->op == UnaryOpNode::OP_ADDR_MUT ||
+                   address->op == UnaryOpNode::OP_ADDR)
+                {
+                    auto* storedReference = dynamic_cast<ReferenceTypeNode*>(
+                        getLValueType(address->operand, node->line));
+                    auto overloads = functionOverloads.find(node->name);
+                    if(storedReference && overloads != functionOverloads.end())
+                    {
+                        bool foundCandidate = false;
+                        bool allCandidatesBorrowSlots = true;
+                        for(const auto& overload : overloads->second)
+                        {
+                            auto* candidate = overload.node;
+                            if(!isOverloadVisible(overload) || !candidate ||
+                               !candidate->parameters ||
+                               candidate->parameters->parameters.size() !=
+                                   node->arguments.size())
+                                continue;
+                            TypeNode* candidateType =
+                                candidate->parameters->parameters[argumentIndex]
+                                    ->type;
+                            if(!candidate->typeParams.empty())
+                            {
+                                std::map<std::string, TypeNode*> bindings;
+                                if(!inferGenericFunctionTypeBindings(
+                                       candidate, node->arguments, bindings))
+                                    continue;
+                                std::vector<TypeNode*> typeArguments;
+                                bool complete = true;
+                                for(const auto& name : candidate->typeParams)
+                                {
+                                    auto binding = bindings.find(name);
+                                    if(binding == bindings.end())
+                                    {
+                                        complete = false;
+                                        break;
+                                    }
+                                    typeArguments.push_back(binding->second);
+                                }
+                                if(!complete)
+                                    continue;
+                                candidateType = substituteTypeParams(
+                                    candidateType, candidate->typeParams,
+                                    typeArguments);
+                            }
+                            auto* outer =
+                                dynamic_cast<ReferenceTypeNode*>(candidateType);
+                            if(outer && typeMangle(outer->elementType) !=
+                                            typeMangle(storedReference))
+                                continue;
+                            foundCandidate = true;
+                            if(!candidate->body || !outer ||
+                               (outer->isMutable &&
+                                address->op != UnaryOpNode::OP_ADDR_MUT))
+                            {
+                                allCandidatesBorrowSlots = false;
+                                break;
+                            }
+                        }
+                        borrowsReferenceSlot =
+                            foundCandidate && allCandidatesBorrowSlots;
+                    }
+                }
+            if(extractsPointer && !borrowsReferenceSlot)
             {
                 reportError(
                     node->line,
@@ -3629,9 +3694,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 callArguments.push_back(argument);
             }
         }
-        llvm::FunctionType* signature = llvm::FunctionType::get(
-            getLLVMTypeFromNode(closureType->returnType),
-            signatureParameters, false);
+        llvm::FunctionType* signature =
+            llvm::FunctionType::get(parameterLLVMType(closureType->returnType),
+                                    signatureParameters, false);
 #if LLVM_VERSION_MAJOR < 15
         code = builder.CreateBitCast(code, signature->getPointerTo(),
                                      node->name + ".callable");
@@ -4657,6 +4722,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
     std::vector<llvm::Value*> argVals;
     argVals.reserve(node->arguments.size());
+    std::vector<bool> sharedReferenceValues(node->arguments.size(), false);
     std::vector<TypeNode*> semanticArgumentTypes;
     semanticArgumentTypes.reserve(node->arguments.size());
     for(size_t i = 0; i < node->arguments.size(); ++i)
@@ -4927,9 +4993,13 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             {
                 auto* unary = dynamic_cast<UnaryOpNode*>(arg);
                 if(!reference->isMutable && unary &&
-                   unary->op == UnaryOpNode::OP_ADDR)
+                   (unary->op == UnaryOpNode::OP_ADDR ||
+                    unary->op == UnaryOpNode::OP_ADDR_MUT))
+                {
                     argVal = generateArgumentValue(unary->operand,
                                                    reference->elementType);
+                    sharedReferenceValues[argIndex] = true;
+                }
                 else
                     argVal = generateArgumentValue(arg, expectedArgumentType);
             }
@@ -4944,7 +5014,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         // the address: a `&mut` parameter writes back through it.
         if(auto* unary = dynamic_cast<UnaryOpNode*>(arg))
         {
-            if(unary->op == UnaryOpNode::OP_ADDR)
+            if(unary->op == UnaryOpNode::OP_ADDR &&
+               !sharedReferenceValues[argIndex])
             {
                 if(auto* id = dynamic_cast<IdentifierNode*>(unary->operand))
                 {
@@ -4956,6 +5027,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     {
                         argVal = builder.CreateLoad(argVal->getType(), argVal,
                                                     id->name + ".str_deref");
+                        sharedReferenceValues[argIndex] = true;
                     }
                 }
             }
@@ -5083,7 +5155,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         dynamic_cast<UnaryOpNode*>(node->arguments[i]);
                     explicitSharedReferenceArgument =
                         !refType->isMutable && unary &&
-                        unary->op == UnaryOpNode::OP_ADDR;
+                        (unary->op == UnaryOpNode::OP_ADDR ||
+                         unary->op == UnaryOpNode::OP_ADDR_MUT);
                     // `&mut x` must name a value of the parameter's type;
                     // without `&mut` the call-site check reports it.
                     if(refType->isMutable)
@@ -5125,7 +5198,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     auto* unary =
                         dynamic_cast<UnaryOpNode*>(node->arguments[i]);
                     if(!reference->isMutable && unary &&
-                       unary->op == UnaryOpNode::OP_ADDR)
+                       (unary->op == UnaryOpNode::OP_ADDR ||
+                        unary->op == UnaryOpNode::OP_ADDR_MUT))
                         actualSemantic = semanticArgumentType(unary->operand);
                 }
                 if(auto* expectedFunction =
@@ -6447,7 +6521,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 best->node->parameters->parameters[i]->type);
             auto* unary = dynamic_cast<UnaryOpNode*>(node->arguments[i]);
             if(reference && !reference->isMutable && unary &&
-               unary->op == UnaryOpNode::OP_ADDR &&
+               (unary->op == UnaryOpNode::OP_ADDR ||
+                unary->op == UnaryOpNode::OP_ADDR_MUT) &&
+               !sharedReferenceValues[i] &&
                callArgVals[i]->getType()->isPointerTy())
                 callArgVals[i] = builder.CreateLoad(
                     callee->getArg(i)->getType(), callArgVals[i],
@@ -6797,9 +6873,8 @@ llvm::Function* CodeGenerator::generateClosureFn(
             closureParameters.push_back(parameterType);
         }
     }
-    llvm::Type* llvmReturnType = returnType
-                                     ? getLLVMTypeFromNode(returnType)
-                                     : llvm::Type::getVoidTy(context);
+    llvm::Type* llvmReturnType = returnType ? parameterLLVMType(returnType)
+                                            : llvm::Type::getVoidTy(context);
     if(!llvmReturnType)
     {
         reportError(node->line,
@@ -7025,6 +7100,16 @@ llvm::Function* CodeGenerator::generateClosureFn(
                     }
                 }
                 variableTypes[parameter->name] = semanticType->kind;
+                if(auto* inner = dynamic_cast<ReferenceTypeNode*>(semanticType))
+                {
+                    pointerElementTypes[parameter->name] = inner->elementType;
+                    pointerBorrowTarget[parameter->name] = parameter->name;
+                    pointerBorrowPlace[parameter->name] = parameter->name;
+                    pointerParameterBorrowOrigins.insert(parameter->name);
+                    if(!inner->isMutable)
+                        activeBorrowers[parameter->name].insert(
+                            parameter->name);
+                }
                 if(auto* pointer =
                        dynamic_cast<PointerTypeNode*>(semanticType))
                 {

@@ -54,6 +54,8 @@ llvm::Type* CodeGenerator::getLLVMType(TypeNode::TypeKind kind)
         return llvm::Type::getInt32Ty(context);
     case TypeNode::TYPE_U64:
         return llvm::Type::getInt64Ty(context);
+    case TypeNode::TYPE_REF:
+    case TypeNode::TYPE_REF_MUT:
     case TypeNode::TYPE_PTR:
 #if LLVM_VERSION_MAJOR >= 15
         return llvm::PointerType::get(context, 0);
@@ -228,10 +230,11 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
     }
 
     // Handle reference type (&T and &mut T)
-    // At LLVM level &string == string (both char*); resolve to element type.
+    // Stored references preserve one pointer level. Parameter lowering handles
+    // the value ABI of shared references separately.
     if(auto* refType = dynamic_cast<ReferenceTypeNode*>(typeNode))
     {
-        return getLLVMTypeFromNode(refType->elementType);
+        return getLLVMType(refType->kind);
     }
 
     // Fall back to basic type kind

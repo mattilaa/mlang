@@ -133,7 +133,7 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
         paramTypes.push_back(paramType);
     }
 
-    llvm::Type* returnType = getLLVMTypeFromNode(method->returnType);
+    llvm::Type* returnType = parameterLLVMType(method->returnType);
     if(!returnType)
     {
         reportError(method->line,
@@ -3030,8 +3030,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     paramTypes.push_back(paramType);
                 }
             }
-            llvm::Type* returnType =
-                getLLVMTypeFromNode(traitMethod->returnType);
+            llvm::Type* returnType = parameterLLVMType(traitMethod->returnType);
             if(!returnType)
             {
                 reportError(node->line,
@@ -3273,8 +3272,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     paramTypes.push_back(paramType);
                 }
             }
-            llvm::Type* returnType =
-                getLLVMTypeFromNode(traitMethod->returnType);
+            llvm::Type* returnType = parameterLLVMType(traitMethod->returnType);
             if(!returnType)
             {
                 reportError(node->line,
@@ -3545,8 +3543,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     paramTypes.push_back(paramType);
                 }
             }
-            llvm::Type* returnType =
-                getLLVMTypeFromNode(traitMethod->returnType);
+            llvm::Type* returnType = parameterLLVMType(traitMethod->returnType);
             if(!returnType)
             {
                 reportError(node->line,

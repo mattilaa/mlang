@@ -182,6 +182,8 @@ TypeNode* CodeGenerator::getPointerElementType(ExpressionNode* expr, int line)
     TypeNode* type = getLValueType(expr, line);
     if(auto* ptrNode = dynamic_cast<PointerTypeNode*>(type))
         return ptrNode->elementType;
+    if(auto* reference = dynamic_cast<ReferenceTypeNode*>(type))
+        return reference->elementType;
 
     reportError(line, "dereference requires a pointer value");
     return nullptr;
@@ -189,6 +191,35 @@ TypeNode* CodeGenerator::getPointerElementType(ExpressionNode* expr, int line)
 
 void CodeGenerator::generateAssignment(AssignmentNode* node)
 {
+    auto kind = variableTypes.find(node->name);
+    if(kind != variableTypes.end() && (kind->second == TypeNode::TYPE_REF ||
+                                       kind->second == TypeNode::TYPE_REF_MUT))
+    {
+        TypeNode* target =
+            getLValueType(new IdentifierNode(node->name), node->line);
+        auto* reference = dynamic_cast<ReferenceTypeNode*>(target);
+        auto* address = dynamic_cast<UnaryOpNode*>(node->expression);
+        TypeNode* source =
+            address ? getLValueType(address->operand, node->line) : nullptr;
+        if(!reference || !address ||
+           (address->op != UnaryOpNode::OP_ADDR &&
+            address->op != UnaryOpNode::OP_ADDR_MUT) ||
+           (reference->isMutable && address->op != UnaryOpNode::OP_ADDR_MUT) ||
+           !source || typeMangle(source) != typeMangle(reference->elementType))
+        {
+            reportError(node->line,
+                        "reference assignment requires a matching borrow");
+            return;
+        }
+        for(const auto& parameter : inoutParams)
+            if(parameter.second == node->name)
+            {
+                reportError(
+                    node->line,
+                    "rebinding a nested reference parameter is not supported");
+                return;
+            }
+    }
     // Check if trying to assign to a constant (let) variable
     if(constantVariables.find(node->name) != constantVariables.end())
     {
@@ -1354,6 +1385,13 @@ void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
     if(!elemTypeNode)
         return;
 
+    if(dynamic_cast<ReferenceTypeNode*>(elemTypeNode))
+    {
+        reportError(
+            node->line,
+            "replacing a reference through a borrowed slot is not supported");
+        return;
+    }
     llvm::Type* elemType = getLLVMTypeFromNode(elemTypeNode);
     if(!elemType)
         return;
