@@ -347,6 +347,7 @@ static int mla_lex_peek_branch_declaration()
 "fn"            { constraint_context = false; return FUNCTION; }
 "concept"       { constraint_context = true; return CONCEPT; }
 "requires"      { constraint_context = true; return REQUIRES; }
+"where"         { constraint_context = true; return WHERE; }
 "typename"      { return TYPENAME; }
 "noexcept"      { return NOEXCEPT; }
 "operator"[ \t\r\n]*\"\"[ \t\r\n]*[a-zA-Z_][a-zA-Z0-9_]* {

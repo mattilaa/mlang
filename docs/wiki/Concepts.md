@@ -4,9 +4,34 @@
 
 # Concepts and Structural Requirements
 Concepts constrain generic code with compile-time boolean predicates. Use a
-named concept to describe a reusable requirement, and a `requires` clause or
+named concept to describe a reusable requirement, and a `where` clause or
 parameter bound to apply it. Structural requirements test whether expressions
 are valid for a type without executing those expressions.
+
+## Two Different Jobs, Two Keywords
+
+`where` filters a generic declaration using a boolean predicate.
+`requires(...) { ... }` produces a boolean by checking structural requirements.
+
+```rust
+// A constraint clause: compile this overload only when the predicate is true.
+generic<T> where type_id(T) == i32
+fn guarded_double(value: T) -> T { return value + value; }
+
+// A structural expression used directly as a constraint.
+generic<T> where requires(value: T) { value + value; }
+fn inline_double(value: T) -> T { return value + value; }
+```
+
+Inside a structural body, `where Predicate;` checks a nested boolean predicate.
+This keeps the roles consistent: `where` consumes a boolean, while `requires`
+builds one from a body of checks. Combining them needs `where requires`, without
+repeating a keyword.
+
+For existing programs, `requires Predicate` clauses and nested
+`requires Predicate;` remain accepted as compatibility forms. New code and
+compiler AST text use `where` for these predicates. Structural expressions keep
+their existing spelling.
 
 ## First Example
 
@@ -16,10 +41,10 @@ use std::concepts::*;
 
 concept Addable<T> = requires(a: T, b: T) {
     { a + b } -> same_as<T>;
-    requires arithmetic<T>;
+    where arithmetic<T>;
 };
 
-generic<T> requires Addable<T>
+generic<T> where Addable<T>
 fn add(a: T, b: T) -> T { return a + b; }
 
 struct Item { var value: i32; };
@@ -58,7 +83,7 @@ fn twice(value: T) -> T { return value + value; }
 Use a prefix clause for compositions or concepts taking several arguments:
 
 ```rust
-generic<T, U> requires same_as<T, U> && arithmetic<T>
+generic<T, U> where same_as<T, U> && arithmetic<T>
 fn add_same(a: T, b: U) -> T { return a + b; }
 ```
 
@@ -74,7 +99,7 @@ predicate or the validity of operations describes the requirement.
 | Simple | `a + b;` | The expression must be well formed; its value is irrelevant. |
 | Type | `typename T;` or `type T;` | The type must exist; generic arity and bounds are checked. |
 | Compound | `{ a + b } -> same_as<T>;` | The expression must be valid and its result type must satisfy the concept. |
-| Nested | `requires arithmetic<T>;` | The compile-time boolean predicate must be true. |
+| Nested | `where arithmetic<T>;` | The compile-time boolean predicate must be true. |
 
 `requires(a: T, b: T) { ... }` introduces local names with types, without
 constructing objects. C++-style `requires(T a, T b) { ... }` is also accepted.
@@ -83,9 +108,9 @@ checked in order until the first failure. Missing members, inaccessible
 operations, invalid substitutions, and unmatched calls make the result false.
 
 Simple and nested requirements differ: `requires { false; }` is true because
-`false` is a valid expression; `requires { requires false; }` is false. Local
+`false` is a valid expression; `requires { where false; }` is false. Local
 parameter values are unavailable for compile-time evaluation, so
-`requires(value: i32) { requires value == 0; }` is false.
+`requires(value: i32) { where value == 0; }` is false.
 
 Compound requirements can use a unary concept (`{ a + b } -> integral;`) or no
 result constraint (`{ a + b };`). The expression's type is inserted as the first
@@ -127,11 +152,13 @@ parameters, or C++ associated type declarations inside structs.
 
 ## Runnable Examples and Reference
 
+- [Boolean constraint clause example](https://github.com/mattilaa/mlang/blob/main/examples/where_constraints_demo.mla)
+- [Structural expression and combined clause example](https://github.com/mattilaa/mlang/blob/main/examples/requires_expression_demo.mla)
 - [Named concepts example](https://github.com/mattilaa/mlang/blob/main/examples/concepts_demo.mla)
 - [Structural requirements example](https://github.com/mattilaa/mlang/blob/main/examples/structural_concepts_demo.mla)
 - [Language syntax reference](Language-Syntax#concepts-and-generic-constraints)
 - [std::concepts reference](Stdlib-Concepts)
-- [Compiler regression tests](https://github.com/mattilaa/mlang/blob/main/tests/mla_tests.cpp): `Concepts*` and `StructuralRequires*`
+- [Compiler regression tests](https://github.com/mattilaa/mlang/blob/main/tests/mla_tests.cpp): `Concepts*`, `StructuralRequires*`, and `WhereConstraint*`
 
 After building the compiler and standard library, run the structural example:
 

@@ -8,20 +8,20 @@ concept Addable<T> = requires(a: T, b: T) {
     a + b;
     typename T;
     { a + b } -> same_as<T>;
-    requires arithmetic<T>;
+    where arithmetic<T>;
 };
 
 concept HasValue<T> = requires(value: T) {
     { value.value } -> integral;
 };
 
-generic<T> requires Addable<T>
+generic<T> where Addable<T>
 fn add(a: T, b: T) -> T { return a + b; }
 
 generic<T>
 fn category(value: T) -> i32 { return 0; }
 
-generic<T> requires HasValue<T>
+generic<T> where HasValue<T>
 fn category(value: T) -> i32 { return 1; }
 
 struct Item { var value: i32; };

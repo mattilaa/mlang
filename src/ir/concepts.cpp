@@ -451,14 +451,14 @@ bool CodeGenerator::satisfiesFunctionConstraints(
             return false;
         if(result.kind != ConstexprValue::Kind::Bool &&
            result.typeKind != TypeNode::TYPE_BOOL)
-            return fail("requires clause must evaluate to bool");
+            return fail("constraint clause must evaluate to bool");
         if(!result.boolValue)
         {
             std::string arguments;
             for(const auto& binding : bindings)
                 arguments += (arguments.empty() ? "" : ", ") + binding.first +
                              " = " + canonicalConstexprTypeName(binding.second);
-            return fail("requires clause '" +
+            return fail("constraint clause '" +
                         function->requiresClause->toString() +
                         "' is not satisfied" +
                         (arguments.empty() ? "" : " for " + arguments));

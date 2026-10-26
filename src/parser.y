@@ -2074,7 +2074,7 @@ enum UpdatePosition
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
 %token PUB IMPL TRAIT DYN
 %token EXTERN
-%token STATIC CEXPR GENERIC CONCEPT REQUIRES TYPENAME NOEXCEPT
+%token STATIC CEXPR GENERIC CONCEPT REQUIRES WHERE TYPENAME NOEXCEPT
 %token ASM VOLATILE SIZEOF
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
@@ -2110,7 +2110,7 @@ enum UpdatePosition
 %token INLINE_NEVER_ATTR
 
 %type <ast> program top_level_list top_level_item test_function_def
-%type <ast> module_asm_declaration literal_function_def concept_def optional_requires
+%type <ast> module_asm_declaration literal_function_def concept_def optional_constraint
 %type <ast> requires_expression requirement_body requirement_list requirement compound_requirement
 %type <ast> requirement_parameters requirement_parameter_list requirement_parameter
 %type <ast> inline_function_def
@@ -2691,7 +2691,7 @@ struct_method
     ;
 
 function_def
-    : GENERIC LT type_param_list GT optional_requires function_def
+    : GENERIC LT type_param_list GT optional_constraint function_def
         {
             auto* fn = static_cast<FunctionDefNode*>($6);
             fn->requiresClause = static_cast<ExpressionNode*>($5);
@@ -2830,8 +2830,9 @@ concept_def
     | PUB concept_def { static_cast<ConceptDefNode*>($2)->isPublic = true; $$ = $2; }
     ;
 
-optional_requires
+optional_constraint
     : /* empty */ { $$ = nullptr; }
+    | WHERE expression { $$ = $2; }
     | REQUIRES expression { $$ = $2; }
     ;
 
@@ -2877,6 +2878,8 @@ requirement
         { auto* node = new RequirementNode(RequirementNode::Type); node->requiredType = static_cast<TypeNode*>($2); node->line = @1.first_line; $$ = node; }
     | TYPE_KW type SEMICOLON
         { auto* node = new RequirementNode(RequirementNode::Type); node->requiredType = static_cast<TypeNode*>($2); node->line = @1.first_line; $$ = node; }
+    | WHERE expression SEMICOLON
+        { auto* node = new RequirementNode(RequirementNode::Nested); node->expression = static_cast<ExpressionNode*>($2); node->line = @1.first_line; $$ = node; }
     | REQUIRES expression SEMICOLON
         { auto* node = new RequirementNode(RequirementNode::Nested); node->expression = static_cast<ExpressionNode*>($2); node->line = @1.first_line; $$ = node; }
     | compound_requirement SEMICOLON { $$ = $1; }

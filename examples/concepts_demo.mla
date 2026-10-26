@@ -1,11 +1,11 @@
 /// \file concepts_demo.mla
 /// @ingroup examples
-/// \brief Named concepts, requires clauses, and constrained overloads.
+/// \brief Named concepts, where clauses, and constrained overloads.
 
 mod std::concepts;
 use std::concepts::*;
 
-generic<T> requires arithmetic<T>
+generic<T> where arithmetic<T>
 fn twice(value: T) -> T {
     return value + value;
 }
@@ -16,7 +16,7 @@ fn category(value: T) -> i32 { return 0; }
 generic<T: integral>
 fn category(value: T) -> i32 { return 1; }
 
-generic<T> requires floating_point<T>
+generic<T> where floating_point<T>
 fn category(value: T) -> i32 { return 2; }
 
 fn main() -> i32 {

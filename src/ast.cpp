@@ -1674,7 +1674,7 @@ std::string FunctionDefNode::toString() const
         result += "> ";
     }
     if(requiresClause)
-        result += "requires " + requiresClause->toString() + " ";
+        result += "where " + requiresClause->toString() + " ";
     if(isCexpr)
         result += "cexpr ";
     result += "fn ";
@@ -3469,7 +3469,7 @@ std::string RequirementNode::toString() const
     if(kind == Type)
         return "typename " + requiredType->toString() + ";";
     if(kind == Nested)
-        return "requires " + expression->toString() + ";";
+        return "where " + expression->toString() + ";";
     if(kind == Simple)
         return expression->toString() + ";";
     std::string result = "{ " + expression->toString() + " }";

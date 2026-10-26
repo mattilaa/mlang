@@ -234,7 +234,7 @@ concept Integral<T> = type_id(T) == i32 || type_id(T) == i64;
 concept Same<T, U> = type_id(T) == type_id(U);
 concept Whole32<T> = Integral<T> && Same<T, i32>;
 
-generic<T> requires Integral<T>
+generic<T> where Integral<T>
 fn twice(value: T) -> T {
     return value + value;
 }
@@ -255,7 +255,17 @@ branch of a predicate is not evaluated. Predicates must produce [`bool`](Quick-G
 recursive concept evaluation, unknown concepts, and wrong argument counts are
 compile errors.
 
-A `requires` clause follows the generic parameter list and precedes the function
+`where Predicate` constrains a declaration; `requires(...) { ... }` is a boolean
+expression that checks operations. Use `generic<T> where requires(value: T) {
+value + value; }` for an inline structural constraint. Inside requirement bodies,
+`where Predicate;` checks a nested boolean predicate. Existing `requires
+Predicate` clauses and nested `requires Predicate;` remain compatibility forms;
+prefer `where` so the two jobs have different keywords. See
+[where_constraints_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/where_constraints_demo.mla) and
+[requires_expression_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/requires_expression_demo.mla) for
+runnable examples of both cases.
+
+A `where` clause follows the generic parameter list and precedes the function
 declaration. Unary concepts can also use the existing parameter-bound syntax:
 
 ```rust
@@ -279,10 +289,10 @@ Constrained overloads can share a signature with a fallback:
 generic<T>
 fn category(value: T) -> i32 { return 0; }
 
-generic<T> requires Integral<T>
+generic<T> where Integral<T>
 fn category(value: T) -> i32 { return 1; }
 
-generic<T> requires Whole32<T>
+generic<T> where Whole32<T>
 fn category(value: T) -> i32 { return 2; }
 ```
 
@@ -322,10 +332,10 @@ concept Addable<T> = requires(a: T, b: T) {
     a + b;                         // Simple: the expression must be valid.
     typename T;                    // Type: the type must exist.
     { a + b } -> same_as<T>;        // Compound: constrain the result type.
-    requires arithmetic<T>;        // Nested: the predicate must be true.
+    where arithmetic<T>;        // Nested: the predicate must be true.
 };
 
-generic<T> requires Addable<T>
+generic<T> where Addable<T>
 fn add(a: T, b: T) -> T { return a + b; }
 ```
 
@@ -340,7 +350,7 @@ Requirements are checked in order and stop at the first failure. Substitution
 failure, a missing member, an invalid operation, an inaccessible member, or an
 unmatched call makes the expression `false`. A simple requirement tests
 well-formedness, so `false;` is satisfied. A nested requirement such as
-`requires false;` is not satisfied, and its expression must be a compile-time
+`where false;` is not satisfied, and its expression must be a compile-time
 boolean. Runtime parameter values cannot satisfy nested predicates.
 
 Use `typename SomeType;` or `type SomeType;` to test a type, including an alias

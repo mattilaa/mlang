@@ -1527,6 +1527,109 @@ TEST_F(MLATest, StructuralRequiresArrayAndFunctionTypes)
               0);
 }
 
+TEST_F(MLATest, WhereConstraintNamedPredicatesAndFallback)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        mod std::concepts;
+        use std::concepts::*;
+        generic<T> where arithmetic<T> && same_as<T, i32>
+        fn twice(value: T) -> T { return value + value; }
+        generic<T> fn category(value: T) -> i32 { return 0; }
+        generic<T> where integral<T>
+        fn category(value: T) -> i32 { return 1; }
+        fn main() -> i32 {
+            return twice(21i32) == 42 && category(1i32) == 1 && category(1.5) == 0 ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, WhereConstraintInlineStructuralExpression)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        generic<T> fn read(value: T) -> i32 { return 7; }
+        generic<T> where requires(value: T) { value.value; }
+        fn read(value: T) -> i32 { return value.value; }
+        struct Item { var value: i32; };
+        fn main() -> i32 {
+            let item = Item { value: 42 };
+            return read(item) == 42 && read(1i32) == 7 ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, WhereConstraintNestedPredicatesAndStructuralChecks)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        mod std::concepts;
+        use std::concepts::*;
+        concept WholeAddable<T> = requires(value: T) {
+            where integral<T>;
+            where requires { value + value; };
+        };
+        fn main() -> i32 {
+            static_assert!(WholeAddable<i32>);
+            static_assert!(!WholeAddable<f64>);
+            static_assert!(requires { false; });
+            static_assert!(!requires { where false; });
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, WhereConstraintLegacyAndNewSyntaxHaveSameIdentity)
+{
+    writeSource(R"(
+        concept Whole<T> = type_id(T) == i32;
+        generic<T> where Whole<T> fn same(value: T) -> i32 { return 1; }
+        generic<T> requires Whole<T> fn same(value: T) -> i32 { return 2; }
+        fn main() -> i32 { return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("duplicate constrained function overload"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, WhereConstraintRejectsNonBooleanPredicates)
+{
+    writeSource(R"(
+        generic<T> where 1 fn invalid(value: T) -> i32 { return 0; }
+        fn main() -> i32 { return invalid(1i32); }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("constraint clause must evaluate to bool"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, WhereConstraintExamples)
+{
+    for(const std::string name :
+        {"where_constraints_demo.mla", "requires_expression_demo.mla"})
+    {
+        const fs::path example =
+            fs::path(__FILE__).parent_path().parent_path() / "examples" / name;
+        std::ifstream input(example);
+        ASSERT_TRUE(input.is_open()) << example;
+        std::ostringstream source;
+        source << input.rdbuf();
+        writeSource(source.str());
+        for(const std::string options : {"-O0", "-O2"})
+        {
+            SCOPED_TRACE(name + " " + options);
+            ASSERT_TRUE(compile(true, options));
+            EXPECT_EQ(runExitCode(), 0);
+        }
+    }
+}
+
 TEST_F(MLATest, MainReturnsExpression)
 {
     std::string code = R"(

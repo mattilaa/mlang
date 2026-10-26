@@ -8,7 +8,7 @@ Compiler-supported named concepts for builtin types. Import them with:
 mod std::concepts;
 use std::concepts::*;
 
-generic<T> requires arithmetic<T>
+generic<T> where arithmetic<T>
 fn twice(value: T) -> T { return value + value; }
 ```
 
@@ -26,7 +26,7 @@ Concepts produce compile-time booleans. A query such as
 equal. Nominal enums and structs are not classified as builtin arithmetic types.
 
 Use a unary concept in a bound (`generic<T: integral>`) or compose concepts in a
-`requires` clause. `same_as` takes two type arguments and belongs in a clause or
+`where` clause. `same_as` takes two type arguments and belongs in a clause or
 boolean expression. Constraint failure rejects an overload before instantiating
 its body; a stronger named constraint wins over a weaker matching overload.
 
