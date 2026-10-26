@@ -813,7 +813,7 @@ TEST_F(MLATest, ConceptsRequiresClauseFiltersBeforeBodyInstantiation)
     EXPECT_EQ(
         compileAndRunExitCode(R"(
         concept Whole<T> = type_id(T) == i32;
-        generic<T> requires Whole<T>
+        generic<T> where Whole<T>
         fn choose(value: T) -> i32 { return value + 1; }
         generic<T>
         fn choose(value: T) -> i32 { return 7; }
@@ -835,7 +835,7 @@ TEST_F(MLATest, ConceptsLosingViableOverloadDoesNotInstantiateBody)
         concept Whole<T> = type_id(T) == i32;
         generic<T>
         fn choose(value: T) -> i32 { return value.missing; }
-        generic<T> requires Whole<T>
+        generic<T> where Whole<T>
         fn choose(value: T) -> i32 { return 42; }
         fn main() -> i32 {
             let value: i32 = 1;
@@ -853,11 +853,11 @@ TEST_F(MLATest, ConceptsConjunctionAndDisjunctionSubsumption)
         concept Floating<T> = type_id(T) == f64;
         concept Numeric<T> = Whole<T> || Floating<T>;
         concept Narrow<T> = Whole<T> && type_id(T) == i32;
-        generic<T> requires Numeric<T>
+        generic<T> where Numeric<T>
         fn rank(value: T) -> i32 { return 1; }
-        generic<T> requires Whole<T>
+        generic<T> where Whole<T>
         fn rank(value: T) -> i32 { return 2; }
-        generic<T> requires Narrow<T>
+        generic<T> where Narrow<T>
         fn rank(value: T) -> i32 { return 3; }
         fn main() -> i32 {
             let small: i32 = 1;
@@ -873,9 +873,9 @@ TEST_F(MLATest, ConceptsIncomparableOverloadsAreAmbiguous)
     writeSource(R"(
         concept First<T> = type_id(T) == i32;
         concept Second<T> = type_id(T) == i32;
-        generic<T> requires First<T>
+        generic<T> where First<T>
         fn choose(value: T) -> i32 { return 1; }
-        generic<T> requires Second<T>
+        generic<T> where Second<T>
         fn choose(value: T) -> i32 { return 2; }
         fn main() -> i32 { let value: i32 = 1; return choose(value); }
     )");
@@ -917,7 +917,7 @@ TEST_F(MLATest, ConceptsFalseRequiresHasDiagnostic)
 {
     writeSource(R"(
         concept Whole<T> = type_id(T) == i32;
-        generic<T> requires Whole<T>
+        generic<T> where Whole<T>
         fn only_whole(value: T) -> T { return value; }
         fn main() -> i32 { let result = only_whole(1.5); return 0; }
     )");
@@ -972,7 +972,7 @@ TEST_F(MLATest, ConceptsMultiParameterRequires)
     EXPECT_EQ(
         compileAndRunExitCode(R"(
         concept Same<T, U> = type_id(T) == type_id(U);
-        generic<T, U> requires Same<T, U>
+        generic<T, U> where Same<T, U>
         fn match_pair(first: T, second: U) -> i32 { return 42; }
         fn main() -> i32 {
             let first: i32 = 1;
@@ -990,7 +990,7 @@ TEST_F(MLATest, ConceptsConstexprConstrainedOverloadSelection)
         concept Whole<T> = type_id(T) == i32;
         generic<T>
         cexpr fn category(value: T) -> i32 { return 1; }
-        generic<T> requires Whole<T>
+        generic<T> where Whole<T>
         cexpr fn category(value: T) -> i32 { return 2; }
         fn main() -> i32 {
             cexpr first: i32 = category(1i32);
@@ -1008,7 +1008,7 @@ TEST_F(MLATest, ConceptsPublicImportAndPrivateImplementation)
         module << R"(
             concept Hidden<T> = type_id(T) == i32;
             pub concept Public<T> = Hidden<T>;
-            generic<T> requires Hidden<T>
+            generic<T> where Hidden<T>
             pub fn accepted(value: T) -> i32 { return 42; }
         )";
     }
@@ -1049,7 +1049,7 @@ TEST_F(MLATest, ConceptsNamespaceLookup)
         namespace rules {
             concept Whole<T> = type_id(T) == i32;
             concept Same<T, U> = type_id(T) == type_id(U);
-            generic<T> requires Whole<T>
+            generic<T> where Whole<T>
             fn accept(value: T) -> i32 { return 42; }
         }
         fn main() -> i32 {
@@ -1080,7 +1080,7 @@ TEST_F(MLATest, ConceptsRejectWrongTypeArityAndUnknownTypes)
 TEST_F(MLATest, ConceptsRejectUnknownNamesInUnusedRequirements)
 {
     writeSource(R"(
-        generic<T> requires MissingConcept<T>
+        generic<T> where MissingConcept<T>
         fn unused(value: T) -> i32 { return 0; }
         fn main() -> i32 { return 0; }
     )");
@@ -1123,9 +1123,9 @@ TEST_F(MLATest, ConceptsRejectDuplicateConstrainedOverloads)
 {
     writeSource(R"(
         concept Whole<T> = type_id(T) == i32;
-        generic<T> requires Whole<T>
+        generic<T> where Whole<T>
         fn repeated(value: T) -> i32 { return 1; }
-        generic<T> requires Whole<T>
+        generic<T> where Whole<T>
         fn repeated(value: T) -> i32 { return 2; }
         fn main() -> i32 { return 0; }
     )");
@@ -1140,7 +1140,7 @@ TEST_F(MLATest, ConceptsVariadicFunctionChecksFixedTypeConstraints)
 {
     writeSource(R"(
         concept Whole<T> = type_id(T) == i32;
-        generic<T, Args...> requires Whole<T>
+        generic<T, Args...> where Whole<T>
         fn many(first: T, args: Args...) -> i32 { return 0; }
         fn main() -> i32 { return many(1.5, 2, 3); }
     )");
@@ -1255,7 +1255,7 @@ TEST_F(MLATest, StructuralRequiresTypeAndNestedRequirements)
         alias Number = i32;
         struct Box<T> { var value: T; };
         struct IntegerBox<T: integral> { var value: T; };
-        concept Complete<T> = req { typename T; type Box<T>; requires integral<T>; };
+        concept Complete<T> = req { typename T; type Box<T>; where integral<T>; };
         concept Missing<T> = req { typename DoesNotExist; };
         fn main() -> i32 {
             static_assert!(Complete<Number>);
@@ -1264,7 +1264,7 @@ TEST_F(MLATest, StructuralRequiresTypeAndNestedRequirements)
             static_assert!(req { typename void; });
             static_assert!(!req { typename IntegerBox<f64>; });
             static_assert!(!req { typename Box<i32, i64>; });
-            static_assert!(!req { requires false; });
+            static_assert!(!req { where false; });
             return 0;
         }
     )"),
@@ -1278,8 +1278,8 @@ TEST_F(MLATest, StructuralRequiresFiltersOverloadsAndOrdersRefinement)
         concept HasValue<T> = req(value: T) { value.value; };
         concept HasBoth<T> = HasValue<T> && req(value: T) { value.other; };
         generic<T> fn select(value: T) -> i32 { return 0; }
-        generic<T> requires HasValue<T> fn select(value: T) -> i32 { return 1; }
-        generic<T> requires HasBoth<T> fn select(value: T) -> i32 { return 2; }
+        generic<T> where HasValue<T> fn select(value: T) -> i32 { return 1; }
+        generic<T> where HasBoth<T> fn select(value: T) -> i32 { return 2; }
         struct One { var value: i32; };
         struct Two { var value: i32; var other: i32; };
         fn main() -> i32 {
@@ -1377,7 +1377,7 @@ TEST_F(MLATest, StructuralRequiresGlobalAndConstexprQueries)
         concept Addable<T> = req(value: T) { value + value; };
         cexpr global_ok: bool = Addable<i32>;
         generic<T> cexpr fn category(value: T) -> i32 { return 0; }
-        generic<T> requires Addable<T> cexpr fn category(value: T) -> i32 { return 1; }
+        generic<T> where Addable<T> cexpr fn category(value: T) -> i32 { return 1; }
         struct Marker { var value: i32; };
         fn main() -> i32 {
             static_assert!(global_ok);
@@ -1393,10 +1393,10 @@ TEST_F(MLATest, StructuralRequiresShortCircuitAndNestedExpressions)
 {
     EXPECT_EQ(
         compileAndRunExitCode(R"(
-        concept NestedParameter<T> = req(value: T) { requires req { value + value; }; };
+        concept NestedParameter<T> = req(value: T) { where req { value + value; }; };
         concept Nested<T> = req {
-            requires req(value: T) { value + value; };
-            requires true || (1 / 0 == 1);
+            where req(value: T) { value + value; };
+            where true || (1 / 0 == 1);
         };
         struct Marker { var value: i32; };
         fn main() -> i32 {
@@ -1461,9 +1461,9 @@ TEST_F(MLATest, StructuralRequiresInvalidParametersAndRuntimeNestedCondition)
 {
     EXPECT_EQ(
         compileAndRunExitCode(R"(
-        concept VoidParameter<T> = req(value: void) { requires true; };
-        concept Duplicate<T> = req(value: T, value: T) { requires true; };
-        concept Runtime<T> = req(value: T) { requires value == 0; };
+        concept VoidParameter<T> = req(value: void) { where true; };
+        concept Duplicate<T> = req(value: T, value: T) { where true; };
+        concept Runtime<T> = req(value: T) { where value == 0; };
         fn main() -> i32 {
             static_assert!(!VoidParameter<i32>);
             static_assert!(!Duplicate<i32>);
@@ -1525,7 +1525,7 @@ TEST_F(MLATest, StructuralRequiresDirectClauseAndGenericResult)
         concept BoxValue<T> = req(value: Box<T>) { { value.value } -> same_as<T>; };
         concept Identity<T> = req(value: T) { { value } -> same_as<T>; };
         concept NestedValue<T> = req(value: &mut &mut T) { { *value } -> same_as<T>; };
-        generic<T> requires req(value: T) { value + value; }
+        generic<T> where req(value: T) { value + value; }
         fn twice(value: T) -> T { return value + value; }
         fn main() -> i32 {
             static_assert!(BoxValue<i32>);
@@ -1641,12 +1641,12 @@ TEST_F(MLATest, WhereConstraintNestedPredicatesAndStructuralChecks)
         0);
 }
 
-TEST_F(MLATest, WhereConstraintLegacyAndNewSyntaxHaveSameIdentity)
+TEST_F(MLATest, WhereConstraintRejectsDuplicateDefinitions)
 {
     writeSource(R"(
         concept Whole<T> = type_id(T) == i32;
         generic<T> where Whole<T> fn same(value: T) -> i32 { return 1; }
-        generic<T> requires Whole<T> fn same(value: T) -> i32 { return 2; }
+        generic<T> where Whole<T> fn same(value: T) -> i32 { return 2; }
         fn main() -> i32 { return 0; }
     )");
     int rc = 0;
@@ -1694,23 +1694,45 @@ TEST_F(MLATest, WhereConstraintExamples)
     }
 }
 
-TEST_F(MLATest, ReqCanonicalAndLegacyCompatibility)
+TEST_F(MLATest, ReqCanonicalSyntax)
 {
     EXPECT_EQ(
         compileAndRunExitCode(R"(
-        concept Modern<T> = req(value: T) { value + value; where type_id(T) == i32; };
-        concept Legacy<T> = requires(value: T) { value + value; requires type_id(T) == i32; };
+        concept Whole<T> = req(value: T) { value + value; where type_id(T) == i32; };
         generic<T> where req(value: T) { value + value; }
-        fn modern(value: T) -> T { return value + value; }
-        generic<T> requires requires(value: T) { value + value; }
-        fn legacy(value: T) -> T { return value + value; }
+        fn twice(value: T) -> T { return value + value; }
         fn main() -> i32 {
-            static_assert!(Modern<i32> && Legacy<i32>);
-            static_assert!(!Modern<f64> && !Legacy<f64>);
-            return modern(21i32) == 42 && legacy(21i32) == 42 ? 0 : 1;
+            static_assert!(Whole<i32>);
+            static_assert!(!Whole<f64>);
+            return twice(21i32) == 42 ? 0 : 1;
         }
     )"),
         0);
+}
+
+TEST_F(MLATest, RemovedRequiresSyntaxIsRejected)
+{
+    for(const std::string source :
+        {"generic<T> requires true fn old(value: T) -> T { return value; } fn "
+         "main() -> i32 { return 0; }",
+         "concept Old<T> = requires(value: T) { value + value; }; fn main() -> "
+         "i32 { return 0; }",
+         "concept Old<T> = requires { true; }; fn main() -> i32 { return 0; }",
+         "concept Old<T> = req { requires true; }; fn main() -> i32 { return "
+         "0; }"})
+    {
+        SCOPED_TRACE(source);
+        writeSource(source);
+        int rc = 0;
+        const std::string output = compileCapture(rc);
+        EXPECT_EQ(rc, 1) << output;
+        EXPECT_NE(output.find("MLANG-E1020"), std::string::npos) << output;
+        EXPECT_NE(output.find("'requires' was removed"), std::string::npos)
+            << output;
+        EXPECT_NE(output.find("'where'"), std::string::npos) << output;
+        EXPECT_NE(output.find("'req(...) { ... }'"), std::string::npos)
+            << output;
+    }
 }
 
 TEST_F(MLATest, ReqDoesNotIntroduceBooleanConstraintClauses)

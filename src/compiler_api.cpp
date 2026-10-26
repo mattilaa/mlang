@@ -4718,9 +4718,6 @@ static std::string_view constraintKeywordDocumentation(std::string_view token)
         return "concept Name<T> = Predicate; defines a named compile-time "
                "boolean predicate. Structural predicates use req(value: T) { "
                "... }.";
-    if(token == "requires")
-        return "Compatibility spelling. Prefer where Predicate for boolean "
-               "constraints and req(...) { ... } for structural expressions.";
     if(token == "generic")
         return "generic<T> introduces generic type parameters before a "
                "function. Add where Predicate to constrain its overload.";
@@ -4757,7 +4754,6 @@ static bool isKeywordToken(std::string_view token)
         "concept",
         "where",
         "req",
-        "requires",
         "typename",
         "noexcept",
     };
@@ -4842,7 +4838,8 @@ static std::vector<std::string> lexicalIdentifiersBeforeOffset(
             ++i;
         }
         std::string token(text.substr(start, i - start));
-        if(!isKeywordToken(token) && seen.insert(token).second)
+        if(token != "requires" && !isKeywordToken(token) &&
+           seen.insert(token).second)
         {
             out.push_back(std::move(token));
         }
@@ -4912,7 +4909,6 @@ static std::vector<std::string> computeSemanticCompletions(
         "concept",
         "where",
         "req",
-        "requires",
         "typename",
         "noexcept",
     };
@@ -5379,7 +5375,6 @@ static std::optional<std::vector<std::string>> fastLexicalCompletionsFromText(
         "concept",
         "where",
         "req",
-        "requires",
         "typename",
         "noexcept",
     };

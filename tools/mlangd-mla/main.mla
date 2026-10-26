@@ -645,7 +645,7 @@ fn builtin_type_location(word: str8) -> str8 {
     let marker: str8 = format!("// @builtin {}", lookup);
     let function_marker: str8 = format!("// @builtin_fn {}", lookup);
     // Match complete reference entries: `type` must not land on `type_id`,
-    // and `req` must not land on the compatibility spelling `requires`.
+    // and short names must not match longer reference entries.
     let reference_count: i64 = line_count(text);
     for i in 0..reference_count {
         let reference_line: str8 = trim_ascii_ws(line_text_at(text, i));
@@ -1872,7 +1872,6 @@ fn completion_kind_lsp(label: str8) -> i32 {
     if eq(label, "concept") == 1 { return 14; }
     if eq(label, "where") == 1 { return 14; }
     if eq(label, "req") == 1 { return 14; }
-    if eq(label, "requires") == 1 { return 14; }
     if eq(label, "typename") == 1 { return 14; }
     if eq(label, "noexcept") == 1 { return 14; }
 
@@ -1946,7 +1945,6 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "concept") == 1 { return "keyword: named compile-time boolean predicate"; }
     if eq(label, "where") == 1 { return "keyword: boolean constraint for a declaration or nested requirement"; }
     if eq(label, "req") == 1 { return "keyword: unevaluated structural requirement expression"; }
-    if eq(label, "requires") == 1 { return "keyword: legacy compatibility spelling for constraints and structural checks"; }
     if eq(label, "typename") == 1 { return "keyword: structural type requirement"; }
     if eq(label, "noexcept") == 1 { return "keyword: non-throwing compound requirement"; }
     if ends_with(label, "!") == 1 { return "builtin macro"; }
@@ -2049,7 +2047,6 @@ fn completion_documentation(label: str8) -> str8 {
     if eq(label, "concept") == 1 { return "Define a named type predicate: concept Addable<T> = req(a: T, b: T) { a + b; };"; }
     if eq(label, "where") == 1 { return "Filter a generic declaration with where Predicate. Inside req { ... }, where Predicate; checks a nested compile-time boolean. Combine the forms as where req(value: T) { value + value; }."; }
     if eq(label, "req") == 1 { return "req(value: T) { ... } is an unevaluated structural expression producing a compile-time boolean by checking operations without executing them. Use where req(...) { ... } to constrain a generic declaration."; }
-    if eq(label, "requires") == 1 { return "Compatibility spelling. Prefer where Predicate for boolean constraints and req(...) { ... } for structural expressions."; }
     if eq(label, "typename") == 1 { return "Inside req { ... }, typename T; checks that a type exists and satisfies generic arity and bounds."; }
     if eq(label, "noexcept") == 1 { return "Inside req { ... }, { expression } noexcept; requires no potentially throwing calls. Ordinary function calls are conservatively potentially throwing."; }
     if eq(label, "void") == 1 {
@@ -3827,7 +3824,7 @@ fn constraint_keyword_tokens(text: str8) -> list<SemanticToken> {
             while i < len(text) && is_ident_char(sub(text, i, 1)) { i = i + 1; column = column + 1; }
             let word = sub(text, start, i - start);
             if eq(word, "req") == 1 || eq(word, "where") == 1 || eq(word, "concept") == 1 ||
-               eq(word, "generic") == 1 || eq(word, "requires") == 1 || eq(word, "typename") == 1 || eq(word, "noexcept") == 1 {
+               eq(word, "generic") == 1 || eq(word, "typename") == 1 || eq(word, "noexcept") == 1 {
                 tokens.push(SemanticToken { line: line, column: start_column, length: i - start, kind: 0, modifiers: 0 });
             }
             continue;

@@ -23,7 +23,6 @@ declarations, and `free_objs`, in addition to the types and intrinsics below.
 | `concept` | Defines a reusable compile-time boolean predicate. |
 | `where` | Applies a boolean constraint to a generic declaration or a nested requirement. |
 | `req` | Checks structural requirements without evaluating the expressions. |
-| `requires` | Compatibility spelling; new code uses `where` and `req`. |
 | `typename` | Checks that a type exists inside a structural requirement. |
 | `noexcept` | Rejects potentially throwing calls in a compound requirement. |
 | `type_id` | Produces compile-time type identity metadata for type comparisons. |

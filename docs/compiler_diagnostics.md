@@ -78,6 +78,12 @@ suffixed numeric literal is out of range. Use `fn operator "" _name` with one
 `u64`, `f64`, or `str8` value parameter and a builtin scalar or string result.
 Integer inputs must fit `u64`; floating-point inputs must fit finite `f64`.
 
+### `MLANG-E1020`
+The removed `requires` spelling was used. Write `where Predicate` for generic
+constraints and nested boolean requirements. Write `req(...) { ... }` or
+`req { ... }` for structural expressions. These forms are distinct; there is
+no compatibility alias.
+
 ### `MLANG-E1100`
 Unexpected character produced by the lexer before parsing could continue.
 

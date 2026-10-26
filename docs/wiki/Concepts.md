@@ -28,11 +28,9 @@ This keeps the roles consistent: `where` consumes a boolean, while `req`
 builds one from a body of checks. Combining them needs `where req`, without
 repeating a keyword.
 
-For existing programs, `requires Predicate` clauses and nested
-`requires Predicate;` remain accepted as compatibility forms. New code and
-compiler AST text use `where` for these predicates. The original
-`requires(...) { ... }` expression spelling is also accepted for compatibility;
-use `req(...) { ... }` in new code.
+Only `where` and `req` are supported. The former `requires` spelling is
+rejected with `MLANG-E1020`: replace boolean clauses and nested predicates with
+`where`, and structural expressions with `req`.
 
 ## First Example
 
@@ -148,7 +146,7 @@ currently has no non-throwing function declaration annotation, so ordinary
 function and method calls are conservatively considered potentially throwing.
 Their bodies are not inspected to infer a non-throwing guarantee.
 
-This feature does not add trailing requires-clauses, abbreviated `auto`
+This feature does not add trailing constraint clauses, abbreviated `auto`
 parameters, or C++ associated type declarations inside structs.
 
 ## Runnable Examples and Reference

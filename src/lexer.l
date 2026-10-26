@@ -347,7 +347,15 @@ static int mla_lex_peek_branch_declaration()
 "fn"            { constraint_context = false; return FUNCTION; }
 "concept"       { constraint_context = true; return CONCEPT; }
 "req"           { constraint_context = true; return REQ; }
-"requires"      { constraint_context = true; return REQUIRES; }
+"requires"      {
+                    parseHadError = true;
+                    const auto message = mlang::diag::format_message_with_code(
+                        "MLANG-E1020", "'requires' was removed; use 'where' for boolean constraints and 'req(...) { ... }' for structural expressions");
+                    if(!mlang::diag::capture_parser_diagnostic(
+                           yylloc.first_line, yylloc.first_column, message))
+                        fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile,
+                                yylloc.first_line, yylloc.first_column, message.c_str());
+                }
 "where"         { constraint_context = true; return WHERE; }
 "typename"      { return TYPENAME; }
 "noexcept"      { return NOEXCEPT; }

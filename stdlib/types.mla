@@ -52,7 +52,7 @@
 /// - `generic<T> where Predicate` constrains a generic declaration.
 /// - `req(value: T) { ... }` checks operations without evaluating them.
 /// - `typename T;`, compound `noexcept`, and nested `where Predicate;` are
-///   requirement forms; `requires` is retained for compatibility.
+///   requirement forms; boolean predicates use `where` and structural checks use `req`.
 /// - `std::concepts` provides `same_as`, `integral`, `signed_integral`,
 ///   `unsigned_integral`, `floating_point`, and `arithmetic`. These are library
 ///   declarations and require imports, rather than being primitive types.
@@ -305,10 +305,6 @@
 // expressions, types, compound result constraints, and nested where predicates
 // without executing them.
 
-// @builtin requires
-// Compatibility spelling for earlier constraints and structural queries.
-// Prefer where Predicate for boolean constraints and req(...) { ... } for
-// structural expressions.
 
 // @builtin where
 // A compile-time boolean constraint on a generic declaration: generic<T> where

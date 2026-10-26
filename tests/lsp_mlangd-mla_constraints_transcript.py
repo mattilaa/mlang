@@ -35,7 +35,6 @@ def main():
             "  { value + value } noexcept;\n"
             "  where type_id(T) == i32;\n"
             "};\n"
-            "concept Legacy<T> = requires(value: T) { value + value; };\n"
             "generic<T> where Addable<T>\n"
             "fn twice(value: T) -> T { return value + value; }\n"
             "fn main() -> i32 {\n"
@@ -64,7 +63,7 @@ def main():
 
             response = client.request("textDocument/semanticTokens/full", {"textDocument": {"uri": uri}})
             tokens = tokens_from_response(response)
-            for keyword in ("concept", "req", "typename", "noexcept", "where", "requires", "generic"):
+            for keyword in ("concept", "req", "typename", "noexcept", "where", "generic"):
                 position = position_of(text, keyword)
                 assert tokens.get(position) == (len(keyword), 0, 0), (keyword, tokens)
             for line_no, line in enumerate(text.splitlines()):
@@ -96,6 +95,14 @@ def main():
             tokens = tokens_from_response(client.request("textDocument/semanticTokens/full", {"textDocument": {"uri": uri}}))
             for keyword in ("concept", "req", "typename"):
                 assert tokens.get(position_of(only_concept, keyword)) == (len(keyword), 0, 0), tokens
+            removed = "generic<T> requires true fn old(value: T) -> T { return value; }\nre"
+            client.notify("textDocument/didChange", {"textDocument": {"uri": uri, "version": 6}, "contentChanges": [{"text": removed}]})
+            diagnostics = client.request("textDocument/diagnostic", {"textDocument": {"uri": uri}})
+            assert any("MLANG-E1020" in item.get("message", "") for item in diagnostics.get("items", [])), diagnostics
+            items = client.request("textDocument/completion", {"textDocument": {"uri": uri}, "position": {"line": 1, "character": 2}})
+            assert not any(item.get("label") == "requires" for item in items), items
+            tokens = tokens_from_response(client.request("textDocument/semanticTokens/full", {"textDocument": {"uri": uri}}))
+            assert tokens.get(position_of(removed, "requires"), (0, -1, 0))[1] != 0, tokens
         finally:
             client.close()
     print("PASS: constraint keyword completion, hover, and semantic tokens")

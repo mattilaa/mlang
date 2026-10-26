@@ -27,7 +27,7 @@ def main():
     reference_text = reference.read_text()
     module_text = module.read_text()
     concepts = re.findall(r"^pub concept (\w+)<", module_text, re.M)
-    keywords = ["where", "req", "concept", "generic", "typename", "noexcept", "requires", "array", "narrow_cast", "is_constructible", "volatile", "operator", "likely", "unlikely", "type_id", "type", "in", "free_objs"]
+    keywords = ["where", "req", "concept", "generic", "typename", "noexcept", "array", "narrow_cast", "is_constructible", "volatile", "operator", "likely", "unlikely", "type_id", "type", "in", "free_objs"]
     with tempfile.TemporaryDirectory(prefix="mlangd_concept_def_") as directory:
         root = Path(directory); path = root / "concepts.mla"; uri = to_uri(path)
         client = JsonRpcClient([str(Path(args.mlangd).resolve()), "--stdio"])

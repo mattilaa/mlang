@@ -258,9 +258,9 @@ compile errors.
 `where Predicate` constrains a declaration; `req(...) { ... }` is a boolean
 expression that checks operations. Use `generic<T> where req(value: T) {
 value + value; }` for an inline structural constraint. Inside requirement bodies,
-`where Predicate;` checks a nested boolean predicate. Existing `requires
-Predicate` clauses and nested `requires Predicate;` remain compatibility forms;
-prefer `where` so the two jobs have different keywords. See
+`where Predicate;` checks a nested boolean predicate. The former `requires`
+spelling is rejected with `MLANG-E1020`; use `where` or `req` according to the
+intended operation. See
 [where_constraints_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/where_constraints_demo.mla) and
 [req_expression_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/req_expression_demo.mla) for
 runnable examples of both cases.
@@ -378,7 +378,7 @@ concept preserves that atom's identity for overload ordering; independently
 written requirement bodies are not inferred to refine each other. Compose
 named concepts with `&&` to express refinements.
 
-Trailing requires-clauses, abbreviated `auto` parameters, and C++ associated
+Trailing constraint clauses, abbreviated `auto` parameters, and C++ associated
 type declarations inside structs are not implemented.
 
 ### Numeric Primitive Names

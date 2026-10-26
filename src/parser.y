@@ -2074,7 +2074,7 @@ enum UpdatePosition
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
 %token PUB IMPL TRAIT DYN
 %token EXTERN
-%token STATIC CEXPR GENERIC CONCEPT REQ REQUIRES WHERE TYPENAME NOEXCEPT
+%token STATIC CEXPR GENERIC CONCEPT REQ WHERE TYPENAME NOEXCEPT
 %token ASM VOLATILE SIZEOF
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
@@ -2833,7 +2833,6 @@ concept_def
 optional_constraint
     : /* empty */ { $$ = nullptr; }
     | WHERE expression { $$ = $2; }
-    | REQUIRES expression { $$ = $2; }
     ;
 
 requires_expression
@@ -2844,13 +2843,6 @@ requires_expression
             node->line = @1.first_line; node->col = @1.first_column; $$ = node;
         }
     | REQ requirement_body { $$ = $2; $$->line = @1.first_line; $$->col = @1.first_column; }
-    | REQUIRES LPAREN requirement_parameters RPAREN requirement_body
-        {
-            auto* node = static_cast<RequiresExpressionNode*>($5);
-            node->parameters = static_cast<ParameterListNode*>($3);
-            node->line = @1.first_line; node->col = @1.first_column; $$ = node;
-        }
-    | REQUIRES requirement_body { $$ = $2; $$->line = @1.first_line; $$->col = @1.first_column; }
     ;
 
 requirement_parameters
@@ -2886,8 +2878,6 @@ requirement
     | TYPE_KW type SEMICOLON
         { auto* node = new RequirementNode(RequirementNode::Type); node->requiredType = static_cast<TypeNode*>($2); node->line = @1.first_line; $$ = node; }
     | WHERE expression SEMICOLON
-        { auto* node = new RequirementNode(RequirementNode::Nested); node->expression = static_cast<ExpressionNode*>($2); node->line = @1.first_line; $$ = node; }
-    | REQUIRES expression SEMICOLON
         { auto* node = new RequirementNode(RequirementNode::Nested); node->expression = static_cast<ExpressionNode*>($2); node->line = @1.first_line; $$ = node; }
     | compound_requirement SEMICOLON { $$ = $1; }
     ;

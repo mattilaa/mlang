@@ -12,7 +12,7 @@ struct AttributeTokenSpec
     int keywordLength;
 };
 
-constexpr std::array<const char*, 17> kLspKeywords = {
+constexpr std::array<const char*, 16> kLspKeywords = {
     "fn",
     "let",
     "struct",
@@ -27,7 +27,6 @@ constexpr std::array<const char*, 17> kLspKeywords = {
     "concept",
     "where",
     "req",
-    "requires",
     "typename",
     "noexcept",
 };
