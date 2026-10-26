@@ -72,6 +72,12 @@ than immediately before an `if`, `let`, or `var` statement. Use
 `likely if condition { ... }`, `else unlikely if condition { ... }`, or a
 boolean declaration such as `likely let ready: bool = check();`.
 
+### `MLANG-E1019`
+A user-defined literal operator has an invalid suffix or signature, or a
+suffixed numeric literal is out of range. Use `fn operator "" _name` with one
+`u64`, `f64`, or `str8` value parameter and a builtin scalar or string result.
+Integer inputs must fit `u64`; floating-point inputs must fit finite `f64`.
+
 ### `MLANG-E1100`
 Unexpected character produced by the lexer before parsing could continue.
 

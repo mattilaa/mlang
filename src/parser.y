@@ -7,6 +7,7 @@
 #include <vector>
 #include <map>
 #include "ast.h"
+#include "literal_operators.h"
 #include "ast_handle_helpers.h"
 #include "diagnostics.h"
 
@@ -1971,6 +1972,35 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
         }
     }
 }
+static ASTNode* make_literal_operator(char* suffix, ASTNode* parameters,
+                                      ASTNode* result, ASTNode* body,
+                                      int line, int column)
+{
+    auto report = [&](const std::string& message) {
+        parseHadError = true;
+        const auto formatted = mlang::diag::format_message_with_code("MLANG-E1019", message);
+        if(!mlang::diag::capture_parser_diagnostic(line, column, formatted))
+            fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line, column, formatted.c_str());
+    };
+    const std::string name = suffix ? suffix : "";
+    if(name.size() < 2 || name.front() != '_')
+        report("user-defined literal suffix must begin with '_' and contain a name");
+    auto* params = static_cast<ParameterListNode*>(parameters);
+    auto* returnType = static_cast<TypeNode*>(result);
+    TypeNode::TypeKind input = TypeNode::TYPE_VOID;
+    if(params && !params->isVarArg && params->parameters.size() == 1)
+        input = params->parameters.front()->type->kind;
+    if(!mlang::literals::inputName(input))
+        report("literal operator requires exactly one builtin u64, f64, or str8 value parameter");
+    if(!returnType || !mlang::literals::isBuiltinResult(returnType->kind))
+        report("literal operator must return a builtin scalar or string type");
+    const std::string internalName = mlang::literals::operatorName(name, input);
+    auto* fn = mla_ast_function_def(result, const_cast<char*>(internalName.c_str()), parameters, body, 0, 0);
+    fn->line = line;
+    fn->col = column;
+    return fn;
+}
+
 enum UpdateKind
 {
     UPDATE_INCREMENT = 0,
@@ -1992,9 +2022,9 @@ enum UpdatePosition
     struct ASTNode* ast;
 }
 
-%token <sval> IDENTIFIER STRING_LITERAL
+%token <sval> IDENTIFIER STRING_LITERAL LITERAL_OPERATOR_NAME
 %token <ival> INT_LITERAL
-%token <ast> TYPED_INT_LITERAL
+%token <ast> TYPED_INT_LITERAL USER_DEFINED_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
 %token FUNCTION RETURN IF ELSE LIKELY UNLIKELY VOID BOOL BIT FLOAT DOUBLE STR8 STR16 ARRAY MULTIARRAY MUTMULTIARRAY LIST MAP TUPLE PTR STRUCT ENUM FIELD
@@ -2039,7 +2069,7 @@ enum UpdatePosition
 %token INLINE_NEVER_ATTR
 
 %type <ast> program top_level_list top_level_item test_function_def
-%type <ast> module_asm_declaration
+%type <ast> module_asm_declaration literal_function_def
 %type <ast> inline_function_def
 %type <ast> arch_gated_function_def arch_gated_test_function_def arch_gated_inline_function_def
 %type <ast> type_alias_def namespace_block namespace_alias_def
@@ -2111,6 +2141,7 @@ top_level_item
     | enum_def
     | trait_def
     | function_def
+    | literal_function_def
     | test_function_def
     | inline_function_def
     | arch_gated_function_def
@@ -2721,6 +2752,15 @@ function_def
         { auto* node = mla_ast_function_def($8, $3, $5, NULL, 0, 1); node->line = yylineno; $$ = node; }
     | EXTERN PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
         { auto* node = mla_ast_function_def($9, $4, $6, NULL, 1, 1); node->line = yylineno; $$ = node; }
+    ;
+
+literal_function_def
+    : FUNCTION LITERAL_OPERATOR_NAME LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        { $$ = make_literal_operator($2, $4, $7, $9, @1.first_line, @1.first_column); }
+    | PUB literal_function_def
+        { static_cast<FunctionDefNode*>($2)->isPublic = true; $$ = $2; }
+    | CEXPR literal_function_def
+        { static_cast<FunctionDefNode*>($2)->isCexpr = true; $$ = $2; }
     ;
 
 test_function_def
@@ -3702,6 +3742,7 @@ condition_postfix
 condition_primary
     : INT_LITERAL { $$ = mla_ast_literal_int($1); }
     | TYPED_INT_LITERAL { $$ = $1; }
+    | USER_DEFINED_LITERAL { $$ = $1; }
     | FLOAT_LITERAL { $$ = mla_ast_literal_float($1); }
     | DOUBLE_LITERAL { $$ = mla_ast_literal_double($1); }
     | STRING_LITERAL { $$ = mla_ast_literal_string($1); }
@@ -3945,6 +3986,7 @@ match_pattern
 primary_expression
     : INT_LITERAL { $$ = mla_ast_literal_int($1); }
     | TYPED_INT_LITERAL { $$ = $1; }
+    | USER_DEFINED_LITERAL { $$ = $1; }
     | FLOAT_LITERAL { $$ = mla_ast_literal_float($1); }
     | DOUBLE_LITERAL { $$ = mla_ast_literal_double($1); }
     | STRING_LITERAL { $$ = mla_ast_literal_string($1); }

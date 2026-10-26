@@ -89,11 +89,20 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
     resolveTypeAliasesInProgram(program);
 
+    // Global constants are evaluated before LLVM function declarations. Make
+    // constexpr bodies available temporarily so suffix operators (and their
+    // constexpr helpers) can run here without requiring generated code.
+    auto savedGlobalConstexprOverloads = functionOverloads;
+    if(!program->cexprDecls.empty() && program->functionList)
+        for(auto* function : program->functionList->functions)
+            if(function && function->isCexpr && function->typeParams.empty())
+                registerFunctionOverload(function, nullptr);
     for(auto* cexprDecl : program->cexprDecls)
     {
         if(cexprDecl)
             generateCexprDeclaration(cexprDecl, false);
     }
+    functionOverloads = std::move(savedGlobalConstexprOverloads);
 
     enum class MainArgMode
     {

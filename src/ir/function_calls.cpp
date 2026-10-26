@@ -1,6 +1,7 @@
 #include "ir.h"
 #include "ir/ast_analysis.h"
 #include "ir/common.h"
+#include "literal_operators.h"
 #include "llvm_compat.h"
 #include "module.h"
 
@@ -4136,6 +4137,29 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         }
     };
 
+    std::string literalSuffixForScope, literalInputForScope;
+    if(node->name.find("::") == std::string::npos &&
+       mlang::literals::decodeOperatorName(node->name, literalSuffixForScope,
+                                           literalInputForScope) &&
+       builder.GetInsertBlock())
+    {
+        const std::string caller =
+            builder.GetInsertBlock()->getParent()->getName().str();
+        const size_t scopeEnd = caller.rfind("::");
+        if(scopeEnd != std::string::npos)
+        {
+            const std::string resolved = mlang::literals::scopedOperatorName(
+                node->name, caller.substr(0, scopeEnd),
+                [&](const std::string& name)
+                { return functionOverloads.count(name) != 0; });
+            if(resolved != node->name)
+            {
+                FunctionCallNode qualified(*node);
+                qualified.name = resolved;
+                return generateFunctionCall(&qualified);
+            }
+        }
+    }
     auto overloadIt = functionOverloads.find(node->name);
     std::string qualifiedModuleFilter;
     bool usingTailQualifiedLookup = false;
@@ -4549,7 +4573,15 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
         }
 
-        reportError(node->line, "unknown function: '" + node->name + "'");
+        std::string literalSuffix, literalInput;
+        if(mlang::literals::decodeOperatorName(node->name, literalSuffix,
+                                               literalInput))
+            reportError(node->line,
+                        "no user-defined literal operator for suffix '" +
+                            literalSuffix + "' with input type '" +
+                            literalInput + "'");
+        else
+            reportError(node->line, "unknown function: '" + node->name + "'");
         return nullptr;
     }
 

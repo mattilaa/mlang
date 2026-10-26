@@ -1,5 +1,6 @@
 #include "ir.h"
 #include "ir/common.h"
+#include "literal_operators.h"
 
 using mlang::ir_detail::common::Helpers;
 
@@ -35,7 +36,7 @@ llvm::Constant* CodeGenerator::buildLLVMConstantFromConstexprValue(
                 ? value.floatValue
                 : (value.kind == ConstexprValue::Kind::Bool
                        ? (value.boolValue ? 1.0 : 0.0)
-                       : static_cast<double>(value.intValue));
+                       : constexprValueAsDouble(value));
         if(kind == TypeNode::TYPE_FLOAT)
             return llvm::ConstantFP::get(llvm::Type::getFloatTy(context),
                                          floatValue);
@@ -115,12 +116,11 @@ bool CodeGenerator::coerceConstexprValueToKind(ConstexprValue& value,
     }
     if(Helpers::isFloatInferKind(targetKind))
     {
-        const double floatValue =
-            value.kind == ConstexprValue::Kind::Float
-                ? value.floatValue
-                : value.kind == ConstexprValue::Kind::Bool
-                      ? (value.boolValue ? 1.0 : 0.0)
-                      : static_cast<double>(value.intValue);
+        const double floatValue = value.kind == ConstexprValue::Kind::Float
+                                      ? value.floatValue
+                                  : value.kind == ConstexprValue::Kind::Bool
+                                      ? (value.boolValue ? 1.0 : 0.0)
+                                      : constexprValueAsDouble(value);
         value.kind = ConstexprValue::Kind::Float;
         value.floatValue = floatValue;
         value.boolValue = floatValue != 0.0;
@@ -159,7 +159,9 @@ double CodeGenerator::constexprValueAsDouble(const ConstexprValue& value) const
         return value.floatValue;
     if(value.kind == ConstexprValue::Kind::Bool)
         return value.boolValue ? 1.0 : 0.0;
-    return static_cast<double>(value.intValue);
+    return Helpers::enumIsUnsigned(value.typeKind)
+               ? static_cast<double>(static_cast<uint64_t>(value.intValue))
+               : static_cast<double>(value.intValue);
 }
 
 int64_t CodeGenerator::constexprValueAsInt(const ConstexprValue& value) const
@@ -583,18 +585,36 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
         return true;
     }
 
-    auto overloadIt = functionOverloads.find(call->name);
+    std::string literalSuffix, literalInput;
+    const bool literalCall = mlang::literals::decodeOperatorName(
+        call->name, literalSuffix, literalInput);
+    std::string lookupName = call->name;
+    if(literalCall && env && lookupName.find("::") == std::string::npos)
+    {
+        auto scope = env->find("$literal_namespace");
+        if(scope != env->end())
+            lookupName = mlang::literals::scopedOperatorName(
+                lookupName, scope->second.typeName, [&](const std::string& name)
+                { return functionOverloads.count(name) != 0; });
+    }
+    auto overloadIt = functionOverloads.find(lookupName);
     if(overloadIt == functionOverloads.end())
     {
         if(errorMessage)
             *errorMessage =
-                "unknown function in cexpr call: '" + call->name + "'";
+                literalCall
+                    ? "no user-defined literal operator for suffix '" +
+                          literalSuffix + "' with input type '" + literalInput +
+                          "'"
+                    : "unknown function in cexpr call: '" + call->name + "'";
         return false;
     }
 
     for(const auto& overload : overloadIt->second)
     {
         FunctionDefNode* fn = overload.node;
+        if(literalCall && !isOverloadVisible(overload))
+            continue;
         if(!fn || !fn->isCexpr || !fn->body || !fn->parameters)
             continue;
         if(fn->parameters->isVarArg)
@@ -603,6 +623,14 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
             continue;
 
         ConstexprEnv localEnv;
+        const size_t namespaceEnd = fn->name.rfind("::");
+        if(namespaceEnd != std::string::npos)
+        {
+            ConstexprValue scope;
+            scope.kind = ConstexprValue::Kind::Type;
+            scope.typeName = fn->name.substr(0, namespaceEnd);
+            localEnv["$literal_namespace"] = scope;
+        }
         bool argsOk = true;
         std::set<std::string> typeParamSet(fn->typeParams.begin(),
                                            fn->typeParams.end());
@@ -685,10 +713,11 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
             }
 
             TypeNode::TypeKind paramKind =
-                concreteArgTypes[i]
+                literalCall && param ? param->type->kind
+                : concreteArgTypes[i]
                     ? Helpers::normalizeInferredKind(concreteArgTypes[i]->kind)
-                    : param ? Helpers::normalizeInferredKind(param->type->kind)
-                            : TypeNode::TYPE_I64;
+                : param ? Helpers::normalizeInferredKind(param->type->kind)
+                        : TypeNode::TYPE_I64;
             if(argValue.kind == ConstexprValue::Kind::OpaqueStruct &&
                paramKind == TypeNode::TYPE_STRUCT)
             {
@@ -706,8 +735,15 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
 
         ConstexprValue returnValue;
         bool didReturn = false;
-        if(!evalConstexprStatementList(fn->body, localEnv, returnValue,
-                                       didReturn, errorMessage, depth + 1))
+        // Evaluate a function body in its defining module. Public literal
+        // operators may call private suffix operators within that module.
+        const std::string callerModule = currentModule;
+        currentModule = fn->sourceModule;
+        const bool evaluated =
+            evalConstexprStatementList(fn->body, localEnv, returnValue,
+                                       didReturn, errorMessage, depth + 1);
+        currentModule = callerModule;
+        if(!evaluated)
             return false;
         if(!didReturn)
         {
@@ -724,8 +760,13 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
 
     if(errorMessage)
         *errorMessage =
-            "cexpr call requires a matching 'cexpr fn' overload: '" +
-            call->name + "'";
+            literalCall
+                ? "user-defined literal suffix '" + literalSuffix +
+                      "' requires a visible cexpr fn operator for input type "
+                      "'" +
+                      literalInput + "'"
+                : "cexpr call requires a matching 'cexpr fn' overload: '" +
+                      call->name + "'";
     return false;
 }
 
@@ -1118,8 +1159,13 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         out.kind = ConstexprValue::Kind::Int;
         out.intValue = i->value;
         out.boolValue = i->value != 0;
-        out.floatValue = static_cast<double>(i->value);
-        out.typeKind = TypeNode::TYPE_I64;
+        out.typeKind = i->explicitType == TypeNode::TYPE_VOID
+                           ? TypeNode::TYPE_I64
+                           : i->explicitType;
+        out.floatValue =
+            isUnsignedType(out.typeKind)
+                ? static_cast<double>(static_cast<uint64_t>(i->value))
+                : static_cast<double>(i->value);
         return true;
     }
     if(auto* b = dynamic_cast<BoolLiteralNode*>(expr))
@@ -1273,7 +1319,12 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                 return true;
             }
             out.kind = ConstexprValue::Kind::Int;
-            out.intValue = -constexprValueAsInt(operand);
+            out.intValue =
+                isUnsignedType(operand.typeKind)
+                    ? static_cast<int64_t>(
+                          uint64_t{0} -
+                          static_cast<uint64_t>(constexprValueAsInt(operand)))
+                    : -constexprValueAsInt(operand);
             out.floatValue = static_cast<double>(out.intValue);
             out.boolValue = out.intValue != 0;
             out.typeKind = operand.typeKind;
@@ -1367,6 +1418,14 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         const int64_t rhs = constexprValueAsInt(rhsValue);
         const double lhsFloat = constexprValueAsDouble(lhsValue);
         const double rhsFloat = constexprValueAsDouble(rhsValue);
+        const bool unsignedOps = isUnsignedType(lhsValue.typeKind) ||
+                                 isUnsignedType(rhsValue.typeKind);
+        const uint64_t unsignedLhs = static_cast<uint64_t>(lhs);
+        const uint64_t unsignedRhs = static_cast<uint64_t>(rhs);
+        const auto integerResultKind =
+            unsignedOps && !isUnsignedType(lhsValue.typeKind)
+                ? rhsValue.typeKind
+                : lhsValue.typeKind;
         switch(bin->op)
         {
         case BinaryOpNode::OP_PLUS:
@@ -1380,9 +1439,12 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             else
             {
                 out.kind = ConstexprValue::Kind::Int;
-                out.intValue = lhs + rhs;
+                out.intValue =
+                    unsignedOps
+                        ? static_cast<int64_t>(unsignedLhs + unsignedRhs)
+                        : lhs + rhs;
                 out.floatValue = static_cast<double>(out.intValue);
-                out.typeKind = lhsValue.typeKind;
+                out.typeKind = integerResultKind;
             }
             break;
         case BinaryOpNode::OP_MINUS:
@@ -1396,9 +1458,12 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             else
             {
                 out.kind = ConstexprValue::Kind::Int;
-                out.intValue = lhs - rhs;
+                out.intValue =
+                    unsignedOps
+                        ? static_cast<int64_t>(unsignedLhs - unsignedRhs)
+                        : lhs - rhs;
                 out.floatValue = static_cast<double>(out.intValue);
-                out.typeKind = lhsValue.typeKind;
+                out.typeKind = integerResultKind;
             }
             break;
         case BinaryOpNode::OP_MULTIPLY:
@@ -1412,9 +1477,12 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             else
             {
                 out.kind = ConstexprValue::Kind::Int;
-                out.intValue = lhs * rhs;
+                out.intValue =
+                    unsignedOps
+                        ? static_cast<int64_t>(unsignedLhs * unsignedRhs)
+                        : lhs * rhs;
                 out.floatValue = static_cast<double>(out.intValue);
-                out.typeKind = lhsValue.typeKind;
+                out.typeKind = integerResultKind;
             }
             break;
         case BinaryOpNode::OP_DIVIDE:
@@ -1439,9 +1507,11 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                 return false;
             }
             out.kind = ConstexprValue::Kind::Int;
-            out.intValue = lhs / rhs;
+            out.intValue = unsignedOps
+                               ? static_cast<int64_t>(unsignedLhs / unsignedRhs)
+                               : lhs / rhs;
             out.floatValue = static_cast<double>(out.intValue);
-            out.typeKind = lhsValue.typeKind;
+            out.typeKind = integerResultKind;
             break;
         case BinaryOpNode::OP_MODULO:
             if(anyFloat)
@@ -1457,9 +1527,11 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                 return false;
             }
             out.kind = ConstexprValue::Kind::Int;
-            out.intValue = lhs % rhs;
+            out.intValue = unsignedOps
+                               ? static_cast<int64_t>(unsignedLhs % unsignedRhs)
+                               : lhs % rhs;
             out.floatValue = static_cast<double>(out.intValue);
-            out.typeKind = lhsValue.typeKind;
+            out.typeKind = integerResultKind;
             break;
         case BinaryOpNode::OP_BITAND:
             if(anyFloat)
@@ -1471,7 +1543,7 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             out.kind = ConstexprValue::Kind::Int;
             out.intValue = lhs & rhs;
             out.floatValue = static_cast<double>(out.intValue);
-            out.typeKind = lhsValue.typeKind;
+            out.typeKind = integerResultKind;
             break;
         case BinaryOpNode::OP_BITOR:
             if(anyFloat)
@@ -1483,7 +1555,7 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             out.kind = ConstexprValue::Kind::Int;
             out.intValue = lhs | rhs;
             out.floatValue = static_cast<double>(out.intValue);
-            out.typeKind = lhsValue.typeKind;
+            out.typeKind = integerResultKind;
             break;
         case BinaryOpNode::OP_BITXOR:
             if(anyFloat)
@@ -1495,7 +1567,7 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             out.kind = ConstexprValue::Kind::Int;
             out.intValue = lhs ^ rhs;
             out.floatValue = static_cast<double>(out.intValue);
-            out.typeKind = lhsValue.typeKind;
+            out.typeKind = integerResultKind;
             break;
         case BinaryOpNode::OP_SHL:
             if(anyFloat)
@@ -1505,9 +1577,16 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                 return false;
             }
             out.kind = ConstexprValue::Kind::Int;
-            out.intValue = lhs << rhs;
+            if(rhs < 0 || unsignedRhs >= 64)
+            {
+                if(errorMessage)
+                    *errorMessage =
+                        "shift count in cexpr must be between 0 and 63";
+                return false;
+            }
+            out.intValue = static_cast<int64_t>(unsignedLhs << unsignedRhs);
             out.floatValue = static_cast<double>(out.intValue);
-            out.typeKind = lhsValue.typeKind;
+            out.typeKind = integerResultKind;
             break;
         case BinaryOpNode::OP_SHR:
             if(anyFloat)
@@ -1517,28 +1596,45 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                 return false;
             }
             out.kind = ConstexprValue::Kind::Int;
-            out.intValue = lhs >> rhs;
+            if(rhs < 0 || unsignedRhs >= 64)
+            {
+                if(errorMessage)
+                    *errorMessage =
+                        "shift count in cexpr must be between 0 and 63";
+                return false;
+            }
+            out.intValue =
+                unsignedOps ? static_cast<int64_t>(unsignedLhs >> unsignedRhs)
+                            : lhs >> rhs;
             out.floatValue = static_cast<double>(out.intValue);
-            out.typeKind = lhsValue.typeKind;
+            out.typeKind = integerResultKind;
             break;
         case BinaryOpNode::OP_LT:
             out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = anyFloat ? lhsFloat < rhsFloat : lhs < rhs;
+            out.boolValue = anyFloat      ? lhsFloat < rhsFloat
+                            : unsignedOps ? unsignedLhs < unsignedRhs
+                                          : lhs < rhs;
             out.typeKind = TypeNode::TYPE_BOOL;
             break;
         case BinaryOpNode::OP_GT:
             out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = anyFloat ? lhsFloat > rhsFloat : lhs > rhs;
+            out.boolValue = anyFloat      ? lhsFloat > rhsFloat
+                            : unsignedOps ? unsignedLhs > unsignedRhs
+                                          : lhs > rhs;
             out.typeKind = TypeNode::TYPE_BOOL;
             break;
         case BinaryOpNode::OP_LE:
             out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = anyFloat ? lhsFloat <= rhsFloat : lhs <= rhs;
+            out.boolValue = anyFloat      ? lhsFloat <= rhsFloat
+                            : unsignedOps ? unsignedLhs <= unsignedRhs
+                                          : lhs <= rhs;
             out.typeKind = TypeNode::TYPE_BOOL;
             break;
         case BinaryOpNode::OP_GE:
             out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = anyFloat ? lhsFloat >= rhsFloat : lhs >= rhs;
+            out.boolValue = anyFloat      ? lhsFloat >= rhsFloat
+                            : unsignedOps ? unsignedLhs >= unsignedRhs
+                                          : lhs >= rhs;
             out.typeKind = TypeNode::TYPE_BOOL;
             break;
         case BinaryOpNode::OP_EQ:
@@ -1573,6 +1669,10 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         }
         else
         {
+            if(out.kind == ConstexprValue::Kind::Int &&
+               isUnsignedType(out.typeKind))
+                out.floatValue =
+                    static_cast<double>(static_cast<uint64_t>(out.intValue));
             out.boolValue = out.intValue != 0;
             if(out.kind == ConstexprValue::Kind::Float)
                 out.boolValue = out.floatValue != 0.0;

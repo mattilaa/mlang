@@ -1,4 +1,5 @@
 #include "module.h"
+#include "literal_operators.h"
 #include "source_filter.h"
 #include <algorithm>
 #include <filesystem>
@@ -586,6 +587,22 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                         continue;
                     if(function_signature_key(existing) == sigKey)
                     {
+                        std::string literalSuffix, literalInput;
+                        if(existing != func &&
+                           existing->sourceModule != func->sourceModule &&
+                           (existing->sourceModule.empty() ||
+                            existing->isPublic) &&
+                           (func->sourceModule.empty() || func->isPublic) &&
+                           mlang::literals::decodeOperatorName(
+                               func->name, literalSuffix, literalInput))
+                        {
+                            errorMsg =
+                                "ambiguous literal operator for suffix '" +
+                                literalSuffix + "' with input type '" +
+                                literalInput +
+                                "' imported from multiple sources";
+                            return false;
+                        }
                         // Prefer the more visible symbol when signatures
                         // collide across modules (e.g. private detail binding
                         // vs public facade declaration).

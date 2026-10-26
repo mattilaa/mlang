@@ -1,5 +1,6 @@
 #include "ir.h"
 #include "ir/common.h"
+#include "literal_operators.h"
 
 using mlang::ir_detail::common::Helpers;
 
@@ -75,6 +76,18 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
     {
         if(info.signatureKey == signatureKey)
         {
+            std::string literalSuffix, literalInput;
+            if(info.node != node && info.node && info.node->body &&
+               node->body && info.sourceModule == node->sourceModule &&
+               mlang::literals::decodeOperatorName(node->name, literalSuffix,
+                                                   literalInput))
+            {
+                reportError(node->line,
+                            "duplicate literal operator for suffix '" +
+                                literalSuffix + "' with input type '" +
+                                literalInput + "'");
+                return;
+            }
             // Module import merging can surface the same declaration multiple
             // times. Treat identical signatures from the same source/symbol as
             // duplicates to skip, not hard errors.

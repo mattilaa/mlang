@@ -421,6 +421,331 @@ TEST_F(MLATest, BitwiseAndAssignmentRejectsImmutableTarget)
     EXPECT_TRUE(compile(false));
 }
 
+TEST_F(MLATest, UserDefinedLiteralDemo)
+{
+    const fs::path example = fs::path(__FILE__).parent_path().parent_path() /
+                             "examples/user_defined_literals_demo.mla";
+    std::ifstream input(example);
+    ASSERT_TRUE(input.is_open()) << example;
+    std::ostringstream source;
+    source << input.rdbuf();
+    writeSource(source.str());
+    for(const std::string options : {"-O0", "-O2"})
+    {
+        SCOPED_TRACE(options);
+        ASSERT_TRUE(compile(true, options));
+        EXPECT_EQ(runExitCode(), 0);
+    }
+}
+
+TEST_F(MLATest, UserDefinedLiteralDispatchesByLiteralCategory)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        fn operator""_kind(value: u64) -> i32 { return 1; }
+        fn operator "" _kind(value: f64) -> i32 { return 2; }
+        fn operator ""_kind(value: str8) -> i32 { return 3; }
+        fn operator "" _64(value: u64) -> u64 { return value; }
+        fn operator "" __units(value: f64) -> f64 { return value; }
+        fn main() -> i32 {
+            if 42_kind != 1 { return 1; }
+            if 42.0_kind != 2 { return 2; }
+            if "42"_kind != 3 { return 3; }
+            if 4_64 != 4u64 || 1.5__units != 1.5 { return 4; }
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, UserDefinedLiteralIntegerBasesAndFullUnsignedRange)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        fn operator "" _value(value: u64) -> u64 { return value; }
+        fn main() -> i32 {
+            if 42_value != 0x2A_value { return 1; }
+            if 0b101010_value != 42_value { return 2; }
+            if 00042_value != 42u64 { return 3; }
+            if 18446744073709551615_value != ~0u64 { return 4; }
+            if 0xFFFFFFFFFFFFFFFF_value != ~0u64 { return 5; }
+            if 0b1111111111111111111111111111111111111111111111111111111111111111_value != ~0u64 { return 6; }
+            if 9223372036854775808_value != (1u64 << 63) { return 7; }
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, UserDefinedLiteralFloatingFormsAndPrecedence)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        fn operator "" _scaled(value: f64) -> f64 { return value * 2.0 + 1.0; }
+        fn operator "" _raw(value: f64) -> f64 { return value; }
+        fn main() -> i32 {
+            if 1.5_scaled != 4.0 { return 1; }
+            if .5_scaled != 2.0 { return 2; }
+            if 1._scaled != 3.0 { return 3; }
+            if 1e2_scaled != 201.0 { return 4; }
+            if 1.5e+1_scaled != 31.0 { return 5; }
+            if 2.5e-1_scaled != 1.5 { return 6; }
+            if -1.5_scaled != -4.0 { return 7; }
+            if 2.0 * 1.5_scaled + 1.0 != 9.0 { return 8; }
+            if 5e-324_raw <= 0.0 { return 9; }
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, UserDefinedLiteralStringsDecodeEscapes)
+{
+    EXPECT_EQ(compileAndRun(R"(
+        fn operator "" _text(value: str8) -> str8 { return value; }
+        fn main() -> i32 {
+            println!("{}", "hello\n\"world\"\t\x21"_text);
+            println!("{}", ""_text);
+            return 0;
+        }
+    )"),
+              "hello\n\"world\"\t!\n\n");
+}
+
+TEST_F(MLATest, UserDefinedLiteralBuiltinResultsAndExistingSuffixes)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        fn operator "" _small(value: u64) -> u8 { return u8(value); }
+        fn operator "" _positive(value: f64) -> bool { return value > 0.0; }
+        fn operator "" _single(value: f64) -> f32 { return f32(value); }
+        fn main() -> i32 {
+            let small: u8 = 7_small;
+            if small != 7u8 { return 1; }
+            if !1.5_positive { return 2; }
+            if 1.5_single != 1.5f { return 3; }
+            let typed: i64 = 3i64;
+            let hex: u8 = 0xFFu8;
+            let binary: u8 = 0b11u8;
+            return typed == 3 && hex == 255u8 && binary == 3u8 ? 0 : 4;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, UserDefinedLiteralNumericConstexpr)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        cexpr fn operator "" _twice(value: u64) -> u64 { return value * 2u64; }
+        cexpr fn operator "" _half(value: f64) -> f64 { return value / 2.0; }
+        cexpr count: u64 = 3_twice;
+        fn main() -> i32 {
+            cexpr half: f64 = 9.0_half;
+            if count != 6u64 || half != 4.5 { return 1; }
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, UserDefinedLiteralConstexprPreservesUnsignedSemantics)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        cexpr fn operator "" _shift(value: u64) -> u64 { return value >> 1u64; }
+        cexpr fn operator "" _divide(value: u64) -> u64 { return value / 2u64; }
+        cexpr fn operator "" _increment(value: u64) -> u64 { return value + 1u64; }
+        cexpr fn operator "" _positive(value: u64) -> bool { return value > 0u64; }
+        cexpr fn operator "" _odd(value: u64) -> bool { return value % 2u64 == 1u64; }
+        fn main() -> i32 {
+            cexpr shifted: u64 = 18446744073709551615_shift;
+            cexpr divided: u64 = 18446744073709551615_divide;
+            cexpr wrapped: u64 = 18446744073709551615_increment;
+            cexpr positive: bool = 18446744073709551615_positive;
+            cexpr odd: bool = 18446744073709551615_odd;
+            if shifted != 0x7FFFFFFFFFFFFFFFu64 || divided != shifted { return 1; }
+            if wrapped != 0u64 || !positive || !odd { return 2; }
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, UserDefinedLiteralLooksUpEnclosingNamespaces)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        fn operator "" _fallback(value: u64) -> u64 { return value + 10u64; }
+        namespace first {
+            cexpr fn operator "" _unit(value: u64) -> u64 { return value * 10u64; }
+            cexpr fn amount() -> u64 { return 4_unit; }
+            fn operator "" _raw(value: u64) -> u64 { return value; }
+            fn high_half() -> u64 { return 18446744073709551615_raw >> 1; }
+            fn fallback() -> u64 { return 1_fallback; }
+        }
+        namespace second {
+            fn operator "" _unit(value: u64) -> u64 { return value * 100u64; }
+            fn amount() -> u64 { return 4_unit; }
+        }
+        fn main() -> i32 {
+            cexpr first_value: u64 = first::amount();
+            if first_value != 40u64 { return 1; }
+            if second::amount() != 400u64 { return 2; }
+            if first::high_half() != 0x7FFFFFFFFFFFFFFFu64 { return 4; }
+            return first::fallback() == 11u64 ? 0 : 3;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, UserDefinedLiteralRejectsMissingCategory)
+{
+    writeSource(R"(
+        fn operator "" _float_only(value: f64) -> f64 { return value; }
+        fn main() -> i32 { let value = 1_float_only; return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("no user-defined literal operator for suffix "
+                       "'_float_only' with input type 'u64'"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, UserDefinedLiteralRejectsUnknownSuffix)
+{
+    writeSource(R"(fn main() -> i32 { return 42_unknown; })");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(
+        out.find("no user-defined literal operator for suffix '_unknown'"),
+        std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, UserDefinedLiteralRejectsInvalidSignatures)
+{
+    for(const std::string definition :
+        {"fn operator \"\" _bad() -> i64 { return 0; }",
+         "fn operator \"\" _bad(value: i64) -> i64 { return value; }",
+         "fn operator \"\" _bad(value: f32) -> f32 { return value; }",
+         "fn operator \"\" _bad(value: &u64) -> u64 { return value; }",
+         "fn operator \"\" _bad(value: u64, other: u64) -> u64 { return value; "
+         "}",
+         "fn operator \"\" _bad(value: u64, ...) -> u64 { return value; }",
+         "fn operator \"\" _bad(value: u64) -> void { return; }",
+         "fn operator \"\" _bad(value: u64) -> list<i32> { return [1]; }"})
+    {
+        SCOPED_TRACE(definition);
+        writeSource(definition + " fn main() -> i32 { return 0; }");
+        int rc = 0;
+        const std::string out = compileCapture(rc);
+        EXPECT_EQ(rc, 1);
+        EXPECT_NE(out.find("MLANG-E1019"), std::string::npos) << out;
+    }
+}
+
+TEST_F(MLATest, UserDefinedLiteralRejectsInvalidSuffixName)
+{
+    writeSource(R"(
+        fn operator "" bad(value: u64) -> u64 { return value; }
+        fn main() -> i32 { return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("suffix must begin with '_'"), std::string::npos) << out;
+}
+
+TEST_F(MLATest, UserDefinedLiteralRejectsOutOfRangeNumbers)
+{
+    for(const std::string literal :
+        {"18446744073709551616_value", "0x10000000000000000_value",
+         "1e9999_value"})
+    {
+        SCOPED_TRACE(literal);
+        writeSource("fn main() -> i32 { let value = " + literal +
+                    "; return 0; }");
+        int rc = 0;
+        const std::string out = compileCapture(rc);
+        EXPECT_EQ(rc, 1);
+        EXPECT_NE(out.find("MLANG-E1019"), std::string::npos) << out;
+        EXPECT_NE(out.find("out of range"), std::string::npos) << out;
+    }
+}
+
+TEST_F(MLATest, UserDefinedLiteralRejectsDuplicateCategory)
+{
+    writeSource(R"(
+        fn operator "" _dup(value: u64) -> u64 { return value; }
+        fn operator "" _dup(value: u64) -> u64 { return value + 1u64; }
+        fn main() -> i32 { return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("duplicate literal operator"), std::string::npos) << out;
+}
+
+TEST_F(MLATest, UserDefinedLiteralImportsPublicModuleOperators)
+{
+    {
+        std::ofstream module(testDir + "/literal_units.mla");
+        module << R"(
+            cexpr fn operator "" _factor(value: u64) -> u64 { return value; }
+            pub cexpr fn operator "" _tick(value: u64) -> u64 { return value * 10_factor; }
+        )";
+    }
+    writeSource(R"(
+        mod literal_units;
+        use literal_units::*;
+        fn main() -> i32 {
+            cexpr ticks: u64 = 4_tick;
+            return ticks == 40u64 ? 0 : 1;
+        }
+    )");
+    ASSERT_TRUE(compile());
+    EXPECT_EQ(runExitCode(), 0);
+}
+
+TEST_F(MLATest, UserDefinedLiteralPrivateModuleOperatorIsNotVisible)
+{
+    {
+        std::ofstream module(testDir + "/literal_private.mla");
+        module << R"(
+            cexpr fn operator "" _hidden(value: u64) -> u64 { return value; }
+        )";
+    }
+    for(const std::string declaration :
+        {"let value = 4_hidden;", "cexpr value: u64 = 4_hidden;"})
+    {
+        SCOPED_TRACE(declaration);
+        writeSource(
+            "mod literal_private; use literal_private::*; fn main() -> i32 { " +
+            declaration + " return 0; }");
+        int rc = 0;
+        const std::string out = compileCapture(rc);
+        EXPECT_EQ(rc, 1) << out;
+    }
+}
+
+TEST_F(MLATest, UserDefinedLiteralRejectsAmbiguousPublicImports)
+{
+    for(const std::string name : {"literal_first", "literal_second"})
+    {
+        std::ofstream module(testDir + "/" + name + ".mla");
+        module
+            << R"(pub fn operator "" _same(value: u64) -> u64 { return value; })";
+    }
+    writeSource(R"(
+        mod literal_first;
+        mod literal_second;
+        use literal_first::*;
+        use literal_second::*;
+        fn main() -> i32 { return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("ambiguous literal operator"), std::string::npos) << out;
+}
+
 TEST_F(MLATest, MainReturnsExpression)
 {
     std::string code = R"(

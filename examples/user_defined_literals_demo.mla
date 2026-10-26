@@ -1,0 +1,23 @@
+/// \file user_defined_literals_demo.mla
+/// @ingroup examples
+/// \brief Compiler-defined suffix operators for builtin values.
+
+cexpr fn operator "" _ms(value: u64) -> u64 {
+    return value * 1000u64;
+}
+
+cexpr fn operator "" _ms(value: f64) -> f64 {
+    return value * 1000.0;
+}
+
+fn operator "" _label(value: str8) -> str8 {
+    return value;
+}
+
+fn main() -> i32 {
+    cexpr delay_us: u64 = 25_ms;
+    let fractional_us: f64 = 1.5_ms;
+    let label: str8 = "delay"_label;
+    println!("{}: {} us, fractional: {} us", label, delay_us, fractional_us);
+    return delay_us == 25000u64 && fractional_us == 1500.0 ? 0 : 1;
+}

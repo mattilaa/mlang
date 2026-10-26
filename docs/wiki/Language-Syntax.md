@@ -240,6 +240,73 @@ let colored: str8 = "\x1b[38;2;164;255;82mhello\x1b[0m";
 
 Use `\xNN` for terminal escape bytes such as `\x1b` (`ESC`).
 
+### User-Defined Literal Suffixes
+
+Define a suffix operator with `fn operator "" _suffix(...) -> Type`:
+
+```mla
+cexpr fn operator "" _ms(value: u64) -> u64 {
+    return value * 1000u64;
+}
+
+fn operator "" _ms(value: f64) -> f64 {
+    return value * 1000.0;
+}
+
+fn operator "" _label(value: str8) -> str8 {
+    return value;
+}
+
+fn main() -> i32 {
+    cexpr delay_us: u64 = 25_ms;
+    let fractional_us: f64 = 1.5_ms;
+    let label: str8 = "delay"_label;
+    println!("{}: {} us, {} us", label, delay_us, fractional_us);
+    return 0;
+}
+```
+
+This is a compiler feature: the lexer recognizes the suffixed literal, and the
+parser lowers it to a typed operator call. No runtime registration or macro is
+required. The result has the operator's declared builtin type.
+
+| Literal form | Operator parameter |
+| --- | --- |
+| `42_unit`, `0x2A_unit`, `0b101010_unit` | `u64` |
+| `1.5_unit`, `.5_unit`, `1._unit`, `1e3_unit`, `2.5e-1_unit` | `f64` |
+| `"hello"_unit` | `str8` (with the usual string escape decoding) |
+
+Each declaration takes exactly one value parameter of the listed builtin type.
+The same suffix may have one operator for each of the three input categories;
+integer literals do not fall back to a floating-point overload. Return types
+are builtin integers, `bit`, `bool`, `f32`, `f64`, `str8`, or `str16`. Custom
+struct, container, pointer, and reference signatures are not accepted.
+
+Suffixes must start with `_` and contain at least one additional letter, digit,
+or underscore. Remaining characters are limited to letters, digits, and underscores. A suffix must directly
+follow its literal. Both `operator""_ms` and `operator "" _ms` work in a
+declaration. Existing builtin suffixes such as `u8`, `i64`, and `f` keep their
+meaning; do not combine a builtin suffix and a user-defined suffix.
+
+The suffix call binds to the literal before surrounding operators:
+`-2.5_unit` negates the result of `2.5_unit`. For example, if the operator adds
+one, `-2.5_unit` means `-(operator(2.5))`, not `operator(-2.5)`. Decimal,
+hexadecimal, and binary integer inputs are checked against the full `u64`
+range; floating-point inputs must be representable as finite `f64` values.
+
+Declare numeric operators with `cexpr fn` to use their results in `cexpr`
+expressions and declarations. Ordinary operators run as normal function calls.
+The existing compile-time evaluator does not evaluate string-valued operators.
+Operators are top-level or namespace declarations, rather than methods,
+generic templates, raw-token operators, or character literal operators.
+
+Use `pub fn` (or `pub cexpr fn`) and `use module_name::*;` to import suffixes
+from a module. Normal module visibility applies. Missing categories, invalid
+signatures, duplicate definitions, and out-of-range inputs are compile errors.
+
+See @ref examples/user_defined_literals_demo.mla
+"user_defined_literals_demo.mla" for a runnable example.
+
 ### Checked Narrow Integer Casts
 
 `narrow_cast<T>(value)` converts between integer types while preserving the
