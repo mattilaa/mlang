@@ -111,6 +111,8 @@ bool CodeGenerator::probeRequirement(
                     probe.structVisibility[definition->name] =
                         {definition->isPublic, definition->sourceModule};
                     probe.generateStructDefinition(definition);
+                    if(probe.hasError)
+                        return false;
                     probe.generateStructMethods(definition);
                 }
     }

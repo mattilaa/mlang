@@ -909,6 +909,10 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
+    // Invalid layouts must not reach function signatures or method bodies.
+    if(hasError)
+        return;
+
     // Generate forward declarations for all functions first
     if(program->functionList)
     {

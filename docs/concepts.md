@@ -154,7 +154,7 @@ The examples cover three further ways to combine the keywords:
 | --- | --- | --- |
 | [Overload refinement](../examples/where_req_refinement_demo.mla) | `where HasValue<T>` versus `where WeightedValue<T>`, with both concepts defined using `req` | A plain record scores 7, a weighted record scores 42, and an unrelated record uses the fallback, scoring 0. |
 | [Numeric constraints](../examples/where_req_numeric_demo.mla) | `where same_as<T, U> && req(a: T, b: U) { ... }` | Integer addition produces 42 and floating-point addition produces 4. The result requirement checks `same_as<T>` and `noexcept`; nested `where arithmetic<T>;` checks a boolean. |
-| [Capability queries](../examples/req_capability_demo.mla) | Use a concept defined with `req` in `cexpr if` | An integer-valued record returns 42; a floating-valued record and a scalar return 0. A call inside `req` leaves its counter unchanged. |
+| [Capability queries](../examples/req_capability_demo.mla) | Use a concept defined with `req` in `cexpr if` | An integer-valued record returns 42; floating-valued and string-valued records and a scalar return 0. A call inside `req` leaves its counter unchanged. |
 
 For example, a structural refinement combines an existing concept with another
 `req` expression:

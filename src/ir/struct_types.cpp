@@ -83,10 +83,21 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
         }
         else
         {
+            llvm::Type* memberType = getLLVMTypeFromNode(member->type);
+            if(!memberType || !llvm::StructType::isValidElementType(memberType))
+            {
+                reportError(
+                    member->line,
+                    "invalid type '" +
+                        Helpers::type_name_for_error(member->type) +
+                        "' for field '" + member->name + "' in struct '" +
+                        node->name + "'");
+                return;
+            }
             packingBitRun = false;
             packedBitOffset = 0;
             layout.storageIndex = static_cast<unsigned>(memberTypes.size());
-            memberTypes.push_back(getLLVMTypeFromNode(member->type));
+            memberTypes.push_back(memberType);
         }
         layouts.push_back(layout);
     }

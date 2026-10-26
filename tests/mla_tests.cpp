@@ -1339,6 +1339,57 @@ TEST_F(MLATest, StructuralRequiresDoesNotInstantiateCalledBodies)
         0);
 }
 
+TEST_F(MLATest, StructuralRequiresStringFields)
+{
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
+        mod std::concepts;
+        use std::concepts::*;
+        struct Label { var value: str8; };
+        struct WideLabel { var value: str16; };
+        concept StringValue<T> = req(value: T) {
+            { value.value } -> same_as<str8>;
+        };
+        generic<T> where StringValue<T>
+        fn read(value: T) -> str8 { return value.value; }
+        fn main() -> i32 {
+            static_assert!(StringValue<Label>);
+            static_assert!(!StringValue<WideLabel>);
+            static_assert!(req(value: WideLabel) {
+                { value.value } -> same_as<str16>;
+            });
+            static_assert!(!req(value: Label) {
+                { value.value } -> integral;
+            });
+            let label = Label { value: "hello" };
+            return read(label) == "hello" ? 0 : 1;
+        }
+    )"),
+        0);
+}
+
+TEST_F(MLATest, StructInvalidFieldTypesAreRejected)
+{
+    for(const std::string type : {"str", "Missing", "void"})
+    {
+        SCOPED_TRACE(type);
+        writeSource(
+            "struct Invalid { var value: " + type +
+            "; fn read(self: &Self) -> i32 { return 1; } }; "
+            "fn consume(value: Invalid) -> i32 { return value.read(); } "
+            "fn main() -> i32 { return 0; }");
+        int rc = 0;
+        const std::string out = compileCapture(rc);
+        EXPECT_EQ(rc, 1) << out;
+        EXPECT_NE(
+            out.find(
+                "invalid type '" + type +
+                "' for field 'value' in struct 'Invalid'"),
+            std::string::npos)
+            << out;
+    }
+}
+
 TEST_F(MLATest, StructuralRequiresReferenceMutability)
 {
     EXPECT_EQ(
