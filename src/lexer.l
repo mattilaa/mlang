@@ -2,10 +2,14 @@
 #include "parser.hpp"
 #include "diagnostics.h"
 #include "ast.h"
+#include "literal_operators.h"
 #include <string.h>
 #include <cctype>
 #include <cstdlib>
 #include <string>
+#include <cerrno>
+#include <cmath>
+#include <cstdint>
 
 extern bool parseHadError;
 extern const char* g_sourceFile;
@@ -13,6 +17,8 @@ int mlaBranchHintPending = 0;
 int mlaBranchHintLine = 0;
 int mlaBranchHintColumn = 0;
 int mlaDeclarationBranchPrediction = 0;
+static int mlaStringStartLine = 1;
+static int mlaStringStartColumn = 1;
 
 // Parse the type-suffix portion of a typed integer literal (e.g. "i64",
 // "u8") into a TypeNode::TypeKind. Returns TYPE_VOID for unrecognized
@@ -44,6 +50,51 @@ static ASTNode* mla_lex_make_typed_int(int64_t value, const char* suffix)
     if(kind != TypeNode::TYPE_VOID)
         node->explicitType = static_cast<TypeNode::TypeKind>(kind);
     return node;
+}
+
+static void mla_lex_literal_error(const char* message)
+{
+    parseHadError = true;
+    const auto formatted = mlang::diag::format_message_with_code("MLANG-E1019", message);
+    const int line = yylloc.first_line;
+    const int column = yylloc.first_column;
+    if(!mlang::diag::capture_parser_diagnostic(line, column, formatted))
+        fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line, column, formatted.c_str());
+}
+
+static ASTNode* mla_lex_user_literal(ExpressionNode* value, const char* suffix,
+                                     TypeNode::TypeKind kind)
+{
+    auto* call = new FunctionCallNode(mlang::literals::operatorName(suffix, kind));
+    call->arguments.push_back(value);
+    call->line = value->line = yylloc.first_line;
+    call->col = value->col = yylloc.first_column;
+    call->file = value->file = g_sourceFile;
+    return call;
+}
+
+static ASTNode* mla_lex_user_integer(const char* text, int base)
+{
+    const char* suffix = strchr(text, '_');
+    errno = 0;
+    const uint64_t value = strtoull(text, nullptr, base);
+    if(errno == ERANGE)
+        mla_lex_literal_error("integer user-defined literal is out of range for u64");
+    int64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    auto* literal = new IntLiteralNode(bits);
+    literal->explicitType = TypeNode::TYPE_U64;
+    return mla_lex_user_literal(literal, suffix, TypeNode::TYPE_U64);
+}
+
+static ASTNode* mla_lex_user_float(const char* text)
+{
+    const char* suffix = strchr(text, '_');
+    errno = 0;
+    const double value = strtod(text, nullptr);
+    if(!std::isfinite(value) || (errno == ERANGE && value == 0.0))
+        mla_lex_literal_error("floating-point user-defined literal is out of range for f64");
+    return mla_lex_user_literal(new DoubleLiteralNode(value), suffix, TypeNode::TYPE_DOUBLE);
 }
 
 static void mla_lex_append_byte(char byte)
@@ -239,8 +290,17 @@ static int mla_lex_peek_branch_declaration()
     "*"         { /* Ignore '*'s that aren't followed by '/' */ }
     \n          { /* Ignore newlines */ }
 }
-\"              { yylval.sval = strdup(""); BEGIN(STRING_); }
+\"              { mlaStringStartLine = yylloc.first_line; mlaStringStartColumn = yylloc.first_column; yylval.sval = strdup(""); BEGIN(STRING_); }
 <STRING_>{
+    \"_[a-zA-Z0-9_]+ {
+                  char* contents = yylval.sval;
+                  yylloc.first_line = mlaStringStartLine;
+                  yylloc.first_column = mlaStringStartColumn;
+                  yylval.ast = mla_lex_user_literal(new StringLiteralNode(contents), yytext + 1, TypeNode::TYPE_STR8);
+                  free(contents);
+                  BEGIN(INITIAL);
+                  return USER_DEFINED_LITERAL;
+                }
     \"          { BEGIN(INITIAL); return STRING_LITERAL; }
     \\x[0-9a-fA-F]{2} {
                   int value = (mla_lex_hex_value(yytext[2]) << 4) |
@@ -270,6 +330,12 @@ static int mla_lex_peek_branch_declaration()
 "cexpr"         { return CEXPR; }
 "generic"       { return GENERIC; }
 "fn"            { return FUNCTION; }
+"operator"[ \t\r\n]*\"\"[ \t\r\n]*[a-zA-Z_][a-zA-Z0-9_]* {
+                  const char* suffix = strrchr(yytext, '"') + 1;
+                  while(*suffix && std::isspace(static_cast<unsigned char>(*suffix))) ++suffix;
+                  yylval.sval = strdup(suffix);
+                  return LITERAL_OPERATOR_NAME;
+                }
 "impl"          { return IMPL; }
 "trait"         { return TRAIT; }
 "dyn"           { return DYN; }
@@ -449,6 +515,18 @@ static int mla_lex_peek_branch_declaration()
 "="             { return ASSIGN; }
 ","             { return COMMA; }
 [a-zA-Z_][a-zA-Z0-9_]* { yylval.sval = strdup(yytext); return IDENTIFIER; }
+0[xX][0-9a-fA-F]+_[a-zA-Z0-9_]+ {
+                  yylval.ast = mla_lex_user_integer(yytext, 16); return USER_DEFINED_LITERAL;
+                }
+0[bB][01]+_[a-zA-Z0-9_]+ {
+                  yylval.ast = mla_lex_user_integer(yytext + 2, 2); return USER_DEFINED_LITERAL;
+                }
+(([0-9]+\.[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?|[0-9]+[eE][+-]?[0-9]+)_[a-zA-Z0-9_]+ {
+                  yylval.ast = mla_lex_user_float(yytext); return USER_DEFINED_LITERAL;
+                }
+[0-9]+_[a-zA-Z0-9_]+ {
+                  yylval.ast = mla_lex_user_integer(yytext, 10); return USER_DEFINED_LITERAL;
+                }
 [0-9]+\.[0-9]+f { yylval.fval = atof(yytext); return FLOAT_LITERAL; }
 [0-9]+\.[0-9]+  { yylval.dval = atof(yytext); return DOUBLE_LITERAL; }
 0[bB][01]+(i|u)(8|16|32|64) {

@@ -1,5 +1,6 @@
 #include "ir.h"
 #include "ir/common.h"
+#include "literal_operators.h"
 
 TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 {
@@ -23,6 +24,9 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
     {
+        auto constant = constexprValues.find(id->name);
+        if(constant != constexprValues.end())
+            return new TypeNode(constant->second.typeKind);
         if(closureVariables.find(id->name) != closureVariables.end())
             return new PointerTypeNode(new TypeNode(TypeNode::TYPE_VOID));
         if(!validateVariableAccessible(id->name, line, id->col))
@@ -164,7 +168,23 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
         if(callable != functionTypeVariables.end() && callable->second)
             return cloneTypeNode(callable->second->returnType);
 
-        auto overloadIt = functionOverloads.find(call->name);
+        std::string lookupName = call->name;
+        std::string literalSuffix, literalInput;
+        if(lookupName.find("::") == std::string::npos &&
+           mlang::literals::decodeOperatorName(lookupName, literalSuffix,
+                                               literalInput) &&
+           builder.GetInsertBlock())
+        {
+            const std::string caller =
+                builder.GetInsertBlock()->getParent()->getName().str();
+            const size_t scopeEnd = caller.rfind("::");
+            if(scopeEnd != std::string::npos)
+                lookupName = mlang::literals::scopedOperatorName(
+                    lookupName, caller.substr(0, scopeEnd),
+                    [&](const std::string& name)
+                    { return functionOverloads.count(name) != 0; });
+        }
+        auto overloadIt = functionOverloads.find(lookupName);
         if(overloadIt != functionOverloads.end())
         {
             for(const auto& info : overloadIt->second)
@@ -509,8 +529,10 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
 
     if(dynamic_cast<BoolLiteralNode*>(expr))
         return new TypeNode(TypeNode::TYPE_BOOL);
-    if(dynamic_cast<IntLiteralNode*>(expr))
-        return new TypeNode(TypeNode::TYPE_I64);
+    if(auto* literal = dynamic_cast<IntLiteralNode*>(expr))
+        return new TypeNode(literal->explicitType == TypeNode::TYPE_VOID
+                                ? TypeNode::TYPE_I64
+                                : literal->explicitType);
     if(dynamic_cast<FloatLiteralNode*>(expr))
         return new TypeNode(TypeNode::TYPE_FLOAT);
     if(dynamic_cast<DoubleLiteralNode*>(expr))
