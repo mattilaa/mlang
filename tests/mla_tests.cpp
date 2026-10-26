@@ -746,6 +746,406 @@ TEST_F(MLATest, UserDefinedLiteralRejectsAmbiguousPublicImports)
     EXPECT_NE(out.find("ambiguous literal operator"), std::string::npos) << out;
 }
 
+TEST_F(MLATest, ConceptsDemo)
+{
+    const fs::path example = fs::path(__FILE__).parent_path().parent_path() /
+                             "examples/concepts_demo.mla";
+    std::ifstream input(example);
+    ASSERT_TRUE(input.is_open()) << example;
+    std::ostringstream source;
+    source << input.rdbuf();
+    writeSource(source.str());
+    for(const std::string options : {"-O0", "-O2"})
+    {
+        SCOPED_TRACE(options);
+        ASSERT_TRUE(compile(true, options));
+        EXPECT_EQ(runExitCode(), 0);
+    }
+}
+
+TEST_F(MLATest, ConceptsBooleanQueriesAndAliases)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept Integral<T> = type_id(T) == i32 || type_id(T) == i64;
+        concept Same<T, U> = type_id(T) == type_id(U);
+        alias Number = i32;
+        cexpr global_ok: bool = Integral<i32>;
+        fn main() -> i32 {
+            static_assert!(Integral<Number>);
+            static_assert!(!Integral<f64>);
+            static_assert!(Same<ptr<i32>, ptr<i32>>);
+            static_assert!(!Same<i32, f64>);
+            let value = Integral<i64>;
+            return global_ok && value ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, ConceptsRequiresClauseFiltersBeforeBodyInstantiation)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept Whole<T> = type_id(T) == i32;
+        generic<T> requires Whole<T>
+        fn choose(value: T) -> i32 { return value + 1; }
+        generic<T>
+        fn choose(value: T) -> i32 { return 7; }
+        struct Marker { var ignored: i32; };
+        fn main() -> i32 {
+            let number: i32 = 41;
+            if choose(number) != 42 { return 1; }
+            let marker = Marker { ignored: 0 };
+            return choose(marker) == 7 ? 0 : 2;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, ConceptsLosingViableOverloadDoesNotInstantiateBody)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept Whole<T> = type_id(T) == i32;
+        generic<T>
+        fn choose(value: T) -> i32 { return value.missing; }
+        generic<T> requires Whole<T>
+        fn choose(value: T) -> i32 { return 42; }
+        fn main() -> i32 {
+            let value: i32 = 1;
+            return choose(value) == 42 ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, ConceptsConjunctionAndDisjunctionSubsumption)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept Whole<T> = type_id(T) == i32 || type_id(T) == i64;
+        concept Floating<T> = type_id(T) == f64;
+        concept Numeric<T> = Whole<T> || Floating<T>;
+        concept Narrow<T> = Whole<T> && type_id(T) == i32;
+        generic<T> requires Numeric<T>
+        fn rank(value: T) -> i32 { return 1; }
+        generic<T> requires Whole<T>
+        fn rank(value: T) -> i32 { return 2; }
+        generic<T> requires Narrow<T>
+        fn rank(value: T) -> i32 { return 3; }
+        fn main() -> i32 {
+            let small: i32 = 1;
+            let wide: i64 = 1;
+            return rank(small) == 3 && rank(wide) == 2 && rank(1.0) == 1 ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, ConceptsIncomparableOverloadsAreAmbiguous)
+{
+    writeSource(R"(
+        concept First<T> = type_id(T) == i32;
+        concept Second<T> = type_id(T) == i32;
+        generic<T> requires First<T>
+        fn choose(value: T) -> i32 { return 1; }
+        generic<T> requires Second<T>
+        fn choose(value: T) -> i32 { return 2; }
+        fn main() -> i32 { let value: i32 = 1; return choose(value); }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("ambiguous call"), std::string::npos) << out;
+}
+
+TEST_F(MLATest, ConceptsGenericStructBounds)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept Whole<T> = type_id(T) == i32;
+        struct Box<T: Whole> { var value: T; };
+        fn main() -> i32 {
+            let box: Box<i32> = Box<i32> { value: 42 };
+            return box.value == 42 ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, ConceptsRejectUnsatisfiedStructBound)
+{
+    writeSource(R"(
+        concept Whole<T> = type_id(T) == i32;
+        struct Box<T: Whole> { var value: T; };
+        fn main() -> i32 { let box: Box<f64> = Box<f64> { value: 1.0 }; return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("does not satisfy concept 'Whole'"), std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, ConceptsFalseRequiresHasDiagnostic)
+{
+    writeSource(R"(
+        concept Whole<T> = type_id(T) == i32;
+        generic<T> requires Whole<T>
+        fn only_whole(value: T) -> T { return value; }
+        fn main() -> i32 { let result = only_whole(1.5); return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("constraints not satisfied"), std::string::npos) << out;
+    EXPECT_NE(out.find("f64"), std::string::npos) << out;
+}
+
+TEST_F(MLATest, ConceptsRejectNonBooleanPredicate)
+{
+    writeSource(R"(
+        concept Wrong<T> = 1;
+        fn main() -> i32 { static_assert!(Wrong<i32>); return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("must evaluate to bool"), std::string::npos) << out;
+}
+
+TEST_F(MLATest, ConceptsDetectRecursion)
+{
+    writeSource(R"(
+        concept Recursive<T> = Recursive<T>;
+        fn main() -> i32 { static_assert!(Recursive<i32>); return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("recursive concept"), std::string::npos) << out;
+}
+
+TEST_F(MLATest, ConceptsBooleanShortCircuit)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept Safe<T> = true || (1 / 0 == 0);
+        concept Never<T> = false && (1 / 0 == 0);
+        fn main() -> i32 {
+            static_assert!(Safe<i32>);
+            static_assert!(!Never<i32>);
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, ConceptsMultiParameterRequires)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept Same<T, U> = type_id(T) == type_id(U);
+        generic<T, U> requires Same<T, U>
+        fn match_pair(first: T, second: U) -> i32 { return 42; }
+        fn main() -> i32 {
+            let first: i32 = 1;
+            let second: i32 = 2;
+            return match_pair(first, second) == 42 ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, ConceptsConstexprConstrainedOverloadSelection)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept Whole<T> = type_id(T) == i32;
+        generic<T>
+        cexpr fn category(value: T) -> i32 { return 1; }
+        generic<T> requires Whole<T>
+        cexpr fn category(value: T) -> i32 { return 2; }
+        fn main() -> i32 {
+            cexpr first: i32 = category(1i32);
+            cexpr second: i32 = category(1.0);
+            return first == 2 && second == 1 ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, ConceptsPublicImportAndPrivateImplementation)
+{
+    {
+        std::ofstream module(testDir + "/concept_module.mla");
+        module << R"(
+            concept Hidden<T> = type_id(T) == i32;
+            pub concept Public<T> = Hidden<T>;
+            generic<T> requires Hidden<T>
+            pub fn accepted(value: T) -> i32 { return 42; }
+        )";
+    }
+    writeSource(R"(
+        mod concept_module;
+        use concept_module::*;
+        fn main() -> i32 {
+            static_assert!(Public<i32>);
+            let value: i32 = 1;
+            return accepted(value) == 42 ? 0 : 1;
+        }
+    )");
+    ASSERT_TRUE(compile());
+    EXPECT_EQ(runExitCode(), 0);
+}
+
+TEST_F(MLATest, ConceptsPrivateImportCannotBeQueried)
+{
+    {
+        std::ofstream module(testDir + "/private_concept.mla");
+        module << "concept Hidden<T> = type_id(T) == i32;";
+    }
+    writeSource(R"(
+        mod private_concept;
+        use private_concept::*;
+        fn main() -> i32 { static_assert!(Hidden<i32>); return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("is private"), std::string::npos) << out;
+}
+
+TEST_F(MLATest, ConceptsNamespaceLookup)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        namespace rules {
+            concept Whole<T> = type_id(T) == i32;
+            concept Same<T, U> = type_id(T) == type_id(U);
+            generic<T> requires Whole<T>
+            fn accept(value: T) -> i32 { return 42; }
+        }
+        fn main() -> i32 {
+            static_assert!(rules::Same<i32, i32>);
+            let value: i32 = 1;
+            return rules::accept(value) == 42 ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, ConceptsRejectWrongTypeArityAndUnknownTypes)
+{
+    for(const std::string query : {"Same<i32>", "Same<i32, MissingType>"})
+    {
+        SCOPED_TRACE(query);
+        writeSource("concept Same<T, U> = type_id(T) == type_id(U); fn main() "
+                    "-> i32 { static_assert!(" +
+                    query + "); return 0; }");
+        int rc = 0;
+        const std::string out = compileCapture(rc);
+        EXPECT_EQ(rc, 1);
+        EXPECT_NE(out.find("concept"), std::string::npos) << out;
+    }
+}
+
+TEST_F(MLATest, ConceptsRejectUnknownNamesInUnusedRequirements)
+{
+    writeSource(R"(
+        generic<T> requires MissingConcept<T>
+        fn unused(value: T) -> i32 { return 0; }
+        fn main() -> i32 { return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("unknown concept 'MissingConcept'"), std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, ConceptsQualifiedModuleAndAliases)
+{
+    {
+        std::ofstream module(testDir + "/module_concepts.mla");
+        module << R"(
+            concept Internal<T> = type_id(T) == i32;
+            pub concept Whole<T> = Internal<T>;
+        )";
+    }
+    for(const std::string imports : {"", "use module_concepts as rules;",
+                                     "use module_concepts::Whole as Accepted;"})
+    {
+        SCOPED_TRACE(imports);
+        const std::string query =
+            imports.empty() ? "module_concepts::Whole<i32>"
+            : imports.find(" as rules") != std::string::npos
+                ? "rules::Whole<i32>"
+                : "Accepted<i32>";
+        writeSource("mod module_concepts; " + imports +
+                    " fn main() -> i32 { static_assert!(" + query +
+                    "); return 0; }");
+        ASSERT_TRUE(compile());
+        EXPECT_EQ(runExitCode(), 0);
+    }
+}
+
+TEST_F(MLATest, ConceptsRejectDuplicateConstrainedOverloads)
+{
+    writeSource(R"(
+        concept Whole<T> = type_id(T) == i32;
+        generic<T> requires Whole<T>
+        fn repeated(value: T) -> i32 { return 1; }
+        generic<T> requires Whole<T>
+        fn repeated(value: T) -> i32 { return 2; }
+        fn main() -> i32 { return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("duplicate constrained function"), std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, ConceptsVariadicFunctionChecksFixedTypeConstraints)
+{
+    writeSource(R"(
+        concept Whole<T> = type_id(T) == i32;
+        generic<T, Args...> requires Whole<T>
+        fn many(first: T, args: Args...) -> i32 { return 0; }
+        fn main() -> i32 { return many(1.5, 2, 3); }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("constraints not satisfied"), std::string::npos) << out;
+}
+
+TEST_F(MLATest, ConceptsQualifiedStandardReferenceTypes)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        mod std::concepts;
+        fn main() -> i32 {
+            static_assert!(std::concepts::same_as<&mut &mut i32, &mut &mut i32>);
+            static_assert!(!std::concepts::same_as<&i32, &mut i32>);
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, ConceptsQueriesInGenericConstexprBranches)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        mod std::concepts;
+        use std::concepts::*;
+        generic<T>
+        fn evaluate(value: T) -> i32 {
+            cexpr if integral<T> { return i32(value + 1); }
+            else { return 7; }
+        }
+        struct Marker { var value: i32; };
+        fn main() -> i32 {
+            let number: i32 = 41;
+            let marker = Marker { value: 1 };
+            return evaluate(number) == 42 && evaluate(marker) == 7 ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
 TEST_F(MLATest, MainReturnsExpression)
 {
     std::string code = R"(

@@ -153,6 +153,18 @@ void CodeGenerator::generateStatement(StatementNode* node)
 llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
                                                TypeNode* expectedType)
 {
+    if(auto* concept = dynamic_cast<ConceptApplicationNode*>(node))
+    {
+        ConstexprValue value;
+        std::string error;
+        if(!evalConcept(concept, value, &error, nullptr, 0))
+        {
+            reportError(node->line, error);
+            return nullptr;
+        }
+        return llvm::ConstantInt::get(llvm::Type::getInt1Ty(context),
+                                      value.boolValue);
+    }
     if(auto intLit = dynamic_cast<IntLiteralNode*>(node))
     {
         return generateIntLiteral(intLit);

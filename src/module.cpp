@@ -1,4 +1,5 @@
 #include "module.h"
+#include "concepts.h"
 #include "literal_operators.h"
 #include "source_filter.h"
 #include <algorithm>
@@ -155,6 +156,9 @@ static std::string function_signature_key(FunctionDefNode* node)
         }
     }
     key += ")";
+    const std::string constraints = mlang::concepts::constraintKey(node);
+    if(!constraints.empty())
+        key += " requires " + constraints;
     return key;
 }
 
@@ -342,6 +346,9 @@ bool ModuleLoader::loadModule(const std::string& moduleName,
         if(tr && tr->sourceModule.empty())
             tr->sourceModule = moduleName;
     }
+    for(auto* concept : moduleAst->conceptDefs)
+        if(concept && concept->sourceModule.empty())
+            concept->sourceModule = moduleName;
     // Process any mod declarations in this module (recursive loading)
     if(!processModDeclarations(moduleAst, errorMsg))
     {
@@ -509,6 +516,22 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                     if(!alreadyAdded)
                         program->functionList->functions.push_back(aliasFn);
                 }
+            }
+            for(auto* definition : aliasedModule->conceptDefs)
+            {
+                if(!definition)
+                    continue;
+                const std::string name =
+                    useDecl->aliasName + "::" + definition->name;
+                const bool exists = std::any_of(
+                    program->conceptDefs.begin(), program->conceptDefs.end(),
+                    [&](ConceptDefNode* item)
+                    { return item && item->name == name; });
+                if(exists)
+                    continue;
+                auto* alias = new ConceptDefNode(*definition);
+                alias->name = name;
+                program->conceptDefs.push_back(alias);
             }
             return true;
         };
@@ -751,6 +774,13 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             }
         }
 
+        for(auto* concept : module->conceptDefs)
+        {
+            if(concept && std::find(program->conceptDefs.begin(),
+                                    program->conceptDefs.end(),
+                                    concept) == program->conceptDefs.end())
+                program->conceptDefs.push_back(concept);
+        }
         // Import traits so trait names can be referenced in impl blocks.
         if(!module->traitDefs.empty())
         {
@@ -872,6 +902,20 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                 }
             }
 
+            if(!found)
+                for(auto* concept : module->conceptDefs)
+                    if(concept && concept->name == useDecl->itemName)
+                    {
+                        if(!concept->isPublic)
+                        {
+                            errorMsg = "Concept '" + concept->name +
+                                       "' is private in module '" +
+                                       resolvedModuleName + "'";
+                            return false;
+                        }
+                        found = true;
+                        break;
+                    }
             // Try to find as trait
             if(!found && !module->traitDefs.empty())
             {
@@ -895,6 +939,15 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             if(!useDecl->aliasName.empty())
             {
                 bool aliasBound = false;
+                for(auto* concept : module->conceptDefs)
+                    if(concept && concept->name == useDecl->itemName)
+                    {
+                        auto* alias = new ConceptDefNode(*concept);
+                        alias->name = useDecl->aliasName;
+                        program->conceptDefs.push_back(alias);
+                        aliasBound = true;
+                        break;
+                    }
 
                 if(module->functionList)
                 {

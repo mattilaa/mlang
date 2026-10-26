@@ -73,6 +73,7 @@
 - [[std::source_location|Stdlib-Source-Location]]
 - [[std::stacktrace|Stdlib-Stacktrace]]
 - [[std::scope_exit|Stdlib-Scope-Exit]]
+- [[std::concepts|Stdlib-Concepts]]
 - [[std::type_traits|Stdlib-Type-Traits]]
 - [[std::multiarray|Stdlib-Multiarray]]
 - [[std::mutmultiarray|Stdlib-Mutmultiarray]]

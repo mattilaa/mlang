@@ -87,6 +87,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
+    buildConceptTable(program);
     resolveTypeAliasesInProgram(program);
 
     // Global constants are evaluated before LLVM function declarations. Make

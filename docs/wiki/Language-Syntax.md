@@ -12,6 +12,7 @@ the compiler.
   - [Namespace blocks](#namespace-blocks)
   - [Trait objects (dyn Trait)](#trait_objects_dyn)
   - [Type aliases](#type-aliases-alias--use-type)
+  - [Concepts and generic constraints](#concepts-and-generic-constraints)
   - [Numeric primitive names](#numeric-primitive-names)
   - [Checked narrow integer casts](#checked-narrow-integer-casts)
 - [Conditional compilation](#conditional-compilation)
@@ -220,6 +221,96 @@ Notes:
 - Alias overlap in the same scope is rejected with a location-based diagnostic
   (`file.mla:row:column`), pointing to both current and previous declarations.
 - Aliases are removed from scope when leaving the defining block.
+
+### Concepts and Generic Constraints
+
+MLang supports C++20-style named concepts as compile-time boolean predicates:
+
+```mla
+concept Integral<T> = type_id(T) == i32 || type_id(T) == i64;
+concept Same<T, U> = type_id(T) == type_id(U);
+concept Whole32<T> = Integral<T> && Same<T, i32>;
+
+generic<T> requires Integral<T>
+fn twice(value: T) -> T {
+    return value + value;
+}
+
+fn main() -> i32 {
+    static_assert!(Integral<i32>);
+    static_assert!(!Integral<f64>);
+    let value: i32 = 21;
+    return twice(value) == 42 ? 0 : 1;
+}
+```
+
+Concepts take explicit type arguments and produce `bool` values during
+compilation. Type aliases are resolved before checking a concept. Use
+`type_id(T)` to inspect a bound type and compare it with a builtin type name or
+another `type_id(...)` result. `&&` and `||` short-circuit, so an unnecessary
+branch of a predicate is not evaluated. Predicates must produce `bool`;
+recursive concept evaluation, unknown concepts, and wrong argument counts are
+compile errors.
+
+A `requires` clause follows the generic parameter list and precedes the function
+declaration. Unary concepts can also use the existing parameter-bound syntax:
+
+```mla
+generic<T: Integral>
+fn identity(value: T) -> T { return value; }
+
+struct IntegerBox<T: Integral> {
+    var value: T;
+};
+```
+
+Bounds can combine concepts and existing nominal traits with `+`. Concepts
+provide predicates over types; traits continue to specify implementations and
+methods. A concept does not require an `impl` declaration. A failed function
+constraint removes that overload before its body is instantiated. A failed
+struct bound rejects the type argument.
+
+Constrained overloads can share a signature with a fallback:
+
+```mla
+generic<T>
+fn category(value: T) -> i32 { return 0; }
+
+generic<T> requires Integral<T>
+fn category(value: T) -> i32 { return 1; }
+
+generic<T> requires Whole32<T>
+fn category(value: T) -> i32 { return 2; }
+```
+
+After comparing ordinary argument conversion costs, the compiler prefers a
+strictly stronger constraint. Named concepts are expanded through `&&` and
+`||` for this comparison: `Whole32<T>` refines `Integral<T>`, and a concept is
+stronger than a disjunction containing that concept. Atomic requirements share
+identity when they come from the same concept definition with the same type
+arguments. Two independent predicates are not ordered merely because they
+happen to produce the same result. Incomparable best candidates are ambiguous.
+A non-generic overload retains priority over an equally good generic
+specialization. Losing generic overload bodies are not instantiated.
+
+Constraints also apply to generic `cexpr fn` calls. A variadic generic function
+can constrain its deduced fixed type parameters; concept applications do not
+expand type packs. Concept values work in `static_assert!`, `cexpr` declarations,
+`cexpr if`, and ordinary boolean expressions without runtime registration.
+
+Concept declarations may be `pub` and may appear inside namespaces. Normal
+module visibility applies, including private helper concepts used by a public
+concept or constrained function. Wildcard imports, specific concept aliases,
+module aliases, and qualified queries such as
+`std::concepts::integral<i32>` are supported.
+
+The `std::concepts` module supplies `same_as`, `integral`, `signed_integral`,
+`unsigned_integral`, `floating_point`, and `arithmetic`. See
+@ref examples/concepts_demo.mla "concepts_demo.mla" for a runnable example.
+
+This support uses named boolean predicates, prefix `requires` clauses, and
+parameter bounds. Structural requires-expressions with requirement bodies,
+trailing requires-clauses, and abbreviated `auto` parameters are not implemented.
 
 ### Numeric Primitive Names
 

@@ -496,6 +496,33 @@ bool CodeGenerator::validateTypeArgumentTraitBounds(
 
         for(const auto& requiredTrait : requiredTraits)
         {
+            std::string scope;
+            const size_t separator = ownerName.rfind("::");
+            if(separator != std::string::npos)
+                scope = ownerName.substr(0, separator);
+            if(auto* concept = findConcept(requiredTrait, scope))
+            {
+                ConceptApplicationNode application(concept->name,
+                                                   {resolvedType});
+                ConstexprValue value;
+                std::string error;
+                if(!evalConcept(&application, value, &error, nullptr, 0) ||
+                   !value.boolValue)
+                {
+                    if(reportFailures)
+                        reportError(
+                            line,
+                            error.empty()
+                                ? "type argument '" +
+                                      Helpers::type_name_for_error(typeArg) +
+                                      "' does not satisfy concept '" +
+                                      requiredTrait + "' required by " +
+                                      ownerKind + " '" + ownerName + "'"
+                                : error);
+                    return false;
+                }
+                continue;
+            }
             bool satisfiesBound = false;
             if(!concreteTypeName.empty())
             {

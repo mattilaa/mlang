@@ -437,6 +437,19 @@ private:
     };
     using ConstexprEnv = std::map<std::string, ConstexprValue>;
     ConstexprEnv constexprValues;
+    std::map<std::string, ConceptDefNode*> conceptDefinitions;
+    std::set<std::string> conceptKnownTypes;
+    std::vector<std::string> conceptEvaluationStack;
+    void buildConceptTable(ProgramNode* program);
+    ConceptDefNode* findConcept(const std::string& name,
+                                const std::string& scope = "");
+    bool evalConcept(ConceptApplicationNode* application, ConstexprValue& out,
+                     std::string* error, ConstexprEnv* env, int depth);
+    bool satisfiesFunctionConstraints(
+        FunctionDefNode* function,
+        const std::map<std::string, TypeNode*>& bindings,
+        std::string* error = nullptr,
+        std::vector<std::set<std::string>>* terms = nullptr);
     bool evalConstexprExpression(ExpressionNode* expr, ConstexprValue& out,
                                  std::string* errorMessage = nullptr,
                                  ConstexprEnv* env = nullptr,

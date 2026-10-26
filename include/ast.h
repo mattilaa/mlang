@@ -548,6 +548,20 @@ public:
     std::string toString() const override;
 };
 
+// A concept-id is a compile-time boolean with explicit type arguments.
+class ConceptApplicationNode : public ExpressionNode
+{
+public:
+    std::string name;
+    std::vector<TypeNode*> typeArguments;
+    ConceptApplicationNode(const std::string& n,
+                           const std::vector<TypeNode*>& types)
+        : name(n), typeArguments(types)
+    {
+    }
+    std::string toString() const override;
+};
+
 // Invocation of a callable expression that is not a direct named call,
 // e.g. `make_callback()(value)`.
 class CallableInvokeNode : public ExpressionNode
@@ -1521,6 +1535,9 @@ public:
     std::map<std::string, std::set<std::string>>
         boundClosureConstCaptures;
     std::string closureSpecializationKey;
+    ExpressionNode* requiresClause = nullptr;
+    FunctionDefNode* genericOrigin = nullptr;
+    std::vector<std::set<std::string>> constraintTerms;
     std::string sourceModule; // Module this function was defined in (for
                               // visibility checks)
 
@@ -1602,6 +1619,23 @@ public:
     std::string toString() const override;
 };
 
+class ConceptDefNode : public ASTNode
+{
+public:
+    std::string name;
+    std::vector<std::string> typeParams;
+    ExpressionNode* predicate;
+    bool isPublic = false;
+    std::string sourceModule;
+    ConceptDefNode(const std::string& n,
+                   const std::vector<std::string>& parameters,
+                   ExpressionNode* expression)
+        : name(n), typeParams(parameters), predicate(expression)
+    {
+    }
+    std::string toString() const override;
+};
+
 // Top-level nodes
 class TopLevelListNode : public ASTNode
 {
@@ -1618,6 +1652,7 @@ public:
     ImplListNode* implList = nullptr;
     EnumListNode* enumList = nullptr;
     std::vector<TraitDefNode*> traitDefs;
+    std::vector<ConceptDefNode*> conceptDefs;
     std::vector<ModDeclNode*> modules;
     std::vector<UseDeclNode*> imports;
     std::vector<VarDeclNode*> globalVars;

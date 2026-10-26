@@ -118,6 +118,10 @@ ASTNode* create_program_impl(ASTNode* top_level_list)
         {
             program->typeAliases.push_back(aliasDef);
         }
+        else if(auto* concept = dynamic_cast<ConceptDefNode*>(item))
+        {
+            program->conceptDefs.push_back(concept);
+        }
         else if(auto* traitDef = dynamic_cast<TraitDefNode*>(item))
         {
             program->traitDefs.push_back(traitDef);
@@ -1669,6 +1673,8 @@ std::string FunctionDefNode::toString() const
         }
         result += "> ";
     }
+    if(requiresClause)
+        result += "requires " + requiresClause->toString() + " ";
     if(isCexpr)
         result += "cexpr ";
     result += "fn ";
@@ -2418,6 +2424,8 @@ std::string ProgramNode::toString() const
     {
         result += enumList->toString();
     }
+    for(const auto* concept : conceptDefs)
+        result += concept->toString() + "\n";
     for(const auto& traitDef : traitDefs)
     {
         result += traitDef->toString() + "\n";
@@ -3430,4 +3438,28 @@ ASTNode* create_generic_struct_type_ref_impl(char* name, ASTNode* type_args)
     }
 
     return node;
+}
+
+std::string ConceptApplicationNode::toString() const
+{
+    std::string result = name + "<";
+    for(size_t i = 0; i < typeArguments.size(); ++i)
+    {
+        if(i)
+            result += ", ";
+        result += typeArguments[i]->toString();
+    }
+    return result + ">";
+}
+std::string ConceptDefNode::toString() const
+{
+    std::string result = isPublic ? "pub concept " : "concept ";
+    result += name + "<";
+    for(size_t i = 0; i < typeParams.size(); ++i)
+    {
+        if(i)
+            result += ", ";
+        result += typeParams[i];
+    }
+    return result + "> = " + predicate->toString() + ";";
 }

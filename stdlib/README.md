@@ -11,6 +11,9 @@ Currently provided:
   `#[derive(Json)]`, `#[test]`).
 - `test.mla`: test framework helpers (test::assert, test::run_all).
 
+- `std/concepts.mla`: named compile-time concepts (`same_as`, `integral`,
+  `signed_integral`, `unsigned_integral`, `floating_point`, `arithmetic`) for
+  generic parameter bounds and `requires` clauses.
 - `std/math.mla`: generic math helpers (backed by libmlang_std).
 - `std/bench.mla`: benchmark helpers for anti-optimization barriers
   (`do_not_optimize_i64`, `do_not_optimize_i32`, `clobber_memory`).
