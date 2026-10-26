@@ -3,6 +3,8 @@
 
 #include <cstdint>
 
+class ASTNode;
+
 extern "C"
 {
     int64_t mla_argument_list_create();
