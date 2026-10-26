@@ -235,7 +235,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         function = generateFunctionDeclaration(node);
     }
 
-    if(node->isExtern || !node->body)
+    if((structuralRequirementProbe && node != structuralProbeFunction) ||
+       node->isExtern || !node->body)
     {
         return function;
     }
@@ -688,6 +689,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     builder.restoreIP(savedIP);
 
     // Verify the function
-    llvm::verifyFunction(*function);
+    if(!structuralRequirementProbe)
+        llvm::verifyFunction(*function);
     return function;
 }

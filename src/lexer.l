@@ -136,6 +136,7 @@ int yycolumn_token = 1; // column at start of the current token
 static int yyinput(void);
 static void yyunput(int, char*);
 static int generic_depth = 0;
+static bool constraint_context = false;
 static int switch_case_header_depth = 0;
 
 static int is_generic_struct_literal_start()
@@ -157,8 +158,22 @@ static int is_generic_struct_literal_start()
             saw_gt = true;
             break;
         }
+        if(c == '&')
+        {
+            // References are valid at the start of a type argument, including
+            // nested &mut references. Boolean/bitwise expressions are not types.
+            std::string prefix = buf.substr(0, buf.size() - 1);
+            const bool adjacentAmp = !prefix.empty() && prefix.back() == '&';
+            const size_t last = prefix.find_last_not_of(" \t\r\n");
+            bool referencePrefix = last == std::string::npos || prefix[last] == '<' ||
+                                   prefix[last] == ',' || prefix[last] == '&';
+            if(last != std::string::npos && last >= 3 && prefix.substr(last - 3, 4) == "&mut")
+                referencePrefix = true;
+            if(adjacentAmp || !referencePrefix) break;
+        }
         if(!(std::isalnum(c) || c == '_' || c == ',' || c == ':' ||
-             std::isspace(c) || c == '<' || c == '+'))
+             std::isspace(c) || c == '<' || c == '+' || c == '&' ||
+             (constraint_context && (c == '*' || c == '[' || c == ']'))))
         {
             break;
         }
@@ -173,7 +188,7 @@ static int is_generic_struct_literal_start()
                 continue;
             if(c == '{' || c == '(' || c == ')' || c == ',' || c == ';' ||
                c == '=' || c == ':' || c == '.' || c == ']' || c == '>' ||
-               c == '|')
+               c == '|' || c == '&' || c == '!' || c == '?' || constraint_context)
             {
                 saw_generic_tail = true;
             }
@@ -329,7 +344,13 @@ static int mla_lex_peek_branch_declaration()
 "static"        { return STATIC; }
 "cexpr"         { return CEXPR; }
 "generic"       { return GENERIC; }
-"fn"            { return FUNCTION; }
+"fn"            { constraint_context = false; return FUNCTION; }
+"concept"       { constraint_context = true; return CONCEPT; }
+"req"           { constraint_context = true; return REQ; }
+"requires"      { constraint_context = true; return REQUIRES; }
+"where"         { constraint_context = true; return WHERE; }
+"typename"      { return TYPENAME; }
+"noexcept"      { return NOEXCEPT; }
 "operator"[ \t\r\n]*\"\"[ \t\r\n]*[a-zA-Z_][a-zA-Z0-9_]* {
                   const char* suffix = strrchr(yytext, '"') + 1;
                   while(*suffix && std::isspace(static_cast<unsigned char>(*suffix))) ++suffix;
@@ -505,7 +526,7 @@ static int mla_lex_peek_branch_declaration()
                       switch_case_header_depth = 0;
                   return COLON;
                 }
-";"             { return SEMICOLON; }
+";"             { constraint_context = false; return SEMICOLON; }
 "{"             { return LBRACE; }
 "}"             { return RBRACE; }
 "("             { return LPAREN; }

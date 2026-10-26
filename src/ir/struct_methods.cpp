@@ -222,6 +222,9 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         function = generateMethodDeclaration(structName, method);
     }
 
+    if(structuralRequirementProbe)
+        return function;
+
     // Check if already has a body
     if(!function->empty())
     {

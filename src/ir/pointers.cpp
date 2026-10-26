@@ -7,6 +7,8 @@ bool CodeGenerator::emitRuntimeNullPointerCheck(llvm::Value* ptrValue, int line)
 {
     if(!ptrValue || !ptrValue->getType()->isPointerTy())
         return false;
+    if(structuralRequirementProbe)
+        return true;
 
     if(llvm::isa<llvm::ConstantPointerNull>(ptrValue))
     {
@@ -55,6 +57,11 @@ bool CodeGenerator::emitRuntimeNullPointerCheck(llvm::Value* ptrValue, int line)
 bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
                                                int line)
 {
+    // Unevaluated requirements check pointer types without dereferencing a
+    // runtime address or needing a surrounding unsafe block.
+    if(structuralRequirementProbe)
+        return getPointerElementType(pointerExpr, line) != nullptr;
+
     if(auto knownNull = pointerExpressionKnownNull(pointerExpr))
     {
         if(*knownNull)

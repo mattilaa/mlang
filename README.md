@@ -4,6 +4,9 @@ MLang - Programming Language
 
 For more documentation, visit the [MLang GitHub Wiki](https://github.com/mattilaa/mlang/wiki).
 
+See [Concepts and Structural Requirements](docs/concepts.md) for named concepts,
+`where` constraints, and C++20-style structural `req` expressions.
+
 The terminal tracker [mlacker](https://github.com/mattilaa/mlacker) (AUHAL output, VST3 hosting and the Mla
 VST3 plugins) is now developed in its own repository: <https://github.com/mattilaa/mlacker>.
 

@@ -12,6 +12,7 @@ the compiler.
   - [Namespace blocks](#namespace-blocks)
   - [Trait objects (dyn Trait)](#trait_objects_dyn)
   - [Type aliases](#type-aliases-alias--use-type)
+  - [Concepts and generic constraints](#concepts-and-generic-constraints)
   - [Numeric primitive names](#numeric-primitive-names)
   - [Checked narrow integer casts](#checked-narrow-integer-casts)
 - [Conditional compilation](#conditional-compilation)
@@ -221,6 +222,165 @@ Notes:
   (`file.mla:row:column`), pointing to both current and previous declarations.
 - Aliases are removed from scope when leaving the defining block.
 
+### Concepts and Generic Constraints
+
+For a guided introduction and runnable examples, see
+[Concepts and Structural Requirements](Concepts).
+
+MLang supports C++20-style named concepts as compile-time boolean predicates:
+
+```rust
+concept Integral<T> = type_id(T) == i32 || type_id(T) == i64;
+concept Same<T, U> = type_id(T) == type_id(U);
+concept Whole32<T> = Integral<T> && Same<T, i32>;
+
+generic<T> where Integral<T>
+fn twice(value: T) -> T {
+    return value + value;
+}
+
+fn main() -> i32 {
+    static_assert!(Integral<i32>);
+    static_assert!(!Integral<f64>);
+    let value: i32 = 21;
+    return twice(value) == 42 ? 0 : 1;
+}
+```
+
+Concepts take explicit type arguments and produce [`bool`](Quick-Guide#types) values during
+compilation. Type aliases are resolved before checking a concept. Use
+`type_id(T)` to inspect a bound type and compare it with a builtin type name or
+another `type_id(...)` result. `&&` and `||` short-circuit, so an unnecessary
+branch of a predicate is not evaluated. Predicates must produce [`bool`](Quick-Guide#types);
+recursive concept evaluation, unknown concepts, and wrong argument counts are
+compile errors.
+
+`where Predicate` constrains a declaration; `req(...) { ... }` is a boolean
+expression that checks operations. Use `generic<T> where req(value: T) {
+value + value; }` for an inline structural constraint. Inside requirement bodies,
+`where Predicate;` checks a nested boolean predicate. Existing `requires
+Predicate` clauses and nested `requires Predicate;` remain compatibility forms;
+prefer `where` so the two jobs have different keywords. See
+[where_constraints_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/where_constraints_demo.mla) and
+[req_expression_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/req_expression_demo.mla) for
+runnable examples of both cases.
+
+A `where` clause follows the generic parameter list and precedes the function
+declaration. Unary concepts can also use the existing parameter-bound syntax:
+
+```rust
+generic<T: Integral>
+fn identity(value: T) -> T { return value; }
+
+struct IntegerBox<T: Integral> {
+    var value: T;
+};
+```
+
+Bounds can combine concepts and existing nominal traits with `+`. Concepts
+provide predicates over types; traits continue to specify implementations and
+methods. A concept does not require an [`impl`](Language-Syntax) declaration. A failed function
+constraint removes that overload before its body is instantiated. A failed
+struct bound rejects the type argument.
+
+Constrained overloads can share a signature with a fallback:
+
+```rust
+generic<T>
+fn category(value: T) -> i32 { return 0; }
+
+generic<T> where Integral<T>
+fn category(value: T) -> i32 { return 1; }
+
+generic<T> where Whole32<T>
+fn category(value: T) -> i32 { return 2; }
+```
+
+After comparing ordinary argument conversion costs, the compiler prefers a
+strictly stronger constraint. Named concepts are expanded through `&&` and
+`||` for this comparison: `Whole32<T>` refines `Integral<T>`, and a concept is
+stronger than a disjunction containing that concept. Atomic requirements share
+identity when they come from the same concept definition with the same type
+arguments. Two independent predicates are not ordered merely because they
+happen to produce the same result. Incomparable best candidates are ambiguous.
+A non-generic overload retains priority over an equally good generic
+specialization. Losing generic overload bodies are not instantiated.
+
+Constraints also apply to generic `cexpr fn` calls. A variadic generic function
+can constrain its deduced fixed type parameters; concept applications do not
+expand type packs. Concept values work in [`static_assert!`](Language-Syntax), [`cexpr`](Language-Syntax) declarations,
+`cexpr if`, and ordinary boolean expressions without runtime registration.
+
+Concept declarations may be `pub` and may appear inside namespaces. Normal
+module visibility applies, including private helper concepts used by a public
+concept or constrained function. Wildcard imports, specific concept aliases,
+module aliases, and qualified queries such as
+[`std::concepts::integral<i32>`](Stdlib-Concepts) are supported.
+
+The [`std::concepts`](Stdlib-Concepts) module supplies `same_as`, `integral`, `signed_integral`,
+`unsigned_integral`, `floating_point`, and `arithmetic`. See
+@ref examples/concepts_demo.mla "concepts_demo.mla" for a runnable example.
+
+Structural requirements can test the operations supported by a type without
+executing them:
+
+```rust
+mod std::concepts;
+use std::concepts::*;
+
+concept Addable<T> = req(a: T, b: T) {
+    a + b;                         // Simple: the expression must be valid.
+    typename T;                    // Type: the type must exist.
+    { a + b } -> same_as<T>;        // Compound: constrain the result type.
+    where arithmetic<T>;        // Nested: the predicate must be true.
+};
+
+generic<T> where Addable<T>
+fn add(a: T, b: T) -> T { return a + b; }
+```
+
+The parameter list introduces local names with types, without constructing
+objects. Both `req(a: T)` and C++-style `req(T a)` are accepted.
+Omit the list for `req { ... }`. Parameters cannot be [`void`](Quick-Guide#types), duplicated,
+variadic, or have default arguments. They are visible only in that requirement
+body. A req-expression written inside a function can also refer to its
+surrounding locals; a named concept uses its own definition scope.
+
+Requirements are checked in order and stop at the first failure. Substitution
+failure, a missing member, an invalid operation, an inaccessible member, or an
+unmatched call makes the expression `false`. A simple requirement tests
+well-formedness, so `false;` is satisfied. A nested requirement such as
+`where false;` is not satisfied, and its expression must be a compile-time
+boolean. Runtime parameter values cannot satisfy nested predicates.
+
+Use `typename SomeType;` or `type SomeType;` to test a type, including an alias
+or a generic instantiation with bounds. Compound requirements may omit the
+arrow, or use a unary concept (`{ a + b } -> integral;`). With a concept argument
+list, the compiler inserts the expression's result type as the first argument:
+`{ a + b } -> same_as<T>;` checks `same_as<Result, T>`. Ordinary module visibility
+and qualified concept names apply. These are MLang expression types; no C++
+`decltype((expr))` value-category rules are introduced.
+
+`{ expression } noexcept;` additionally requires the expression to contain no
+potentially throwing calls. Builtin scalar operations satisfy this condition.
+MLang functions currently have no non-throwing declaration annotation, so calls
+to ordinary functions or methods are conservatively considered potentially
+throwing, even if their bodies happen not to throw.
+
+Structural checks never execute expressions, instantiate called generic bodies,
+or emit their operations into the program. Arithmetic runtime faults and raw
+pointer runtime safety checks do not run: `req { 1 / 0; }` is satisfied,
+and a typed pointer may be dereferenced in a requirement without an `unsafe`
+block. Normal type, visibility, and reference mutability rules still apply.
+
+A structural req-expression forms an atomic constraint. Reusing a named
+concept preserves that atom's identity for overload ordering; independently
+written requirement bodies are not inferred to refine each other. Compose
+named concepts with `&&` to express refinements.
+
+Trailing requires-clauses, abbreviated `auto` parameters, and C++ associated
+type declarations inside structs are not implemented.
+
 ### Numeric Primitive Names
 
 Available primitive floating-point types:
@@ -244,7 +404,7 @@ Use `\xNN` for terminal escape bytes such as `\x1b` (`ESC`).
 
 Define a suffix operator with `fn operator "" _suffix(...) -> Type`:
 
-```mla
+```rust
 cexpr fn operator "" _ms(value: u64) -> u64 {
     return value * 1000u64;
 }
@@ -272,29 +432,29 @@ required. The result has the operator's declared builtin type.
 
 | Literal form | Operator parameter |
 | --- | --- |
-| `42_unit`, `0x2A_unit`, `0b101010_unit` | `u64` |
-| `1.5_unit`, `.5_unit`, `1._unit`, `1e3_unit`, `2.5e-1_unit` | `f64` |
-| `"hello"_unit` | `str8` (with the usual string escape decoding) |
+| `42_unit`, `0x2A_unit`, `0b101010_unit` | [`u64`](Quick-Guide#types) |
+| `1.5_unit`, `.5_unit`, `1._unit`, `1e3_unit`, `2.5e-1_unit` | [`f64`](Quick-Guide#types) |
+| `"hello"_unit` | [`str8`](Quick-Guide#types) (with the usual string escape decoding) |
 
 Each declaration takes exactly one value parameter of the listed builtin type.
 The same suffix may have one operator for each of the three input categories;
 integer literals do not fall back to a floating-point overload. Return types
-are builtin integers, `bit`, `bool`, `f32`, `f64`, `str8`, or `str16`. Custom
+are builtin integers, [`bit`](Quick-Guide#types), [`bool`](Quick-Guide#types), [`f32`](Quick-Guide#types), [`f64`](Quick-Guide#types), [`str8`](Quick-Guide#types), or [`str16`](Quick-Guide#types). Custom
 struct, container, pointer, and reference signatures are not accepted.
 
 Suffixes must start with `_` and contain at least one additional letter, digit,
 or underscore. Remaining characters are limited to letters, digits, and underscores. A suffix must directly
 follow its literal. Both `operator""_ms` and `operator "" _ms` work in a
-declaration. Existing builtin suffixes such as `u8`, `i64`, and `f` keep their
+declaration. Existing builtin suffixes such as [`u8`](Quick-Guide#types), [`i64`](Quick-Guide#types), and `f` keep their
 meaning; do not combine a builtin suffix and a user-defined suffix.
 
 The suffix call binds to the literal before surrounding operators:
 `-2.5_unit` negates the result of `2.5_unit`. For example, if the operator adds
 one, `-2.5_unit` means `-(operator(2.5))`, not `operator(-2.5)`. Decimal,
-hexadecimal, and binary integer inputs are checked against the full `u64`
-range; floating-point inputs must be representable as finite `f64` values.
+hexadecimal, and binary integer inputs are checked against the full [`u64`](Quick-Guide#types)
+range; floating-point inputs must be representable as finite [`f64`](Quick-Guide#types) values.
 
-Declare numeric operators with `cexpr fn` to use their results in `cexpr`
+Declare numeric operators with `cexpr fn` to use their results in [`cexpr`](Language-Syntax)
 expressions and declarations. Ordinary operators run as normal function calls.
 The existing compile-time evaluator does not evaluate string-valued operators.
 Operators are top-level or namespace declarations, rather than methods,
@@ -463,7 +623,7 @@ Mutable targets support `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`,
 `<<=`, and `>>=` with the corresponding binary operator type rules.
 `^=` performs bitwise XOR.
 
-```mla
+```rust
 var i: i32 = 3;
 i += 1;  // 4
 i *= 2;  // 8
@@ -477,7 +637,7 @@ Nested mutable references work for both primitive values and structs. A local
 `&mut T` binding stores a checked reference to `T`; borrowing that binding with
 `&mut` supplies a parameter of type `&mut &mut T`.
 
-```mla
+```rust
 struct Counter { var value: i32; };
 
 fn increment(reference: &mut &mut Counter) -> void {
@@ -499,9 +659,9 @@ block. Further nesting and forwarding through named functions are supported.
 Each level preserves its pointee type and mutability; neither a shared inner
 reference nor a shared outer parameter grants write access to the value.
 
-Declare the inner binding with `var` to borrow its storage mutably. Reference
+Declare the inner binding with [`var`](Language-Syntax) to borrow its storage mutably. Reference
 bindings require a matching `&value` or `&mut value` initializer and cannot be
-null or implicitly zero initialized. A single `&mut value` for an `i32` does not
+null or implicitly zero initialized. A single `&mut value` for an [`i32`](Quick-Guide#types) does not
 match an `&mut &mut i32` parameter. Borrow checking keeps the original value
 reserved while the nested borrow remains in use.
 
@@ -519,7 +679,7 @@ storage containing an inner `ptr<T>`; assigning through the outer pointer
 replaces the inner pointer. Pointer dereferences require `unsafe` and remain
 subject to borrow checking.
 
-```mla
+```rust
 fn select_second(first: ptr<i32>, second: ptr<i32>) -> ptr<i32> {
     var selected: ptr<i32> = first;
     let slot: ptr<ptr<i32>> = &mut selected;

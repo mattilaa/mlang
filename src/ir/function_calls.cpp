@@ -1,3 +1,4 @@
+#include "concepts.h"
 #include "ir.h"
 #include "ir/ast_analysis.h"
 #include "ir/common.h"
@@ -631,6 +632,18 @@ CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
         }
         fixedTypeNames.push_back(typeParam);
         fixedTypeArgs.push_back(found->second);
+    }
+
+    if(!mlang::concepts::constraintKey(functionTemplate).empty())
+    {
+        std::string failure;
+        if(!satisfiesFunctionConstraints(functionTemplate, bindings, &failure))
+        {
+            reportError(node->line,
+                        "constraints not satisfied for variadic function '" +
+                            node->name + "': " + failure);
+            return nullptr;
+        }
     }
 
     std::vector<TypeNode*> packTypes;
@@ -1827,7 +1840,8 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
     {
         FunctionDefNode* candidate = overload.node;
         if(candidate && !overload.function && !candidate->typeParams.empty() &&
-           candidate->typePackParam.empty() && !candidate->isCexpr &&
+           candidate->typePackParam.empty() &&
+           (!candidate->isCexpr || structuralRequirementProbe) &&
            candidate->parameters &&
            candidate->parameters->parameters.size() == call->arguments.size() &&
            isOverloadVisible(overload))
@@ -1856,11 +1870,10 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
             }
             typeArgs.push_back(found->second);
         }
+        std::vector<std::set<std::string>> constraintTerms;
         if(!complete ||
-           !validateTypeArgumentTraitBounds(
-               functionTemplate->typeParams,
-               functionTemplate->typeParamTraitBounds, typeArgs, {},
-               functionTemplate->line, "function", lookupName, false))
+           !satisfiesFunctionConstraints(functionTemplate, bindings, nullptr,
+                                         &constraintTerms))
             continue;
 
         auto* specializedParameters = new ParameterListNode();
@@ -1877,6 +1890,8 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
                                  functionTemplate->typeParams, typeArgs),
             functionTemplate->name, specializedParameters,
             functionTemplate->body, functionTemplate->isPublic, false);
+        specialized->genericOrigin = functionTemplate;
+        specialized->constraintTerms = std::move(constraintTerms);
         specialized->line = functionTemplate->line;
         specialized->col = functionTemplate->col;
         specialized->sourceModule = functionTemplate->sourceModule;
@@ -1982,7 +1997,6 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
         if(!declaration)
             continue;
         registerFunctionOverload(specialized, declaration);
-        generateFunctionDefinition(specialized);
     }
 }
 
@@ -4139,8 +4153,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
     std::string literalSuffixForScope, literalInputForScope;
     if(node->name.find("::") == std::string::npos &&
-       mlang::literals::decodeOperatorName(node->name, literalSuffixForScope,
-                                           literalInputForScope) &&
+       (structuralRequirementProbe ||
+        mlang::literals::decodeOperatorName(node->name, literalSuffixForScope,
+                                            literalInputForScope)) &&
        builder.GetInsertBlock())
     {
         const std::string caller =
@@ -4156,7 +4171,12 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             {
                 FunctionCallNode qualified(*node);
                 qualified.name = resolved;
-                return generateFunctionCall(&qualified);
+                llvm::Value* result = generateFunctionCall(&qualified);
+                auto selected = structuralSelectedTypes.find(&qualified);
+                if(structuralRequirementProbe &&
+                   selected != structuralSelectedTypes.end())
+                    structuralSelectedTypes[node] = selected->second;
+                return result;
             }
         }
     }
@@ -5070,6 +5090,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     FunctionOverloadInfo* best = nullptr;
     int bestCost = std::numeric_limits<int>::max();
     bool ambiguous = false;
+    std::vector<FunctionOverloadInfo*> equallyGood;
     std::string privateModule;
 
     for(auto& info : overloadIt->second)
@@ -5386,12 +5407,33 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         {
             bestCost = totalCost;
             best = &info;
+            equallyGood = {&info};
             ambiguous = false;
         }
         else if(totalCost == bestCost)
         {
-            ambiguous = true;
+            equallyGood.push_back(&info);
         }
+    }
+    if(equallyGood.size() > 1)
+    {
+        std::vector<FunctionOverloadInfo*> preferred;
+        for(auto* candidate : equallyGood)
+        {
+            bool dominated = false;
+            for(auto* other : equallyGood)
+                if(other != candidate && mlang::concepts::moreConstrained(
+                                             other->node, candidate->node))
+                {
+                    dominated = true;
+                    break;
+                }
+            if(!dominated)
+                preferred.push_back(candidate);
+        }
+        if(!preferred.empty())
+            best = preferred.front();
+        ambiguous = preferred.size() != 1;
     }
 
     if(!best)
@@ -5404,8 +5446,26 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         }
         else
         {
+            std::string constraintFailure;
+            for(const auto& candidate : overloadIt->second)
+            {
+                if(!candidate.node || candidate.node->typeParams.empty() ||
+                   mlang::concepts::constraintKey(candidate.node).empty() ||
+                   !isOverloadVisible(candidate))
+                    continue;
+                std::map<std::string, TypeNode*> bindings;
+                if(inferGenericFunctionTypeBindings(
+                       candidate.node, node->arguments, bindings) &&
+                   !satisfiesFunctionConstraints(candidate.node, bindings,
+                                                 &constraintFailure))
+                    break;
+            }
             reportError(node->line, "no matching overload for function '" +
-                                        node->name + "'");
+                                        node->name + "'" +
+                                        (constraintFailure.empty()
+                                             ? ""
+                                             : ": constraints not satisfied: " +
+                                                   constraintFailure));
         }
         return nullptr;
     }
@@ -5415,6 +5475,13 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     "ambiguous call to function '" + node->name + "'");
         return nullptr;
     }
+
+    if(structuralRequirementProbe && best->node)
+        structuralSelectedTypes[node] = cloneTypeNode(best->node->returnType);
+    FunctionOverloadInfo selectedOverload = *best;
+    best = &selectedOverload;
+    if(best->node && best->node->genericOrigin && best->function->empty())
+        generateFunctionDefinition(best->node);
 
     // Pointer parameters use the raw `ptr<T>` ABI, so their caller-side
     // mutability is otherwise erased. Inspect the selected body for writes

@@ -137,9 +137,13 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
         return;
     }
 
-    if(!validateTypeArgumentTraitBounds(typeParams,
-                                        templateStruct->typeParamTraitBounds,
-                                        typeArgs, {}, 0, "struct", genericName))
+    const std::string callerModule = currentModule;
+    currentModule = templateStruct->sourceModule;
+    const bool boundsSatisfied = validateTypeArgumentTraitBounds(
+        typeParams, templateStruct->typeParamTraitBounds, typeArgs, {}, 0,
+        "struct", genericName);
+    currentModule = callerModule;
+    if(!boundsSatisfied)
     {
         hasError = true;
         return;

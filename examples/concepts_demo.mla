@@ -1,0 +1,28 @@
+/// \file concepts_demo.mla
+/// @ingroup examples
+/// \brief Named concepts, where clauses, and constrained overloads.
+
+mod std::concepts;
+use std::concepts::*;
+
+generic<T> where arithmetic<T>
+fn twice(value: T) -> T {
+    return value + value;
+}
+
+generic<T>
+fn category(value: T) -> i32 { return 0; }
+
+generic<T: integral>
+fn category(value: T) -> i32 { return 1; }
+
+generic<T> where floating_point<T>
+fn category(value: T) -> i32 { return 2; }
+
+fn main() -> i32 {
+    static_assert!(same_as<i32, i32>);
+    static_assert!(!integral<f64>);
+    let value: i32 = 21;
+    println!("twice={}, integral={}, floating={}", twice(value), category(value), category(1.5));
+    return twice(value) == 42 && category(value) == 1 && category(1.5) == 2 ? 0 : 1;
+}

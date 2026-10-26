@@ -437,6 +437,37 @@ private:
     };
     using ConstexprEnv = std::map<std::string, ConstexprValue>;
     ConstexprEnv constexprValues;
+    std::map<std::string, ConceptDefNode*> conceptDefinitions;
+    std::set<std::string> conceptKnownTypes;
+    std::vector<std::string> conceptEvaluationStack;
+    ProgramNode* conceptProgram = nullptr;
+    // A scratch generator type-checks unevaluated expressions without emitting
+    // code or diagnostics into the user's compilation.
+    bool structuralRequirementProbe = false;
+    bool structuralProbeNoThrow = true;
+    unsigned structuralProbeDepth = 0;
+    FunctionDefNode* structuralProbeFunction = nullptr;
+    ExpressionNode* structuralProbeExpression = nullptr;
+    TypeNode* structuralProbeResult = nullptr;
+    std::map<ExpressionNode*, TypeNode*> structuralSelectedTypes;
+    bool isKnownRequirementType(TypeNode* type);
+    bool evalRequiresExpression(RequiresExpressionNode* expression,
+                                ConstexprValue& out, std::string* error,
+                                ConstexprEnv* env, int depth);
+    bool probeRequirement(ExpressionNode* expression,
+                          ParameterListNode* parameters, ConstexprEnv* env,
+                          TypeNode*& result, bool& noThrow,
+                          TypeNode* requiredType = nullptr);
+    void buildConceptTable(ProgramNode* program);
+    ConceptDefNode* findConcept(const std::string& name,
+                                const std::string& scope = "");
+    bool evalConcept(ConceptApplicationNode* application, ConstexprValue& out,
+                     std::string* error, ConstexprEnv* env, int depth);
+    bool satisfiesFunctionConstraints(
+        FunctionDefNode* function,
+        const std::map<std::string, TypeNode*>& bindings,
+        std::string* error = nullptr,
+        std::vector<std::set<std::string>>* terms = nullptr);
     bool evalConstexprExpression(ExpressionNode* expr, ConstexprValue& out,
                                  std::string* errorMessage = nullptr,
                                  ConstexprEnv* env = nullptr,

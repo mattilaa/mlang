@@ -1,0 +1,166 @@
+# Concepts and Structural Requirements {#concepts}
+
+Concepts constrain generic code with compile-time boolean predicates. Use a
+named concept to describe a reusable requirement, and a `where` clause or
+parameter bound to apply it. Structural requirements test whether expressions
+are valid for a type without executing those expressions.
+
+## Two Different Jobs, Two Keywords
+
+`where` filters a generic declaration using a boolean predicate.
+`req(...) { ... }` produces a boolean by checking structural requirements.
+
+```mla
+// A constraint clause: compile this overload only when the predicate is true.
+generic<T> where type_id(T) == i32
+fn guarded_double(value: T) -> T { return value + value; }
+
+// A structural expression used directly as a constraint.
+generic<T> where req(value: T) { value + value; }
+fn inline_double(value: T) -> T { return value + value; }
+```
+
+Inside a structural body, `where Predicate;` checks a nested boolean predicate.
+This keeps the roles consistent: `where` consumes a boolean, while `req`
+builds one from a body of checks. Combining them needs `where req`, without
+repeating a keyword.
+
+For existing programs, `requires Predicate` clauses and nested
+`requires Predicate;` remain accepted as compatibility forms. New code and
+compiler AST text use `where` for these predicates. The original
+`requires(...) { ... }` expression spelling is also accepted for compatibility;
+use `req(...) { ... }` in new code.
+
+## First Example
+
+```mla
+mod std::concepts;
+use std::concepts::*;
+
+concept Addable<T> = req(a: T, b: T) {
+    { a + b } -> same_as<T>;
+    where arithmetic<T>;
+};
+
+generic<T> where Addable<T>
+fn add(a: T, b: T) -> T { return a + b; }
+
+struct Item { var value: i32; };
+
+fn main() -> i32 {
+    static_assert!(Addable<i32>);
+    static_assert!(!Addable<Item>);
+    return add(20i32, 22i32) == 42 ? 0 : 1;
+}
+```
+
+The compiler checks that `a + b` is valid, that its result satisfies
+`same_as<Result, T>`, and that `arithmetic<T>` is true. `Item` fails the check,
+so an overload constrained by `Addable<Item>` is excluded before its body is
+instantiated.
+
+A concept can also use a boolean predicate directly:
+
+```mla
+concept Whole32<T> = type_id(T) == i32;
+```
+
+Import builtin predicates from [std::concepts](stdlib/std_concepts.md):
+`same_as`, `integral`, `signed_integral`, `unsigned_integral`, `floating_point`,
+and `arithmetic`. Aliases are resolved when evaluating concept arguments.
+
+## Applying a Concept
+
+A unary concept can use the parameter-bound form:
+
+```mla
+generic<T: Addable>
+fn twice(value: T) -> T { return value + value; }
+```
+
+Use a prefix clause for compositions or concepts taking several arguments:
+
+```mla
+generic<T, U> where same_as<T, U> && arithmetic<T>
+fn add_same(a: T, b: U) -> T { return a + b; }
+```
+
+Structs can use concept bounds too: `struct Box<T: integral> { var value: T; };`.
+Concepts and nominal trait bounds can be combined with `+`. Use a trait when an
+implementation and its methods form the contract; use a concept when a boolean
+predicate or the validity of operations describes the requirement.
+
+## The Four Requirement Forms
+
+| Form | Example inside a requirement body | Meaning |
+| --- | --- | --- |
+| Simple | `a + b;` | The expression must be well formed; its value is irrelevant. |
+| Type | `typename T;` or `type T;` | The type must exist; generic arity and bounds are checked. |
+| Compound | `{ a + b } -> same_as<T>;` | The expression must be valid and its result type must satisfy the concept. |
+| Nested | `where arithmetic<T>;` | The compile-time boolean predicate must be true. |
+
+`req(a: T, b: T) { ... }` introduces local names with types, without
+constructing objects. C++-style `req(T a, T b) { ... }` is also accepted.
+Omit the list for `req { ... }`. Bodies contain one or more requirements,
+checked in order until the first failure. Missing members, inaccessible
+operations, invalid substitutions, and unmatched calls make the result false.
+
+Simple and nested requirements differ: `req { false; }` is true because
+`false` is a valid expression; `req { where false; }` is false. Local
+parameter values are unavailable for compile-time evaluation, so
+`req(value: i32) { where value == 0; }` is false.
+
+Compound requirements can use a unary concept (`{ a + b } -> integral;`) or no
+result constraint (`{ a + b };`). The expression's type is inserted as the first
+concept argument. Expression types follow MLang reference semantics, rather
+than C++ `decltype((expr))` value-category rules.
+
+## Overloads and Scope
+
+An unconstrained generic overload can provide a fallback. With equal argument
+conversion costs, a strictly stronger constraint wins. Express refinements by
+composing named concepts, such as `HasValue<T> && HasOther<T>`.
+
+Named concept definitions preserve atomic constraint identity. Two independently
+written requirement bodies are not inferred to refine each other, even if they
+check similar operations. Incomparable best matches produce an ambiguity error.
+
+Requirements have their own local scope and may nest. A req-expression
+inside a function can refer to surrounding locals. A named concept resolves
+names in its definition scope. Export concepts with `pub concept`; public
+concepts can use private helpers from their defining module.
+
+## Unevaluated Checks and `noexcept`
+
+Structural checks do not execute expressions, change caller variables, emit the
+checked operations into the program, or instantiate called generic bodies.
+`req { 1 / 0; }` is therefore true: evaluation would fail, but the operation
+has valid operand types. Raw pointer requirements check pointee types without
+performing runtime null checks or requiring an `unsafe` block. Reference
+mutability and type rules still apply.
+
+A compound requirement can add `noexcept`, for example
+`{ a + b } noexcept -> same_as<T>;`. Builtin scalar operations qualify. MLang
+currently has no non-throwing function declaration annotation, so ordinary
+function and method calls are conservatively considered potentially throwing.
+Their bodies are not inspected to infer a non-throwing guarantee.
+
+This feature does not add trailing requires-clauses, abbreviated `auto`
+parameters, or C++ associated type declarations inside structs.
+
+## Runnable Examples and Reference
+
+- [Boolean constraint clause example](../examples/where_constraints_demo.mla)
+- [Structural expression and combined clause example](../examples/req_expression_demo.mla)
+- [Named concepts example](../examples/concepts_demo.mla)
+- [Structural requirements example](../examples/structural_concepts_demo.mla)
+- [Language syntax reference](language_syntax.md#concepts-and-generic-constraints)
+- [std::concepts reference](stdlib/std_concepts.md)
+- [Compiler regression tests](../tests/mla_tests.cpp): `Concepts*`, `StructuralRequires*`, and `WhereConstraint*`
+
+After building the compiler and standard library, run the structural example:
+
+```sh
+./build/mlang examples/structural_concepts_demo.mla -L build -lmlang_std -o /tmp/structural-concepts-demo
+/tmp/structural-concepts-demo
+```

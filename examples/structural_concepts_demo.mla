@@ -1,0 +1,37 @@
+/// \file structural_concepts_demo.mla
+/// \brief Structural operation checks and constrained overload selection.
+
+mod std::concepts;
+use std::concepts::*;
+
+concept Addable<T> = req(a: T, b: T) {
+    a + b;
+    typename T;
+    { a + b } -> same_as<T>;
+    where arithmetic<T>;
+};
+
+concept HasValue<T> = req(value: T) {
+    { value.value } -> integral;
+};
+
+generic<T> where Addable<T>
+fn add(a: T, b: T) -> T { return a + b; }
+
+generic<T>
+fn category(value: T) -> i32 { return 0; }
+
+generic<T> where HasValue<T>
+fn category(value: T) -> i32 { return 1; }
+
+struct Item { var value: i32; };
+
+fn main() -> i32 {
+    static_assert!(Addable<i32>);
+    static_assert!(!Addable<Item>);
+    static_assert!(HasValue<Item>);
+    let item = Item { value: 7 };
+    let sum = add(20i32, 22i32);
+    println!("sum={}, item category={}", sum, category(item));
+    return sum == 42 && category(item) == 1 && category(1i32) == 0 ? 0 : 1;
+}

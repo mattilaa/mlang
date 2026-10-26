@@ -1,0 +1,21 @@
+/// \file where_constraints_demo.mla
+/// \brief A where clause selects generic overloads using a boolean predicate.
+
+mod std::concepts;
+use std::concepts::*;
+
+// Case 1: where filters a declaration. The predicate must be true.
+generic<T> where arithmetic<T>
+fn twice(value: T) -> T { return value + value; }
+
+generic<T>
+fn category(value: T) -> i32 { return 0; }
+
+generic<T> where integral<T>
+fn category(value: T) -> i32 { return 1; }
+
+fn main() -> i32 {
+    let result = twice(21i32);
+    println!("twice={}, integer={}, floating={}", result, category(1i32), category(1.5));
+    return result == 42 && category(1i32) == 1 && category(1.5) == 0 ? 0 : 1;
+}

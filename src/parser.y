@@ -215,6 +215,8 @@ collect_namespace_decl_names(TopLevelListNode* list)
             names.insert(tr->name);
         else if(auto* fn = dynamic_cast<FunctionDefNode*>(item))
             names.insert(fn->name);
+        else if(auto* conceptDefinition = dynamic_cast<ConceptDefNode*>(item))
+            names.insert(conceptDefinition->name);
         else if(auto* alias = dynamic_cast<TypeAliasNode*>(item))
             names.insert(alias->name);
     }
@@ -303,6 +305,39 @@ static void qualify_params_in_namespace(ParameterListNode* params,
             qualify_type_in_namespace(param->type, ns, names);
 }
 
+static void qualify_constraint_in_namespace(ExpressionNode* expression,
+    const std::string& ns, const std::unordered_set<std::string>& names)
+{
+    if(!expression) return;
+    if(auto* requirement = dynamic_cast<RequiresExpressionNode*>(expression))
+    {
+        qualify_params_in_namespace(requirement->parameters, ns, names);
+        for(auto* item : requirement->requirements)
+        {
+            qualify_type_in_namespace(item->requiredType, ns, names);
+            for(auto* argument : item->resultArguments) qualify_type_in_namespace(argument, ns, names);
+            qualify_constraint_in_namespace(item->expression, ns, names);
+        }
+    }
+    else if(auto* application = dynamic_cast<ConceptApplicationNode*>(expression))
+        for(auto* argument : application->typeArguments) qualify_type_in_namespace(argument, ns, names);
+    else if(auto* binary = dynamic_cast<BinaryOpNode*>(expression))
+    {
+        qualify_constraint_in_namespace(binary->left, ns, names);
+        qualify_constraint_in_namespace(binary->right, ns, names);
+    }
+    else if(auto* unary = dynamic_cast<UnaryOpNode*>(expression))
+        qualify_constraint_in_namespace(unary->operand, ns, names);
+    else if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
+        for(auto* argument : call->arguments) qualify_constraint_in_namespace(argument, ns, names);
+    else if(auto* ternary = dynamic_cast<TernaryNode*>(expression))
+    {
+        qualify_constraint_in_namespace(ternary->condition, ns, names);
+        qualify_constraint_in_namespace(ternary->trueExpr, ns, names);
+        qualify_constraint_in_namespace(ternary->falseExpr, ns, names);
+    }
+}
+
 static void qualify_method_in_namespace(StructMethodNode* method,
                                         const std::string& ns,
                                         const std::unordered_set<std::string>& names)
@@ -366,7 +401,13 @@ static ASTNode* qualify_namespace_block(char* namespacePath,
         {
             qualify_type_in_namespace(fn->returnType, ns, names);
             qualify_params_in_namespace(fn->parameters, ns, names);
+            qualify_constraint_in_namespace(fn->requiresClause, ns, names);
             fn->name = qualify_name(ns, fn->name);
+        }
+        else if(auto* conceptDefinition = dynamic_cast<ConceptDefNode*>(item))
+        {
+            qualify_constraint_in_namespace(conceptDefinition->predicate, ns, names);
+            conceptDefinition->name = qualify_name(ns, conceptDefinition->name);
         }
         else if(auto* alias = dynamic_cast<TypeAliasNode*>(item))
         {
@@ -2033,7 +2074,7 @@ enum UpdatePosition
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
 %token PUB IMPL TRAIT DYN
 %token EXTERN
-%token STATIC CEXPR GENERIC
+%token STATIC CEXPR GENERIC CONCEPT REQ REQUIRES WHERE TYPENAME NOEXCEPT
 %token ASM VOLATILE SIZEOF
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
@@ -2069,7 +2110,9 @@ enum UpdatePosition
 %token INLINE_NEVER_ATTR
 
 %type <ast> program top_level_list top_level_item test_function_def
-%type <ast> module_asm_declaration literal_function_def
+%type <ast> module_asm_declaration literal_function_def concept_def optional_constraint
+%type <ast> requires_expression requirement_body requirement_list requirement compound_requirement
+%type <ast> requirement_parameters requirement_parameter_list requirement_parameter
 %type <ast> inline_function_def
 %type <ast> arch_gated_function_def arch_gated_test_function_def arch_gated_inline_function_def
 %type <ast> type_alias_def namespace_block namespace_alias_def
@@ -2106,7 +2149,7 @@ enum UpdatePosition
 %type <ival> enum_base_type_opt enum_backing_type enum_int_type
 %type <ival> arch_attr arch_attr_list
 %type <ival> property_options_opt property_option_list property_option
-%type <sval> field_path
+%type <sval> field_path builtin_type_name
 
 %left PIPE_PIPE
 %left PIPE_GT
@@ -2142,6 +2185,7 @@ top_level_item
     | trait_def
     | function_def
     | literal_function_def
+    | concept_def
     | test_function_def
     | inline_function_def
     | arch_gated_function_def
@@ -2424,8 +2468,8 @@ type_param_list
     ;
 
 trait_bound_chain
-    : IDENTIFIER { $$ = $1; }
-    | trait_bound_chain PLUS IDENTIFIER
+    : module_path { $$ = $1; }
+    | trait_bound_chain PLUS module_path
         { $$ = trait_bound_concat($1, $3); }
     ;
 
@@ -2647,9 +2691,10 @@ struct_method
     ;
 
 function_def
-    : GENERIC LT type_param_list GT function_def
+    : GENERIC LT type_param_list GT optional_constraint function_def
         {
-            auto* fn = static_cast<FunctionDefNode*>($5);
+            auto* fn = static_cast<FunctionDefNode*>($6);
+            fn->requiresClause = static_cast<ExpressionNode*>($5);
             auto* params = static_cast<TypeParamListNode*>($3);
             fn->typeParams = params->params;
             fn->typeParamTraitBounds = params->traitBounds;
@@ -2752,6 +2797,109 @@ function_def
         { auto* node = mla_ast_function_def($8, $3, $5, NULL, 0, 1); node->line = yylineno; $$ = node; }
     | EXTERN PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
         { auto* node = mla_ast_function_def($9, $4, $6, NULL, 1, 1); node->line = yylineno; $$ = node; }
+    ;
+
+builtin_type_name
+    : VOID { $$ = strdup("void"); }
+    | BOOL { $$ = strdup("bool"); }
+    | BIT { $$ = strdup("bit"); }
+    | FLOAT { $$ = strdup("f32"); }
+    | DOUBLE { $$ = strdup("f64"); }
+    | STR8 { $$ = strdup("str8"); }
+    | STR16 { $$ = strdup("str16"); }
+    | I8 { $$ = strdup("i8"); }
+    | I16 { $$ = strdup("i16"); }
+    | I32 { $$ = strdup("i32"); }
+    | I64 { $$ = strdup("i64"); }
+    | U8 { $$ = strdup("u8"); }
+    | U16 { $$ = strdup("u16"); }
+    | U32 { $$ = strdup("u32"); }
+    | U64 { $$ = strdup("u64"); }
+    ;
+
+concept_def
+    : CONCEPT IDENTIFIER GENERIC_LT type_param_list GT ASSIGN expression SEMICOLON
+        {
+            auto* params = static_cast<TypeParamListNode*>($4);
+            auto* node = new ConceptDefNode($2, params->params, static_cast<ExpressionNode*>($7));
+            node->line = @1.first_line; node->col = @1.first_column;
+            if(!params->packParam.empty() || !params->traitBounds.empty())
+                yyerror("concept parameters must be plain type parameters");
+            $$ = node;
+        }
+    | PUB concept_def { static_cast<ConceptDefNode*>($2)->isPublic = true; $$ = $2; }
+    ;
+
+optional_constraint
+    : /* empty */ { $$ = nullptr; }
+    | WHERE expression { $$ = $2; }
+    | REQUIRES expression { $$ = $2; }
+    ;
+
+requires_expression
+    : REQ LPAREN requirement_parameters RPAREN requirement_body
+        {
+            auto* node = static_cast<RequiresExpressionNode*>($5);
+            node->parameters = static_cast<ParameterListNode*>($3);
+            node->line = @1.first_line; node->col = @1.first_column; $$ = node;
+        }
+    | REQ requirement_body { $$ = $2; $$->line = @1.first_line; $$->col = @1.first_column; }
+    | REQUIRES LPAREN requirement_parameters RPAREN requirement_body
+        {
+            auto* node = static_cast<RequiresExpressionNode*>($5);
+            node->parameters = static_cast<ParameterListNode*>($3);
+            node->line = @1.first_line; node->col = @1.first_column; $$ = node;
+        }
+    | REQUIRES requirement_body { $$ = $2; $$->line = @1.first_line; $$->col = @1.first_column; }
+    ;
+
+requirement_parameters
+    : /* empty */ { $$ = new ParameterListNode(); }
+    | requirement_parameter_list { $$ = $1; }
+    ;
+
+requirement_parameter_list
+    : requirement_parameter { auto* list = new ParameterListNode(); list->parameters.push_back(static_cast<ParameterNode*>($1)); $$ = list; }
+    | requirement_parameter_list COMMA requirement_parameter
+        { static_cast<ParameterListNode*>($1)->parameters.push_back(static_cast<ParameterNode*>($3)); $$ = $1; }
+    ;
+
+requirement_parameter
+    : IDENTIFIER COLON type { $$ = new ParameterNode(static_cast<TypeNode*>($3), $1); }
+    | type IDENTIFIER { $$ = new ParameterNode(static_cast<TypeNode*>($1), $2); }
+    ;
+
+requirement_body
+    : LBRACE requirement_list RBRACE { $$ = $2; }
+    ;
+
+requirement_list
+    : requirement { auto* node = new RequiresExpressionNode(); node->requirements.push_back(static_cast<RequirementNode*>($1)); $$ = node; }
+    | requirement_list requirement { static_cast<RequiresExpressionNode*>($1)->requirements.push_back(static_cast<RequirementNode*>($2)); $$ = $1; }
+    ;
+
+requirement
+    : expression SEMICOLON
+        { auto* node = new RequirementNode(RequirementNode::Simple); node->expression = static_cast<ExpressionNode*>($1); node->line = @1.first_line; $$ = node; }
+    | TYPENAME type SEMICOLON
+        { auto* node = new RequirementNode(RequirementNode::Type); node->requiredType = static_cast<TypeNode*>($2); node->line = @1.first_line; $$ = node; }
+    | TYPE_KW type SEMICOLON
+        { auto* node = new RequirementNode(RequirementNode::Type); node->requiredType = static_cast<TypeNode*>($2); node->line = @1.first_line; $$ = node; }
+    | WHERE expression SEMICOLON
+        { auto* node = new RequirementNode(RequirementNode::Nested); node->expression = static_cast<ExpressionNode*>($2); node->line = @1.first_line; $$ = node; }
+    | REQUIRES expression SEMICOLON
+        { auto* node = new RequirementNode(RequirementNode::Nested); node->expression = static_cast<ExpressionNode*>($2); node->line = @1.first_line; $$ = node; }
+    | compound_requirement SEMICOLON { $$ = $1; }
+    ;
+
+compound_requirement
+    : LBRACE expression RBRACE
+        { auto* node = new RequirementNode(RequirementNode::Compound); node->expression = static_cast<ExpressionNode*>($2); node->line = @1.first_line; $$ = node; }
+    | compound_requirement NOEXCEPT { static_cast<RequirementNode*>($1)->noThrow = true; $$ = $1; }
+    | compound_requirement ARROW module_path
+        { static_cast<RequirementNode*>($1)->resultConcept = $3; $$ = $1; }
+    | compound_requirement ARROW module_path GENERIC_LT type_list GT
+        { auto* node = static_cast<RequirementNode*>($1); node->resultConcept = $3; node->resultArguments = static_cast<TypeListNode*>($5)->types; $$ = node; }
     ;
 
 literal_function_def
@@ -2898,13 +3046,7 @@ closure_parameter
     ;
 
 type
-    : VOID   { $$ = mla_ast_type_node(TypeNode::TYPE_VOID); }
-    | BOOL   { $$ = mla_ast_type_node(TypeNode::TYPE_BOOL); }
-    | BIT    { $$ = mla_ast_type_node(TypeNode::TYPE_BIT); }
-    | FLOAT  { $$ = mla_ast_type_node(TypeNode::TYPE_FLOAT); }
-    | DOUBLE { $$ = mla_ast_type_node(TypeNode::TYPE_DOUBLE); }
-    | STR8   { $$ = mla_ast_type_node(TypeNode::TYPE_STR8); }
-    | STR16  { $$ = mla_ast_type_node(TypeNode::TYPE_STR16); }
+    : builtin_type_name { $$ = type_node_from_simple_name($1); }
     | ARRAY GENERIC_LT type COMMA INT_LITERAL GT
         { $$ = make_array_type($3, $5, yylineno, yycolumn_token); }
     | MULTIARRAY GENERIC_LT type COMMA multiarray_dimensions GT
@@ -2924,14 +3066,6 @@ type
     | DYN module_path        { $$ = create_trait_object_type($2); }
     | LBRACKET type SEMICOLON expression RBRACKET
         { $$ = mla_ast_generic_list_type($2); /* [T; N] is list<T>, N ignored */ }
-    | I8     { $$ = mla_ast_type_node(TypeNode::TYPE_I8); }
-    | I16    { $$ = mla_ast_type_node(TypeNode::TYPE_I16); }
-    | I32    { $$ = mla_ast_type_node(TypeNode::TYPE_I32); }
-    | I64    { $$ = mla_ast_type_node(TypeNode::TYPE_I64); }
-    | U8     { $$ = mla_ast_type_node(TypeNode::TYPE_U8); }
-    | U16    { $$ = mla_ast_type_node(TypeNode::TYPE_U16); }
-    | U32    { $$ = mla_ast_type_node(TypeNode::TYPE_U32); }
-    | U64    { $$ = mla_ast_type_node(TypeNode::TYPE_U64); }
     | STRUCT IDENTIFIER LBRACE struct_member_list RBRACE
         { $$ = create_inline_struct_type($2, $4, yylineno); }
     | module_path { $$ = make_type_from_module_path($1); }
@@ -3740,7 +3874,24 @@ condition_postfix
     ;
 
 condition_primary
-    : INT_LITERAL { $$ = mla_ast_literal_int($1); }
+    : requires_expression { $$ = $1; }
+    | INT_LITERAL { $$ = mla_ast_literal_int($1); }
+    | builtin_type_name { $$ = create_identifier_at($1, @1.first_line, @1.first_column); }
+    | IDENTIFIER GENERIC_LT type_list GT
+        {
+            auto* node = new ConceptApplicationNode($1, static_cast<TypeListNode*>($3)->types);
+            node->line = @1.first_line; node->col = @1.first_column; $$ = node;
+        }
+    | module_path GENERIC_LT type_list GT
+        {
+            auto* node = new ConceptApplicationNode($1, static_cast<TypeListNode*>($3)->types);
+            node->line = @1.first_line; node->col = @1.first_column; $$ = node;
+        }
+    | module_path COLONCOLON IDENTIFIER GENERIC_LT type_list GT
+        {
+            auto* node = new ConceptApplicationNode(std::string($1) + "::" + $3, static_cast<TypeListNode*>($5)->types);
+            node->line = @1.first_line; node->col = @1.first_column; $$ = node;
+        }
     | TYPED_INT_LITERAL { $$ = $1; }
     | USER_DEFINED_LITERAL { $$ = $1; }
     | FLOAT_LITERAL { $$ = mla_ast_literal_float($1); }
@@ -3984,7 +4135,24 @@ match_pattern
     ;
 
 primary_expression
-    : INT_LITERAL { $$ = mla_ast_literal_int($1); }
+    : requires_expression { $$ = $1; }
+    | INT_LITERAL { $$ = mla_ast_literal_int($1); }
+    | builtin_type_name { $$ = create_identifier_at($1, @1.first_line, @1.first_column); }
+    | IDENTIFIER GENERIC_LT type_list GT
+        {
+            auto* node = new ConceptApplicationNode($1, static_cast<TypeListNode*>($3)->types);
+            node->line = @1.first_line; node->col = @1.first_column; $$ = node;
+        }
+    | module_path GENERIC_LT type_list GT
+        {
+            auto* node = new ConceptApplicationNode($1, static_cast<TypeListNode*>($3)->types);
+            node->line = @1.first_line; node->col = @1.first_column; $$ = node;
+        }
+    | module_path COLONCOLON IDENTIFIER GENERIC_LT type_list GT
+        {
+            auto* node = new ConceptApplicationNode(std::string($1) + "::" + $3, static_cast<TypeListNode*>($5)->types);
+            node->line = @1.first_line; node->col = @1.first_column; $$ = node;
+        }
     | TYPED_INT_LITERAL { $$ = $1; }
     | USER_DEFINED_LITERAL { $$ = $1; }
     | FLOAT_LITERAL { $$ = mla_ast_literal_float($1); }

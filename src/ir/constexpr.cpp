@@ -1,3 +1,4 @@
+#include "concepts.h"
 #include "ir.h"
 #include "ir/common.h"
 #include "literal_operators.h"
@@ -204,6 +205,15 @@ std::string CodeGenerator::canonicalConstexprTypeName(TypeNode* type) const
 bool CodeGenerator::constexprTypeNameFromIdentifier(const std::string& name,
                                                     std::string& out) const
 {
+    if(conceptKnownTypes.count(name))
+    {
+        auto alias = typeAliases.find(name);
+        if(alias != typeAliases.end() && alias->second.aliasedType)
+            out = canonicalConstexprTypeName(alias->second.aliasedType);
+        else
+            out = name;
+        return true;
+    }
     auto aliasIt = typeAliases.find(name);
     if(aliasIt != typeAliases.end() && aliasIt->second.aliasedType)
     {
@@ -610,10 +620,50 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
         return false;
     }
 
+    const bool constrainedSet = std::any_of(
+        overloadIt->second.begin(), overloadIt->second.end(),
+        [](const FunctionOverloadInfo& item)
+        {
+            return item.node &&
+                   !mlang::concepts::constraintKey(item.node).empty();
+        });
+    struct ConstrainedCandidate
+    {
+        FunctionDefNode* function;
+        ConstexprEnv environment;
+        FunctionDefNode ranking;
+        int cost;
+    };
+    std::vector<ConstrainedCandidate> constrainedCandidates;
+    std::string constraintFailure;
+    auto evaluateBody = [&](FunctionDefNode* fn, ConstexprEnv& environment)
+    {
+        ConstexprValue returnValue;
+        bool didReturn = false;
+        const std::string callerModule = currentModule;
+        currentModule = fn->sourceModule;
+        const bool evaluated =
+            evalConstexprStatementList(fn->body, environment, returnValue,
+                                       didReturn, errorMessage, depth + 1);
+        currentModule = callerModule;
+        if(!evaluated)
+            return false;
+        if(!didReturn)
+        {
+            if(errorMessage)
+                *errorMessage =
+                    "cexpr fn '" + call->name + "' must return a value";
+            return false;
+        }
+        out = returnValue;
+        if(fn->returnType)
+            out.typeKind = Helpers::normalizeInferredKind(fn->returnType->kind);
+        return true;
+    };
     for(const auto& overload : overloadIt->second)
     {
         FunctionDefNode* fn = overload.node;
-        if(literalCall && !isOverloadVisible(overload))
+        if((literalCall || constrainedSet) && !isOverloadVisible(overload))
             continue;
         if(!fn || !fn->isCexpr || !fn->body || !fn->parameters)
             continue;
@@ -630,6 +680,7 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
             scope.kind = ConstexprValue::Kind::Type;
             scope.typeName = fn->name.substr(0, namespaceEnd);
             localEnv["$literal_namespace"] = scope;
+            localEnv["$concept_namespace"] = scope;
         }
         bool argsOk = true;
         std::set<std::string> typeParamSet(fn->typeParams.begin(),
@@ -685,6 +736,15 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
         }
         if(!argsOk)
             continue;
+        std::map<std::string, TypeNode*> conceptBindings;
+        for(const auto& binding : typeBindings)
+            conceptBindings[binding.first] =
+                Helpers::type_from_text(binding.second);
+        std::vector<std::set<std::string>> constraintTerms;
+        if(constrainedSet &&
+           !satisfiesFunctionConstraints(fn, conceptBindings,
+                                         &constraintFailure, &constraintTerms))
+            continue;
         for(const auto& binding : typeBindings)
         {
             ConstexprValue typeValue;
@@ -733,29 +793,73 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
         if(!argsOk)
             return false;
 
-        ConstexprValue returnValue;
-        bool didReturn = false;
-        // Evaluate a function body in its defining module. Public literal
-        // operators may call private suffix operators within that module.
-        const std::string callerModule = currentModule;
-        currentModule = fn->sourceModule;
-        const bool evaluated =
-            evalConstexprStatementList(fn->body, localEnv, returnValue,
-                                       didReturn, errorMessage, depth + 1);
-        currentModule = callerModule;
-        if(!evaluated)
-            return false;
-        if(!didReturn)
+        if(constrainedSet)
         {
-            if(errorMessage)
-                *errorMessage =
-                    "cexpr fn '" + call->name + "' must return a value";
-            return false;
+            int cost = 0;
+            std::vector<TypeNode*> arguments;
+            for(const auto& name : fn->typeParams)
+                arguments.push_back(conceptBindings.count(name)
+                                        ? conceptBindings[name]
+                                        : new StructTypeRefNode(name));
+            for(size_t i = 0; i < concreteArgTypes.size(); ++i)
+            {
+                auto* expected =
+                    substituteTypeParams(fn->parameters->parameters[i]->type,
+                                         fn->typeParams, arguments);
+                if(concreteArgTypes[i] &&
+                   canonicalConstexprTypeName(expected) !=
+                       canonicalConstexprTypeName(concreteArgTypes[i]))
+                    ++cost;
+            }
+            FunctionDefNode ranking(*fn);
+            if(!fn->typeParams.empty())
+                ranking.genericOrigin = fn;
+            ranking.constraintTerms = std::move(constraintTerms);
+            constrainedCandidates.push_back(
+                {fn, std::move(localEnv), std::move(ranking), cost});
+            continue;
         }
-        out = returnValue;
-        if(fn->returnType)
-            out.typeKind = Helpers::normalizeInferredKind(fn->returnType->kind);
-        return true;
+        return evaluateBody(fn, localEnv);
+    }
+    if(constrainedSet && !constrainedCandidates.empty())
+    {
+        int bestCost = constrainedCandidates.front().cost;
+        for(const auto& candidate : constrainedCandidates)
+            bestCost = std::min(bestCost, candidate.cost);
+        ConstrainedCandidate* selected = nullptr;
+        for(auto& candidate : constrainedCandidates)
+        {
+            if(candidate.cost != bestCost)
+                continue;
+            bool dominated = false;
+            for(const auto& other : constrainedCandidates)
+                if(other.cost == bestCost && &other != &candidate &&
+                   mlang::concepts::moreConstrained(&other.ranking,
+                                                    &candidate.ranking))
+                {
+                    dominated = true;
+                    break;
+                }
+            if(dominated)
+                continue;
+            if(selected)
+            {
+                if(errorMessage)
+                    *errorMessage = "ambiguous constrained cexpr call to '" +
+                                    call->name + "'";
+                return false;
+            }
+            selected = &candidate;
+        }
+        if(selected)
+            return evaluateBody(selected->function, selected->environment);
+    }
+    if(constrainedSet && !constraintFailure.empty())
+    {
+        if(errorMessage)
+            *errorMessage = "constraints not satisfied for cexpr call to '" +
+                            call->name + "': " + constraintFailure;
+        return false;
     }
 
     if(errorMessage)
@@ -1154,6 +1258,12 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         out.typeKind = TypeNode::TYPE_I64;
         return true;
     }
+    if(auto* requirement = dynamic_cast<RequiresExpressionNode*>(expr))
+        return evalRequiresExpression(requirement, out, errorMessage, env,
+                                      depth + 1);
+    if(auto* conceptDefinition = dynamic_cast<ConceptApplicationNode*>(expr))
+        return evalConcept(conceptDefinition, out, errorMessage, env,
+                           depth + 1);
     if(auto* i = dynamic_cast<IntLiteralNode*>(expr))
     {
         out.kind = ConstexprValue::Kind::Int;
@@ -1366,6 +1476,18 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                 *errorMessage =
                     "left operand is not compile-time evaluable in cexpr";
             return false;
+        }
+        if(lhsValue.kind != ConstexprValue::Kind::Type &&
+           lhsValue.kind != ConstexprValue::Kind::OpaqueStruct &&
+           ((bin->op == BinaryOpNode::OP_AND && !lhsValue.boolValue) ||
+            (bin->op == BinaryOpNode::OP_OR && lhsValue.boolValue)))
+        {
+            out.kind = ConstexprValue::Kind::Bool;
+            out.typeKind = TypeNode::TYPE_BOOL;
+            out.boolValue = lhsValue.boolValue;
+            out.intValue = out.boolValue ? 1 : 0;
+            out.floatValue = out.boolValue ? 1.0 : 0.0;
+            return true;
         }
         if(!evalConstexprExpression(bin->right, rhsValue, errorMessage, env,
                                     depth + 1))

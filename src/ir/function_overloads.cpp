@@ -1,3 +1,4 @@
+#include "concepts.h"
 #include "ir.h"
 #include "ir/common.h"
 #include "literal_operators.h"
@@ -26,6 +27,9 @@ std::string CodeGenerator::functionSignatureKey(FunctionDefNode* node) const
         }
     }
     key += ")";
+    const std::string constraints = mlang::concepts::constraintKey(node);
+    if(!constraints.empty())
+        key += " requires " + constraints;
     if(!node->closureSpecializationKey.empty())
         key += "#closure=" + node->closureSpecializationKey;
     return key;
@@ -60,7 +64,7 @@ std::string CodeGenerator::functionSymbolName(FunctionDefNode* node) const
     }
     if(!node->closureSpecializationKey.empty())
         suffix += "_closure_" + node->closureSpecializationKey;
-    return node->name + "__" + suffix;
+    return node->name + "__" + suffix + mlang::concepts::constraintSymbol(node);
 }
 
 void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
@@ -76,6 +80,17 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
     {
         if(info.signatureKey == signatureKey)
         {
+            if(info.node && info.node != node && info.node->body &&
+               node->body && !info.node->genericOrigin &&
+               !node->genericOrigin &&
+               info.sourceModule == node->sourceModule &&
+               !mlang::concepts::constraintKey(node).empty())
+            {
+                reportError(node->line,
+                            "duplicate constrained function overload: '" +
+                                node->name + "'");
+                return;
+            }
             std::string literalSuffix, literalInput;
             if(info.node != node && info.node && info.node->body &&
                node->body && info.sourceModule == node->sourceModule &&

@@ -118,6 +118,10 @@ ASTNode* create_program_impl(ASTNode* top_level_list)
         {
             program->typeAliases.push_back(aliasDef);
         }
+        else if(auto* conceptDefinition = dynamic_cast<ConceptDefNode*>(item))
+        {
+            program->conceptDefs.push_back(conceptDefinition);
+        }
         else if(auto* traitDef = dynamic_cast<TraitDefNode*>(item))
         {
             program->traitDefs.push_back(traitDef);
@@ -1669,6 +1673,8 @@ std::string FunctionDefNode::toString() const
         }
         result += "> ";
     }
+    if(requiresClause)
+        result += "where " + requiresClause->toString() + " ";
     if(isCexpr)
         result += "cexpr ";
     result += "fn ";
@@ -2418,6 +2424,8 @@ std::string ProgramNode::toString() const
     {
         result += enumList->toString();
     }
+    for(const auto* conceptDefinition : conceptDefs)
+        result += conceptDefinition->toString() + "\n";
     for(const auto& traitDef : traitDefs)
     {
         result += traitDef->toString() + "\n";
@@ -3430,4 +3438,67 @@ ASTNode* create_generic_struct_type_ref_impl(char* name, ASTNode* type_args)
     }
 
     return node;
+}
+
+std::string ConceptApplicationNode::toString() const
+{
+    std::string result = name + "<";
+    for(size_t i = 0; i < typeArguments.size(); ++i)
+    {
+        if(i)
+            result += ", ";
+        result += typeArguments[i]->toString();
+    }
+    return result + ">";
+}
+std::string ConceptDefNode::toString() const
+{
+    std::string result = isPublic ? "pub concept " : "concept ";
+    result += name + "<";
+    for(size_t i = 0; i < typeParams.size(); ++i)
+    {
+        if(i)
+            result += ", ";
+        result += typeParams[i];
+    }
+    return result + "> = " + predicate->toString() + ";";
+}
+
+std::string RequirementNode::toString() const
+{
+    if(kind == Type)
+        return "typename " + requiredType->toString() + ";";
+    if(kind == Nested)
+        return "where " + expression->toString() + ";";
+    if(kind == Simple)
+        return expression->toString() + ";";
+    std::string result = "{ " + expression->toString() + " }";
+    if(noThrow)
+        result += " noexcept";
+    if(!resultConcept.empty())
+    {
+        result += " -> " + resultConcept;
+        if(!resultArguments.empty())
+        {
+            result += "<";
+            for(size_t i = 0; i < resultArguments.size(); ++i)
+            {
+                if(i)
+                    result += ", ";
+                result += resultArguments[i]->toString();
+            }
+            result += ">";
+        }
+    }
+    return result + ";";
+}
+std::string RequiresExpressionNode::toString() const
+{
+    std::string result = "req(";
+    if(parameters)
+        result += parameters->toString();
+    result += ") { ";
+    for(auto* requirement : requirements)
+        result += requirement->toString() + " ";
+    return result + "}";
 }

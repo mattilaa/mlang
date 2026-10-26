@@ -4,6 +4,9 @@
 
 TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 {
+    if(dynamic_cast<ConceptApplicationNode*>(expr) ||
+       dynamic_cast<RequiresExpressionNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_BOOL);
     if(auto* invoke = dynamic_cast<CallableInvokeNode*>(expr))
     {
         auto* callableType =

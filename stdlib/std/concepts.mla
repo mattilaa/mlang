@@ -1,0 +1,17 @@
+/// \file concepts.mla
+/// \brief Named compile-time concepts for builtin numeric types.
+
+pub concept same_as<T, U> = type_id(T) == type_id(U);
+
+pub concept integral<T> = type_id(T) == bool || type_id(T) == bit ||
+    type_id(T) == i8 || type_id(T) == i16 || type_id(T) == i32 || type_id(T) == i64 ||
+    type_id(T) == u8 || type_id(T) == u16 || type_id(T) == u32 || type_id(T) == u64;
+
+pub concept signed_integral<T> = integral<T> &&
+    (type_id(T) == i8 || type_id(T) == i16 || type_id(T) == i32 || type_id(T) == i64);
+
+pub concept unsigned_integral<T> = integral<T> && !signed_integral<T>;
+
+pub concept floating_point<T> = type_id(T) == f32 || type_id(T) == f64;
+
+pub concept arithmetic<T> = integral<T> || floating_point<T>;
