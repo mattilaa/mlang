@@ -1,17 +1,23 @@
 /// \file concepts.mla
 /// \brief Named compile-time concepts for builtin numeric types.
 
+/// True when both arguments resolve to the same type, including reference mutability.
 pub concept same_as<T, U> = type_id(T) == type_id(U);
 
+/// True for bool, bit, and all builtin signed and unsigned integer widths.
 pub concept integral<T> = type_id(T) == bool || type_id(T) == bit ||
     type_id(T) == i8 || type_id(T) == i16 || type_id(T) == i32 || type_id(T) == i64 ||
     type_id(T) == u8 || type_id(T) == u16 || type_id(T) == u32 || type_id(T) == u64;
 
+/// True for i8, i16, i32, and i64.
 pub concept signed_integral<T> = integral<T> &&
     (type_id(T) == i8 || type_id(T) == i16 || type_id(T) == i32 || type_id(T) == i64);
 
+/// True for u8, u16, u32, u64, bool, and bit.
 pub concept unsigned_integral<T> = integral<T> && !signed_integral<T>;
 
+/// True for f32 and f64.
 pub concept floating_point<T> = type_id(T) == f32 || type_id(T) == f64;
 
+/// True for integral or floating-point builtin types.
 pub concept arithmetic<T> = integral<T> || floating_point<T>;

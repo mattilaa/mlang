@@ -2,6 +2,62 @@
 
 Compiler-provided collection methods, enum behavior, aliases, and builtin type helpers.
 
+## Builtin Reference and Go to Definition
+
+[stdlib/types.mla](../stdlib/types.mla) is the editor-readable reference for
+builtin types, keywords, and selected compiler helpers. Its `@builtin` entries
+let uvim show documentation and use `gd` even without a declaration in the
+current file. The language server also resolves these entries to their actual
+reference-file locations, rather than jumping to the same line in the current
+buffer.
+
+The reference includes declaration and control-flow keywords, fixed-capacity
+`array`, `narrow_cast`, pack-fold `is_constructible`, literal `operator`
+declarations, and `free_objs`, in addition to the types and intrinsics below.
+
+### Constraints and Structural Queries
+
+| Entry | Purpose |
+| --- | --- |
+| `generic` | Introduces type parameters for runtime or compile-time functions. |
+| `concept` | Defines a reusable compile-time boolean predicate. |
+| `where` | Applies a boolean constraint to a generic declaration or a nested requirement. |
+| `req` | Checks structural requirements without evaluating the expressions. |
+| `requires` | Compatibility spelling; new code uses `where` and `req`. |
+| `typename` | Checks that a type exists inside a structural requirement. |
+| `noexcept` | Rejects potentially throwing calls in a compound requirement. |
+| `type_id` | Produces compile-time type identity metadata for type comparisons. |
+
+See [Concepts and Structural Requirements](concepts.md) for syntax, scope,
+overload ordering, and runnable examples.
+
+### Standard Concepts
+
+These entries are included in the builtin reference for editor discovery, but
+are library declarations. Import `std::concepts` to use them:
+
+```mla
+mod std::concepts;
+use std::concepts::*;
+
+generic<T> where arithmetic<T>
+fn twice(value: T) -> T { return value + value; }
+```
+
+| Concept | Accepted arguments |
+| --- | --- |
+| `same_as<T, U>` | Identical resolved types, including reference mutability. |
+| `integral<T>` | `bool`, `bit`, and signed or unsigned 8/16/32/64-bit integers. |
+| `signed_integral<T>` | `i8`, `i16`, `i32`, `i64`. |
+| `unsigned_integral<T>` | `u8`, `u16`, `u32`, `u64`, `bool`, `bit`. |
+| `floating_point<T>` | `f32`, `f64`. |
+| `arithmetic<T>` | Integral or floating-point builtin types. |
+
+With mlangd, `gd` on a visible concept resolves its declaration in
+[stdlib/std/concepts.mla](../stdlib/std/concepts.mla). User-defined concepts are
+indexed too, including their predicate signatures and documentation. See the
+[std::concepts reference](stdlib/std_concepts.md).
+
 ## Built-in Collection Methods (Compiler Intrinsics)
 
 These methods are language/compiler intrinsics and are available directly on

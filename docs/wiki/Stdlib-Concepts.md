@@ -42,3 +42,9 @@ type, compound, and nested requirements.
 
 See the [concepts guide](Concepts) for a complete example, requirement forms,
 overload ordering, and current compatibility limits.
+
+Editor tooling indexes concept declarations for definition navigation and hover.
+`gd` on an imported concept leads to its declaration in `std/concepts.mla`;
+`gd` on keywords such as `where` and `req` leads to their builtin reference in
+`types.mla`. The builtin reference also describes every standard concept for
+editor discovery. Specific import aliases retain the original definition target.

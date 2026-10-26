@@ -83,12 +83,14 @@ struct SemanticSymbol
     std::string type_info;
     std::string signature;
     std::string documentation;
+    bool is_public = true;
 };
 
 struct UseDecl
 {
     std::string module;
     std::string item;
+    std::string alias;
     bool wildcard = false;
 };
 
@@ -1723,6 +1725,10 @@ static void addSemanticSymbol(
                 kind_match =
                     line.find("mod " + s.name) != std::string_view::npos;
                 break;
+            case 6:
+                kind_match =
+                    line.find("concept " + s.name) != std::string_view::npos;
+                break;
             case 5:
                 kind_match =
                     line.find("alias " + s.name) != std::string_view::npos ||
@@ -2253,6 +2259,7 @@ static std::optional<DocumentSemantic> buildDocumentSemanticFromAst(
             UseDecl u;
             u.module = use->moduleName;
             u.item = use->itemName;
+            u.alias = use->aliasName;
             u.wildcard = use->importAll;
             out.uses.push_back(std::move(u));
         }
@@ -2277,6 +2284,23 @@ static std::optional<DocumentSemantic> buildDocumentSemanticFromAst(
                 {},
                 docCommentAboveLine(doc.text, alias->line));
         }
+    }
+
+    for(auto* definition : program->conceptDefs)
+    {
+        if(!definition)
+            continue;
+        addSemanticSymbol(
+            out,
+            lines,
+            definition->name,
+            6,
+            definition->line > 0 ? definition->line : 1,
+            0,
+            "bool",
+            definition->toString(),
+            docCommentAboveLine(doc.text, definition->line));
+        out.symbols.back().is_public = definition->isPublic;
     }
 
     if(program->structList)
@@ -2800,13 +2824,9 @@ static void hydrateFilesystemModulesFor(
 static bool uriMatchesModule(std::string_view uri, std::string_view modName)
 {
     const std::string path = uriToPath(uri);
-    const std::string modPath = modulePathFromName(modName);
-    if(endsWith(path, "/" + modPath) || endsWith(path, modPath))
-    {
-        return true;
-    }
-    const std::string leaf = moduleLeafFromName(modName);
-    return endsWith(path, "/" + leaf + ".mla") || endsWith(path, leaf + ".mla");
+    const std::string module_path = modulePathFromName(modName);
+    // A user file named concepts.mla is not a provider for std::concepts.
+    return path == module_path || endsWith(path, "/" + module_path);
 }
 
 static int lineDepthAt(const DocumentSemantic& doc, int line)
@@ -3046,7 +3066,8 @@ static std::vector<SemanticSymbol> collectImportedSymbols(
 
     auto append_from_module = [&](std::string_view module_name,
                                   std::string_view specific_name,
-                                  bool wildcard)
+                                  bool wildcard,
+                                  std::string_view alias = {})
     {
         for(const DocumentSemantic& doc : all_docs)
         {
@@ -3064,7 +3085,7 @@ static std::vector<SemanticSymbol> collectImportedSymbols(
                 {
                     continue;
                 }
-                if(sym.kind == 2)
+                if(sym.kind == 2 || (sym.kind == 6 && !sym.is_public))
                 {
                     continue;
                 }
@@ -3073,13 +3094,15 @@ static std::vector<SemanticSymbol> collectImportedSymbols(
                     continue;
                 }
                 imported.push_back(sym);
+                if(!wildcard && !alias.empty())
+                    imported.back().name = std::string(alias);
             }
         }
     };
 
     for(const UseDecl& use : current.uses)
     {
-        append_from_module(use.module, use.item, use.wildcard);
+        append_from_module(use.module, use.item, use.wildcard, use.alias);
     }
 
     for(const std::string& mod : current.mods)
@@ -3154,12 +3177,14 @@ static std::optional<ImportDefinitionFallback> builtinDefinitionFromTypesFile(
     }
 
     const std::string marker = "// @builtin " + std::string(builtin_name);
+    const std::string function_marker =
+        "// @builtin_fn " + std::string(builtin_name);
     std::string line;
     int line_no = 0;
     while(std::getline(in, line))
     {
         ++line_no;
-        if(line != marker)
+        if(line != marker && line != function_marker)
         {
             continue;
         }
@@ -3167,7 +3192,8 @@ static std::optional<ImportDefinitionFallback> builtinDefinitionFromTypesFile(
         out.name = std::string(builtin_name);
         out.uri = fileUriFromPath(*file_path);
         out.line = line_no;
-        out.column = static_cast<int>(line.find(std::string(builtin_name))) + 1;
+        out.column =
+            static_cast<int>(line.rfind(std::string(builtin_name))) + 1;
         if(out.column <= 0)
         {
             out.column = 1;
@@ -3234,6 +3260,9 @@ static std::optional<ImportDefinitionFallback> importDefinitionFromText(
         return std::nullopt;
     }
     const std::string_view token = token_span->token;
+
+    if(auto builtin = builtinDefinitionFromTypesFile(current.uri, token))
+        return builtin;
 
     const std::string line_trim = trimWs(lines[line_idx]);
     bool is_use = false;
@@ -5383,6 +5412,8 @@ static const char* symbolKindName(int kind)
         return "mod";
     case 5:
         return "type";
+    case 6:
+        return "concept";
     default:
         return "symbol";
     }
@@ -6383,6 +6414,8 @@ extern "C"
         {
             hover += " | " + resolved->symbol.signature;
         }
+        if(!resolved->symbol.documentation.empty())
+            hover += "\n" + resolved->symbol.documentation;
         if(resolved->overload_count > 1)
         {
             hover += " | overloads=" + std::to_string(resolved->overload_count);

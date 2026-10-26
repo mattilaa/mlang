@@ -34,6 +34,7 @@ pub struct DocumentSymbol {
     var type_info: str8;
     var signature: str8;
     var documentation: str8;
+    /// 1: function, 2: variable, 3: struct, 4: module, 5: alias, 6: concept.
     var kind: i32;
     var line: i32;
     var column: i32;

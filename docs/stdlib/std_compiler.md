@@ -40,3 +40,18 @@ Module file: `stdlib/std/compiler.mla`
 - `session::rename_is_safe(self: session, uri: str8, line: i32, column: i32, new_name: str8) -> result<i32, str8>`
 - `session::semantic_cache_warm(self: session, uri: str8) -> result<i32, str8>`
 - `session::semantic_cache_clear(self: session) -> result<i32, str8>`
+
+### Concept symbols and builtin navigation
+
+`document_symbol.kind` uses `1` for functions, `2` for variables, `3` for
+structs, `4` for modules, `5` for type aliases, and `6` for concepts. Concept
+symbols include their predicate signature and declaration documentation.
+Definition queries resolve local concepts, visible imports, and specific import
+aliases to their original declaration locations. Private concepts remain local
+to their defining module.
+
+Builtin keywords such as `where` and `req` resolve to the matching reference
+entry in `stdlib/types.mla`, with that file's URI and source location. Imported
+standard concepts resolve to `stdlib/std/concepts.mla`. Qualified module names
+retain their path when finding a provider, so a user file named `concepts.mla`
+does not hide `std::concepts`.

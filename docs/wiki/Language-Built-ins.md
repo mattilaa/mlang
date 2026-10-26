@@ -4,6 +4,62 @@
 
 Compiler-provided collection methods, enum behavior, aliases, and builtin type helpers.
 
+## Builtin Reference and Go to Definition
+
+[stdlib/types.mla](https://github.com/mattilaa/mlang/blob/main/stdlib/types.mla) is the editor-readable reference for
+builtin types, keywords, and selected compiler helpers. Its `@builtin` entries
+let uvim show documentation and use `gd` even without a declaration in the
+current file. The language server also resolves these entries to their actual
+reference-file locations, rather than jumping to the same line in the current
+buffer.
+
+The reference includes declaration and control-flow keywords, fixed-capacity
+`array`, `narrow_cast`, pack-fold `is_constructible`, literal `operator`
+declarations, and `free_objs`, in addition to the types and intrinsics below.
+
+### Constraints and Structural Queries
+
+| Entry | Purpose |
+| --- | --- |
+| `generic` | Introduces type parameters for runtime or compile-time functions. |
+| `concept` | Defines a reusable compile-time boolean predicate. |
+| `where` | Applies a boolean constraint to a generic declaration or a nested requirement. |
+| `req` | Checks structural requirements without evaluating the expressions. |
+| `requires` | Compatibility spelling; new code uses `where` and `req`. |
+| `typename` | Checks that a type exists inside a structural requirement. |
+| `noexcept` | Rejects potentially throwing calls in a compound requirement. |
+| `type_id` | Produces compile-time type identity metadata for type comparisons. |
+
+See [Concepts and Structural Requirements](Concepts) for syntax, scope,
+overload ordering, and runnable examples.
+
+### Standard Concepts
+
+These entries are included in the builtin reference for editor discovery, but
+are library declarations. Import [`std::concepts`](Stdlib-Concepts) to use them:
+
+```rust
+mod std::concepts;
+use std::concepts::*;
+
+generic<T> where arithmetic<T>
+fn twice(value: T) -> T { return value + value; }
+```
+
+| Concept | Accepted arguments |
+| --- | --- |
+| `same_as<T, U>` | Identical resolved types, including reference mutability. |
+| `integral<T>` | [`bool`](Quick-Guide#types), [`bit`](Quick-Guide#types), and signed or unsigned 8/16/32/64-bit integers. |
+| `signed_integral<T>` | [`i8`](Quick-Guide#types), [`i16`](Quick-Guide#types), [`i32`](Quick-Guide#types), [`i64`](Quick-Guide#types). |
+| `unsigned_integral<T>` | [`u8`](Quick-Guide#types), [`u16`](Quick-Guide#types), [`u32`](Quick-Guide#types), [`u64`](Quick-Guide#types), [`bool`](Quick-Guide#types), [`bit`](Quick-Guide#types). |
+| `floating_point<T>` | [`f32`](Quick-Guide#types), [`f64`](Quick-Guide#types). |
+| `arithmetic<T>` | Integral or floating-point builtin types. |
+
+With mlangd, `gd` on a visible concept resolves its declaration in
+[stdlib/std/concepts.mla](https://github.com/mattilaa/mlang/blob/main/stdlib/std/concepts.mla). User-defined concepts are
+indexed too, including their predicate signatures and documentation. See the
+[std::concepts reference](Stdlib-Concepts).
+
 ## Built-in Collection Methods (Compiler Intrinsics)
 
 These methods are language/compiler intrinsics and are available directly on

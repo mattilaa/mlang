@@ -47,8 +47,20 @@
 /// - `x64`
 /// - `aarch64`
 ///
+/// \section builtin_types_constraints Concepts and Constraints
+/// - `concept Name<T> = Predicate;` names a compile-time boolean predicate.
+/// - `generic<T> where Predicate` constrains a generic declaration.
+/// - `req(value: T) { ... }` checks operations without evaluating them.
+/// - `typename T;`, compound `noexcept`, and nested `where Predicate;` are
+///   requirement forms; `requires` is retained for compatibility.
+/// - `std::concepts` provides `same_as`, `integral`, `signed_integral`,
+///   `unsigned_integral`, `floating_point`, and `arithmetic`. These are library
+///   declarations and require imports, rather than being primitive types.
+/// - See @ref concepts for the complete concepts guide.
+///
 /// \section builtin_types_notes Notes
-/// - This page documents language built-ins, not importable stdlib modules.
+/// - Most entries document language built-ins. Standard concept entries also
+///   appear here for editor discovery; their declarations live in std/concepts.mla.
 /// - The `?` operator propagates `Err` values and enriches
 ///   `result<_, str8>` error stacks with call-site context.
 /// - `cexpr(...)` and `cexpr fn` provide explicit compile-time evaluation for
@@ -120,6 +132,7 @@
 // @builtin map
 // Generic map type: map<K, V>.
 
+// @builtin_fn free_objs
 /// Release a heterogeneous object pack in argument order.
 ///
 /// `free_objs(a, b, ...)` requires every argument to expose a visible,
@@ -224,19 +237,18 @@
 // Use `cexpr if` to select a branch during compilation.
 
 // @builtin generic
-// Compile-time generic function parameter introducer.
-// Use `generic<T, Y>` before `cexpr fn` to declare one or more type
-// parameters for a compile-time-only generic function.
+// Generic function parameter introducer for runtime and compile-time functions.
+// Use `generic<T, Y>` before a function declaration, with an optional
+// `where Predicate` constraint. Unary concepts can use `generic<T: Concept>`.
 // Inside that function, `type_id(T)` can be compared in a `cexpr if`
 // condition to dispatch by the concrete compile-time argument type.
-// Struct arguments are allowed for this type-dispatch use case, but struct
-// fields and struct constants are not compile-time evaluable yet.
+// Use req(value: T) { ... } to check struct operations without evaluating values.
 
 // @builtin type_id
 // Compile-time type identity helper.
 // Use `type_id(T) == SomeType` or `type_id(T) != SomeType` inside `cexpr`
 // expressions. `SomeType` may be a primitive alias or a struct type. The result
-// is a compile-time bool and can be combined with `&&` or `||`.
+// of a comparison is a compile-time bool, combinable with `&&` or `||`.
 
 // @builtin asm
 /// Inline assembly expression keyword.
@@ -270,3 +282,205 @@
 //     Some(x) => x,
 //     None => 0,
 // };
+
+// @builtin pub
+// Export a declaration so it can be used from another module.
+
+// @builtin extern
+// Declare a function provided by an external library, without an MLang body.
+
+// @builtin static
+// Declare a static member or associated function instead of an instance
+// member.
+
+// @builtin fn
+// Declare a function: fn name(value: Type) -> ReturnType { ... }.
+
+// @builtin concept
+// Define a named compile-time boolean predicate: concept Addable<T> = req(a:
+// T, b: T) { a + b; };
+
+// @builtin req
+// An unevaluated structural expression: req(value: T) { ... }. Tests simple
+// expressions, types, compound result constraints, and nested where predicates
+// without executing them.
+
+// @builtin requires
+// Compatibility spelling for earlier constraints and structural queries.
+// Prefer where Predicate for boolean constraints and req(...) { ... } for
+// structural expressions.
+
+// @builtin where
+// A compile-time boolean constraint on a generic declaration: generic<T> where
+// arithmetic<T> fn twice(value: T) -> T { return value + value; }. Inside req
+// { ... }, where Predicate; checks a nested boolean requirement.
+
+// @builtin typename
+// Inside req { ... }, typename T; checks that a type exists, including generic
+// arity and parameter bounds. The spelling type T; is also accepted.
+
+// @builtin noexcept
+// Inside req { ... }, { expression } noexcept; rejects potentially throwing
+// calls. Builtin scalar operations qualify; ordinary function and method calls
+// are conservatively potentially throwing.
+
+// @builtin impl
+// Define methods for a struct or implement a nominal trait: impl Type { ... }
+// or impl Trait for Type { ... }.
+
+// @builtin trait
+// Declare a nominal interface with required methods and optional super-traits.
+
+// @builtin dyn
+// Construct a trait-object type, such as dyn Trait, for runtime method
+// dispatch.
+
+// @builtin return
+// Return a value from the current function, or return; from a void function.
+
+// @builtin likely
+// Mark a boolean condition or branch as expected to be true. This is an
+// optimization hint; it does not change the result.
+
+// @builtin unlikely
+// Mark a boolean condition or branch as expected to be false. This is an
+// optimization hint; it does not change the result.
+
+// @builtin if
+// Conditionally execute a block. Compile-time branch selection uses cexpr if.
+
+// @builtin else
+// Provide the alternate branch of an if or cexpr if expression or statement.
+
+// @builtin try
+// Execute a block with a catch handler to handle exceptions.
+
+// @builtin catch
+// Handle an exception raised from a try block.
+
+// @builtin throw
+// Raise an exception payload and unwind to a matching catch handler.
+
+// @builtin match
+// Select a branch by matching values or patterns, including enum, option, and
+// result variants.
+
+// @builtin switch
+// Select a case from an integral or enum value.
+
+// @builtin case
+// Introduce a matching branch in a switch statement.
+
+// @builtin default
+// Introduce the fallback branch in a switch statement.
+
+// @builtin for
+// Iterate over a range or iterable value: for value in values { ... }.
+
+// @builtin while
+// Repeat a block while a condition is true; guarded binding forms are also
+// supported.
+
+// @builtin unsafe
+// Mark a block containing operations that require explicit unsafe context,
+// such as unproven raw-pointer dereferences.
+
+// @builtin volatile
+// Mark inline assembly as side-effecting: asm volatile(...).
+
+// @builtin in
+// Separate loop bindings from the range or iterable in a for statement.
+
+// @builtin break
+// Exit the innermost loop or supported breakable control-flow construct.
+
+// @builtin continue
+// Skip to the next iteration of the innermost loop.
+
+// @builtin mod
+// Declare a module dependency: mod std::concepts;
+
+// @builtin namespace
+// Group declarations under a qualified path: namespace geometry { ... }.
+
+// @builtin use
+// Import a module symbol, wildcard, or alias: use std::concepts::*;.
+
+// @builtin as
+// Give an imported symbol or module an alias: use std::concepts::same_as as
+// Same;.
+
+// @builtin alias
+// Declare a type alias: alias Number = i32;.
+
+// @builtin type
+// Use type in a type import, or type T; for a structural type requirement
+// inside req { ... }.
+
+// @builtin object
+// Construct an anonymous object with named fields: object { value: 42 }.
+
+// @builtin let
+// Introduce an immutable binding with an explicit or inferred type.
+
+// @builtin var
+// Introduce a mutable binding with an explicit or inferred type.
+
+// @builtin true
+// The boolean true literal.
+
+// @builtin false
+// The boolean false literal.
+
+// @builtin array
+// A fixed-capacity, list-compatible container: array<T, N>. The capacity is
+// compile-time constant, and literal initializers cannot exceed it.
+
+// @builtin struct
+// Declare a named aggregate with fields and optional methods.
+
+// @builtin field
+// Declare a compact single-field wrapper for builder syntax: field Width:
+// i32;.
+
+// @builtin narrow_cast
+// Perform a checked narrowing integer cast: narrow_cast<i8>(value). Range
+// checks are enabled in debug builds.
+
+// @builtin is_constructible
+// Use is_constructible<T>(value) in a boolean pack fold to check whether every
+// argument can construct T.
+
+// @builtin operator
+// Declare a compiler-supported user-defined literal suffix: fn operator ""
+// _name(value: u64) -> u64 { ... }. Builtin integer, floating-point, and
+// string signatures are supported.
+
+// @builtin mut
+// Mutable reference modifier in &mut T and &mut value. The referenced storage
+// must permit mutation.
+
+// @builtin same_as
+// Standard concept same_as<T, U> is true for the same resolved type, including
+// reference structure and mutability. Import std::concepts. The declaration is
+// in std/concepts.mla.
+
+// @builtin integral
+// Standard concept integral<T> accepts bool, bit, and signed or unsigned 8-,
+// 16-, 32-, and 64-bit integers. Import std::concepts.
+
+// @builtin signed_integral
+// Standard concept signed_integral<T> accepts i8, i16, i32, and i64. Import
+// std::concepts.
+
+// @builtin unsigned_integral
+// Standard concept unsigned_integral<T> accepts u8, u16, u32, u64, bool, and
+// bit. Import std::concepts.
+
+// @builtin floating_point
+// Standard concept floating_point<T> accepts f32 and f64. Import
+// std::concepts.
+
+// @builtin arithmetic
+// Standard concept arithmetic<T> accepts integral<T> or floating_point<T>.
+// Import std::concepts; this is a library predicate, not a new primitive type.

@@ -642,8 +642,18 @@ fn builtin_type_location(word: str8) -> str8 {
     let text_r: result<str8, str8> = read_all_text(path);
     if text_r.is_err() { return String::new(); }
     let text: str8 = text_r.unwrap();
-    let marker: str8 = format!("@builtin {}", lookup);
-    return first_match_location(path, text, marker);
+    let marker: str8 = format!("// @builtin {}", lookup);
+    let function_marker: str8 = format!("// @builtin_fn {}", lookup);
+    // Match complete reference entries: `type` must not land on `type_id`,
+    // and `req` must not land on the compatibility spelling `requires`.
+    let reference_count: i64 = line_count(text);
+    for i in 0..reference_count {
+        let reference_line: str8 = trim_ascii_ws(line_text_at(text, i));
+        if eq(reference_line, marker) == 1 || eq(reference_line, function_marker) == 1 {
+            return location_json(path_to_file_uri(path), i + 1, len(reference_line) - len(lookup) + 1);
+        }
+    }
+    return String::new();
 }
 
 fn builtin_result_method_location(member: str8) -> str8 {
@@ -1832,6 +1842,7 @@ fn word_at_col(line_text: str8, col0: i64) -> str8 {
 }
 
 fn symbol_kind_lsp(sig: str8) -> i32 {
+    if contains(sig, "concept ") == 1 { return 11; }
     if contains(sig, "fn ") == 1 {
         return 12;
     }
@@ -1848,6 +1859,13 @@ fn symbol_kind_lsp(sig: str8) -> i32 {
 }
 
 fn completion_kind_lsp(label: str8) -> i32 {
+    if eq(label, "same_as") == 1 { return 11; }
+    if eq(label, "integral") == 1 { return 11; }
+    if eq(label, "signed_integral") == 1 { return 11; }
+    if eq(label, "unsigned_integral") == 1 { return 11; }
+    if eq(label, "floating_point") == 1 { return 11; }
+    if eq(label, "arithmetic") == 1 { return 11; }
+
     if ends_with(label, "!") == 1 { return 14; }
     if eq(label, "fn") == 1 { return 14; }
     if eq(label, "generic") == 1 { return 14; }
@@ -1917,6 +1935,13 @@ fn completion_kind_lsp(label: str8) -> i32 {
 }
 
 fn completion_detail(label: str8) -> str8 {
+    if eq(label, "same_as") == 1 { return "std::concepts::same_as: compile-time type predicate"; }
+    if eq(label, "integral") == 1 { return "std::concepts::integral: compile-time type predicate"; }
+    if eq(label, "signed_integral") == 1 { return "std::concepts::signed_integral: compile-time type predicate"; }
+    if eq(label, "unsigned_integral") == 1 { return "std::concepts::unsigned_integral: compile-time type predicate"; }
+    if eq(label, "floating_point") == 1 { return "std::concepts::floating_point: compile-time type predicate"; }
+    if eq(label, "arithmetic") == 1 { return "std::concepts::arithmetic: compile-time type predicate"; }
+
     if eq(label, "generic") == 1 { return "keyword: generic type parameter declaration"; }
     if eq(label, "concept") == 1 { return "keyword: named compile-time boolean predicate"; }
     if eq(label, "where") == 1 { return "keyword: boolean constraint for a declaration or nested requirement"; }
@@ -2013,6 +2038,13 @@ fn completion_detail(label: str8) -> str8 {
 }
 
 fn completion_documentation(label: str8) -> str8 {
+    if eq(label, "same_as") == 1 { return "Standard concept same_as<T, U> is true for the same resolved type, including reference structure and mutability. Import std::concepts. The declaration is in std/concepts.mla."; }
+    if eq(label, "integral") == 1 { return "Standard concept integral<T> accepts bool, bit, and signed or unsigned 8-, 16-, 32-, and 64-bit integers. Import std::concepts."; }
+    if eq(label, "signed_integral") == 1 { return "Standard concept signed_integral<T> accepts i8, i16, i32, and i64. Import std::concepts."; }
+    if eq(label, "unsigned_integral") == 1 { return "Standard concept unsigned_integral<T> accepts u8, u16, u32, u64, bool, and bit. Import std::concepts."; }
+    if eq(label, "floating_point") == 1 { return "Standard concept floating_point<T> accepts f32 and f64. Import std::concepts."; }
+    if eq(label, "arithmetic") == 1 { return "Standard concept arithmetic<T> accepts integral<T> or floating_point<T>. Import std::concepts; this is a library predicate, not a new primitive type."; }
+
     if eq(label, "generic") == 1 { return "Declare generic type parameters with generic<T> before a function. Apply a boolean constraint with where Predicate."; }
     if eq(label, "concept") == 1 { return "Define a named type predicate: concept Addable<T> = req(a: T, b: T) { a + b; };"; }
     if eq(label, "where") == 1 { return "Filter a generic declaration with where Predicate. Inside req { ... }, where Predicate; checks a nested compile-time boolean. Combine the forms as where req(value: T) { value + value; }."; }
@@ -2647,6 +2679,19 @@ fn handle_definition(payload: str8) -> str8 {
     if line < 0 { return "[]"; }
     if col < 0 { return "[]"; }
 
+    // Concepts are real declarations. Resolve them before builtin-document
+    // and import heuristics so aliases and local shadowing retain their targets.
+    let semantic_session: SessionRef = current_session();
+    let semantic_result: result<ResolvedSymbol, str8> = semantic_session.resolve_symbol(uri, line + 1, col + 1);
+    if semantic_result.is_ok() {
+        let symbol: ResolvedSymbol = semantic_result.unwrap();
+        if symbol.kind == 6 || eq(symbol.name, "same_as") == 1 || eq(symbol.name, "integral") == 1 ||
+           eq(symbol.name, "signed_integral") == 1 || eq(symbol.name, "unsigned_integral") == 1 ||
+           eq(symbol.name, "floating_point") == 1 || eq(symbol.name, "arithmetic") == 1 {
+            return format!("[{}]", location_json(symbol.uri, symbol.line, symbol.column));
+        }
+    }
+
     var query_text: str8 = String::new();
     if ensure_text_store() == 0 {
         query_text = text_store_get(g_text_store_handle, uri);
@@ -3083,7 +3128,7 @@ fn handle_completion(payload: str8) -> str8 {
             Err(_e) => String::new()
         };
         let label: str8 = json_escape(label_raw);
-        let kind: i32 = completion_kind_lsp(label_raw);
+        var kind: i32 = completion_kind_lsp(label_raw);
         var detail_raw: str8 = completion_detail(label_raw);
         var doc_raw: str8 = completion_documentation(label_raw);
         if len(detail_raw) == 0 || len(doc_raw) == 0 {
@@ -3097,6 +3142,7 @@ fn handle_completion(payload: str8) -> str8 {
                 doc_raw = meta.doc;
             }
         }
+        if contains(detail_raw, "concept ") == 1 { kind = 11; }
         let detail: str8 = json_escape(detail_raw);
         let doc: str8 = json_escape(doc_raw);
         var item: str8 = String::new();
@@ -3683,8 +3729,8 @@ fn semantic_token_type(sig: str8, kind: i32) -> i32 {
     if kind == 4 {
         return 0; // keyword/module
     }
-    if kind == 5 {
-        return 5; // type alias
+    if kind == 5 || kind == 6 {
+        return 5; // type alias or concept
     }
     if kind == 2 {
         return 4; // variable

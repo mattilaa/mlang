@@ -39,6 +39,13 @@ endif()
 
 option(BUILD_CPP_GTESTS "Build GoogleTest-based C++ compiler tests" ON)
 
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME mlang_builtin_reference
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_builtin_reference.py)
+    set_tests_properties(mlang_builtin_reference PROPERTIES LABELS "documentation")
+endif()
+
 if(TARGET mlang-config)
     add_test(NAME mlang_config_debugger_option
         COMMAND ${CMAKE_COMMAND}

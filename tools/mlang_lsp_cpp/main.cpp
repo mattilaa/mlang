@@ -71,6 +71,19 @@ extern "C"
         int* out_signature_length,
         int* out_overload_count,
         int* out_from_current_document);
+    int __mlang_compiler_document_definition_ex(
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        int* out_line,
+        int* out_column,
+        char* out_name,
+        int out_name_capacity,
+        int* out_name_length,
+        char* out_uri,
+        int out_uri_capacity,
+        int* out_uri_length);
     int __mlang_compiler_document_reference_count(
         mlang_compiler_session* session,
         const char* uri,
@@ -743,6 +756,8 @@ private:
             return "Struct";
         case 4:
             return "Module";
+        case 6:
+            return "Concept";
         default:
             return "Symbol";
         }
@@ -3866,6 +3881,36 @@ private:
 
         if(auto loc = find_symbol_in_workspace(word))
             return location_to_json(*loc);
+
+        // Share the compiler API's builtin-reference fallbacks, including
+        // their external document URI rather than a current-buffer location.
+        if(compilerSession)
+        {
+            char name[4096];
+            char target_uri[4096];
+            int target_line = 0, target_column = 0, name_length = 0,
+                uri_length = 0;
+            if(__mlang_compiler_document_definition_ex(
+                   compilerSession,
+                   uri->str().c_str(),
+                   static_cast<int>(*line) + 1,
+                   static_cast<int>(*character) + 1,
+                   &target_line,
+                   &target_column,
+                   name,
+                   sizeof(name),
+                   &name_length,
+                   target_uri,
+                   sizeof(target_uri),
+                   &uri_length) == 0)
+            {
+                Location location;
+                location.uri = target_uri;
+                location.line = std::max(0, target_line - 1);
+                location.character = std::max(0, target_column - 1);
+                return location_to_json(location);
+            }
+        }
 
         return nullptr;
     }
