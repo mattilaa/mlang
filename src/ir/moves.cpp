@@ -98,7 +98,10 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
                 if(unary->op == UnaryOpNode::OP_DEREF && !borrowed &&
                    !validateMoveFromBorrowedPlace(e))
                     return;
-                consume(unary->operand, borrowed);
+                // Reading or moving the pointee does not move the reference
+                // used to reach it. Keep exclusive reference bindings usable.
+                consume(unary->operand,
+                        borrowed || unary->op == UnaryOpNode::OP_DEREF);
             }
             return;
         }

@@ -28,7 +28,8 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
         paramTypes.push_back(paramType);
     }
 
-    llvm::Type* returnType = getLLVMTypeFromNode(node->returnType);
+    // Shared reference return annotations retain the existing value ABI.
+    llvm::Type* returnType = parameterLLVMType(node->returnType);
     if(!returnType)
     {
         reportError(node->line,
@@ -67,8 +68,8 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
 llvm::Type* CodeGenerator::parameterLLVMType(TypeNode* type)
 {
     if(auto* ref = dynamic_cast<ReferenceTypeNode*>(type))
-        if(ref->isMutable)
-            return llvm::PointerType::get(context, 0);
+        return ref->isMutable ? llvm::PointerType::get(context, 0)
+                              : getLLVMTypeFromNode(ref->elementType);
     return getLLVMTypeFromNode(type);
 }
 
@@ -463,6 +464,17 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                     std::string mangled = getOrCreateMonomorphizedStruct(
                         genStructInner->structName, genStructInner->typeArgs);
                     structVariableTypes[std::string(arg.getName())] = mangled;
+                }
+                if(auto* inner =
+                       dynamic_cast<ReferenceTypeNode*>(refType->elementType))
+                {
+                    const std::string name(arg.getName());
+                    pointerElementTypes[name] = inner->elementType;
+                    pointerBorrowTarget[name] = name;
+                    pointerBorrowPlace[name] = name;
+                    pointerParameterBorrowOrigins.insert(name);
+                    if(!inner->isMutable)
+                        activeBorrowers[name].insert(name);
                 }
                 // Immutable reference: param may not be mutated inside body.
                 if(!refType->isMutable)

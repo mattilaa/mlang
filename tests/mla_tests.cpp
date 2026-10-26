@@ -8820,6 +8820,313 @@ TEST_F(MLATest, FunctionRejectsSharedAndMutableAliasing)
     EXPECT_NE(out.find("cannot borrow"), std::string::npos);
 }
 
+TEST_F(MLATest, NestedMutableReferenceDoesNotAcceptSingleBorrow)
+{
+    writeSource(R"(
+        fn set(value: &mut &mut i32) -> void { value = 42; }
+        fn main() -> i32 {
+            var value: i32 = 1;
+            set(&mut value);
+            return 0;
+        }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("no matching overload for function 'set'"),
+              std::string::npos) << out;
+}
+
+TEST_F(MLATest, NestedMutableReferenceDemoMutatesIntegerAndStruct)
+{
+    const fs::path example = fs::path(__FILE__).parent_path().parent_path() /
+                             "examples/nested_mutable_references_demo.mla";
+    std::ifstream input(example);
+    ASSERT_TRUE(input.is_open()) << example;
+    std::ostringstream source;
+    source << input.rdbuf();
+    writeSource(source.str());
+    for(const std::string options : {"-O0", "-O2"})
+    {
+        SCOPED_TRACE(options);
+        ASSERT_TRUE(compile(true, options));
+        EXPECT_EQ(runExitCode(), 0);
+    }
+}
+
+TEST_F(MLATest, NestedMutableReferenceLocalsAndForwarding)
+{
+    writeSource(R"(
+        fn set(reference: &mut &mut i32) -> void { *reference = 42; }
+        fn forward(reference: &mut &mut i32) -> void { set(&mut reference); }
+        fn set_deep(reference: &mut &mut &mut i32) -> void { *(*reference) = 43; }
+        fn main() -> i32 {
+            var value: i32 = 1;
+            var inner: &mut i32 = &mut value;
+            forward(&mut inner);
+            var outer: &mut &mut i32 = &mut inner;
+            set_deep(&mut outer);
+            *(*outer) = 44;
+            return value == 44 ? 0 : 1;
+        }
+    )");
+    for(const std::string options : {"-O0", "-O2"})
+    {
+        SCOPED_TRACE(options);
+        ASSERT_TRUE(compile(true, options));
+        EXPECT_EQ(runExitCode(), 0);
+    }
+}
+
+TEST_F(MLATest, NestedMutableReferenceGenericFunction)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        generic<T>
+        fn replace_value(reference: &mut &mut T, value: T) -> void {
+            *reference = value;
+        }
+        struct Counter { var value: i32; };
+        fn main() -> i32 {
+            var number: i32 = 1;
+            var number_reference: &mut i32 = &mut number;
+            let replacement: i32 = 42;
+            replace_value(&mut number_reference, replacement);
+            if number != 42 { return 1; }
+            var counter = Counter { value: 1 };
+            var counter_reference: &mut Counter = &mut counter;
+            replace_value(&mut counter_reference, Counter { value: 42 });
+            return counter.value == 42 ? 0 : 2;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, NestedReferencesAllowReadingSharedLayers)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        fn read_shared_inner(reference: &mut &i32) -> i32 { return *reference; }
+        fn read_shared_outer(reference: & &mut i32) -> i32 { return *reference; }
+        fn main() -> i32 {
+            var value: i32 = 42;
+            var shared: &i32 = &value;
+            if read_shared_inner(&mut shared) != 42 { return 1; }
+            var exclusive: &mut i32 = &mut value;
+            if read_shared_outer(&exclusive) != 42 { return 2; }
+            if read_shared_outer(&mut exclusive) != 42 { return 3; }
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, NestedMutableReferenceRejectsSharedInnerReference)
+{
+    writeSource(R"(
+        fn set(reference: &mut &i32) -> void { *reference = 42; }
+        fn main() -> i32 {
+            var value: i32 = 1;
+            var inner: &i32 = &value;
+            set(&mut inner);
+            return 0;
+        }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("cannot write through shared reference"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, NestedMutableReferenceRejectsSharedOuterReference)
+{
+    writeSource(R"(
+        fn set(reference: & &mut i32) -> void { *reference = 42; }
+        fn main() -> i32 { return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("cannot write through shared reference"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, NestedMutableReferenceRejectsWrongPointee)
+{
+    writeSource(R"(
+        struct Counter { var value: i32; };
+        fn set(reference: &mut &mut Counter) -> void { (*reference).value = 42; }
+        fn main() -> i32 {
+            var value: i32 = 1;
+            var inner: &mut i32 = &mut value;
+            set(&mut inner);
+            return 0;
+        }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1) << out;
+}
+
+TEST_F(MLATest, NestedMutableReferenceKeepsOriginalBorrowLive)
+{
+    writeSource(R"(
+        fn set(reference: &mut &mut i32) -> void { *reference = 42; }
+        fn main() -> i32 {
+            var value: i32 = 1;
+            var inner: &mut i32 = &mut value;
+            var outer: &mut &mut i32 = &mut inner;
+            value = 2;
+            set(&mut *outer);
+            return 0;
+        }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("cannot assign to 'value'"), std::string::npos) << out;
+}
+
+TEST_F(MLATest, NestedMutableReferenceRejectsRebindingParameterToLocal)
+{
+    writeSource(R"(
+        fn replace(reference: &mut &mut i32) -> void {
+            var local: i32 = 42;
+            reference = &mut local;
+        }
+        fn main() -> i32 { return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("rebinding a nested reference parameter"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, ReferenceBindingRejectsMissingOrMismatchedInitializer)
+{
+    for(const std::string declaration :
+        {"var reference: &mut i32;", "var reference: &mut i32 = 42;",
+         "var reference: &mut i32 = &value;",
+         "var reference: &mut i64 = &mut value;",
+         "static var reference: &mut i32 = &mut value;"})
+    {
+        SCOPED_TRACE(declaration);
+        writeSource("fn main() -> i32 { var value: i32 = 1; " + declaration +
+                    " return 0; }");
+        int rc = 0;
+        const std::string out = compileCapture(rc);
+        EXPECT_EQ(rc, 1);
+        EXPECT_EQ(out.find("Segmentation fault"), std::string::npos) << out;
+        EXPECT_NE(out.find("reference"), std::string::npos) << out;
+    }
+}
+
+TEST_F(MLATest, NestedMutableReferenceRejectsReplacingBorrowedSlot)
+{
+    writeSource(R"(
+        fn main() -> i32 {
+            var first: i32 = 1;
+            var second: i32 = 2;
+            var inner: &mut i32 = &mut first;
+            var outer: &mut &mut i32 = &mut inner;
+            *outer = &mut second;
+            return 0;
+        }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("replacing a reference through a borrowed slot"),
+              std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, StoredReferenceRejectsEscapingReturn)
+{
+    writeSource(R"(
+        fn dangling() -> &mut i32 {
+            var value: i32 = 1;
+            let reference: &mut i32 = &mut value;
+            return reference;
+        }
+        fn main() -> i32 { return 0; }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("cannot return a stored reference"), std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, StoredReferenceRejectsDuplicatingMutableBorrow)
+{
+    writeSource(R"(
+        fn main() -> i32 {
+            var value: i32 = 1;
+            var reference: &mut i32 = &mut value;
+            let copy = reference;
+            *reference = 2;
+            unsafe { *copy = 3; }
+            return value;
+        }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("cannot alias mutable borrow"), std::string::npos)
+        << out;
+}
+
+TEST_F(MLATest, StoredReferenceSlotCannotEscapeThroughRawPointerParameter)
+{
+    writeSource(R"(
+        fn retain(slot: ptr<ptr<i32>>) -> void { return; }
+        fn main() -> i32 {
+            var value: i32 = 1;
+            var reference: &mut i32 = &mut value;
+            retain(&mut reference);
+            return 0;
+        }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 1);
+    EXPECT_NE(out.find("callee may retain it"), std::string::npos) << out;
+}
+
+TEST_F(MLATest, SharedReferenceReturnsKeepValueABI)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        fn identity(value: &i32) -> &i32 { return value; }
+        fn main() -> i32 {
+            let value: i32 = 42;
+            let result = identity(&value);
+            return result == 42 ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, NestedPointerDemoReplacesInnerPointer)
+{
+    const fs::path example = fs::path(__FILE__).parent_path().parent_path() /
+                             "examples/nested_pointer_demo.mla";
+    std::ifstream input(example);
+    ASSERT_TRUE(input.is_open()) << example;
+    std::ostringstream source;
+    source << input.rdbuf();
+    writeSource(source.str());
+    for(const std::string options : {"-O0", "-O2"})
+    {
+        SCOPED_TRACE(options);
+        ASSERT_TRUE(compile(true, options));
+        EXPECT_EQ(runExitCode(), 0);
+    }
+}
+
 TEST_F(MLATest, FunctionRejectsMutableBorrowWhileSharedBorrowIsLive)
 {
     std::string code = R"(

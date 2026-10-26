@@ -64,6 +64,12 @@ bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
         }
     }
 
+    // A typed reference is created from a checked borrow; unlike a raw pointer
+    // it does not require an unsafe block even when nested in another
+    // reference.
+    if(dynamic_cast<ReferenceTypeNode*>(getLValueType(pointerExpr, line)))
+        return true;
+
     std::string ownerName = getBorrowedOwnerForPointerExpression(pointerExpr);
     if(ownerName.empty())
     {

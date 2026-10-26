@@ -1852,12 +1852,40 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         return;
     }
 
-    // Handle pointer type
-    if(auto* ptrType = dynamic_cast<PointerTypeNode*>(declaredType))
+    // Stored references, like pointers, retain their pointee type and borrow.
+    auto* referenceType = dynamic_cast<ReferenceTypeNode*>(declaredType);
+    auto* ptrType = dynamic_cast<PointerTypeNode*>(declaredType);
+    if(ptrType || referenceType)
     {
-        pointerElementTypes[node->name] = ptrType->elementType;
+        TypeNode* elementType =
+            ptrType ? ptrType->elementType : referenceType->elementType;
+        ExpressionNode* initializer = node->expression;
+        if(referenceType)
+        {
+            auto* address = dynamic_cast<UnaryOpNode*>(initializer);
+            if(!address ||
+               (address->op != UnaryOpNode::OP_ADDR &&
+                address->op != UnaryOpNode::OP_ADDR_MUT) ||
+               (referenceType->isMutable &&
+                address->op != UnaryOpNode::OP_ADDR_MUT))
+            {
+                reportError(
+                    node->line,
+                    "reference binding requires a matching borrow initializer");
+                return;
+            }
+            TypeNode* actual = getLValueType(address->operand, node->line);
+            if(!actual || typeMangle(actual) != typeMangle(elementType))
+            {
+                reportError(
+                    node->line,
+                    "reference initializer has incompatible pointee type");
+                return;
+            }
+        }
+        pointerElementTypes[node->name] = elementType;
 
-        llvm::Type* llvmPtrType = getLLVMTypeFromNode(ptrType);
+        llvm::Type* llvmPtrType = getLLVMTypeFromNode(declaredType);
         if(!llvmPtrType)
             return;
 
@@ -1865,7 +1893,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             builder.CreateAlloca(llvmPtrType, nullptr, node->name);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
-        variableTypes[node->name] = TypeNode::TYPE_PTR;
+        variableTypes[node->name] =
+            referenceType ? referenceType->kind : TypeNode::TYPE_PTR;
         if(auto knownNull = pointerExpressionKnownNull(node->expression))
             pointerKnownNull[node->name] = *knownNull;
         else
@@ -2209,6 +2238,13 @@ void CodeGenerator::generateCexprDeclaration(CexprDeclNode* node,
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
     TypeNode* declaredType = node->type;
+    if(dynamic_cast<ReferenceTypeNode*>(declaredType) &&
+       (node->isGlobalStorage || node->isStaticStorage))
+    {
+        reportError(node->line,
+                    "reference bindings require local initialized storage");
+        return;
+    }
     if(declaredType && !activeFunctionTypeBindings.empty())
     {
         std::vector<std::string> typeParams;
@@ -3052,12 +3088,40 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         return;
     }
 
-    // Handle pointer type
-    if(auto* ptrType = dynamic_cast<PointerTypeNode*>(declaredType))
+    // Stored references, like pointers, retain their pointee type and borrow.
+    auto* referenceType = dynamic_cast<ReferenceTypeNode*>(declaredType);
+    auto* ptrType = dynamic_cast<PointerTypeNode*>(declaredType);
+    if(ptrType || referenceType)
     {
-        pointerElementTypes[node->name] = ptrType->elementType;
+        TypeNode* elementType =
+            ptrType ? ptrType->elementType : referenceType->elementType;
+        ExpressionNode* initializer = node->initExpr;
+        if(referenceType)
+        {
+            auto* address = dynamic_cast<UnaryOpNode*>(initializer);
+            if(!address ||
+               (address->op != UnaryOpNode::OP_ADDR &&
+                address->op != UnaryOpNode::OP_ADDR_MUT) ||
+               (referenceType->isMutable &&
+                address->op != UnaryOpNode::OP_ADDR_MUT))
+            {
+                reportError(
+                    node->line,
+                    "reference binding requires a matching borrow initializer");
+                return;
+            }
+            TypeNode* actual = getLValueType(address->operand, node->line);
+            if(!actual || typeMangle(actual) != typeMangle(elementType))
+            {
+                reportError(
+                    node->line,
+                    "reference initializer has incompatible pointee type");
+                return;
+            }
+        }
+        pointerElementTypes[node->name] = elementType;
 
-        llvm::Type* llvmPtrType = getLLVMTypeFromNode(ptrType);
+        llvm::Type* llvmPtrType = getLLVMTypeFromNode(declaredType);
         if(!llvmPtrType)
             return;
 
@@ -3084,7 +3148,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         }
 
         namedValues[node->name] = alloca;
-        variableTypes[node->name] = TypeNode::TYPE_PTR;
+        variableTypes[node->name] =
+            referenceType ? referenceType->kind : TypeNode::TYPE_PTR;
         {
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->initExpr);
             bool _is_mut_borrow =

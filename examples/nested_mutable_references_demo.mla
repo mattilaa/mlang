@@ -1,0 +1,27 @@
+/// \file nested_mutable_references_demo.mla
+/// @ingroup examples
+/// \brief Mutates integers and structs through nested mutable references.
+
+struct Counter { var value: i32; };
+
+fn set_integer(reference: &mut &mut i32) -> void {
+    // The outer parameter borrows the local holding the inner reference.
+    // Dereferencing the inner reference accesses the original integer.
+    *reference = 42;
+}
+
+fn increment_counter(reference: &mut &mut Counter) -> void {
+    (*reference).value += 1;
+}
+
+fn main() -> i32 {
+    var value: i32 = 1;
+    var integer_reference: &mut i32 = &mut value;
+    set_integer(&mut integer_reference);
+    if value != 42 { return 1; }
+
+    var counter = Counter { value: 9 };
+    var counter_reference: &mut Counter = &mut counter;
+    increment_counter(&mut counter_reference);
+    return counter.value == 10 ? 0 : 2;
+}
