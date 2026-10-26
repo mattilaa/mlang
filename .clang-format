@@ -3,24 +3,46 @@ BasedOnStyle: LLVM
 IndentWidth: 4
 ColumnLimit: 80
 AccessModifierOffset: -4
-AlignAfterOpenBracket: Align
+
+# --- STRICT ONE-ARGUMENT-PER-LINE WHEN OVER LIMIT ---
+# Forces elements to unpack individually into separate rows when wrapping
+BinPackArguments: false
+BinPackParameters: false
+# Clang-format otherwise repacks braced lists with more than 20 items.
+BinPackLongBracedList: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AlignAfterOpenBracket: AlwaysBreak
+
+# Removes spaces inside curly braces (e.g. DocEntry{"adc", ...})
+Cpp11BracedListStyle: true
+SpacesInContainerLiterals: false
+SpaceBeforeCpp11BracedList: false
+
+# Forces a heavy penalty to prevent splitting types/namespaces at '::' (e.g., std::string)
+PenaltyBreakScopeResolution: 10000
+
+# Heavy penalties to force the function return type and names to stay intact
+PenaltyReturnTypeOnItsOwnLine: 5000
+PenaltyBreakBeforeFirstCallParameter: 500
+
+AlwaysBreakAfterReturnType: None
+# --------------------------------------------------------
+
 AlignConsecutiveAssignments: false
 AlignConsecutiveDeclarations: false
 AlignEscapedNewlines: Right
 AlignOperands: true
 AlignTrailingComments: true
-AllowAllParametersOfDeclarationOnNextLine: true
 AllowShortBlocksOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: Empty
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
 AlwaysBreakAfterDefinitionReturnType: None
-AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: Yes
-BinPackArguments: true
-BinPackParameters: true
+
 BraceWrapping:
   AfterClass: false
   AfterControlStatement: false
@@ -37,6 +59,7 @@ BraceWrapping:
   SplitEmptyFunction: false
   SplitEmptyRecord: false
   SplitEmptyNamespace: false
+
 BreakBeforeBinaryOperators: None
 BreakBeforeBraces: Allman
 BreakBeforeInheritanceComma: false
@@ -51,15 +74,16 @@ CompactNamespaces: false
 ConstructorInitializerAllOnOneLineOrOnePerLine: false
 ConstructorInitializerIndentWidth: 4
 ContinuationIndentWidth: 4
-Cpp11BracedListStyle: true
 DerivePointerAlignment: false
 DisableFormat: false
 ExperimentalAutoDetectBinPacking: false
 FixNamespaceComments: true
+
 ForEachMacros:
   - foreach
   - Q_FOREACH
   - BOOST_FOREACH
+
 IncludeBlocks: Preserve
 IncludeCategories:
   - Regex: '^"(llvm|llvm-c|clang|clang-c)/'
@@ -69,6 +93,7 @@ IncludeCategories:
   - Regex: '.*'
     Priority: 1
 IncludeIsMainRegex: '(Test)?$'
+
 IndentCaseLabels: false
 IndentPPDirectives: None
 IndentWrappedFunctionNames: false
@@ -83,23 +108,23 @@ ObjCBinPackProtocolList: Auto
 ObjCBlockIndentWidth: 4
 ObjCSpaceAfterProperty: false
 ObjCSpaceBeforeProtocolList: true
+
 PenaltyBreakAssignment: 2
-PenaltyBreakBeforeFirstCallParameter: 19
 PenaltyBreakComment: 300
 PenaltyBreakFirstLessLess: 120
 PenaltyBreakString: 1000
 PenaltyBreakTemplateDeclaration: 10
 PenaltyExcessCharacter: 1000000
-PenaltyReturnTypeOnItsOwnLine: 60
+
 RequiresExpressionIndentation: OuterScope
 PointerAlignment: Left
 ReflowComments: true
+SeparateDefinitionBlocks: Always
 SortIncludes: true
 SortUsingDeclarations: true
 SpaceAfterCStyleCast: false
 SpaceAfterTemplateKeyword: true
 SpaceBeforeAssignmentOperators: true
-SpaceBeforeCpp11BracedList: false
 SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: true
 SpaceBeforeParens: Custom
@@ -109,7 +134,6 @@ SpaceBeforeRangeBasedForLoopColon: true
 SpaceInEmptyParentheses: false
 SpacesBeforeTrailingComments: 1
 SpacesInAngles: false
-SpacesInContainerLiterals: true
 SpacesInCStyleCastParentheses: false
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
