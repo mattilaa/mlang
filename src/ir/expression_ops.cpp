@@ -1064,7 +1064,7 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         // Check for division by zero with constant divisor
         if(auto* constInt = llvm::dyn_cast<llvm::ConstantInt>(R))
         {
-            if(constInt->isZero())
+            if(constInt->isZero() && !structuralRequirementProbe)
             {
                 reportError(node->line, "division by zero");
                 return nullptr;
@@ -1072,7 +1072,7 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         }
         if(auto* constFP = llvm::dyn_cast<llvm::ConstantFP>(R))
         {
-            if(constFP->isZero())
+            if(constFP->isZero() && !structuralRequirementProbe)
             {
                 reportError(node->line, "division by zero");
                 return nullptr;
@@ -1088,7 +1088,7 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         // Check for modulo by zero with constant divisor
         if(auto* constInt = llvm::dyn_cast<llvm::ConstantInt>(R))
         {
-            if(constInt->isZero())
+            if(constInt->isZero() && !structuralRequirementProbe)
             {
                 reportError(node->line, "modulo by zero");
                 return nullptr;
@@ -1096,7 +1096,7 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         }
         if(auto* constFP = llvm::dyn_cast<llvm::ConstantFP>(R))
         {
-            if(constFP->isZero())
+            if(constFP->isZero() && !structuralRequirementProbe)
             {
                 reportError(node->line, "modulo by zero");
                 return nullptr;

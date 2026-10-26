@@ -146,13 +146,87 @@ void CodeGenerator::generateStatement(StatementNode* node)
     }
     else if(auto exprStmt = dynamic_cast<ExpressionStatementNode*>(node))
     {
-        generateExpression(exprStmt->expression);
+        std::set<const llvm::Instruction*> precedingInstructions;
+        if(structuralRequirementProbe && builder.GetInsertBlock())
+            for(auto& block : *builder.GetInsertBlock()->getParent())
+                for(auto& instruction : block)
+                    precedingInstructions.insert(&instruction);
+        llvm::Value* value = generateExpression(exprStmt->expression);
+        if(structuralRequirementProbe &&
+           exprStmt->expression == structuralProbeExpression && value &&
+           !hasError)
+        {
+            for(auto& block : *builder.GetInsertBlock()->getParent())
+                for(auto& instruction : block)
+                    if(auto* call =
+                           llvm::dyn_cast<llvm::CallBase>(&instruction))
+                        if(!precedingInstructions.count(call) &&
+                           !call->doesNotThrow())
+                            structuralProbeNoThrow = false;
+            auto selected = structuralSelectedTypes.find(exprStmt->expression);
+            structuralProbeResult =
+                selected == structuralSelectedTypes.end()
+                    ? inferExpressionTypeNode(exprStmt->expression,
+                                              exprStmt->line)
+                    : cloneTypeNode(selected->second);
+            if(auto* call = llvm::dyn_cast<llvm::CallBase>(value))
+                if(auto* callee = call->getCalledFunction())
+                    for(const auto& owner : structMethods)
+                        for(const auto& method : owner.second)
+                            if(callee->getName() ==
+                                   owner.first + "_" + method.first &&
+                               method.second.second)
+                                structuralProbeResult = cloneTypeNode(
+                                    method.second.second->returnType);
+            // Inference may describe an operator's operands. Its lowered result
+            // has priority for overloaded operators and builtin comparisons.
+            if(!structuralProbeResult ||
+               getLLVMTypeFromNode(structuralProbeResult) != value->getType())
+            {
+                if(value->getType()->isVoidTy())
+                    structuralProbeResult = new TypeNode(TypeNode::TYPE_VOID);
+                else if(value->getType()->isIntegerTy(1))
+                    structuralProbeResult = new TypeNode(TypeNode::TYPE_BOOL);
+                else if(value->getType()->isIntegerTy(8))
+                    structuralProbeResult = new TypeNode(TypeNode::TYPE_I8);
+                else if(value->getType()->isIntegerTy(16))
+                    structuralProbeResult = new TypeNode(TypeNode::TYPE_I16);
+                else if(value->getType()->isIntegerTy(32))
+                    structuralProbeResult = new TypeNode(TypeNode::TYPE_I32);
+                else if(value->getType()->isIntegerTy(64))
+                    structuralProbeResult = new TypeNode(TypeNode::TYPE_I64);
+                else if(value->getType()->isFloatTy())
+                    structuralProbeResult = new TypeNode(TypeNode::TYPE_FLOAT);
+                else if(value->getType()->isDoubleTy())
+                    structuralProbeResult = new TypeNode(TypeNode::TYPE_DOUBLE);
+                else
+                    for(const auto& entry : structTypes)
+                        if(entry.second == value->getType())
+                        {
+                            structuralProbeResult =
+                                new StructTypeRefNode(entry.first);
+                            break;
+                        }
+            }
+        }
     }
 }
 
 llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
                                                TypeNode* expectedType)
 {
+    if(auto* requirement = dynamic_cast<RequiresExpressionNode*>(node))
+    {
+        ConstexprValue value;
+        std::string error;
+        if(!evalRequiresExpression(requirement, value, &error, nullptr, 0))
+        {
+            reportError(node->line, error);
+            return nullptr;
+        }
+        return llvm::ConstantInt::get(llvm::Type::getInt1Ty(context),
+                                      value.boolValue);
+    }
     if(auto* concept = dynamic_cast<ConceptApplicationNode*>(node))
     {
         ConstexprValue value;

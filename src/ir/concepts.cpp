@@ -9,6 +9,7 @@ using mlang::ir_detail::common::Helpers;
 
 void CodeGenerator::buildConceptTable(ProgramNode* program)
 {
+    conceptProgram = program;
     conceptDefinitions.clear();
     conceptEvaluationStack.clear();
     conceptKnownTypes = {"void", "bool", "bit", "i8",   "i16",
@@ -237,42 +238,13 @@ bool CodeGenerator::evalConcept(ConceptApplicationNode* application,
     }
     ConstexprEnv local;
     std::string key = definition->name + "<";
-    std::function<bool(TypeNode*)> knownType = [&](TypeNode* type)
-    {
-        if(!type)
-            return false;
-        if(auto* generic = dynamic_cast<GenericStructTypeRefNode*>(type))
-        {
-            if(!conceptKnownTypes.count(generic->structName))
-                return false;
-            for(auto* argument : generic->typeArgs)
-                if(!knownType(argument))
-                    return false;
-        }
-        else if(auto* reference = dynamic_cast<StructTypeRefNode*>(type))
-            return conceptKnownTypes.count(reference->structName) ||
-                   structTypes.count(reference->structName);
-        else if(auto* pointer = dynamic_cast<PointerTypeNode*>(type))
-            return knownType(pointer->elementType);
-        else if(auto* reference = dynamic_cast<ReferenceTypeNode*>(type))
-            return knownType(reference->elementType);
-        else if(auto* list = dynamic_cast<GenericListTypeNode*>(type))
-            return knownType(list->elementType);
-        else if(auto* map = dynamic_cast<MapTypeNode*>(type))
-            return knownType(map->keyType) && knownType(map->valueType);
-        else if(auto* tuple = dynamic_cast<TupleTypeNode*>(type))
-            for(auto* item : tuple->elementTypes->types)
-                if(!knownType(item))
-                    return false;
-        return true;
-    };
     for(size_t i = 0; i < application->typeArguments.size(); ++i)
     {
         TypeNode* type =
             substituteTypeParams(application->typeArguments[i], names, types);
         std::vector<std::string> aliases;
         type = resolveTypeAliasNode(type, {}, aliases);
-        if(!knownType(type))
+        if(!isKnownRequirementType(type))
             return fail("unknown or unbound type argument in concept '" +
                         application->name + "'");
         ConstexprValue value;
@@ -500,5 +472,45 @@ bool CodeGenerator::satisfiesFunctionConstraints(
     }
     if(normalized)
         *normalized = std::move(terms);
+    return true;
+}
+
+bool CodeGenerator::isKnownRequirementType(TypeNode* type)
+{
+    if(!type)
+        return false;
+    if(auto* generic = dynamic_cast<GenericStructTypeRefNode*>(type))
+    {
+        if(!conceptKnownTypes.count(generic->structName))
+            return false;
+        for(auto* argument : generic->typeArgs)
+            if(!isKnownRequirementType(argument))
+                return false;
+    }
+    else if(auto* reference = dynamic_cast<StructTypeRefNode*>(type))
+        return conceptKnownTypes.count(reference->structName) ||
+               structTypes.count(reference->structName);
+    else if(auto* pointer = dynamic_cast<PointerTypeNode*>(type))
+        return isKnownRequirementType(pointer->elementType);
+    else if(auto* reference = dynamic_cast<ReferenceTypeNode*>(type))
+        return isKnownRequirementType(reference->elementType);
+    else if(auto* list = dynamic_cast<GenericListTypeNode*>(type))
+        return isKnownRequirementType(list->elementType);
+    else if(auto* map = dynamic_cast<MapTypeNode*>(type))
+        return isKnownRequirementType(map->keyType) &&
+               isKnownRequirementType(map->valueType);
+    else if(auto* function = dynamic_cast<FunctionTypeNode*>(type))
+    {
+        if(!isKnownRequirementType(function->returnType))
+            return false;
+        if(function->parameterTypes)
+            for(auto* parameter : function->parameterTypes->types)
+                if(!isKnownRequirementType(parameter))
+                    return false;
+    }
+    else if(auto* tuple = dynamic_cast<TupleTypeNode*>(type))
+        for(auto* item : tuple->elementTypes->types)
+            if(!isKnownRequirementType(item))
+                return false;
     return true;
 }

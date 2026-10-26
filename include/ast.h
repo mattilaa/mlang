@@ -562,6 +562,37 @@ public:
     std::string toString() const override;
 };
 
+// An unevaluated structural requirement. Compound requirements optionally
+// constrain the expression's type; nested requirements require a true
+// predicate.
+class RequirementNode : public ASTNode
+{
+public:
+    enum Kind
+    {
+        Simple,
+        Type,
+        Compound,
+        Nested
+    };
+    Kind kind;
+    ExpressionNode* expression = nullptr;
+    TypeNode* requiredType = nullptr;
+    std::string resultConcept;
+    std::vector<TypeNode*> resultArguments;
+    bool noThrow = false;
+    explicit RequirementNode(Kind k) : kind(k) {}
+    std::string toString() const override;
+};
+
+class RequiresExpressionNode : public ExpressionNode
+{
+public:
+    ParameterListNode* parameters = nullptr;
+    std::vector<RequirementNode*> requirements;
+    std::string toString() const override;
+};
+
 // Invocation of a callable expression that is not a direct named call,
 // e.g. `make_callback()(value)`.
 class CallableInvokeNode : public ExpressionNode

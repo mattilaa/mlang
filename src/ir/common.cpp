@@ -1,11 +1,12 @@
 #include "ir/common.h"
 
-#include <llvm/Config/llvm-config.h>
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <charconv>
 #include <cstdint>
 #include <cstring>
+#include <llvm/Config/llvm-config.h>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -89,9 +90,10 @@ std::vector<std::string> split_top_level_commas(const std::string& s)
     for(size_t i = 0; i < s.size(); ++i)
     {
         char c = s[i];
-        if(c == '<')
+        if(c == '<' || c == '(' || c == '[')
             ++depth;
-        else if(c == '>')
+        else if(c == ')' || c == ']' ||
+                (c == '>' && (i == 0 || s[i - 1] != '-')))
             --depth;
         else if(c == ',' && depth == 0)
         {
@@ -170,6 +172,17 @@ std::string Helpers::type_name_for_error(TypeNode* typeNode)
 TypeNode* Helpers::type_from_text(std::string text)
 {
     text = trim_copy(text);
+    if(text == "void")
+        return new TypeNode(TypeNode::TYPE_VOID);
+    if(text.compare(0, 5, "&mut ") == 0)
+        return new ReferenceTypeNode(Helpers::type_from_text(text.substr(5)),
+                                     true);
+    if(!text.empty() && text.front() == '&')
+        return new ReferenceTypeNode(Helpers::type_from_text(text.substr(1)),
+                                     false);
+    if(is_wrapped_generic(text, "ptr"))
+        return new PointerTypeNode(
+            Helpers::type_from_text(text.substr(4, text.size() - 5)));
     if(const auto typeKey = find_enum_key(text, kPrimitiveTypeAliases);
        typeKey.has_value())
     {
@@ -205,6 +218,61 @@ TypeNode* Helpers::type_from_text(std::string text)
             return new TypeNode(TypeNode::TYPE_STR16);
         }
     }
+
+    if(text.compare(0, 4, "dyn ") == 0)
+        return new TraitObjectTypeNode(trim_copy(text.substr(4)));
+    if(text.compare(0, 3, "fn(") == 0)
+    {
+        int depth = 1;
+        size_t end = 3;
+        for(; end < text.size(); ++end)
+        {
+            if(text[end] == '(')
+                ++depth;
+            else if(text[end] == ')' && --depth == 0)
+                break;
+        }
+        if(end < text.size())
+        {
+            const std::string result = trim_copy(text.substr(end + 1));
+            if(result.compare(0, 2, "->") == 0)
+            {
+                auto* parameters = new TypeListNode();
+                const std::string body = trim_copy(text.substr(3, end - 3));
+                if(!body.empty())
+                    for(const auto& parameter : split_top_level_commas(body))
+                        parameters->addType(Helpers::type_from_text(parameter));
+                return new FunctionTypeNode(
+                    parameters, Helpers::type_from_text(result.substr(2)));
+            }
+        }
+    }
+    for(const std::string wrapper : {"array", "multiarray", "mutmultiarray"})
+        if(is_wrapped_generic(text, wrapper.c_str()))
+        {
+            auto parts = split_top_level_commas(text.substr(
+                wrapper.size() + 1, text.size() - wrapper.size() - 2));
+            if(parts.size() < 2)
+                break;
+            TypeNode* element = Helpers::type_from_text(parts.front());
+            for(size_t i = parts.size(); i-- > 1;)
+            {
+                int64_t capacity = 0;
+                auto parsed = std::from_chars(parts[i].data(),
+                                              parts[i].data() + parts[i].size(),
+                                              capacity);
+                if(parsed.ec != std::errc{} ||
+                   parsed.ptr != parts[i].data() + parts[i].size())
+                    return new StructTypeRefNode(text);
+                element =
+                    wrapper == "array"
+                        ? static_cast<TypeNode*>(
+                              new ArrayTypeNode(element, capacity))
+                        : static_cast<TypeNode*>(new MultiArrayTypeNode(
+                              element, capacity, wrapper == "mutmultiarray"));
+            }
+            return element;
+        }
 
     if(is_wrapped_generic(text, "list"))
     {

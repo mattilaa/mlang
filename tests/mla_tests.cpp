@@ -1146,6 +1146,387 @@ TEST_F(MLATest, ConceptsQueriesInGenericConstexprBranches)
               0);
 }
 
+TEST_F(MLATest, StructuralRequiresBuiltinExpressions)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept Addable<T> = requires(a: T, b: T) { a + b; a == b; };
+        concept CppParameters<T> = requires(T a, T b) { a * b; };
+        struct Marker { var value: i32; };
+        fn main() -> i32 {
+            static_assert!(Addable<i32>);
+            static_assert!(Addable<f64>);
+            static_assert!(CppParameters<i64>);
+            static_assert!(!Addable<Marker>);
+            static_assert!(requires { 1 + 2; false; });
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresMembersAndMethods)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept HasValue<T> = requires(value: T) { value.value; value.read(); };
+        struct Good {
+            var value: i32;
+            fn read(self: &Self) -> i32 { return self.value; }
+        };
+        struct Missing { var other: i32; };
+        fn main() -> i32 {
+            static_assert!(HasValue<Good>);
+            static_assert!(!HasValue<Missing>);
+            static_assert!(!HasValue<i32>);
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresCompoundResultConstraints)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        mod std::concepts;
+        use std::concepts::*;
+        concept AddsToSelf<T> = requires(a: T, b: T) {
+            { a + b } -> same_as<T>;
+            { a == b } -> same_as<bool>;
+        };
+        concept AddsToInteger<T> = requires(a: T) { { a + a } -> integral; };
+        fn main() -> i32 {
+            static_assert!(AddsToSelf<i32>);
+            static_assert!(AddsToSelf<f64>);
+            static_assert!(AddsToInteger<i64>);
+            static_assert!(!AddsToInteger<f64>);
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresTypeAndNestedRequirements)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        mod std::concepts;
+        use std::concepts::*;
+        alias Number = i32;
+        struct Box<T> { var value: T; };
+        struct IntegerBox<T: integral> { var value: T; };
+        concept Complete<T> = requires { typename T; type Box<T>; requires integral<T>; };
+        concept Missing<T> = requires { typename DoesNotExist; };
+        fn main() -> i32 {
+            static_assert!(Complete<Number>);
+            static_assert!(!Complete<f64>);
+            static_assert!(!Missing<i32>);
+            static_assert!(requires { typename void; });
+            static_assert!(!requires { typename IntegerBox<f64>; });
+            static_assert!(!requires { typename Box<i32, i64>; });
+            static_assert!(!requires { requires false; });
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresFiltersOverloadsAndOrdersRefinement)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept HasValue<T> = requires(value: T) { value.value; };
+        concept HasBoth<T> = HasValue<T> && requires(value: T) { value.other; };
+        generic<T> fn select(value: T) -> i32 { return 0; }
+        generic<T> requires HasValue<T> fn select(value: T) -> i32 { return 1; }
+        generic<T> requires HasBoth<T> fn select(value: T) -> i32 { return 2; }
+        struct One { var value: i32; };
+        struct Two { var value: i32; var other: i32; };
+        fn main() -> i32 {
+            let a = One { value: 1 };
+            let b = Two { value: 1, other: 2 };
+            return select(1i32) == 0 && select(a) == 1 && select(b) == 2 ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresDoesNotEvaluateOrEmitCode)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        var calls: i32 = 0;
+        fn touch(value: i32) -> i32 { calls = calls + 1; return value; }
+        extern fn never_linked(value: i32) -> i32;
+        concept Callable<T> = requires(value: T) { touch(value); never_linked(value); };
+        fn main() -> i32 {
+            static_assert!(Callable<i32>);
+            static_assert!(requires { calls + 1; });
+            static_assert!(requires { 1 / 0; });
+            return calls;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresRejectsMissingCallsAndWrongArguments)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        struct Item { var value: i32; };
+        fn consume(value: Item) -> i32 { return value.value; }
+        concept Accepts<T> = requires(value: T) { consume(value); };
+        concept Unknown<T> = requires(value: T) { no_such_function(value); };
+        fn main() -> i32 {
+            static_assert!(Accepts<Item>);
+            static_assert!(!Accepts<i32>);
+            static_assert!(!Unknown<i32>);
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresDoesNotInstantiateCalledBodies)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        generic<T> fn declared(value: T) -> i32 { return value.nonexistent; }
+        generic<T> cexpr fn compile_time(value: T) -> i32 { return value.nonexistent; }
+        concept Declared<T> = requires(value: T) { declared(value); compile_time(value); };
+        fn main() -> i32 { static_assert!(Declared<i32>); return 0; }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresReferenceMutability)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept SharedIncrement<T> = requires(value: &T) { &mut value; };
+        concept MutableIncrement<T> = requires(value: &mut T) { &mut value; };
+        fn main() -> i32 {
+            static_assert!(!SharedIncrement<i32>);
+            static_assert!(MutableIncrement<i32>);
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresNoexcept)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        fn callable(value: i32) -> i32 { return value; }
+        concept SafeAdd<T> = requires(value: T) { { value + value } noexcept; };
+        concept SafeCall<T> = requires(value: T) { { callable(value) } noexcept; };
+        fn main() -> i32 {
+            static_assert!(SafeAdd<i32>);
+            static_assert!(!SafeCall<i32>);
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresGlobalAndConstexprQueries)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept Addable<T> = requires(value: T) { value + value; };
+        cexpr global_ok: bool = Addable<i32>;
+        generic<T> cexpr fn category(value: T) -> i32 { return 0; }
+        generic<T> requires Addable<T> cexpr fn category(value: T) -> i32 { return 1; }
+        struct Marker { var value: i32; };
+        fn main() -> i32 {
+            static_assert!(global_ok);
+            static_assert!(category(1i32) == 1);
+            static_assert!(!Addable<Marker>);
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresShortCircuitAndNestedExpressions)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept NestedParameter<T> = requires(value: T) { requires requires { value + value; }; };
+        concept Nested<T> = requires {
+            requires requires(value: T) { value + value; };
+            requires true || (1 / 0 == 1);
+        };
+        struct Marker { var value: i32; };
+        fn main() -> i32 {
+            static_assert!(Nested<i32>);
+            static_assert!(!Nested<Marker>);
+            static_assert!(NestedParameter<i32>);
+            static_assert!(!NestedParameter<Marker>);
+            static_assert!(true || requires(value: Marker) { value.nope; });
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresQualifiedCompoundConcept)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        mod std::concepts;
+        concept SameResult<T> = requires(value: T) { { value + value } -> std::concepts::same_as<T>; };
+        fn main() -> i32 { static_assert!(SameResult<u32>); return 0; }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresIndexesAndDereferences)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept Indexed<T> = requires(value: T) { value[0]; };
+        concept Dereference<T> = requires(value: T) { *value; };
+        fn main() -> i32 {
+            static_assert!(Indexed<list<i32>>);
+            static_assert!(!Indexed<i32>);
+            static_assert!(Dereference<ptr<i32>>);
+            static_assert!(!Dereference<i32>);
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresLexicalLocalsAndNoScopeLeak)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept NoCallerLocal<T> = requires { caller_only; };
+        fn main() -> i32 {
+            var caller_only: i32 = 5;
+            let immutable: i32 = 3;
+            static_assert!(requires { caller_only + 1; &mut caller_only; });
+            static_assert!(!requires { &mut immutable; });
+            static_assert!(!NoCallerLocal<i32>);
+            static_assert!(requires(caller_only: f64) { caller_only + 1.0; });
+            return caller_only == 5 ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresInvalidParametersAndRuntimeNestedCondition)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept VoidParameter<T> = requires(value: void) { requires true; };
+        concept Duplicate<T> = requires(value: T, value: T) { requires true; };
+        concept Runtime<T> = requires(value: T) { requires value == 0; };
+        fn main() -> i32 {
+            static_assert!(!VoidParameter<i32>);
+            static_assert!(!Duplicate<i32>);
+            static_assert!(!Runtime<i32>);
+            return 0;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresNamespaceAndImportedPrivateHelper)
+{
+    {
+        std::ofstream module(testDir + "/structural_module.mla");
+        module << R"(
+            fn helper(value: i32) -> i32 { return value; }
+            pub concept Accepted<T> = requires(value: T) { helper(value); };
+        )";
+    }
+    writeSource(R"(
+        mod structural_module;
+        use structural_module::*;
+        namespace local {
+            fn helper(value: i32) -> i32 { return value; }
+            concept Accepted<T> = requires(value: T) { helper(value); };
+        }
+        fn main() -> i32 {
+            static_assert!(Accepted<i32>);
+            static_assert!(local::Accepted<i32>);
+            static_assert!(!requires { helper(1i32); });
+            return 0;
+        }
+    )");
+    ASSERT_TRUE(compile());
+    EXPECT_EQ(runExitCode(), 0);
+}
+
+TEST_F(MLATest, StructuralRequiresGlobalStructAndFunctionContext)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        struct Item { var value: i32; };
+        fn read(value: Item) -> i32 { return value.value; }
+        impl Item { pub fn get(self: &Self) -> i32 { return self.value; } }
+        concept Readable<T> = requires(value: T) { value.value; value.get(); read(value); };
+        cexpr global_ok: bool = Readable<Item>;
+        fn main() -> i32 { static_assert!(global_ok); return 0; }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresDirectClauseAndGenericResult)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        mod std::concepts;
+        use std::concepts::*;
+        struct Box<T> { var value: T; };
+        concept BoxValue<T> = requires(value: Box<T>) { { value.value } -> same_as<T>; };
+        concept Identity<T> = requires(value: T) { { value } -> same_as<T>; };
+        concept NestedValue<T> = requires(value: &mut &mut T) { { *value } -> same_as<T>; };
+        generic<T> requires requires(value: T) { value + value; }
+        fn twice(value: T) -> T { return value + value; }
+        fn main() -> i32 {
+            static_assert!(BoxValue<i32>);
+            static_assert!(Identity<Box<i32>>);
+            static_assert!(NestedValue<i32>);
+            return twice(21i32) == 42 ? 0 : 1;
+        }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresNamespacedTypes)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        namespace local {
+            struct Item { var value: i32; };
+            concept HasItem<T> = requires(value: Item) { typename Item; value.value; };
+        }
+        fn main() -> i32 { static_assert!(local::HasItem<i32>); return 0; }
+    )"),
+              0);
+}
+
+TEST_F(MLATest, StructuralRequiresDemo)
+{
+    const fs::path example = fs::path(__FILE__).parent_path().parent_path() /
+                             "examples/structural_concepts_demo.mla";
+    std::ifstream input(example);
+    ASSERT_TRUE(input.is_open()) << example;
+    std::ostringstream source;
+    source << input.rdbuf();
+    writeSource(source.str());
+    for(const std::string options : {"-O0", "-O2"})
+    {
+        SCOPED_TRACE(options);
+        ASSERT_TRUE(compile(true, options));
+        EXPECT_EQ(runExitCode(), 0);
+    }
+}
+
+TEST_F(MLATest, StructuralRequiresArrayAndFunctionTypes)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        concept Indexed<T> = requires(value: T) { value[0]; };
+        concept Callable<T> = requires(value: T) { value(1i32); };
+        alias Callback = fn(i32) -> i32;
+        alias WrongCallback = fn() -> i32;
+        fn main() -> i32 {
+            static_assert!(Indexed<array<i32, 4>>);
+            static_assert!(Callable<Callback>);
+            static_assert!(!Callable<WrongCallback>);
+            static_assert!(!Callable<i32>);
+            return 0;
+        }
+    )"),
+              0);
+}
+
 TEST_F(MLATest, MainReturnsExpression)
 {
     std::string code = R"(

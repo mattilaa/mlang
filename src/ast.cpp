@@ -3463,3 +3463,42 @@ std::string ConceptDefNode::toString() const
     }
     return result + "> = " + predicate->toString() + ";";
 }
+
+std::string RequirementNode::toString() const
+{
+    if(kind == Type)
+        return "typename " + requiredType->toString() + ";";
+    if(kind == Nested)
+        return "requires " + expression->toString() + ";";
+    if(kind == Simple)
+        return expression->toString() + ";";
+    std::string result = "{ " + expression->toString() + " }";
+    if(noThrow)
+        result += " noexcept";
+    if(!resultConcept.empty())
+    {
+        result += " -> " + resultConcept;
+        if(!resultArguments.empty())
+        {
+            result += "<";
+            for(size_t i = 0; i < resultArguments.size(); ++i)
+            {
+                if(i)
+                    result += ", ";
+                result += resultArguments[i]->toString();
+            }
+            result += ">";
+        }
+    }
+    return result + ";";
+}
+std::string RequiresExpressionNode::toString() const
+{
+    std::string result = "requires(";
+    if(parameters)
+        result += parameters->toString();
+    result += ") { ";
+    for(auto* requirement : requirements)
+        result += requirement->toString() + " ";
+    return result + "}";
+}

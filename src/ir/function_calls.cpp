@@ -1840,7 +1840,8 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
     {
         FunctionDefNode* candidate = overload.node;
         if(candidate && !overload.function && !candidate->typeParams.empty() &&
-           candidate->typePackParam.empty() && !candidate->isCexpr &&
+           candidate->typePackParam.empty() &&
+           (!candidate->isCexpr || structuralRequirementProbe) &&
            candidate->parameters &&
            candidate->parameters->parameters.size() == call->arguments.size() &&
            isOverloadVisible(overload))
@@ -4152,8 +4153,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
     std::string literalSuffixForScope, literalInputForScope;
     if(node->name.find("::") == std::string::npos &&
-       mlang::literals::decodeOperatorName(node->name, literalSuffixForScope,
-                                           literalInputForScope) &&
+       (structuralRequirementProbe ||
+        mlang::literals::decodeOperatorName(node->name, literalSuffixForScope,
+                                            literalInputForScope)) &&
        builder.GetInsertBlock())
     {
         const std::string caller =
@@ -4169,7 +4171,12 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             {
                 FunctionCallNode qualified(*node);
                 qualified.name = resolved;
-                return generateFunctionCall(&qualified);
+                llvm::Value* result = generateFunctionCall(&qualified);
+                auto selected = structuralSelectedTypes.find(&qualified);
+                if(structuralRequirementProbe &&
+                   selected != structuralSelectedTypes.end())
+                    structuralSelectedTypes[node] = selected->second;
+                return result;
             }
         }
     }
@@ -5469,6 +5476,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return nullptr;
     }
 
+    if(structuralRequirementProbe && best->node)
+        structuralSelectedTypes[node] = cloneTypeNode(best->node->returnType);
     FunctionOverloadInfo selectedOverload = *best;
     best = &selectedOverload;
     if(best->node && best->node->genericOrigin && best->function->empty())

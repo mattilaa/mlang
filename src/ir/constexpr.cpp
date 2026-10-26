@@ -1258,6 +1258,9 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         out.typeKind = TypeNode::TYPE_I64;
         return true;
     }
+    if(auto* requirement = dynamic_cast<RequiresExpressionNode*>(expr))
+        return evalRequiresExpression(requirement, out, errorMessage, env,
+                                      depth + 1);
     if(auto* concept = dynamic_cast<ConceptApplicationNode*>(expr))
         return evalConcept(concept, out, errorMessage, env, depth + 1);
     if(auto* i = dynamic_cast<IntLiteralNode*>(expr))

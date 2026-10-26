@@ -18,6 +18,11 @@ std::string CodeGenerator::diagnosticFileName() const
 
 void CodeGenerator::reportError(int line, int col, const std::string& message)
 {
+    if(structuralRequirementProbe)
+    {
+        hasError = true;
+        return;
+    }
     const std::string file = diagnosticFileName();
     mlang::diag::print_diagnostic_location(std::cerr, file, line, col, "error");
     std::cerr << mlang::diag::format_error_message(message) << std::endl;
@@ -26,6 +31,8 @@ void CodeGenerator::reportError(int line, int col, const std::string& message)
 
 void CodeGenerator::reportWarning(int line, int col, const std::string& message)
 {
+    if(structuralRequirementProbe)
+        return;
     const std::string file = diagnosticFileName();
     mlang::diag::print_diagnostic_location(std::cerr, file, line, col,
                                            "warning");
