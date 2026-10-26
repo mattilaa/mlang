@@ -1,4 +1,4 @@
-Language: Cpp
+# Shared defaults for C++, Objective-C, and Objective-C++ sources.
 BasedOnStyle: LLVM
 IndentWidth: 4
 ColumnLimit: 80
