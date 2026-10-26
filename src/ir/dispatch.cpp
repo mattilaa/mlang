@@ -227,11 +227,11 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
         return llvm::ConstantInt::get(llvm::Type::getInt1Ty(context),
                                       value.boolValue);
     }
-    if(auto* concept = dynamic_cast<ConceptApplicationNode*>(node))
+    if(auto* conceptDefinition = dynamic_cast<ConceptApplicationNode*>(node))
     {
         ConstexprValue value;
         std::string error;
-        if(!evalConcept(concept, value, &error, nullptr, 0))
+        if(!evalConcept(conceptDefinition, value, &error, nullptr, 0))
         {
             reportError(node->line, error);
             return nullptr;

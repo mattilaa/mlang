@@ -1261,8 +1261,9 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
     if(auto* requirement = dynamic_cast<RequiresExpressionNode*>(expr))
         return evalRequiresExpression(requirement, out, errorMessage, env,
                                       depth + 1);
-    if(auto* concept = dynamic_cast<ConceptApplicationNode*>(expr))
-        return evalConcept(concept, out, errorMessage, env, depth + 1);
+    if(auto* conceptDefinition = dynamic_cast<ConceptApplicationNode*>(expr))
+        return evalConcept(conceptDefinition, out, errorMessage, env,
+                           depth + 1);
     if(auto* i = dynamic_cast<IntLiteralNode*>(expr))
     {
         out.kind = ConstexprValue::Kind::Int;

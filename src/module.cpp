@@ -346,9 +346,9 @@ bool ModuleLoader::loadModule(const std::string& moduleName,
         if(tr && tr->sourceModule.empty())
             tr->sourceModule = moduleName;
     }
-    for(auto* concept : moduleAst->conceptDefs)
-        if(concept && concept->sourceModule.empty())
-            concept->sourceModule = moduleName;
+    for(auto* conceptDefinition : moduleAst->conceptDefs)
+        if(conceptDefinition && conceptDefinition->sourceModule.empty())
+            conceptDefinition->sourceModule = moduleName;
     // Process any mod declarations in this module (recursive loading)
     if(!processModDeclarations(moduleAst, errorMsg))
     {
@@ -774,12 +774,13 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             }
         }
 
-        for(auto* concept : module->conceptDefs)
+        for(auto* conceptDefinition : module->conceptDefs)
         {
-            if(concept && std::find(program->conceptDefs.begin(),
-                                    program->conceptDefs.end(),
-                                    concept) == program->conceptDefs.end())
-                program->conceptDefs.push_back(concept);
+            if(conceptDefinition &&
+               std::find(program->conceptDefs.begin(),
+                         program->conceptDefs.end(),
+                         conceptDefinition) == program->conceptDefs.end())
+                program->conceptDefs.push_back(conceptDefinition);
         }
         // Import traits so trait names can be referenced in impl blocks.
         if(!module->traitDefs.empty())
@@ -903,12 +904,13 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             }
 
             if(!found)
-                for(auto* concept : module->conceptDefs)
-                    if(concept && concept->name == useDecl->itemName)
+                for(auto* conceptDefinition : module->conceptDefs)
+                    if(conceptDefinition &&
+                       conceptDefinition->name == useDecl->itemName)
                     {
-                        if(!concept->isPublic)
+                        if(!conceptDefinition->isPublic)
                         {
-                            errorMsg = "Concept '" + concept->name +
+                            errorMsg = "Concept '" + conceptDefinition->name +
                                        "' is private in module '" +
                                        resolvedModuleName + "'";
                             return false;
@@ -939,10 +941,11 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             if(!useDecl->aliasName.empty())
             {
                 bool aliasBound = false;
-                for(auto* concept : module->conceptDefs)
-                    if(concept && concept->name == useDecl->itemName)
+                for(auto* conceptDefinition : module->conceptDefs)
+                    if(conceptDefinition &&
+                       conceptDefinition->name == useDecl->itemName)
                     {
-                        auto* alias = new ConceptDefNode(*concept);
+                        auto* alias = new ConceptDefNode(*conceptDefinition);
                         alias->name = useDecl->aliasName;
                         program->conceptDefs.push_back(alias);
                         aliasBound = true;

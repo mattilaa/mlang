@@ -4429,12 +4429,43 @@ builtinMemberNames(std::string_view owner)
     return kEmpty;
 }
 
+static std::string_view constraintKeywordDocumentation(std::string_view token)
+{
+    if(token == "req")
+        return "req(value: T) { ... } is an unevaluated structural expression "
+               "producing a compile-time boolean. Use where req(...) { ... } "
+               "to constrain a generic declaration.";
+    if(token == "where")
+        return "where Predicate filters a generic declaration using a "
+               "compile-time boolean. Inside req { ... }, where Predicate; "
+               "checks a nested boolean requirement.";
+    if(token == "concept")
+        return "concept Name<T> = Predicate; defines a named compile-time "
+               "boolean predicate. Structural predicates use req(value: T) { "
+               "... }.";
+    if(token == "requires")
+        return "Compatibility spelling. Prefer where Predicate for boolean "
+               "constraints and req(...) { ... } for structural expressions.";
+    if(token == "generic")
+        return "generic<T> introduces generic type parameters before a "
+               "function. Add where Predicate to constrain its overload.";
+    if(token == "typename")
+        return "Inside req { ... }, typename T; checks that the type exists "
+               "and satisfies generic arity and bounds.";
+    if(token == "noexcept")
+        return "Inside req { ... }, { expression } noexcept; checks for "
+               "potentially throwing calls. Ordinary function calls are "
+               "conservatively potentially throwing.";
+    return {};
+}
+
 static bool isKeywordToken(std::string_view token)
 {
     static constexpr std::string_view kKeywords[] = {
-        "fn",     "cexpr", "let",   "var", "struct", "mod", "namespace",
-        "use",    "alias", "if",    "else", "likely", "unlikely",
-        "while",  "for",   "return",
+        "fn",        "cexpr", "let",      "var",      "struct",   "mod",
+        "namespace", "use",   "alias",    "if",       "else",     "likely",
+        "unlikely",  "while", "for",      "return",   "generic",  "concept",
+        "where",     "req",   "requires", "typename", "noexcept",
     };
     for(const auto kw : kKeywords)
     {
@@ -4529,7 +4560,7 @@ static constexpr std::string_view kBuiltinCompletionLabels[] = {
     "i64",    "u8",     "u16",    "u32",    "u64",    "f32",
     "f64",    "str8",   "str16",  "list",   "map",    "tuple",
     "ptr",    "result", "option", "Ok",     "Err",    "Some",   "None",
-    "array",  "size_of", "Vec",   "Span",  "span",
+    "array",  "size_of", "Vec",   "Span",  "span", "utf8", "utf16",
 };
 
 static std::vector<std::string>
@@ -4538,9 +4569,10 @@ computeSemanticCompletions(const DocumentSemantic& current,
                            int line, int column)
 {
     static constexpr std::string_view kKeywords[] = {
-        "fn",     "cexpr", "let",   "var", "struct", "mod", "namespace",
-        "use",    "alias", "if",    "else", "likely", "unlikely",
-        "while",  "for",   "return",
+        "fn",        "cexpr", "let",      "var",      "struct",   "mod",
+        "namespace", "use",   "alias",    "if",       "else",     "likely",
+        "unlikely",  "while", "for",      "return",   "generic",  "concept",
+        "where",     "req",   "requires", "typename", "noexcept",
     };
 
     const std::optional<size_t> offset =
@@ -4974,9 +5006,10 @@ fastLexicalCompletionsFromText(std::string_view text, int line, int column)
         }
     };
     static constexpr std::string_view kLargeDocumentKeywords[] = {
-        "fn",     "cexpr", "let",   "var", "struct", "mod", "namespace",
-        "use",    "alias", "if",    "else", "likely", "unlikely",
-        "while",  "for",   "return",
+        "fn",        "cexpr", "let",      "var",      "struct",   "mod",
+        "namespace", "use",   "alias",    "if",       "else",     "likely",
+        "unlikely",  "while", "for",      "return",   "generic",  "concept",
+        "where",     "req",   "requires", "typename", "noexcept",
     };
     for(const std::string_view kw : kLargeDocumentKeywords)
     {
@@ -5874,6 +5907,27 @@ extern "C"
         {
             return prep;
         }
+
+        if(const auto offset = mlang::compiler_api::offsetFromLineColumn(
+               current->text, line, column))
+            if(const auto token = mlang::compiler_api::tokenSpanAtOffset(
+                   current->text, *offset))
+            {
+                const auto documentation =
+                    mlang::compiler_api::constraintKeywordDocumentation(
+                        token->token);
+                if(!documentation.empty())
+                {
+                    *out_message_length =
+                        static_cast<int>(documentation.size());
+                    const size_t count =
+                        std::min(static_cast<size_t>(out_message_capacity - 1),
+                                 documentation.size());
+                    std::memcpy(out_message, documentation.data(), count);
+                    out_message[count] = '\0';
+                    return static_cast<int>(mlang::compiler_api::Status::Ok);
+                }
+            }
 
         const std::optional<mlang::compiler_api::ResolvedQuerySymbol> resolved =
             mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs,

@@ -11,9 +11,10 @@ struct AttributeTokenSpec
     int keywordLength;
 };
 
-constexpr std::array<const char*, 10> kLspKeywords = {
-    "fn", "let", "struct", "enum", "if", "else", "match", "return",
-    "result", "option",
+constexpr std::array<const char*, 17> kLspKeywords = {
+    "fn",    "let",    "struct",   "enum",     "if",       "else",
+    "match", "return", "result",   "option",   "generic",  "concept",
+    "where", "req",    "requires", "typename", "noexcept",
 };
 
 constexpr std::array<const char*, 0> kRuntimeBuiltinTypes = {};

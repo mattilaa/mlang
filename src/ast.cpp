@@ -118,9 +118,9 @@ ASTNode* create_program_impl(ASTNode* top_level_list)
         {
             program->typeAliases.push_back(aliasDef);
         }
-        else if(auto* concept = dynamic_cast<ConceptDefNode*>(item))
+        else if(auto* conceptDefinition = dynamic_cast<ConceptDefNode*>(item))
         {
-            program->conceptDefs.push_back(concept);
+            program->conceptDefs.push_back(conceptDefinition);
         }
         else if(auto* traitDef = dynamic_cast<TraitDefNode*>(item))
         {
@@ -2424,8 +2424,8 @@ std::string ProgramNode::toString() const
     {
         result += enumList->toString();
     }
-    for(const auto* concept : conceptDefs)
-        result += concept->toString() + "\n";
+    for(const auto* conceptDefinition : conceptDefs)
+        result += conceptDefinition->toString() + "\n";
     for(const auto& traitDef : traitDefs)
     {
         result += traitDef->toString() + "\n";
@@ -3494,7 +3494,7 @@ std::string RequirementNode::toString() const
 }
 std::string RequiresExpressionNode::toString() const
 {
-    std::string result = "requires(";
+    std::string result = "req(";
     if(parameters)
         result += parameters->toString();
     result += ") { ";

@@ -215,8 +215,8 @@ collect_namespace_decl_names(TopLevelListNode* list)
             names.insert(tr->name);
         else if(auto* fn = dynamic_cast<FunctionDefNode*>(item))
             names.insert(fn->name);
-        else if(auto* concept = dynamic_cast<ConceptDefNode*>(item))
-            names.insert(concept->name);
+        else if(auto* conceptDefinition = dynamic_cast<ConceptDefNode*>(item))
+            names.insert(conceptDefinition->name);
         else if(auto* alias = dynamic_cast<TypeAliasNode*>(item))
             names.insert(alias->name);
     }
@@ -404,10 +404,10 @@ static ASTNode* qualify_namespace_block(char* namespacePath,
             qualify_constraint_in_namespace(fn->requiresClause, ns, names);
             fn->name = qualify_name(ns, fn->name);
         }
-        else if(auto* concept = dynamic_cast<ConceptDefNode*>(item))
+        else if(auto* conceptDefinition = dynamic_cast<ConceptDefNode*>(item))
         {
-            qualify_constraint_in_namespace(concept->predicate, ns, names);
-            concept->name = qualify_name(ns, concept->name);
+            qualify_constraint_in_namespace(conceptDefinition->predicate, ns, names);
+            conceptDefinition->name = qualify_name(ns, conceptDefinition->name);
         }
         else if(auto* alias = dynamic_cast<TypeAliasNode*>(item))
         {
@@ -2074,7 +2074,7 @@ enum UpdatePosition
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
 %token PUB IMPL TRAIT DYN
 %token EXTERN
-%token STATIC CEXPR GENERIC CONCEPT REQUIRES WHERE TYPENAME NOEXCEPT
+%token STATIC CEXPR GENERIC CONCEPT REQ REQUIRES WHERE TYPENAME NOEXCEPT
 %token ASM VOLATILE SIZEOF
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
@@ -2837,7 +2837,14 @@ optional_constraint
     ;
 
 requires_expression
-    : REQUIRES LPAREN requirement_parameters RPAREN requirement_body
+    : REQ LPAREN requirement_parameters RPAREN requirement_body
+        {
+            auto* node = static_cast<RequiresExpressionNode*>($5);
+            node->parameters = static_cast<ParameterListNode*>($3);
+            node->line = @1.first_line; node->col = @1.first_column; $$ = node;
+        }
+    | REQ requirement_body { $$ = $2; $$->line = @1.first_line; $$->col = @1.first_column; }
+    | REQUIRES LPAREN requirement_parameters RPAREN requirement_body
         {
             auto* node = static_cast<RequiresExpressionNode*>($5);
             node->parameters = static_cast<ParameterListNode*>($3);

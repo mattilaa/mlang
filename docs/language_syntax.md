@@ -251,14 +251,14 @@ branch of a predicate is not evaluated. Predicates must produce `bool`;
 recursive concept evaluation, unknown concepts, and wrong argument counts are
 compile errors.
 
-`where Predicate` constrains a declaration; `requires(...) { ... }` is a boolean
-expression that checks operations. Use `generic<T> where requires(value: T) {
+`where Predicate` constrains a declaration; `req(...) { ... }` is a boolean
+expression that checks operations. Use `generic<T> where req(value: T) {
 value + value; }` for an inline structural constraint. Inside requirement bodies,
 `where Predicate;` checks a nested boolean predicate. Existing `requires
 Predicate` clauses and nested `requires Predicate;` remain compatibility forms;
 prefer `where` so the two jobs have different keywords. See
 [where_constraints_demo.mla](../examples/where_constraints_demo.mla) and
-[requires_expression_demo.mla](../examples/requires_expression_demo.mla) for
+[req_expression_demo.mla](../examples/req_expression_demo.mla) for
 runnable examples of both cases.
 
 A `where` clause follows the generic parameter list and precedes the function
@@ -324,7 +324,7 @@ executing them:
 mod std::concepts;
 use std::concepts::*;
 
-concept Addable<T> = requires(a: T, b: T) {
+concept Addable<T> = req(a: T, b: T) {
     a + b;                         // Simple: the expression must be valid.
     typename T;                    // Type: the type must exist.
     { a + b } -> same_as<T>;        // Compound: constrain the result type.
@@ -336,10 +336,10 @@ fn add(a: T, b: T) -> T { return a + b; }
 ```
 
 The parameter list introduces local names with types, without constructing
-objects. Both `requires(a: T)` and C++-style `requires(T a)` are accepted.
-Omit the list for `requires { ... }`. Parameters cannot be `void`, duplicated,
+objects. Both `req(a: T)` and C++-style `req(T a)` are accepted.
+Omit the list for `req { ... }`. Parameters cannot be `void`, duplicated,
 variadic, or have default arguments. They are visible only in that requirement
-body. A requires-expression written inside a function can also refer to its
+body. A req-expression written inside a function can also refer to its
 surrounding locals; a named concept uses its own definition scope.
 
 Requirements are checked in order and stop at the first failure. Substitution
@@ -365,11 +365,11 @@ throwing, even if their bodies happen not to throw.
 
 Structural checks never execute expressions, instantiate called generic bodies,
 or emit their operations into the program. Arithmetic runtime faults and raw
-pointer runtime safety checks do not run: `requires { 1 / 0; }` is satisfied,
+pointer runtime safety checks do not run: `req { 1 / 0; }` is satisfied,
 and a typed pointer may be dereferenced in a requirement without an `unsafe`
 block. Normal type, visibility, and reference mutability rules still apply.
 
-A structural requires-expression forms an atomic constraint. Reusing a named
+A structural req-expression forms an atomic constraint. Reusing a named
 concept preserves that atom's identity for overload ordering; independently
 written requirement bodies are not inferred to refine each other. Compose
 named concepts with `&&` to express refinements.

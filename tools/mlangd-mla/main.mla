@@ -1850,6 +1850,14 @@ fn symbol_kind_lsp(sig: str8) -> i32 {
 fn completion_kind_lsp(label: str8) -> i32 {
     if ends_with(label, "!") == 1 { return 14; }
     if eq(label, "fn") == 1 { return 14; }
+    if eq(label, "generic") == 1 { return 14; }
+    if eq(label, "concept") == 1 { return 14; }
+    if eq(label, "where") == 1 { return 14; }
+    if eq(label, "req") == 1 { return 14; }
+    if eq(label, "requires") == 1 { return 14; }
+    if eq(label, "typename") == 1 { return 14; }
+    if eq(label, "noexcept") == 1 { return 14; }
+
     if eq(label, "let") == 1 { return 14; }
     if eq(label, "var") == 1 { return 14; }
     if eq(label, "if") == 1 { return 14; }
@@ -1909,6 +1917,13 @@ fn completion_kind_lsp(label: str8) -> i32 {
 }
 
 fn completion_detail(label: str8) -> str8 {
+    if eq(label, "generic") == 1 { return "keyword: generic type parameter declaration"; }
+    if eq(label, "concept") == 1 { return "keyword: named compile-time boolean predicate"; }
+    if eq(label, "where") == 1 { return "keyword: boolean constraint for a declaration or nested requirement"; }
+    if eq(label, "req") == 1 { return "keyword: unevaluated structural requirement expression"; }
+    if eq(label, "requires") == 1 { return "keyword: legacy compatibility spelling for constraints and structural checks"; }
+    if eq(label, "typename") == 1 { return "keyword: structural type requirement"; }
+    if eq(label, "noexcept") == 1 { return "keyword: non-throwing compound requirement"; }
     if ends_with(label, "!") == 1 { return "builtin macro"; }
     if eq(label, "fn") == 1 { return "keyword: function definition"; }
     if eq(label, "let") == 1 { return "keyword: immutable binding"; }
@@ -1998,6 +2013,13 @@ fn completion_detail(label: str8) -> str8 {
 }
 
 fn completion_documentation(label: str8) -> str8 {
+    if eq(label, "generic") == 1 { return "Declare generic type parameters with generic<T> before a function. Apply a boolean constraint with where Predicate."; }
+    if eq(label, "concept") == 1 { return "Define a named type predicate: concept Addable<T> = req(a: T, b: T) { a + b; };"; }
+    if eq(label, "where") == 1 { return "Filter a generic declaration with where Predicate. Inside req { ... }, where Predicate; checks a nested compile-time boolean. Combine the forms as where req(value: T) { value + value; }."; }
+    if eq(label, "req") == 1 { return "req(value: T) { ... } is an unevaluated structural expression producing a compile-time boolean by checking operations without executing them. Use where req(...) { ... } to constrain a generic declaration."; }
+    if eq(label, "requires") == 1 { return "Compatibility spelling. Prefer where Predicate for boolean constraints and req(...) { ... } for structural expressions."; }
+    if eq(label, "typename") == 1 { return "Inside req { ... }, typename T; checks that a type exists and satisfies generic arity and bounds."; }
+    if eq(label, "noexcept") == 1 { return "Inside req { ... }, { expression } noexcept; requires no potentially throwing calls. Ordinary function calls are conservatively potentially throwing."; }
     if eq(label, "void") == 1 {
         return "No value. Use void as the return type for functions that do not return a value.";
     }
@@ -3709,6 +3731,67 @@ fn semantic_token_modifiers(sig: str8) -> i32 {
     return mods;
 }
 
+struct SemanticToken {
+    var line: i64;
+    var column: i64;
+    var length: i64;
+    var kind: i32;
+    var modifiers: i32;
+};
+
+fn constraint_keyword_tokens(text: str8) -> list<SemanticToken> {
+    var tokens: list<SemanticToken> = [];
+    var i: i64 = 0;
+    var line: i64 = 0;
+    var column: i64 = 0;
+    var block_depth: i32 = 0;
+    var line_comment: bool = false;
+    var quote: str8 = "";
+    var escaped: bool = false;
+    while i < len(text) {
+        let ch = sub(text, i, 1);
+        var pair: str8 = "";
+        if i + 1 < len(text) { pair = sub(text, i, 2); }
+        if eq(ch, "\n") == 1 {
+            line = line + 1;
+            column = 0;
+            line_comment = false;
+            escaped = false;
+            i = i + 1;
+            continue;
+        }
+        if line_comment { i = i + 1; column = column + 1; continue; }
+        if block_depth > 0 {
+            if eq(pair, "/*") == 1 { block_depth = block_depth + 1; i = i + 2; column = column + 2; continue; }
+            if eq(pair, "*/") == 1 { block_depth = block_depth - 1; i = i + 2; column = column + 2; continue; }
+            i = i + 1; column = column + 1; continue;
+        }
+        if len(quote) > 0 {
+            if escaped { escaped = false; }
+            else if eq(ch, "\\") == 1 { escaped = true; }
+            else if eq(ch, quote) == 1 { quote = ""; }
+            i = i + 1; column = column + 1; continue;
+        }
+        if eq(pair, "//") == 1 { line_comment = true; i = i + 2; column = column + 2; continue; }
+        if eq(pair, "/*") == 1 { block_depth = 1; i = i + 2; column = column + 2; continue; }
+        if eq(ch, "\"") == 1 || eq(ch, "'") == 1 { quote = ch; i = i + 1; column = column + 1; continue; }
+        if is_ident_char(ch) {
+            let start = i;
+            let start_column = column;
+            while i < len(text) && is_ident_char(sub(text, i, 1)) { i = i + 1; column = column + 1; }
+            let word = sub(text, start, i - start);
+            if eq(word, "req") == 1 || eq(word, "where") == 1 || eq(word, "concept") == 1 ||
+               eq(word, "generic") == 1 || eq(word, "requires") == 1 || eq(word, "typename") == 1 || eq(word, "noexcept") == 1 {
+                tokens.push(SemanticToken { line: line, column: start_column, length: i - start, kind: 0, modifiers: 0 });
+            }
+            continue;
+        }
+        i = i + 1;
+        column = column + 1;
+    }
+    return tokens;
+}
+
 fn handle_semantic_tokens_full(payload: str8) -> str8 {
     if ensure_session() != 0 { return "{\"data\":[]}"; }
     let uri: str8 = extract_text_document_uri(payload);
@@ -3720,13 +3803,11 @@ fn handle_semantic_tokens_full(payload: str8) -> str8 {
         Ok(v) => v,
         Err(_e) => 0
     };
-    if n <= 0 { return "{\"data\":[]}"; }
 
-    var data: str8 = String::new();
-    data = concat(data, "[");
-    var j: i32 = 0;
-    var prev_line: i32 = 0;
-    var prev_col: i32 = 0;
+    var tokens: list<SemanticToken> = [];
+    if ensure_text_store() == 0 {
+        tokens = constraint_keyword_tokens(text_store_get(g_text_store_handle, uri));
+    }
 
     for i in 0..n {
         let sr: result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
@@ -3749,23 +3830,38 @@ fn handle_semantic_tokens_full(payload: str8) -> str8 {
         let col0: i32 = lsp_col(sym.column);
         if line0 < 0 { continue; }
         if col0 < 0 { continue; }
-        let dl: i32 = line0 - prev_line;
-        var ds: i32 = col0;
-        if dl == 0 {
-            ds = col0 - prev_col;
+        tokens.push(SemanticToken {
+            line: line0, column: col0, length: len(sym.name),
+            kind: semantic_token_type(sym.signature, sym.kind),
+            modifiers: semantic_token_modifiers(sym.signature)
+        });
+    }
+    // LSP tokens must be ordered, including when declarations come from
+    // different AST lists or appear after newly recognized keywords.
+    for i in 1..tokens.len() {
+        let token = tokens[i];
+        var k = i;
+        while k > 0 {
+            let previous = tokens[k - 1];
+            if previous.line < token.line || (previous.line == token.line && previous.column <= token.column) { break; }
+            tokens[k] = previous;
+            k = k - 1;
         }
-        let tlen: i32 = len(sym.name);
-        let ttype: i32 = semantic_token_type(sym.signature, sym.kind);
-        let tmods: i32 = semantic_token_modifiers(sym.signature);
-        let chunk: str8 = format!("{},{},{},{},{}", dl, ds, tlen, ttype, tmods);
-        if j > 0 {
-            data = format!("{},{}", data, chunk);
-        } else {
-            data = format!("{}{}", data, chunk);
-        }
-        prev_line = line0;
-        prev_col = col0;
-        j = j + 1;
+        tokens[k] = token;
+    }
+    var data: str8 = "[";
+    var prev_line: i64 = 0;
+    var prev_col: i64 = 0;
+    for i in 0..tokens.len() {
+        let token = tokens[i];
+        let dl = token.line - prev_line;
+        var ds = token.column;
+        if dl == 0 { ds = token.column - prev_col; }
+        let chunk = format!("{},{},{},{},{}", dl, ds, token.length, token.kind, token.modifiers);
+        if i > 0 { data = concat(data, ","); }
+        data = concat(data, chunk);
+        prev_line = token.line;
+        prev_col = token.column;
     }
 
     data = concat(data, "]");

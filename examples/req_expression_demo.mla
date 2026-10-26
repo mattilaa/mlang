@@ -1,0 +1,29 @@
+/// \file req_expression_demo.mla
+/// \brief A req expression checks operations without executing them.
+
+mod std::concepts;
+use std::concepts::*;
+
+// Case 2: req produces a boolean by checking structural requirements.
+concept HasIntegerValue<T> = req(value: T) {
+    { value.value } -> integral;
+    where !floating_point<T>;
+};
+
+struct Item { var value: i32; };
+
+// Both cases combined: where consumes the boolean produced by req.
+// Each keyword has one role.
+generic<T> where req(value: T) {
+    { value.value } -> same_as<i32>;
+}
+fn read(value: T) -> i32 { return value.value; }
+
+fn main() -> i32 {
+    static_assert!(HasIntegerValue<Item>);
+    static_assert!(!HasIntegerValue<i32>);
+    static_assert!(req(a: i32, b: i32) { a + b; });
+    let item = Item { value: 42 };
+    println!("value={}", read(item));
+    return read(item) == 42 ? 0 : 1;
+}

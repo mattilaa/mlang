@@ -11,7 +11,7 @@ are valid for a type without executing those expressions.
 ## Two Different Jobs, Two Keywords
 
 `where` filters a generic declaration using a boolean predicate.
-`requires(...) { ... }` produces a boolean by checking structural requirements.
+`req(...) { ... }` produces a boolean by checking structural requirements.
 
 ```rust
 // A constraint clause: compile this overload only when the predicate is true.
@@ -19,19 +19,20 @@ generic<T> where type_id(T) == i32
 fn guarded_double(value: T) -> T { return value + value; }
 
 // A structural expression used directly as a constraint.
-generic<T> where requires(value: T) { value + value; }
+generic<T> where req(value: T) { value + value; }
 fn inline_double(value: T) -> T { return value + value; }
 ```
 
 Inside a structural body, `where Predicate;` checks a nested boolean predicate.
-This keeps the roles consistent: `where` consumes a boolean, while `requires`
-builds one from a body of checks. Combining them needs `where requires`, without
+This keeps the roles consistent: `where` consumes a boolean, while `req`
+builds one from a body of checks. Combining them needs `where req`, without
 repeating a keyword.
 
 For existing programs, `requires Predicate` clauses and nested
 `requires Predicate;` remain accepted as compatibility forms. New code and
-compiler AST text use `where` for these predicates. Structural expressions keep
-their existing spelling.
+compiler AST text use `where` for these predicates. The original
+`requires(...) { ... }` expression spelling is also accepted for compatibility;
+use `req(...) { ... }` in new code.
 
 ## First Example
 
@@ -39,7 +40,7 @@ their existing spelling.
 mod std::concepts;
 use std::concepts::*;
 
-concept Addable<T> = requires(a: T, b: T) {
+concept Addable<T> = req(a: T, b: T) {
     { a + b } -> same_as<T>;
     where arithmetic<T>;
 };
@@ -101,16 +102,16 @@ predicate or the validity of operations describes the requirement.
 | Compound | `{ a + b } -> same_as<T>;` | The expression must be valid and its result type must satisfy the concept. |
 | Nested | `where arithmetic<T>;` | The compile-time boolean predicate must be true. |
 
-`requires(a: T, b: T) { ... }` introduces local names with types, without
-constructing objects. C++-style `requires(T a, T b) { ... }` is also accepted.
-Omit the list for `requires { ... }`. Bodies contain one or more requirements,
+`req(a: T, b: T) { ... }` introduces local names with types, without
+constructing objects. C++-style `req(T a, T b) { ... }` is also accepted.
+Omit the list for `req { ... }`. Bodies contain one or more requirements,
 checked in order until the first failure. Missing members, inaccessible
 operations, invalid substitutions, and unmatched calls make the result false.
 
-Simple and nested requirements differ: `requires { false; }` is true because
-`false` is a valid expression; `requires { where false; }` is false. Local
+Simple and nested requirements differ: `req { false; }` is true because
+`false` is a valid expression; `req { where false; }` is false. Local
 parameter values are unavailable for compile-time evaluation, so
-`requires(value: i32) { where value == 0; }` is false.
+`req(value: i32) { where value == 0; }` is false.
 
 Compound requirements can use a unary concept (`{ a + b } -> integral;`) or no
 result constraint (`{ a + b };`). The expression's type is inserted as the first
@@ -127,7 +128,7 @@ Named concept definitions preserve atomic constraint identity. Two independently
 written requirement bodies are not inferred to refine each other, even if they
 check similar operations. Incomparable best matches produce an ambiguity error.
 
-Requirements have their own local scope and may nest. A requires-expression
+Requirements have their own local scope and may nest. A req-expression
 inside a function can refer to surrounding locals. A named concept resolves
 names in its definition scope. Export concepts with `pub concept`; public
 concepts can use private helpers from their defining module.
@@ -136,7 +137,7 @@ concepts can use private helpers from their defining module.
 
 Structural checks do not execute expressions, change caller variables, emit the
 checked operations into the program, or instantiate called generic bodies.
-`requires { 1 / 0; }` is therefore true: evaluation would fail, but the operation
+`req { 1 / 0; }` is therefore true: evaluation would fail, but the operation
 has valid operand types. Raw pointer requirements check pointee types without
 performing runtime null checks or requiring an `unsafe` block. Reference
 mutability and type rules still apply.
@@ -153,7 +154,7 @@ parameters, or C++ associated type declarations inside structs.
 ## Runnable Examples and Reference
 
 - [Boolean constraint clause example](https://github.com/mattilaa/mlang/blob/main/examples/where_constraints_demo.mla)
-- [Structural expression and combined clause example](https://github.com/mattilaa/mlang/blob/main/examples/requires_expression_demo.mla)
+- [Structural expression and combined clause example](https://github.com/mattilaa/mlang/blob/main/examples/req_expression_demo.mla)
 - [Named concepts example](https://github.com/mattilaa/mlang/blob/main/examples/concepts_demo.mla)
 - [Structural requirements example](https://github.com/mattilaa/mlang/blob/main/examples/structural_concepts_demo.mla)
 - [Language syntax reference](Language-Syntax#concepts-and-generic-constraints)

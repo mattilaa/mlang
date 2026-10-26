@@ -346,6 +346,7 @@ static int mla_lex_peek_branch_declaration()
 "generic"       { return GENERIC; }
 "fn"            { constraint_context = false; return FUNCTION; }
 "concept"       { constraint_context = true; return CONCEPT; }
+"req"           { constraint_context = true; return REQ; }
 "requires"      { constraint_context = true; return REQUIRES; }
 "where"         { constraint_context = true; return WHERE; }
 "typename"      { return TYPENAME; }

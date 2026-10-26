@@ -4,14 +4,14 @@
 mod std::concepts;
 use std::concepts::*;
 
-concept Addable<T> = requires(a: T, b: T) {
+concept Addable<T> = req(a: T, b: T) {
     a + b;
     typename T;
     { a + b } -> same_as<T>;
     where arithmetic<T>;
 };
 
-concept HasValue<T> = requires(value: T) {
+concept HasValue<T> = req(value: T) {
     { value.value } -> integral;
 };
 

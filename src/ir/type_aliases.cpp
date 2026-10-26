@@ -500,9 +500,9 @@ bool CodeGenerator::validateTypeArgumentTraitBounds(
             const size_t separator = ownerName.rfind("::");
             if(separator != std::string::npos)
                 scope = ownerName.substr(0, separator);
-            if(auto* concept = findConcept(requiredTrait, scope))
+            if(auto* conceptDefinition = findConcept(requiredTrait, scope))
             {
-                ConceptApplicationNode application(concept->name,
+                ConceptApplicationNode application(conceptDefinition->name,
                                                    {resolvedType});
                 ConstexprValue value;
                 std::string error;
