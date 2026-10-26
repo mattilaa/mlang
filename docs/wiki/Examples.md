@@ -44,6 +44,19 @@ The feature-oriented index in [New Features Guide](New-Features) covers
 language and standard-library examples that are not all repeated below. The
 following additional programs are useful runnable showcases:
 
+- [where constraints](https://github.com/mattilaa/mlang/blob/main/examples/where_constraints_demo.mla) and
+  [req expressions](https://github.com/mattilaa/mlang/blob/main/examples/req_expression_demo.mla) — separate boolean
+  declaration constraints from structural checks, then combine them with
+  `where req(...) { ... }`.
+- [Overload refinement](https://github.com/mattilaa/mlang/blob/main/examples/where_req_refinement_demo.mla) — reuse
+  named structural concepts to choose between a fallback, a value record,
+  and a weighted record.
+- [Numeric constraints](https://github.com/mattilaa/mlang/blob/main/examples/where_req_numeric_demo.mla) — combine
+  `same_as`, inline `req`, `noexcept`, nested `where`, and an integral struct
+  bound.
+- [Capability queries](https://github.com/mattilaa/mlang/blob/main/examples/req_capability_demo.mla) — choose
+  `cexpr if` branches with structural concepts and verify that structural
+  checks never execute a side-effecting call. See the [concepts guide](Concepts).
 - `examples/branch_prediction_demo.mla` — `likely` and `unlikely` hints on
   runtime branches and boolean declaration initializers.
 - `examples/argparser_demo.mla`, `examples/std_compiler_demo.mla` — argument

@@ -1676,7 +1676,11 @@ TEST_F(MLATest, WhereConstraintRejectsNonBooleanPredicates)
 TEST_F(MLATest, WhereConstraintExamples)
 {
     for(const std::string name :
-        {"where_constraints_demo.mla", "req_expression_demo.mla"})
+        {"where_constraints_demo.mla",
+         "req_expression_demo.mla",
+         "where_req_refinement_demo.mla",
+         "where_req_numeric_demo.mla",
+         "req_capability_demo.mla"})
     {
         const fs::path example =
             fs::path(__FILE__).parent_path().parent_path() / "examples" / name;

@@ -148,6 +148,38 @@ parameters, or C++ associated type declarations inside structs.
 
 ## Runnable Examples and Reference
 
+The examples cover three further ways to combine the keywords:
+
+| Program | What to try | Expected result |
+| --- | --- | --- |
+| [Overload refinement](../examples/where_req_refinement_demo.mla) | `where HasValue<T>` versus `where WeightedValue<T>`, with both concepts defined using `req` | A plain record scores 7, a weighted record scores 42, and an unrelated record uses the fallback, scoring 0. |
+| [Numeric constraints](../examples/where_req_numeric_demo.mla) | `where same_as<T, U> && req(a: T, b: U) { ... }` | Integer addition produces 42 and floating-point addition produces 4. The result requirement checks `same_as<T>` and `noexcept`; nested `where arithmetic<T>;` checks a boolean. |
+| [Capability queries](../examples/req_capability_demo.mla) | Use a concept defined with `req` in `cexpr if` | An integer-valued record returns 42; a floating-valued record and a scalar return 0. A call inside `req` leaves its counter unchanged. |
+
+For example, a structural refinement combines an existing concept with another
+`req` expression:
+
+```mla
+concept HasValue<T> = req(item: T) {
+    { item.value } -> same_as<i32>;
+};
+concept WeightedValue<T> = HasValue<T> && req(item: T) {
+    { item.weight } -> same_as<i32>;
+    { item.value * item.weight } -> same_as<i32>;
+};
+
+generic<T> where HasValue<T>
+fn score(item: T) -> i32 { return item.value; }
+
+generic<T> where WeightedValue<T>
+fn score(item: T) -> i32 { return item.value * item.weight; }
+```
+
+Both overloads accept a weighted record, but the second wins because its
+constraint includes the first overload's named concept plus additional checks.
+The runnable version also provides an unconstrained fallback and tests missing
+members with negative `static_assert!` queries.
+
 - [Boolean constraint clause example](../examples/where_constraints_demo.mla)
 - [Structural expression and combined clause example](../examples/req_expression_demo.mla)
 - [Named concepts example](../examples/concepts_demo.mla)

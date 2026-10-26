@@ -1,0 +1,41 @@
+/// \file where_req_refinement_demo.mla
+/// \brief Named structural concepts refine overloads for different records.
+
+mod std::concepts;
+use std::concepts::*;
+
+concept HasValue<T> = req(item: T) {
+    { item.value } -> same_as<i32>;
+};
+
+// Reuse the named base concept so overload ordering sees the refinement.
+concept WeightedValue<T> = HasValue<T> && req(item: T) {
+    { item.weight } -> same_as<i32>;
+    { item.value * item.weight } -> same_as<i32>;
+};
+
+generic<T>
+fn score(item: T) -> i32 { return 0; }
+
+generic<T> where HasValue<T>
+fn score(item: T) -> i32 { return item.value; }
+
+generic<T> where WeightedValue<T>
+fn score(item: T) -> i32 { return item.value * item.weight; }
+
+struct Plain { var value: i32; };
+struct Weighted { var value: i32; var weight: i32; };
+struct Unrelated { var id: i32; };
+
+fn main() -> i32 {
+    static_assert!(HasValue<Weighted>);
+    static_assert!(WeightedValue<Weighted>);
+    static_assert!(!WeightedValue<Plain>);
+    static_assert!(!HasValue<Unrelated>);
+    let plain = Plain { value: 7 };
+    let weighted = Weighted { value: 6, weight: 7 };
+    let unrelated = Unrelated { id: 1 };
+    println!("plain={}, weighted={}, fallback={}",
+             score(plain), score(weighted), score(unrelated));
+    return score(plain) == 7 && score(weighted) == 42 && score(unrelated) == 0 ? 0 : 1;
+}

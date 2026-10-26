@@ -1,0 +1,44 @@
+/// \file req_capability_demo.mla
+/// \brief Query capabilities and discard invalid branches at compile time.
+
+mod std::concepts;
+use std::concepts::*;
+
+concept HasIntegerValue<T> = req(value: T) {
+    { value.value } -> same_as<i32>;
+};
+
+// A concept built with req can select a branch without constraining callers.
+generic<T>
+fn value_or_zero(item: T) -> i32 {
+    cexpr if HasIntegerValue<T> {
+        return item.value;
+    } else {
+        return 0;
+    }
+}
+
+fn increment(value: &mut i32) -> i32 {
+    value += 1;
+    return value;
+}
+
+struct Item { var value: i32; };
+struct Reading { var value: f64; };
+
+fn main() -> i32 {
+    // A simple requirement checks validity, not the expression's truth value.
+    static_assert!(req { false; });
+    static_assert!(!req { where false; });
+    static_assert!(!req(value: Reading) { { value.value } -> integral; });
+
+    var calls: i32 = 0;
+    // The function call is checked but never executed.
+    let incrementable = req { increment(&mut calls); };
+    let item = Item { value: 42 };
+    let reading = Reading { value: 1.5 };
+    println!("value={}, reading fallback={}, scalar fallback={}, calls={}",
+             value_or_zero(item), value_or_zero(reading), value_or_zero(7i32), calls);
+    return incrementable && calls == 0 && value_or_zero(item) == 42
+        && value_or_zero(reading) == 0 && value_or_zero(7i32) == 0 ? 0 : 1;
+}

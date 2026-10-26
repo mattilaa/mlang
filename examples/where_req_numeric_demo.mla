@@ -1,0 +1,26 @@
+/// \file where_req_numeric_demo.mla
+/// \brief Combine multi-type predicates with inline structural requirements.
+
+mod std::concepts;
+use std::concepts::*;
+
+// where combines boolean predicates; req checks the operations and result type.
+generic<T, U> where same_as<T, U> && req(a: T, b: U) {
+    typename T;
+    { a + b } noexcept -> same_as<T>;
+    where arithmetic<T>;
+}
+fn add_same(a: T, b: U) -> T { return a + b; }
+
+// A concept bound also works on a generic struct.
+struct Counter<T: integral> { var value: T; };
+
+fn main() -> i32 {
+    let integer = add_same(20i32, 22i32);
+    let floating = add_same(1.25, 2.75);
+    let counter: Counter<i32> = Counter<i32> { value: integer };
+    static_assert!(same_as<i32, i32> && !same_as<i32, f64>);
+    static_assert!(req { typename Counter<i32>; });
+    println!("integer={}, floating={}, counter={}", integer, floating, counter.value);
+    return integer == 42 && floating == 4.0 && counter.value == 42 ? 0 : 1;
+}
