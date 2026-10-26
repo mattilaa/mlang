@@ -77,8 +77,8 @@ boolean declaration such as `likely let ready: bool = check();`.
 ### `MLANG-E1019`
 A user-defined literal operator has an invalid suffix or signature, or a
 suffixed numeric literal is out of range. Use `fn operator "" _name` with one
-`u64`, `f64`, or `str8` value parameter and a builtin scalar or string result.
-Integer inputs must fit `u64`; floating-point inputs must fit finite `f64`.
+[`u64`](Quick-Guide#types), [`f64`](Quick-Guide#types), or [`str8`](Quick-Guide#types) value parameter and a builtin scalar or string result.
+Integer inputs must fit [`u64`](Quick-Guide#types); floating-point inputs must fit finite [`f64`](Quick-Guide#types).
 
 ### `MLANG-E1100`
 Unexpected character produced by the lexer before parsing could continue.

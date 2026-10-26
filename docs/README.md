@@ -76,6 +76,8 @@ If you are new to MLang, read these pages in this order:
 - [Language Syntax](language_syntax.md)
   Language features such as `switch`, exceptions, pipe syntax, inline asm,
   conditional regions, lambdas/folds, and `bit`/`size_of`.
+- [Concepts and Structural Requirements](concepts.md)
+  Named predicates, generic constraints, structural checks, and overload selection.
 - [Language Attributes](language_attributes.md)
   Attribute syntax such as `#[test]`, `#[derive(Debug)]`,
   `#[derive(Json)]`, and `#[inline]`.

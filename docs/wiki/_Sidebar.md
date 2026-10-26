@@ -11,6 +11,7 @@
 - [[Language Attributes|Language-Attributes]]
 - [[Language Built-ins|Language-Built-ins]]
 - [[Language Syntax|Language-Syntax]]
+- [[Concepts and Structural Requirements|Concepts]]
 - [[Quick Guide|Quick-Guide]]
 
 ## Standard Library
@@ -53,6 +54,7 @@
 - [[std::chrono|Stdlib-Chrono]]
 - [[std::compare|Stdlib-Compare]]
 - [[std::compiler|Stdlib-Compiler]]
+- [[std::concepts|Stdlib-Concepts]]
 - [[std::date|Stdlib-Date]]
 - [[std::env|Stdlib-Env]]
 - [[std::esc|Stdlib-Esc]]
@@ -73,7 +75,6 @@
 - [[std::source_location|Stdlib-Source-Location]]
 - [[std::stacktrace|Stdlib-Stacktrace]]
 - [[std::scope_exit|Stdlib-Scope-Exit]]
-- [[std::concepts|Stdlib-Concepts]]
 - [[std::type_traits|Stdlib-Type-Traits]]
 - [[std::multiarray|Stdlib-Multiarray]]
 - [[std::mutmultiarray|Stdlib-Mutmultiarray]]

@@ -31,3 +31,12 @@ its body; a stronger named constraint wins over a weaker matching overload.
 The declarations live in `stdlib/std/concepts.mla`. The language guide documents
 concept definitions, module visibility, short-circuiting, and overload ordering;
 `examples/concepts_demo.mla` demonstrates runtime calls and compile-time queries.
+
+Concepts also constrain structural expressions. For example,
+`concept Addable<T> = requires(a: T, b: T) { { a + b } -> same_as<T>; };`
+tests the operation and its result type without evaluating it. See
+`examples/structural_concepts_demo.mla` for a runnable example using simple,
+type, compound, and nested requirements.
+
+See the [concepts guide](../concepts.md) for a complete example, requirement forms,
+overload ordering, and current compatibility limits.

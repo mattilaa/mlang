@@ -220,6 +220,9 @@ Notes:
 
 ### Concepts and Generic Constraints
 
+For a guided introduction and runnable examples, see
+[Concepts and Structural Requirements](concepts.md).
+
 MLang supports C++20-style named concepts as compile-time boolean predicates:
 
 ```mla
@@ -304,9 +307,65 @@ The `std::concepts` module supplies `same_as`, `integral`, `signed_integral`,
 `unsigned_integral`, `floating_point`, and `arithmetic`. See
 @ref examples/concepts_demo.mla "concepts_demo.mla" for a runnable example.
 
-This support uses named boolean predicates, prefix `requires` clauses, and
-parameter bounds. Structural requires-expressions with requirement bodies,
-trailing requires-clauses, and abbreviated `auto` parameters are not implemented.
+Structural requirements can test the operations supported by a type without
+executing them:
+
+```mla
+mod std::concepts;
+use std::concepts::*;
+
+concept Addable<T> = requires(a: T, b: T) {
+    a + b;                         // Simple: the expression must be valid.
+    typename T;                    // Type: the type must exist.
+    { a + b } -> same_as<T>;        // Compound: constrain the result type.
+    requires arithmetic<T>;        // Nested: the predicate must be true.
+};
+
+generic<T> requires Addable<T>
+fn add(a: T, b: T) -> T { return a + b; }
+```
+
+The parameter list introduces local names with types, without constructing
+objects. Both `requires(a: T)` and C++-style `requires(T a)` are accepted.
+Omit the list for `requires { ... }`. Parameters cannot be `void`, duplicated,
+variadic, or have default arguments. They are visible only in that requirement
+body. A requires-expression written inside a function can also refer to its
+surrounding locals; a named concept uses its own definition scope.
+
+Requirements are checked in order and stop at the first failure. Substitution
+failure, a missing member, an invalid operation, an inaccessible member, or an
+unmatched call makes the expression `false`. A simple requirement tests
+well-formedness, so `false;` is satisfied. A nested requirement such as
+`requires false;` is not satisfied, and its expression must be a compile-time
+boolean. Runtime parameter values cannot satisfy nested predicates.
+
+Use `typename SomeType;` or `type SomeType;` to test a type, including an alias
+or a generic instantiation with bounds. Compound requirements may omit the
+arrow, or use a unary concept (`{ a + b } -> integral;`). With a concept argument
+list, the compiler inserts the expression's result type as the first argument:
+`{ a + b } -> same_as<T>;` checks `same_as<Result, T>`. Ordinary module visibility
+and qualified concept names apply. These are MLang expression types; no C++
+`decltype((expr))` value-category rules are introduced.
+
+`{ expression } noexcept;` additionally requires the expression to contain no
+potentially throwing calls. Builtin scalar operations satisfy this condition.
+MLang functions currently have no non-throwing declaration annotation, so calls
+to ordinary functions or methods are conservatively considered potentially
+throwing, even if their bodies happen not to throw.
+
+Structural checks never execute expressions, instantiate called generic bodies,
+or emit their operations into the program. Arithmetic runtime faults and raw
+pointer runtime safety checks do not run: `requires { 1 / 0; }` is satisfied,
+and a typed pointer may be dereferenced in a requirement without an `unsafe`
+block. Normal type, visibility, and reference mutability rules still apply.
+
+A structural requires-expression forms an atomic constraint. Reusing a named
+concept preserves that atom's identity for overload ordering; independently
+written requirement bodies are not inferred to refine each other. Compose
+named concepts with `&&` to express refinements.
+
+Trailing requires-clauses, abbreviated `auto` parameters, and C++ associated
+type declarations inside structs are not implemented.
 
 ### Numeric Primitive Names
 
