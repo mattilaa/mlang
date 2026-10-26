@@ -5,14 +5,14 @@
 #include "ir/expression_type_kind.h"
 #include "llvm_compat.h"
 
+#include <functional>
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/InlineAsm.h>
-#include <functional>
 
-using mlang::ir_detail::ast_analysis::contains_unsupported_try_control_flow;
-using mlang::ir_detail::common::Helpers;
 using mlang::ir_detail::module_target_triple_string;
 using mlang::ir_detail::normalize_target_arch_name;
+using mlang::ir_detail::ast_analysis::contains_unsupported_try_control_flow;
+using mlang::ir_detail::common::Helpers;
 
 llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
 {
@@ -28,9 +28,10 @@ llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
             normalize_target_arch_name(node->requiredArch);
         if(requiredArch.empty())
         {
-            reportError(node->line, "unsupported inline asm target arch '" +
-                                        node->requiredArch +
-                                        "'; expected x86, x64, or aarch64");
+            reportError(
+                node->line,
+                "unsupported inline asm target arch '" + node->requiredArch +
+                    "'; expected x86, x64, or aarch64");
             return nullptr;
         }
 
@@ -42,18 +43,20 @@ llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
             normalize_target_arch_name(triple.getArchName().str());
         if(actualArch.empty())
         {
-            reportError(node->line,
-                        "unsupported compilation target arch '" +
-                            triple.getArchName().str() +
-                            "' for inline asm; expected x86, x64, or aarch64");
+            reportError(
+                node->line,
+                "unsupported compilation target arch '" +
+                    triple.getArchName().str() +
+                    "' for inline asm; expected x86, x64, or aarch64");
             return nullptr;
         }
         if(actualArch != requiredArch)
         {
-            reportError(node->line,
-                        "inline asm target arch '" + requiredArch +
-                            "' does not match compilation target arch '" +
-                            actualArch + "'");
+            reportError(
+                node->line,
+                "inline asm target arch '" + requiredArch +
+                    "' does not match compilation target arch '" + actualArch +
+                    "'");
             return nullptr;
         }
     }
@@ -79,8 +82,10 @@ llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
             return nullptr;
         if(!supportsRegisterConstraint(value->getType()))
         {
-            reportError(node->line, "inline asm currently supports only "
-                                    "integer and pointer operands");
+            reportError(
+                node->line,
+                "inline asm currently supports only "
+                "integer and pointer operands");
             return nullptr;
         }
         argValues.push_back(value);
@@ -90,22 +95,27 @@ llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
     const bool returnsVoid = resultType->isVoidTy();
     if(!returnsVoid && !supportsRegisterConstraint(resultType))
     {
-        reportError(node->line, "inline asm currently supports only integer, "
-                                "pointer, or void result types");
+        reportError(
+            node->line,
+            "inline asm currently supports only integer, "
+            "pointer, or void result types");
         return nullptr;
     }
     if(!returnsVoid)
     {
         if(argValues.empty())
         {
-            reportError(node->line,
-                        "non-void inline asm requires at least one operand");
+            reportError(
+                node->line,
+                "non-void inline asm requires at least one operand");
             return nullptr;
         }
         if(argTypes.front() != resultType)
         {
-            reportError(node->line, "non-void inline asm requires its first "
-                                    "operand to match the result type");
+            reportError(
+                node->line,
+                "non-void inline asm requires its first "
+                "operand to match the result type");
             return nullptr;
         }
     }
@@ -133,7 +143,10 @@ llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
     llvm::FunctionType* asmType =
         llvm::FunctionType::get(resultType, argTypes, false);
     llvm::InlineAsm* asmFn = llvm::InlineAsm::get(
-        asmType, node->asmTemplate, constraints, node->isVolatile);
+        asmType,
+        node->asmTemplate,
+        constraints,
+        node->isVolatile);
 
     if(returnsVoid)
         return builder.CreateCall(asmFn, argValues);
@@ -166,10 +179,11 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
            !rhsStructTy->hasName() ||
            lhsStructTy->getName() != rhsStructTy->getName())
         {
-            reportError(node->line,
-                        "operator '" + opText +
-                            "' on structs requires both operands to have the "
-                            "same struct type");
+            reportError(
+                node->line,
+                "operator '" + opText +
+                    "' on structs requires both operands to have the "
+                    "same struct type");
             return nullptr;
         }
 
@@ -178,31 +192,35 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         if(traitIt == structImplementedTraits.end() ||
            traitIt->second.find(traitName) == traitIt->second.end())
         {
-            reportError(node->line, "struct '" + structTypeName +
-                                        "' must implement trait '" + traitName +
-                                        "' to use operator '" + opText + "'");
+            reportError(
+                node->line,
+                "struct '" + structTypeName + "' must implement trait '" +
+                    traitName + "' to use operator '" + opText + "'");
             return nullptr;
         }
 
         auto structIt = structMethods.find(structTypeName);
         if(structIt == structMethods.end())
         {
-            reportError(node->line,
-                        "struct '" + structTypeName + "' has no methods");
+            reportError(
+                node->line,
+                "struct '" + structTypeName + "' has no methods");
             return nullptr;
         }
         auto methodIt = structIt->second.find(methodName);
         if(methodIt == structIt->second.end() || !methodIt->second.second)
         {
-            reportError(node->line, "trait '" + traitName + "' on struct '" +
-                                        structTypeName + "' requires method '" +
-                                        methodName + "'");
+            reportError(
+                node->line,
+                "trait '" + traitName + "' on struct '" + structTypeName +
+                    "' requires method '" + methodName + "'");
             return nullptr;
         }
         if(methodIt->second.second->isStatic)
         {
-            reportError(node->line,
-                        "trait method '" + methodName + "' must not be static");
+            reportError(
+                node->line,
+                "trait method '" + methodName + "' must not be static");
             return nullptr;
         }
 
@@ -297,9 +315,10 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         }
         if(callee->arg_size() < 2)
         {
-            reportError(node->line, "trait method '" + methodName +
-                                        "' for operator '" + opText +
-                                        "' requires one argument");
+            reportError(
+                node->line,
+                "trait method '" + methodName + "' for operator '" + opText +
+                    "' requires one argument");
             return nullptr;
         }
 
@@ -328,46 +347,59 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         {
             arg1 = rhsPtr;
             if(arg1->getType() != expectedTy && arg1->getType()->isPointerTy())
-                arg1 = builder.CreateBitCast(arg1, expectedTy,
-                                             "traitop.arg.ptrcast");
+                arg1 =
+                    builder
+                        .CreateBitCast(arg1, expectedTy, "traitop.arg.ptrcast");
         }
         else if(arg1->getType() != expectedTy)
         {
             int convCost = 0;
             if(!canConvertType(arg1->getType(), expectedTy, convCost))
             {
-                reportError(node->line,
-                            "argument type mismatch for trait method '" +
-                                methodName + "'");
+                reportError(
+                    node->line,
+                    "argument type mismatch for trait method '" + methodName +
+                        "'");
                 return nullptr;
             }
             if(arg1->getType()->isIntegerTy() && expectedTy->isIntegerTy())
-                arg1 = builder.CreateIntCast(arg1, expectedTy, true,
-                                             "traitop.arg.cast");
-            else if(arg1->getType()->isIntegerTy() &&
-                    expectedTy->isFloatingPointTy())
-                arg1 = builder.CreateSIToFP(arg1, expectedTy,
-                                            "traitop.arg.sitofp");
-            else if(arg1->getType()->isFloatingPointTy() &&
-                    expectedTy->isIntegerTy())
-                arg1 = builder.CreateFPToSI(arg1, expectedTy,
-                                            "traitop.arg.fptosi");
-            else if(arg1->getType()->isFloatingPointTy() &&
-                    expectedTy->isFloatingPointTy())
-                arg1 = builder.CreateFPCast(arg1, expectedTy,
-                                            "traitop.arg.fpcast");
+                arg1 = builder.CreateIntCast(
+                    arg1,
+                    expectedTy,
+                    true,
+                    "traitop.arg.cast");
+            else if(
+                arg1->getType()->isIntegerTy() &&
+                expectedTy->isFloatingPointTy())
+                arg1 =
+                    builder
+                        .CreateSIToFP(arg1, expectedTy, "traitop.arg.sitofp");
+            else if(
+                arg1->getType()->isFloatingPointTy() &&
+                expectedTy->isIntegerTy())
+                arg1 =
+                    builder
+                        .CreateFPToSI(arg1, expectedTy, "traitop.arg.fptosi");
+            else if(
+                arg1->getType()->isFloatingPointTy() &&
+                expectedTy->isFloatingPointTy())
+                arg1 =
+                    builder
+                        .CreateFPCast(arg1, expectedTy, "traitop.arg.fpcast");
             else if(arg1->getType()->isPointerTy() && expectedTy->isPointerTy())
-                arg1 = builder.CreateBitCast(arg1, expectedTy,
-                                             "traitop.arg.ptrcast");
+                arg1 =
+                    builder
+                        .CreateBitCast(arg1, expectedTy, "traitop.arg.ptrcast");
         }
         args.push_back(arg1);
 
         llvm::Value* res = builder.CreateCall(callee, args, "traitop.call");
         if(res->getType() != L->getType())
         {
-            reportError(node->line, "trait method '" + methodName +
-                                        "' used by operator '" + opText +
-                                        "' must return the receiver type");
+            reportError(
+                node->line,
+                "trait method '" + methodName + "' used by operator '" +
+                    opText + "' must return the receiver type");
             return nullptr;
         }
         return res;
@@ -403,12 +435,16 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                 {
                     if(lhsBits > rhsBits)
                         rhs = builder.CreateIntCast(
-                            rhs, lhs->getType(), !useUnsignedIntCmp,
+                            rhs,
+                            lhs->getType(),
+                            !useUnsignedIntCmp,
                             useUnsignedIntCmp ? "spaceship.zext"
                                               : "spaceship.sext");
                     else
                         lhs = builder.CreateIntCast(
-                            lhs, rhs->getType(), !useUnsignedIntCmp,
+                            lhs,
+                            rhs->getType(),
+                            !useUnsignedIntCmp,
                             useUnsignedIntCmp ? "spaceship.zext"
                                               : "spaceship.sext");
                 }
@@ -449,9 +485,10 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                !rhsStructTy->hasName() ||
                lhsStructTy->getName() != rhsStructTy->getName())
             {
-                reportError(node->line,
-                            "<=> on structs requires both operands to have the "
-                            "same struct type");
+                reportError(
+                    node->line,
+                    "<=> on structs requires both operands to have the "
+                    "same struct type");
                 return nullptr;
             }
 
@@ -463,32 +500,35 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             if(traitIt == structImplementedTraits.end() ||
                traitIt->second.find(traitName) == traitIt->second.end())
             {
-                reportError(node->line, "struct '" + structTypeName +
-                                            "' must implement trait '" +
-                                            traitName + "' to use <=>");
+                reportError(
+                    node->line,
+                    "struct '" + structTypeName + "' must implement trait '" +
+                        traitName + "' to use <=>");
                 return nullptr;
             }
 
             auto structIt = structMethods.find(structTypeName);
             if(structIt == structMethods.end())
             {
-                reportError(node->line,
-                            "struct '" + structTypeName + "' has no methods");
+                reportError(
+                    node->line,
+                    "struct '" + structTypeName + "' has no methods");
                 return nullptr;
             }
             auto methodIt = structIt->second.find(methodName);
             if(methodIt == structIt->second.end() || !methodIt->second.second)
             {
-                reportError(node->line, "trait '" + traitName +
-                                            "' on struct '" + structTypeName +
-                                            "' requires method '" + methodName +
-                                            "'");
+                reportError(
+                    node->line,
+                    "trait '" + traitName + "' on struct '" + structTypeName +
+                        "' requires method '" + methodName + "'");
                 return nullptr;
             }
             if(methodIt->second.second->isStatic)
             {
-                reportError(node->line, "trait method '" + methodName +
-                                            "' must not be static");
+                reportError(
+                    node->line,
+                    "trait method '" + methodName + "' must not be static");
                 return nullptr;
             }
 
@@ -518,24 +558,30 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             }
             if(callee->arg_size() < 2)
             {
-                reportError(node->line, "trait method '" + methodName +
-                                            "' for <=> requires one argument");
+                reportError(
+                    node->line,
+                    "trait method '" + methodName +
+                        "' for <=> requires one argument");
                 return nullptr;
             }
 
             llvm::Value* lhsPtr = getLValuePointer(node->left, node->line);
             if(!lhsPtr)
             {
-                lhsPtr = builder.CreateAlloca(L->getType(), nullptr,
-                                              "spaceship.lhs.tmp");
+                lhsPtr = builder.CreateAlloca(
+                    L->getType(),
+                    nullptr,
+                    "spaceship.lhs.tmp");
                 builder.CreateStore(L, lhsPtr);
             }
 
             llvm::Value* rhsPtr = getLValuePointer(node->right, node->line);
             if(!rhsPtr)
             {
-                rhsPtr = builder.CreateAlloca(R->getType(), nullptr,
-                                              "spaceship.rhs.tmp");
+                rhsPtr = builder.CreateAlloca(
+                    R->getType(),
+                    nullptr,
+                    "spaceship.rhs.tmp");
                 builder.CreateStore(R, rhsPtr);
             }
 
@@ -549,47 +595,64 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                 arg1 = rhsPtr;
                 if(arg1->getType() != expectedTy &&
                    arg1->getType()->isPointerTy())
-                    arg1 = builder.CreateBitCast(arg1, expectedTy,
-                                                 "spaceship.arg.ptrcast");
+                    arg1 = builder.CreateBitCast(
+                        arg1,
+                        expectedTy,
+                        "spaceship.arg.ptrcast");
             }
             else if(arg1->getType() != expectedTy)
             {
                 int convCost = 0;
                 if(!canConvertType(arg1->getType(), expectedTy, convCost))
                 {
-                    reportError(node->line,
-                                "argument type mismatch for trait method '" +
-                                    methodName + "'");
+                    reportError(
+                        node->line,
+                        "argument type mismatch for trait method '" +
+                            methodName + "'");
                     return nullptr;
                 }
                 if(arg1->getType()->isIntegerTy() && expectedTy->isIntegerTy())
                 {
-                    arg1 = builder.CreateIntCast(arg1, expectedTy, true,
-                                                 "spaceship.arg.cast");
+                    arg1 = builder.CreateIntCast(
+                        arg1,
+                        expectedTy,
+                        true,
+                        "spaceship.arg.cast");
                 }
-                else if(arg1->getType()->isIntegerTy() &&
-                        expectedTy->isFloatingPointTy())
+                else if(
+                    arg1->getType()->isIntegerTy() &&
+                    expectedTy->isFloatingPointTy())
                 {
-                    arg1 = builder.CreateSIToFP(arg1, expectedTy,
-                                                "spaceship.arg.sitofp");
+                    arg1 = builder.CreateSIToFP(
+                        arg1,
+                        expectedTy,
+                        "spaceship.arg.sitofp");
                 }
-                else if(arg1->getType()->isFloatingPointTy() &&
-                        expectedTy->isIntegerTy())
+                else if(
+                    arg1->getType()->isFloatingPointTy() &&
+                    expectedTy->isIntegerTy())
                 {
-                    arg1 = builder.CreateFPToSI(arg1, expectedTy,
-                                                "spaceship.arg.fptosi");
+                    arg1 = builder.CreateFPToSI(
+                        arg1,
+                        expectedTy,
+                        "spaceship.arg.fptosi");
                 }
-                else if(arg1->getType()->isFloatingPointTy() &&
-                        expectedTy->isFloatingPointTy())
+                else if(
+                    arg1->getType()->isFloatingPointTy() &&
+                    expectedTy->isFloatingPointTy())
                 {
-                    arg1 = builder.CreateFPCast(arg1, expectedTy,
-                                                "spaceship.arg.fpcast");
+                    arg1 = builder.CreateFPCast(
+                        arg1,
+                        expectedTy,
+                        "spaceship.arg.fpcast");
                 }
-                else if(arg1->getType()->isPointerTy() &&
-                        expectedTy->isPointerTy())
+                else if(
+                    arg1->getType()->isPointerTy() && expectedTy->isPointerTy())
                 {
-                    arg1 = builder.CreateBitCast(arg1, expectedTy,
-                                                 "spaceship.arg.ptrcast");
+                    arg1 = builder.CreateBitCast(
+                        arg1,
+                        expectedTy,
+                        "spaceship.arg.ptrcast");
                 }
             }
             args.push_back(arg1);
@@ -598,16 +661,20 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                 builder.CreateCall(callee, args, "spaceship.call");
             if(!cmpVal->getType()->isIntegerTy())
             {
-                reportError(node->line,
-                            "trait method '" + methodName +
-                                "' used by <=> must return an integer");
+                reportError(
+                    node->line,
+                    "trait method '" + methodName +
+                        "' used by <=> must return an integer");
                 return nullptr;
             }
             llvm::Type* i32Ty = llvm::Type::getInt32Ty(context);
             if(cmpVal->getType() != i32Ty)
             {
-                cmpVal = builder.CreateIntCast(cmpVal, i32Ty, true,
-                                               "spaceship.ret.cast");
+                cmpVal = builder.CreateIntCast(
+                    cmpVal,
+                    i32Ty,
+                    true,
+                    "spaceship.ret.cast");
             }
             return cmpVal;
         }
@@ -615,9 +682,10 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         llvm::Value* numericCmp = buildNumericSpaceship(L, R);
         if(!numericCmp)
         {
-            reportError(node->line,
-                        "<=> requires numeric operands or structs implementing "
-                        "trait 'Compare'");
+            reportError(
+                node->line,
+                "<=> requires numeric operands or structs implementing "
+                "trait 'Compare'");
             return nullptr;
         }
         return numericCmp;
@@ -679,9 +747,10 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         std::string typeName = L->getType()->getStructName().str().empty()
                                    ? "struct"
                                    : L->getType()->getStructName().str();
-        reportError(node->line,
-                    "cannot perform binary operation on struct type '" +
-                        typeName + "'");
+        reportError(
+            node->line,
+            "cannot perform binary operation on struct type '" + typeName +
+                "'");
         return nullptr;
     }
     if(R->getType()->isStructTy())
@@ -689,9 +758,10 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         std::string typeName = R->getType()->getStructName().str().empty()
                                    ? "struct"
                                    : R->getType()->getStructName().str();
-        reportError(node->line,
-                    "cannot perform binary operation on struct type '" +
-                        typeName + "'");
+        reportError(
+            node->line,
+            "cannot perform binary operation on struct type '" + typeName +
+                "'");
         return nullptr;
     }
 
@@ -700,13 +770,16 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         if(v->getType()->isIntegerTy(1))
             return v;
         if(v->getType()->isIntegerTy())
-            return builder.CreateICmpNE(
-                v, llvm::ConstantInt::get(v->getType(), 0), name);
+            return builder
+                .CreateICmpNE(v, llvm::ConstantInt::get(v->getType(), 0), name);
         if(v->getType()->isFloatingPointTy())
             return builder.CreateFCmpONE(
-                v, llvm::ConstantFP::get(v->getType(), 0.0), name);
-        reportError(node->line,
-                    "logical operations require numeric or boolean operands");
+                v,
+                llvm::ConstantFP::get(v->getType(), 0.0),
+                name);
+        reportError(
+            node->line,
+            "logical operations require numeric or boolean operands");
         return nullptr;
     };
 
@@ -747,8 +820,9 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     {
         if(!L->getType()->isIntegerTy() || !R->getType()->isIntegerTy())
         {
-            reportError(node->line,
-                        "bitwise operations require integer operands");
+            reportError(
+                node->line,
+                "bitwise operations require integer operands");
             return nullptr;
         }
         unsigned LBits = L->getType()->getIntegerBitWidth();
@@ -756,19 +830,23 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         if(node->op == BinaryOpNode::OP_SHL || node->op == BinaryOpNode::OP_SHR)
         {
             if(RBits != LBits)
-                R = builder.CreateIntCast(R, L->getType(), false,
-                                          "bitshift.cast");
+                R = builder
+                        .CreateIntCast(R, L->getType(), false, "bitshift.cast");
         }
         else if(LBits != RBits)
         {
             if(LBits > RBits)
-                R = builder.CreateIntCast(R, L->getType(), !useUnsignedIntOps,
-                                          useUnsignedIntOps ? "bitand.zext"
-                                                            : "bitand.sext");
+                R = builder.CreateIntCast(
+                    R,
+                    L->getType(),
+                    !useUnsignedIntOps,
+                    useUnsignedIntOps ? "bitand.zext" : "bitand.sext");
             else
-                L = builder.CreateIntCast(L, R->getType(), !useUnsignedIntOps,
-                                          useUnsignedIntOps ? "bitand.zext"
-                                                            : "bitand.sext");
+                L = builder.CreateIntCast(
+                    L,
+                    R->getType(),
+                    !useUnsignedIntOps,
+                    useUnsignedIntOps ? "bitand.zext" : "bitand.sext");
         }
         switch(node->op)
         {
@@ -844,18 +922,20 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     {
         if(!lhsIsString || !rhsIsString)
         {
-            reportError(node->line,
-                        "string concatenation requires both operands to be "
-                        "string types");
+            reportError(
+                node->line,
+                "string concatenation requires both operands to be "
+                "string types");
             return nullptr;
         }
         if(!sameStringRuntimeKind)
         {
-            reportError(node->line,
-                        "string concatenation requires matching operand types "
-                        "(got '" +
-                            typeKindName(lhsKind) + "' and '" +
-                            typeKindName(rhsKind) + "')");
+            reportError(
+                node->line,
+                "string concatenation requires matching operand types "
+                "(got '" +
+                    typeKindName(lhsKind) + "' and '" + typeKindName(rhsKind) +
+                    "')");
             return nullptr;
         }
         initializeStdlibFunctions();
@@ -874,8 +954,9 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         if(!lhsPtr->getType()->isPointerTy() ||
            !rhsPtr->getType()->isPointerTy())
         {
-            reportError(node->line,
-                        "invalid string operands for concatenation");
+            reportError(
+                node->line,
+                "invalid string operands for concatenation");
             return nullptr;
         }
 
@@ -892,9 +973,10 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     {
         if(!lhsIsString || !rhsIsString)
         {
-            reportError(node->line,
-                        "string operations require both operands to be string "
-                        "types");
+            reportError(
+                node->line,
+                "string operations require both operands to be string "
+                "types");
             return nullptr;
         }
         if(!sameStringRuntimeKind)
@@ -914,9 +996,10 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                                  node->op == BinaryOpNode::OP_GE;
         if(!isStringCompareOp)
         {
-            reportError(node->line,
-                        "only '+', '==', '!=', '<', '<=', '>', '>=' are "
-                        "supported for string operands");
+            reportError(
+                node->line,
+                "only '+', '==', '!=', '<', '<=', '>', '>=' are "
+                "supported for string operands");
             return nullptr;
         }
 
@@ -943,7 +1026,9 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         if(node->op == BinaryOpNode::OP_EQ || node->op == BinaryOpNode::OP_NE)
         {
             llvm::FunctionType* eqFnType = llvm::FunctionType::get(
-                llvm::Type::getInt32Ty(context), {ptrType, ptrType}, false);
+                llvm::Type::getInt32Ty(context),
+                {ptrType, ptrType},
+                false);
             const char* eqName = lhsKind == TypeNode::TYPE_STR16
                                      ? "__mlang_std_strbuf_eq16"
                                      : "__mlang_std_strbuf_eq";
@@ -961,7 +1046,9 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         }
 
         llvm::FunctionType* cmpFnType = llvm::FunctionType::get(
-            llvm::Type::getInt64Ty(context), {ptrType, ptrType}, false);
+            llvm::Type::getInt64Ty(context),
+            {ptrType, ptrType},
+            false);
         const char* cmpName = lhsKind == TypeNode::TYPE_STR16
                                   ? "__mlang_std_strbuf_compare16"
                                   : "__mlang_std_strbuf_compare";
@@ -1020,9 +1107,10 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
 
     if(!LIsNumeric || !RIsNumeric)
     {
-        reportError(node->line,
-                    "binary operations require numeric operands (integer or "
-                    "floating-point)");
+        reportError(
+            node->line,
+            "binary operations require numeric operands (integer or "
+            "floating-point)");
         return nullptr;
     }
 
@@ -1037,13 +1125,19 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             // Extend the smaller type to match the larger type
             if(LBits > RBits)
             {
-                R = builder.CreateIntCast(R, L->getType(), !useUnsignedIntOps,
-                                          useUnsignedIntOps ? "zext" : "sext");
+                R = builder.CreateIntCast(
+                    R,
+                    L->getType(),
+                    !useUnsignedIntOps,
+                    useUnsignedIntOps ? "zext" : "sext");
             }
             else
             {
-                L = builder.CreateIntCast(L, R->getType(), !useUnsignedIntOps,
-                                          useUnsignedIntOps ? "zext" : "sext");
+                L = builder.CreateIntCast(
+                    L,
+                    R->getType(),
+                    !useUnsignedIntOps,
+                    useUnsignedIntOps ? "zext" : "sext");
             }
         }
     }
@@ -1247,39 +1341,58 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
                     if(!accumulator->getType()->isIntegerTy(1) ||
                        !value->getType()->isIntegerTy(1))
                     {
-                        reportError(node->line,
-                                    "logical parameter-pack fold requires bool values");
+                        reportError(
+                            node->line,
+                            "logical parameter-pack fold requires bool values");
                         return nullptr;
                     }
-                    accumulator = node->op == BinaryOpNode::OP_AND
-                        ? builder.CreateAnd(accumulator, value, "pack.fold.and")
-                        : builder.CreateOr(accumulator, value, "pack.fold.or");
+                    accumulator =
+                        node->op == BinaryOpNode::OP_AND
+                            ? builder.CreateAnd(
+                                  accumulator,
+                                  value,
+                                  "pack.fold.and")
+                            : builder
+                                  .CreateOr(accumulator, value, "pack.fold.or");
                 }
-                else if(node->op == BinaryOpNode::OP_PLUS ||
-                        node->op == BinaryOpNode::OP_MULTIPLY)
+                else if(
+                    node->op == BinaryOpNode::OP_PLUS ||
+                    node->op == BinaryOpNode::OP_MULTIPLY)
                 {
                     if(accumulator->getType() != value->getType())
                     {
-                        reportError(node->line,
-                                    "numeric parameter-pack fold requires matching types");
+                        reportError(
+                            node->line,
+                            "numeric parameter-pack fold requires matching "
+                            "types");
                         return nullptr;
                     }
                     if(accumulator->getType()->isFloatingPointTy())
                         accumulator = node->op == BinaryOpNode::OP_PLUS
-                            ? builder.CreateFAdd(accumulator, value,
-                                                 "pack.fold.add")
-                            : builder.CreateFMul(accumulator, value,
-                                                 "pack.fold.mul");
+                                          ? builder.CreateFAdd(
+                                                accumulator,
+                                                value,
+                                                "pack.fold.add")
+                                          : builder.CreateFMul(
+                                                accumulator,
+                                                value,
+                                                "pack.fold.mul");
                     else if(accumulator->getType()->isIntegerTy())
                         accumulator = node->op == BinaryOpNode::OP_PLUS
-                            ? builder.CreateAdd(accumulator, value,
+                                          ? builder.CreateAdd(
+                                                accumulator,
+                                                value,
                                                 "pack.fold.add")
-                            : builder.CreateMul(accumulator, value,
+                                          : builder.CreateMul(
+                                                accumulator,
+                                                value,
                                                 "pack.fold.mul");
                     else
                     {
-                        reportError(node->line,
-                                    "numeric parameter-pack fold requires numeric values");
+                        reportError(
+                            node->line,
+                            "numeric parameter-pack fold requires numeric "
+                            "values");
                         return nullptr;
                     }
                 }
@@ -1297,8 +1410,9 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
     auto* listId = dynamic_cast<IdentifierNode*>(node->packExpr);
     if(!listId)
     {
-        reportError(node->line,
-                    "fold expression currently requires a list variable");
+        reportError(
+            node->line,
+            "fold expression currently requires a list variable");
         return nullptr;
     }
 
@@ -1312,8 +1426,9 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
     auto elemTypeIt = listElementTypes.find(listId->name);
     if(elemTypeIt == listElementTypes.end() || !elemTypeIt->second)
     {
-        reportError(node->line,
-                    "cannot infer element type for fold expression");
+        reportError(
+            node->line,
+            "cannot infer element type for fold expression");
         return nullptr;
     }
 
@@ -1326,8 +1441,9 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
     {
         if(!(elemType->isIntegerTy() || elemType->isFloatingPointTy()))
         {
-            reportError(node->line,
-                        "fold '+'/'*' requires numeric list elements");
+            reportError(
+                node->line,
+                "fold '+'/'*' requires numeric list elements");
             return nullptr;
         }
     }
@@ -1396,13 +1512,16 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
         if(v->getType()->isIntegerTy(1))
             return v;
         if(v->getType()->isIntegerTy())
-            return builder.CreateICmpNE(
-                v, llvm::ConstantInt::get(v->getType(), 0), name);
+            return builder
+                .CreateICmpNE(v, llvm::ConstantInt::get(v->getType(), 0), name);
         if(v->getType()->isFloatingPointTy())
             return builder.CreateFCmpONE(
-                v, llvm::ConstantFP::get(v->getType(), 0.0), name);
-        reportError(node->line,
-                    "logical fold requires numeric or boolean list elements");
+                v,
+                llvm::ConstantFP::get(v->getType(), 0.0),
+                name);
+        reportError(
+            node->line,
+            "logical fold requires numeric or boolean list elements");
         return static_cast<llvm::Value*>(nullptr);
     };
 
@@ -1431,8 +1550,10 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
         builder.CreateLoad(i64Type, idxAlloca, "fold.idx.cur");
     llvm::Value* cond = nullptr;
     if(node->isRightFold)
-        cond = builder.CreateICmpSGT(idxVal, llvm::ConstantInt::get(i64Type, 0),
-                                     "fold.cond.right");
+        cond = builder.CreateICmpSGT(
+            idxVal,
+            llvm::ConstantInt::get(i64Type, 0),
+            "fold.cond.right");
     else
         cond = builder.CreateICmpSLT(idxVal, lenVal, "fold.cond.left");
     builder.CreateCondBr(cond, bodyBB, endBB);
@@ -1441,8 +1562,10 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
     llvm::Value* elemIdx = idxVal;
     if(node->isRightFold)
     {
-        elemIdx = builder.CreateSub(idxVal, llvm::ConstantInt::get(i64Type, 1),
-                                    "fold.elem.idx");
+        elemIdx = builder.CreateSub(
+            idxVal,
+            llvm::ConstantInt::get(i64Type, 1),
+            "fold.elem.idx");
     }
     llvm::Value* elemPtr =
         builder.CreateGEP(elemType, dataPtr, elemIdx, "fold.elem.ptr");
@@ -1485,12 +1608,15 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
     }
 
     builder.CreateStore(nextAcc, accAlloca);
-    llvm::Value* nextIdx =
-        node->isRightFold
-            ? builder.CreateSub(idxVal, llvm::ConstantInt::get(i64Type, 1),
-                                "fold.idx.next")
-            : builder.CreateAdd(idxVal, llvm::ConstantInt::get(i64Type, 1),
-                                "fold.idx.next");
+    llvm::Value* nextIdx = node->isRightFold
+                               ? builder.CreateSub(
+                                     idxVal,
+                                     llvm::ConstantInt::get(i64Type, 1),
+                                     "fold.idx.next")
+                               : builder.CreateAdd(
+                                     idxVal,
+                                     llvm::ConstantInt::get(i64Type, 1),
+                                     "fold.idx.next");
     builder.CreateStore(nextIdx, idxAlloca);
     builder.CreateBr(condBB);
 
@@ -1522,32 +1648,35 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
             if(traitIt == structImplementedTraits.end() ||
                traitIt->second.find(traitName) == traitIt->second.end())
             {
-                reportError(node->line, "struct '" + structTypeName +
-                                            "' must implement trait '" +
-                                            traitName + "' to use unary '-'");
+                reportError(
+                    node->line,
+                    "struct '" + structTypeName + "' must implement trait '" +
+                        traitName + "' to use unary '-'");
                 return nullptr;
             }
 
             auto structIt = structMethods.find(structTypeName);
             if(structIt == structMethods.end())
             {
-                reportError(node->line,
-                            "struct '" + structTypeName + "' has no methods");
+                reportError(
+                    node->line,
+                    "struct '" + structTypeName + "' has no methods");
                 return nullptr;
             }
             auto methodIt = structIt->second.find(methodName);
             if(methodIt == structIt->second.end() || !methodIt->second.second)
             {
-                reportError(node->line, "trait '" + traitName +
-                                            "' on struct '" + structTypeName +
-                                            "' requires method '" + methodName +
-                                            "'");
+                reportError(
+                    node->line,
+                    "trait '" + traitName + "' on struct '" + structTypeName +
+                        "' requires method '" + methodName + "'");
                 return nullptr;
             }
             if(methodIt->second.second->isStatic)
             {
-                reportError(node->line, "trait method '" + methodName +
-                                            "' must not be static");
+                reportError(
+                    node->line,
+                    "trait method '" + methodName + "' must not be static");
                 return nullptr;
             }
 
@@ -1642,17 +1771,20 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
             }
             if(callee->arg_size() != 1)
             {
-                reportError(node->line,
-                            "trait method '" + methodName +
-                                "' for unary '-' must take no arguments");
+                reportError(
+                    node->line,
+                    "trait method '" + methodName +
+                        "' for unary '-' must take no arguments");
                 return nullptr;
             }
 
             llvm::Value* selfPtr = getLValuePointer(node->operand, node->line);
             if(!selfPtr)
             {
-                selfPtr = builder.CreateAlloca(value->getType(), nullptr,
-                                               "traitneg.self.tmp");
+                selfPtr = builder.CreateAlloca(
+                    value->getType(),
+                    nullptr,
+                    "traitneg.self.tmp");
                 builder.CreateStore(value, selfPtr);
             }
 
@@ -1660,10 +1792,11 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
                 builder.CreateCall(callee, {selfPtr}, "traitneg.call");
             if(res->getType() != value->getType())
             {
-                reportError(node->line,
-                            "trait method '" + methodName +
-                                "' used by unary '-' must return the receiver "
-                                "type");
+                reportError(
+                    node->line,
+                    "trait method '" + methodName +
+                        "' used by unary '-' must return the receiver "
+                        "type");
                 return nullptr;
             }
             return res;
@@ -1690,19 +1823,23 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
         if(value->getType()->isIntegerTy())
         {
             llvm::Value* asBool = builder.CreateICmpNE(
-                value, llvm::ConstantInt::get(value->getType(), 0), "not.bool");
+                value,
+                llvm::ConstantInt::get(value->getType(), 0),
+                "not.bool");
             return builder.CreateNot(asBool, "nottmp");
         }
         if(value->getType()->isFloatingPointTy())
         {
             llvm::Value* asBool = builder.CreateFCmpONE(
-                value, llvm::ConstantFP::get(value->getType(), 0.0),
+                value,
+                llvm::ConstantFP::get(value->getType(), 0.0),
                 "not.bool");
             return builder.CreateNot(asBool, "nottmp");
         }
 
-        reportError(node->line,
-                    "unary '!' requires boolean or numeric operand");
+        reportError(
+            node->line,
+            "unary '!' requires boolean or numeric operand");
         return nullptr;
     }
     case UnaryOpNode::OP_BITNOT:
@@ -1819,8 +1956,9 @@ llvm::Value* CodeGenerator::generateUpdateExpression(UpdateExpressionNode* node)
     auto* structTy = llvm::dyn_cast<llvm::StructType>(ty);
     if(!structTy || !structTy->hasName())
     {
-        reportError(node->line,
-                    "++/-- requires a numeric operand or trait-based struct");
+        reportError(
+            node->line,
+            "++/-- requires a numeric operand or trait-based struct");
         return nullptr;
     }
     const std::string structTypeName = structTy->getName().str();
@@ -1829,39 +1967,45 @@ llvm::Value* CodeGenerator::generateUpdateExpression(UpdateExpressionNode* node)
     if(traitIt == structImplementedTraits.end() ||
        traitIt->second.find(traitName) == traitIt->second.end())
     {
-        reportError(node->line, "struct '" + structTypeName +
-                                    "' must implement trait '" + traitName +
-                                    "' to use " + (isInc ? "++" : "--"));
+        reportError(
+            node->line,
+            "struct '" + structTypeName + "' must implement trait '" +
+                traitName + "' to use " + (isInc ? "++" : "--"));
         return nullptr;
     }
 
     auto structIt = structMethods.find(structTypeName);
     if(structIt == structMethods.end())
     {
-        reportError(node->line,
-                    "struct '" + structTypeName + "' has no methods");
+        reportError(
+            node->line,
+            "struct '" + structTypeName + "' has no methods");
         return nullptr;
     }
     auto methodIt = structIt->second.find(methodName);
     if(methodIt == structIt->second.end())
     {
-        reportError(node->line, "trait '" + traitName + "' on struct '" +
-                                    structTypeName + "' requires method '" +
-                                    methodName + "'");
+        reportError(
+            node->line,
+            "trait '" + traitName + "' on struct '" + structTypeName +
+                "' requires method '" + methodName + "'");
         return nullptr;
     }
 
     StructMethodNode* methodNode = methodIt->second.second;
     if(!methodNode)
     {
-        reportError(node->line, "invalid method metadata for '" +
-                                    structTypeName + "::" + methodName + "'");
+        reportError(
+            node->line,
+            "invalid method metadata for '" + structTypeName +
+                "::" + methodName + "'");
         return nullptr;
     }
     if(methodNode->isStatic)
     {
-        reportError(node->line,
-                    "trait method '" + methodName + "' must not be static");
+        reportError(
+            node->line,
+            "trait method '" + methodName + "' must not be static");
         return nullptr;
     }
 
@@ -1972,9 +2116,10 @@ llvm::Value* CodeGenerator::generateUpdateExpression(UpdateExpressionNode* node)
         llvm::Value* callVal = builder.CreateCall(callee, args, "upd.new");
         if(callVal->getType() != ty)
         {
-            reportError(node->line,
-                        "trait method '" + methodName +
-                            "' must return void or the receiver type");
+            reportError(
+                node->line,
+                "trait method '" + methodName +
+                    "' must return void or the receiver type");
             return nullptr;
         }
         builder.CreateStore(callVal, ptr);
@@ -1995,13 +2140,16 @@ llvm::Value* CodeGenerator::generateShortCircuitLogicalOp(BinaryOpNode* node)
         if(v->getType()->isIntegerTy(1))
             return v;
         if(v->getType()->isIntegerTy())
-            return builder.CreateICmpNE(
-                v, llvm::ConstantInt::get(v->getType(), 0), name);
+            return builder
+                .CreateICmpNE(v, llvm::ConstantInt::get(v->getType(), 0), name);
         if(v->getType()->isFloatingPointTy())
             return builder.CreateFCmpONE(
-                v, llvm::ConstantFP::get(v->getType(), 0.0), name);
-        reportError(node->line,
-                    "logical operations require numeric or boolean operands");
+                v,
+                llvm::ConstantFP::get(v->getType(), 0.0),
+                name);
+        reportError(
+            node->line,
+            "logical operations require numeric or boolean operands");
         return nullptr;
     };
 
@@ -2021,7 +2169,9 @@ llvm::Value* CodeGenerator::generateShortCircuitLogicalOp(BinaryOpNode* node)
     llvm::Function* function = builder.GetInsertBlock()->getParent();
     llvm::BasicBlock* lhsEnd = builder.GetInsertBlock();
     llvm::BasicBlock* rhsBB = llvm::BasicBlock::Create(
-        context, isAnd ? "and.rhs" : "or.rhs", function);
+        context,
+        isAnd ? "and.rhs" : "or.rhs",
+        function);
     llvm::BasicBlock* mergeBB =
         llvm::BasicBlock::Create(context, isAnd ? "and.end" : "or.end");
     if(isAnd)
@@ -2044,8 +2194,8 @@ llvm::Value* CodeGenerator::generateShortCircuitLogicalOp(BinaryOpNode* node)
 
     mergeBB->insertInto(function);
     builder.SetInsertPoint(mergeBB);
-    llvm::PHINode* phi = builder.CreatePHI(builder.getInt1Ty(), 2,
-                                           isAnd ? "andtmp" : "ortmp");
+    llvm::PHINode* phi =
+        builder.CreatePHI(builder.getInt1Ty(), 2, isAnd ? "andtmp" : "ortmp");
     phi->addIncoming(isAnd ? builder.getFalse() : builder.getTrue(), lhsEnd);
     if(rhsFallsThrough)
         phi->addIncoming(Rb, rhsEnd);
@@ -2068,8 +2218,9 @@ llvm::Value* CodeGenerator::generateShortCircuitLogicalOp(BinaryOpNode* node)
     return phi;
 }
 
-llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
-                                                      TypeNode* expectedType)
+llvm::Value* CodeGenerator::generateTernaryExpression(
+    TernaryNode* node,
+    TypeNode* expectedType)
 {
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
@@ -2108,13 +2259,15 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
         if(condValue->getType()->isFloatingPointTy())
         {
             condValue = builder.CreateFCmpONE(
-                condValue, llvm::ConstantFP::get(condValue->getType(), 0.0),
+                condValue,
+                llvm::ConstantFP::get(condValue->getType(), 0.0),
                 "ternary.cond");
         }
         else
         {
             condValue = builder.CreateICmpNE(
-                condValue, llvm::ConstantInt::get(condValue->getType(), 0),
+                condValue,
+                llvm::ConstantInt::get(condValue->getType(), 0),
                 "ternary.cond");
         }
     }
@@ -2267,9 +2420,10 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
                        ? "struct"
                        : elseVal->getType()->getStructName().str())
                 : (elseVal->getType()->isPointerTy() ? "pointer" : "value");
-        reportError(node->line,
-                    "ternary branches must return the same type (got " + t0 +
-                        " and " + t1 + ")");
+        reportError(
+            node->line,
+            "ternary branches must return the same type (got " + t0 + " and " +
+                t1 + ")");
         return nullptr;
     }
     if(commonType->isVoidTy())
@@ -2280,7 +2434,8 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
 
     if(thenVal->getType() != commonType)
     {
-        llvm::IRBuilder<> castBuilder(mlang::llvm_compat::terminatorOrNull(thenEnd));
+        llvm::IRBuilder<> castBuilder(
+            mlang::llvm_compat::terminatorOrNull(thenEnd));
         llvm::Type* src = thenVal->getType();
         if(src->isIntegerTy() && commonType->isIntegerTy())
         {
@@ -2307,7 +2462,8 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
 
     if(elseVal->getType() != commonType)
     {
-        llvm::IRBuilder<> castBuilder(mlang::llvm_compat::terminatorOrNull(elseEnd));
+        llvm::IRBuilder<> castBuilder(
+            mlang::llvm_compat::terminatorOrNull(elseEnd));
         llvm::Type* src = elseVal->getType();
         if(src->isIntegerTy() && commonType->isIntegerTy())
         {
@@ -2365,11 +2521,12 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
     pointerBorrowPlace = std::move(mergedPointerBorrowPlace);
 
     aggregateBorrowPlaces = incomingAggregateBorrowPlaces;
-    auto mergeBorrowPlaces = [&](const auto& branchPlaces) {
+    auto mergeBorrowPlaces = [&](const auto& branchPlaces)
+    {
         for(const auto& borrower : branchPlaces)
             for(const auto& owner : borrower.second)
-                aggregateBorrowPlaces[borrower.first][owner.first].insert(
-                    owner.second.begin(), owner.second.end());
+                aggregateBorrowPlaces[borrower.first][owner.first]
+                    .insert(owner.second.begin(), owner.second.end());
     };
     mergeBorrowPlaces(thenAggregateBorrowPlaces);
     mergeBorrowPlaces(elseAggregateBorrowPlaces);
@@ -2378,7 +2535,8 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
     for(auto it = pointerBorrowParent.begin(); it != pointerBorrowParent.end();)
     {
         auto other = elsePointerBorrowParent.find(it->first);
-        if(other == elsePointerBorrowParent.end() || other->second != it->second)
+        if(other == elsePointerBorrowParent.end() ||
+           other->second != it->second)
             it = pointerBorrowParent.erase(it);
         else
             ++it;
@@ -2404,7 +2562,8 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
 
     auto mergeJoinedPointerPlaces = [&](const auto& branchTargets,
                                         const auto& branchPlaces,
-                                        const auto& branchMutBorrowers) {
+                                        const auto& branchMutBorrowers)
+    {
         for(const auto& borrow : branchMutBorrowers)
         {
             const std::string& pointer = borrow.second;
@@ -2420,10 +2579,14 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
             aggregateBorrowPlaces[pointer][owner].insert(ownerPlace);
         }
     };
-    mergeJoinedPointerPlaces(thenPointerBorrowTarget, thenPointerBorrowPlace,
-                             thenActiveMutBorrower);
-    mergeJoinedPointerPlaces(elsePointerBorrowTarget, elsePointerBorrowPlace,
-                             elseActiveMutBorrower);
+    mergeJoinedPointerPlaces(
+        thenPointerBorrowTarget,
+        thenPointerBorrowPlace,
+        thenActiveMutBorrower);
+    mergeJoinedPointerPlaces(
+        elsePointerBorrowTarget,
+        elsePointerBorrowPlace,
+        elseActiveMutBorrower);
 
     return phi;
 }
@@ -2485,8 +2648,10 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     llvm::Type* expectedRetType = currentFunc->getReturnType();
     if(!expectedRetType->isStructTy())
     {
-        reportError(node->line, "operator '?' can only be used in functions "
-                                "returning result<_, _>");
+        reportError(
+            node->line,
+            "operator '?' can only be used in functions "
+            "returning result<_, _>");
         return nullptr;
     }
 
@@ -2495,8 +2660,10 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     auto expectedMembersIt = structMembers.find(expectedStructName);
     if(expectedMembersIt == structMembers.end())
     {
-        reportError(node->line, "operator '?' can only be used in functions "
-                                "returning result<_, _>");
+        reportError(
+            node->line,
+            "operator '?' can only be used in functions "
+            "returning result<_, _>");
         return nullptr;
     }
 
@@ -2521,8 +2688,10 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     if(expectedIsOkIndex < 0 || expectedOkIndex < 0 || expectedErrIndex < 0 ||
        !expectedErrType)
     {
-        reportError(node->line, "operator '?' can only be used in functions "
-                                "returning result<_, _>");
+        reportError(
+            node->line,
+            "operator '?' can only be used in functions "
+            "returning result<_, _>");
         return nullptr;
     }
 
@@ -2537,8 +2706,9 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     llvm::Type* okLlvmType = getLLVMTypeFromNode(resultOkType);
     if(!okLlvmType)
     {
-        reportError(node->line,
-                    "operator '?': failed to resolve Ok payload type");
+        reportError(
+            node->line,
+            "operator '?': failed to resolve Ok payload type");
         return nullptr;
     }
     llvm::AllocaInst* okSlot =
@@ -2547,20 +2717,23 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     builder.CreateCondBr(isOkVal, okBB, errBB);
 
     builder.SetInsertPoint(okBB);
-    llvm::Value* okPayload = builder.CreateExtractValue(
-        resultValue, resultOkIndex, "try.ok.payload");
+    llvm::Value* okPayload =
+        builder
+            .CreateExtractValue(resultValue, resultOkIndex, "try.ok.payload");
     builder.CreateStore(okPayload, okSlot);
     builder.CreateBr(contBB);
 
     errBB->insertInto(function);
     builder.SetInsertPoint(errBB);
-    llvm::Value* errPayload = builder.CreateExtractValue(
-        resultValue, resultErrIndex, "try.err.payload");
+    llvm::Value* errPayload =
+        builder
+            .CreateExtractValue(resultValue, resultErrIndex, "try.err.payload");
     llvm::Type* expectedErrLlvmType = getLLVMTypeFromNode(expectedErrType);
     if(!expectedErrLlvmType)
     {
-        reportError(node->line,
-                    "operator '?': failed to resolve Err payload type");
+        reportError(
+            node->line,
+            "operator '?': failed to resolve Err payload type");
         return nullptr;
     }
 
@@ -2569,30 +2742,43 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
         if(errPayload->getType()->isIntegerTy() &&
            expectedErrLlvmType->isIntegerTy())
         {
-            errPayload = builder.CreateIntCast(errPayload, expectedErrLlvmType,
-                                               true, "try.err.cast");
+            errPayload = builder.CreateIntCast(
+                errPayload,
+                expectedErrLlvmType,
+                true,
+                "try.err.cast");
         }
-        else if(errPayload->getType()->isIntegerTy() &&
-                expectedErrLlvmType->isFloatingPointTy())
+        else if(
+            errPayload->getType()->isIntegerTy() &&
+            expectedErrLlvmType->isFloatingPointTy())
         {
-            errPayload = builder.CreateSIToFP(errPayload, expectedErrLlvmType,
-                                              "try.err.sitofp");
+            errPayload = builder.CreateSIToFP(
+                errPayload,
+                expectedErrLlvmType,
+                "try.err.sitofp");
         }
-        else if(errPayload->getType()->isFloatingPointTy() &&
-                expectedErrLlvmType->isFloatingPointTy())
+        else if(
+            errPayload->getType()->isFloatingPointTy() &&
+            expectedErrLlvmType->isFloatingPointTy())
         {
-            errPayload = builder.CreateFPCast(errPayload, expectedErrLlvmType,
-                                              "try.err.fpcast");
+            errPayload = builder.CreateFPCast(
+                errPayload,
+                expectedErrLlvmType,
+                "try.err.fpcast");
         }
-        else if(errPayload->getType()->isPointerTy() &&
-                expectedErrLlvmType->isPointerTy())
+        else if(
+            errPayload->getType()->isPointerTy() &&
+            expectedErrLlvmType->isPointerTy())
         {
-            errPayload = builder.CreateBitCast(errPayload, expectedErrLlvmType,
-                                               "try.err.ptrcast");
+            errPayload = builder.CreateBitCast(
+                errPayload,
+                expectedErrLlvmType,
+                "try.err.ptrcast");
         }
-        else if(errPayload->getType()->isStructTy() &&
-                expectedErrLlvmType->isStructTy() &&
-                errPayload->getType() == expectedErrLlvmType)
+        else if(
+            errPayload->getType()->isStructTy() &&
+            expectedErrLlvmType->isStructTy() &&
+            errPayload->getType() == expectedErrLlvmType)
         {
             // Same struct type, nothing to do.
         }
@@ -2623,20 +2809,27 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
         std::string tryContext = fnLabel + ":" + std::to_string(node->line);
         llvm::Value* ctxStr =
             Helpers::create_global_cstring(builder, tryContext, "try.ctx");
-        errPayload = builder.CreateCall(addContextFn, {errPayload, ctxStr},
-                                        "try.err.withctx");
+        errPayload = builder.CreateCall(
+            addContextFn,
+            {errPayload, ctxStr},
+            "try.err.withctx");
     }
 
     retResult = builder.CreateInsertValue(
-        retResult, llvm::ConstantInt::getFalse(context),
-        static_cast<unsigned>(expectedIsOkIndex), "try.ret.is_ok");
+        retResult,
+        llvm::ConstantInt::getFalse(context),
+        static_cast<unsigned>(expectedIsOkIndex),
+        "try.ret.is_ok");
     retResult = builder.CreateInsertValue(
         retResult,
         llvm::Constant::getNullValue(expectedRetType->getStructElementType(
             static_cast<unsigned>(expectedOkIndex))),
-        static_cast<unsigned>(expectedOkIndex), "try.ret.ok");
+        static_cast<unsigned>(expectedOkIndex),
+        "try.ret.ok");
     retResult = builder.CreateInsertValue(
-        retResult, errPayload, static_cast<unsigned>(expectedErrIndex),
+        retResult,
+        errPayload,
+        static_cast<unsigned>(expectedErrIndex),
         "try.ret.err");
     emitInoutWriteBack();
     emitAllActiveCleanups();

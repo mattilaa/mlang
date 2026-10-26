@@ -17,17 +17,22 @@ void CodeGenerator::initializeStdioFunctions()
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    llvm::FunctionType* printfType =
-        llvm::FunctionType::get(llvm::Type::getInt32Ty(context), {ptrType},
-                                true);
+    llvm::FunctionType* printfType = llvm::FunctionType::get(
+        llvm::Type::getInt32Ty(context),
+        {ptrType},
+        true);
     printfFunc = module->getOrInsertFunction("printf", printfType);
 
     llvm::FunctionType* fprintfType = llvm::FunctionType::get(
-        llvm::Type::getInt32Ty(context), {ptrType, ptrType}, true);
+        llvm::Type::getInt32Ty(context),
+        {ptrType, ptrType},
+        true);
     fprintfFunc = module->getOrInsertFunction("fprintf", fprintfType);
 
     llvm::FunctionType* snprintfType = llvm::FunctionType::get(
-        llvm::Type::getInt32Ty(context), {ptrType, int64Type, ptrType}, true);
+        llvm::Type::getInt32Ty(context),
+        {ptrType, int64Type, ptrType},
+        true);
     snprintfFunc = module->getOrInsertFunction("snprintf", snprintfType);
 
 #if defined(__APPLE__) || defined(__MACH__)
@@ -59,7 +64,9 @@ void CodeGenerator::initializePthreadFunctions()
     llvm::Type* intType = llvm::Type::getInt32Ty(context);
 
     llvm::FunctionType* pthreadCreateType = llvm::FunctionType::get(
-        intType, {ptrType, ptrType, ptrType, ptrType}, false);
+        intType,
+        {ptrType, ptrType, ptrType, ptrType},
+        false);
     pthreadCreateFunc =
         module->getOrInsertFunction("pthread_create", pthreadCreateType);
 
@@ -76,7 +83,8 @@ void CodeGenerator::initializePthreadFunctions()
     llvm::FunctionType* pthreadMutexDestroyType =
         llvm::FunctionType::get(intType, {ptrType}, false);
     pthreadMutexDestroyFunc = module->getOrInsertFunction(
-        "pthread_mutex_destroy", pthreadMutexDestroyType);
+        "pthread_mutex_destroy",
+        pthreadMutexDestroyType);
 
     llvm::FunctionType* pthreadMutexLockType =
         llvm::FunctionType::get(intType, {ptrType}, false);
@@ -86,22 +94,26 @@ void CodeGenerator::initializePthreadFunctions()
     llvm::FunctionType* pthreadMutexUnlockType =
         llvm::FunctionType::get(intType, {ptrType}, false);
     pthreadMutexUnlockFunc = module->getOrInsertFunction(
-        "pthread_mutex_unlock", pthreadMutexUnlockType);
+        "pthread_mutex_unlock",
+        pthreadMutexUnlockType);
 
     llvm::FunctionType* pthreadMutexAttrInitType =
         llvm::FunctionType::get(intType, {ptrType}, false);
     pthreadMutexAttrInitFunc = module->getOrInsertFunction(
-        "pthread_mutexattr_init", pthreadMutexAttrInitType);
+        "pthread_mutexattr_init",
+        pthreadMutexAttrInitType);
 
     llvm::FunctionType* pthreadMutexAttrSetTypeType =
         llvm::FunctionType::get(intType, {ptrType, intType}, false);
     pthreadMutexAttrSetTypeFunc = module->getOrInsertFunction(
-        "pthread_mutexattr_settype", pthreadMutexAttrSetTypeType);
+        "pthread_mutexattr_settype",
+        pthreadMutexAttrSetTypeType);
 
     llvm::FunctionType* pthreadMutexAttrDestroyType =
         llvm::FunctionType::get(intType, {ptrType}, false);
     pthreadMutexAttrDestroyFunc = module->getOrInsertFunction(
-        "pthread_mutexattr_destroy", pthreadMutexAttrDestroyType);
+        "pthread_mutexattr_destroy",
+        pthreadMutexAttrDestroyType);
 
     pthreadInitialized = true;
 }
@@ -125,7 +137,9 @@ void CodeGenerator::initializeStdlibFunctions()
     mallocFunc = module->getOrInsertFunction("malloc", mallocType);
 
     llvm::FunctionType* freeType = llvm::FunctionType::get(
-        llvm::Type::getVoidTy(context), {ptrType}, false);
+        llvm::Type::getVoidTy(context),
+        {ptrType},
+        false);
     freeFunc = module->getOrInsertFunction("free", freeType);
 
     llvm::FunctionType* strcmpType =
@@ -135,70 +149,85 @@ void CodeGenerator::initializeStdlibFunctions()
     llvm::FunctionType* jsonEscapeType =
         llvm::FunctionType::get(ptrType, {ptrType}, false);
     jsonEscapeFunc = module->getOrInsertFunction(
-        "__mlang_std_strbuf_json_escape", jsonEscapeType);
+        "__mlang_std_strbuf_json_escape",
+        jsonEscapeType);
 
     llvm::FunctionType* jsonParseType =
         llvm::FunctionType::get(int64Type, {ptrType}, false);
-    jsonParseFunc = module->getOrInsertFunction("__mlang_std_json_parse",
-                                                jsonParseType);
+    jsonParseFunc =
+        module->getOrInsertFunction("__mlang_std_json_parse", jsonParseType);
 
-    llvm::FunctionType* jsonDocFreeType =
-        llvm::FunctionType::get(llvm::Type::getVoidTy(context), {int64Type},
-                                false);
-    jsonDocFreeFunc = module->getOrInsertFunction("__mlang_std_json_doc_free",
-                                                  jsonDocFreeType);
+    llvm::FunctionType* jsonDocFreeType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(context),
+        {int64Type},
+        false);
+    jsonDocFreeFunc =
+        module
+            ->getOrInsertFunction("__mlang_std_json_doc_free", jsonDocFreeType);
 
     llvm::FunctionType* jsonLastErrorType =
         llvm::FunctionType::get(ptrType, {}, false);
     jsonLastErrorFunc = module->getOrInsertFunction(
-        "__mlang_std_json_last_error", jsonLastErrorType);
+        "__mlang_std_json_last_error",
+        jsonLastErrorType);
 
     llvm::FunctionType* jsonDocRootType =
         llvm::FunctionType::get(int64Type, {int64Type}, false);
-    jsonDocRootFunc = module->getOrInsertFunction("__mlang_std_json_doc_root",
-                                                  jsonDocRootType);
+    jsonDocRootFunc =
+        module
+            ->getOrInsertFunction("__mlang_std_json_doc_root", jsonDocRootType);
 
-    llvm::FunctionType* jsonValueFreeType =
-        llvm::FunctionType::get(llvm::Type::getVoidTy(context), {int64Type},
-                                false);
+    llvm::FunctionType* jsonValueFreeType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(context),
+        {int64Type},
+        false);
     jsonValueFreeFunc = module->getOrInsertFunction(
-        "__mlang_std_json_value_free", jsonValueFreeType);
+        "__mlang_std_json_value_free",
+        jsonValueFreeType);
 
     llvm::FunctionType* jsonValueKindType =
         llvm::FunctionType::get(intType, {int64Type}, false);
     jsonValueKindFunc = module->getOrInsertFunction(
-        "__mlang_std_json_value_kind", jsonValueKindType);
+        "__mlang_std_json_value_kind",
+        jsonValueKindType);
 
     llvm::FunctionType* jsonObjectGetType =
         llvm::FunctionType::get(int64Type, {int64Type, ptrType}, false);
     jsonObjectGetFunc = module->getOrInsertFunction(
-        "__mlang_std_json_object_get", jsonObjectGetType);
+        "__mlang_std_json_object_get",
+        jsonObjectGetType);
 
     llvm::FunctionType* jsonArrayGetType =
         llvm::FunctionType::get(int64Type, {int64Type, int64Type}, false);
     jsonArrayGetFunc = module->getOrInsertFunction(
-        "__mlang_std_json_array_get", jsonArrayGetType);
+        "__mlang_std_json_array_get",
+        jsonArrayGetType);
 
     llvm::FunctionType* jsonAsBoolType =
         llvm::FunctionType::get(intType, {int64Type}, false);
     jsonAsBoolFunc = module->getOrInsertFunction(
-        "__mlang_std_json_value_as_bool", jsonAsBoolType);
+        "__mlang_std_json_value_as_bool",
+        jsonAsBoolType);
 
     llvm::FunctionType* jsonAsI64Type =
         llvm::FunctionType::get(int64Type, {int64Type}, false);
     jsonAsI64Func = module->getOrInsertFunction(
-        "__mlang_std_json_value_as_i64", jsonAsI64Type);
+        "__mlang_std_json_value_as_i64",
+        jsonAsI64Type);
 
-    llvm::FunctionType* jsonAsF64Type =
-        llvm::FunctionType::get(llvm::Type::getDoubleTy(context), {int64Type},
-                                false);
+    llvm::FunctionType* jsonAsF64Type = llvm::FunctionType::get(
+        llvm::Type::getDoubleTy(context),
+        {int64Type},
+        false);
     jsonAsF64Func = module->getOrInsertFunction(
-        "__mlang_std_json_value_as_f64", jsonAsF64Type);
+        "__mlang_std_json_value_as_f64",
+        jsonAsF64Type);
 
     llvm::FunctionType* jsonAsStringType =
         llvm::FunctionType::get(ptrType, {int64Type}, false);
     jsonAsStringFunc = module->getOrInsertFunction(
-        "__mlang_std_json_value_as_string", jsonAsStringType);
+        "__mlang_std_json_value_as_string",
+        jsonAsStringType);
 
     llvm::FunctionType* abortType =
         llvm::FunctionType::get(llvm::Type::getVoidTy(context), {}, false);
@@ -207,12 +236,14 @@ void CodeGenerator::initializeStdlibFunctions()
     llvm::FunctionType* pushFrameType =
         llvm::FunctionType::get(int64Type, {}, false);
     exceptionsPushFrameFunc = module->getOrInsertFunction(
-        "__mlang_std_exceptions_push_frame", pushFrameType);
+        "__mlang_std_exceptions_push_frame",
+        pushFrameType);
 
     llvm::FunctionType* frameEnvType =
         llvm::FunctionType::get(ptrType, {int64Type}, false);
     exceptionsFrameEnvFunc = module->getOrInsertFunction(
-        "__mlang_std_exceptions_frame_env", frameEnvType);
+        "__mlang_std_exceptions_frame_env",
+        frameEnvType);
 
     llvm::FunctionType* setjmpType =
         llvm::FunctionType::get(intType, {ptrType}, false);
@@ -224,31 +255,40 @@ void CodeGenerator::initializeStdlibFunctions()
     }
 
     llvm::FunctionType* popFrameType = llvm::FunctionType::get(
-        llvm::Type::getVoidTy(context), {int64Type}, false);
+        llvm::Type::getVoidTy(context),
+        {int64Type},
+        false);
     exceptionsPopFrameFunc = module->getOrInsertFunction(
-        "__mlang_std_exceptions_pop_frame", popFrameType);
+        "__mlang_std_exceptions_pop_frame",
+        popFrameType);
 
     llvm::FunctionType* throwType = llvm::FunctionType::get(
-        llvm::Type::getVoidTy(context), {ptrType, ptrType, intType}, false);
+        llvm::Type::getVoidTy(context),
+        {ptrType, ptrType, intType},
+        false);
     exceptionsThrowFunc =
         module->getOrInsertFunction("__mlang_std_exceptions_throw", throwType);
 
     llvm::FunctionType* rethrowType =
         llvm::FunctionType::get(llvm::Type::getVoidTy(context), {}, false);
     exceptionsRethrowFunc = module->getOrInsertFunction(
-        "__mlang_std_exceptions_rethrow_current", rethrowType);
+        "__mlang_std_exceptions_rethrow_current",
+        rethrowType);
 
     llvm::FunctionType* takeStringType =
         llvm::FunctionType::get(ptrType, {}, false);
     exceptionsTakeTypeNameFunc = module->getOrInsertFunction(
-        "__mlang_std_exceptions_take_type_name", takeStringType);
+        "__mlang_std_exceptions_take_type_name",
+        takeStringType);
     exceptionsTakeMessageFunc = module->getOrInsertFunction(
-        "__mlang_std_exceptions_take_message", takeStringType);
+        "__mlang_std_exceptions_take_message",
+        takeStringType);
 
     llvm::FunctionType* takeLineType =
         llvm::FunctionType::get(intType, {}, false);
     exceptionsTakeSourceLineFunc = module->getOrInsertFunction(
-        "__mlang_std_exceptions_take_source_line", takeLineType);
+        "__mlang_std_exceptions_take_source_line",
+        takeLineType);
 
     stdlibInitialized = true;
 }
@@ -259,9 +299,11 @@ void CodeGenerator::initializeFormatFunctions()
     initializeStdlibFunctions();
 }
 
-llvm::Value* CodeGenerator::buildAlignedString(llvm::Value* value,
-                                               llvm::Value* widthValue,
-                                               char align, int line)
+llvm::Value* CodeGenerator::buildAlignedString(
+    llvm::Value* value,
+    llvm::Value* widthValue,
+    char align,
+    int line)
 {
     initializeFormatFunctions();
 
@@ -276,8 +318,9 @@ llvm::Value* CodeGenerator::buildAlignedString(llvm::Value* value,
 
     if(!value->getType()->isPointerTy())
     {
-        reportError(line,
-                    "alignment format specifiers currently require a string");
+        reportError(
+            line,
+            "alignment format specifiers currently require a string");
 #if LLVM_VERSION_MAJOR >= 21
         return builder.CreateGlobalString("<format-error>");
 #else
@@ -299,7 +342,9 @@ llvm::Value* CodeGenerator::buildAlignedString(llvm::Value* value,
     if(!strbufAlignFunc)
     {
         llvm::FunctionType* alignType = llvm::FunctionType::get(
-            ptrType, {ptrType, int64Type, int32Type}, false);
+            ptrType,
+            {ptrType, int64Type, int32Type},
+            false);
         strbufAlignFunc =
             module->getOrInsertFunction("__mlang_std_strbuf_align", alignType);
     }
@@ -316,11 +361,13 @@ llvm::Value* CodeGenerator::buildAlignedString(llvm::Value* value,
         "fmt.align");
 }
 
-llvm::AllocaInst*
-CodeGenerator::createEntryBlockAlloca(llvm::Function* function,
-                                      llvm::Type* type, const std::string& name)
+llvm::AllocaInst* CodeGenerator::createEntryBlockAlloca(
+    llvm::Function* function,
+    llvm::Type* type,
+    const std::string& name)
 {
-    llvm::IRBuilder<> entryBuilder(&function->getEntryBlock(),
-                                   function->getEntryBlock().begin());
+    llvm::IRBuilder<> entryBuilder(
+        &function->getEntryBlock(),
+        function->getEntryBlock().begin());
     return entryBuilder.CreateAlloca(type, nullptr, name);
 }

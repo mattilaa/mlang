@@ -10,9 +10,9 @@ using mlang::ir_detail::common::Helpers;
 namespace
 {
 
-
-static std::string generateMangledName(const std::string& baseName,
-                                       const std::vector<TypeNode*>& typeArgs)
+static std::string generateMangledName(
+    const std::string& baseName,
+    const std::vector<TypeNode*>& typeArgs)
 {
     auto normalize_type_name = [](const std::string& n) -> std::string
     {
@@ -111,9 +111,10 @@ static std::string generateMangledName(const std::string& baseName,
 } // namespace
 
 // Monomorphize a generic struct with concrete type arguments
-void CodeGenerator::monomorphizeStruct(const std::string& genericName,
-                                       const std::vector<TypeNode*>& typeArgs,
-                                       const std::string& mangledName)
+void CodeGenerator::monomorphizeStruct(
+    const std::string& genericName,
+    const std::vector<TypeNode*>& typeArgs,
+    const std::string& mangledName)
 {
     // Find the generic template
     auto templateIt = genericStructTemplates.find(genericName);
@@ -140,8 +141,13 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
     const std::string callerModule = currentModule;
     currentModule = templateStruct->sourceModule;
     const bool boundsSatisfied = validateTypeArgumentTraitBounds(
-        typeParams, templateStruct->typeParamTraitBounds, typeArgs, {}, 0,
-        "struct", genericName);
+        typeParams,
+        templateStruct->typeParamTraitBounds,
+        typeArgs,
+        {},
+        0,
+        "struct",
+        genericName);
     currentModule = callerModule;
     if(!boundsSatisfied)
     {
@@ -250,8 +256,14 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
         for(auto* impl : implIt->second)
         {
             if(!validateTypeArgumentTraitBounds(
-                   impl->typeParams, impl->typeParamTraitBounds, typeArgs, {},
-                   0, "impl", genericName, false))
+                   impl->typeParams,
+                   impl->typeParamTraitBounds,
+                   typeArgs,
+                   {},
+                   0,
+                   "impl",
+                   genericName,
+                   false))
             {
                 continue;
             }
@@ -263,7 +275,9 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
             {
                 // Substitute types in return type
                 TypeNode* newReturnType = substituteTypeParams(
-                    method->returnType, typeParams, typeArgs);
+                    method->returnType,
+                    typeParams,
+                    typeArgs);
 
                 // Substitute types in parameters
                 auto* newParams = new ParameterListNode();
@@ -277,8 +291,12 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
 
                 // Create monomorphized method node
                 auto* newMethod = new StructMethodNode(
-                    newReturnType, method->name, newParams, method->body,
-                    method->isPublic, method->isStatic);
+                    newReturnType,
+                    method->name,
+                    newParams,
+                    method->body,
+                    method->isPublic,
+                    method->isStatic);
                 newMethod->sourceModule = method->sourceModule;
                 newMethod->isSynthesizedPropertyAccessor =
                     method->isSynthesizedPropertyAccessor;
@@ -329,8 +347,12 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
 
             // Create a new method node with substituted types
             auto* newMethod = new StructMethodNode(
-                newReturnType, method->name, newParams, method->body,
-                method->isPublic, method->isStatic);
+                newReturnType,
+                method->name,
+                newParams,
+                method->body,
+                method->isPublic,
+                method->isStatic);
             newMethod->sourceModule = method->sourceModule;
             newMethod->isSynthesizedPropertyAccessor =
                 method->isSynthesizedPropertyAccessor;
@@ -363,7 +385,8 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
 // Monomorphize an impl block (Note: this is no longer called from
 // monomorphizeStruct but kept for potential future use)
 void CodeGenerator::monomorphizeImplBlock(
-    ImplBlockNode* impl, const std::vector<std::string>& typeParams,
+    ImplBlockNode* impl,
+    const std::vector<std::string>& typeParams,
     const std::vector<TypeNode*>& typeArgs,
     const std::string& mangledStructName)
 {
@@ -389,8 +412,12 @@ void CodeGenerator::monomorphizeImplBlock(
 
         // Create monomorphized method
         auto* newMethod = new StructMethodNode(
-            newReturnType, method->name, newParams, method->body,
-            method->isPublic, method->isStatic);
+            newReturnType,
+            method->name,
+            newParams,
+            method->body,
+            method->isPublic,
+            method->isStatic);
         newMethod->sourceModule = method->sourceModule;
         newMethod->isSynthesizedPropertyAccessor =
             method->isSynthesizedPropertyAccessor;
@@ -419,7 +446,8 @@ void CodeGenerator::monomorphizeImplBlock(
 
 // Get or create a monomorphized struct type
 std::string CodeGenerator::getOrCreateMonomorphizedStruct(
-    const std::string& genericName, const std::vector<TypeNode*>& typeArgs)
+    const std::string& genericName,
+    const std::vector<TypeNode*>& typeArgs)
 {
     // Generate the mangled name
     std::string mangledName = generateMangledName(genericName, typeArgs);
@@ -451,10 +479,10 @@ std::string CodeGenerator::getOrCreateMonomorphizedStruct(
 // Substitute type parameters with concrete types
 // e.g., if typeParams = ["T", "U"] and typeArgs = [i32, i64],
 // then a StructTypeRefNode("T") becomes a TypeNode(TYPE_I32)
-TypeNode*
-CodeGenerator::substituteTypeParams(TypeNode* type,
-                                    const std::vector<std::string>& typeParams,
-                                    const std::vector<TypeNode*>& typeArgs)
+TypeNode* CodeGenerator::substituteTypeParams(
+    TypeNode* type,
+    const std::vector<std::string>& typeParams,
+    const std::vector<TypeNode*>& typeArgs)
 {
     if(!type)
         return nullptr;
@@ -508,7 +536,8 @@ CodeGenerator::substituteTypeParams(TypeNode* type,
             substituteTypeParams(listType->elementType, typeParams, typeArgs);
         if(auto* multiarrayType = dynamic_cast<MultiArrayTypeNode*>(type))
             return new MultiArrayTypeNode(
-                newElemType, multiarrayType->capacity,
+                newElemType,
+                multiarrayType->capacity,
                 multiarrayType->elementsMutable);
         if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(type))
             return new ArrayTypeNode(newElemType, arrayType->capacity);
@@ -546,8 +575,10 @@ CodeGenerator::substituteTypeParams(TypeNode* type,
                     substituteTypeParams(parameter, typeParams, typeArgs));
         return new FunctionTypeNode(
             parameters,
-            substituteTypeParams(functionType->returnType, typeParams,
-                                 typeArgs));
+            substituteTypeParams(
+                functionType->returnType,
+                typeParams,
+                typeArgs));
     }
 
     // Basic types don't need substitution

@@ -10,7 +10,8 @@
 #include <stdexcept>
 #include <string_view>
 
-namespace {
+namespace
+{
 
 enum class VariantKeyword
 {
@@ -28,20 +29,22 @@ enum class VariantFamily
 };
 
 static constexpr std::array<std::pair<VariantKeyword, std::string_view>, 5>
-    kVariantKeywords {{{ VariantKeyword::Ok, "Ok" },
-                       { VariantKeyword::Err, "Err" },
-                       { VariantKeyword::Some, "Some" },
-                       { VariantKeyword::None, "None" },
-                       { VariantKeyword::Wildcard, "_" } }};
+    kVariantKeywords{
+        {{VariantKeyword::Ok, "Ok"},
+         {VariantKeyword::Err, "Err"},
+         {VariantKeyword::Some, "Some"},
+         {VariantKeyword::None, "None"},
+         {VariantKeyword::Wildcard, "_"}}};
 
 template <typename Enum, size_t N>
-static std::optional<Enum>
-find_enum_key(std::string_view key,
-              const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+static std::optional<Enum> find_enum_key(
+    std::string_view key,
+    const std::array<std::pair<Enum, std::string_view>, N>& mappings)
 {
-    const auto it =
-        std::find_if(mappings.begin(), mappings.end(),
-                     [&](const auto& entry) { return entry.second == key; });
+    const auto it = std::find_if(
+        mappings.begin(),
+        mappings.end(),
+        [&](const auto& entry) { return entry.second == key; });
     if(it == mappings.end())
         return std::nullopt;
     return it->first;
@@ -140,8 +143,10 @@ ASTNode* create_top_level_list_impl(ASTNode* item)
     auto list = new TopLevelListNode();
     if(auto* nested = dynamic_cast<TopLevelListNode*>(item))
     {
-        list->items.insert(list->items.end(), nested->items.begin(),
-                           nested->items.end());
+        list->items.insert(
+            list->items.end(),
+            nested->items.begin(),
+            nested->items.end());
     }
     else
     {
@@ -155,8 +160,10 @@ ASTNode* add_to_top_level_list_impl(ASTNode* list, ASTNode* item)
     auto topLevelList = static_cast<TopLevelListNode*>(list);
     if(auto* nested = dynamic_cast<TopLevelListNode*>(item))
     {
-        topLevelList->items.insert(topLevelList->items.end(),
-                                   nested->items.begin(), nested->items.end());
+        topLevelList->items.insert(
+            topLevelList->items.end(),
+            nested->items.begin(),
+            nested->items.end());
     }
     else
     {
@@ -179,14 +186,21 @@ ASTNode* add_function_to_list_impl(ASTNode* list, ASTNode* function)
     return func_list;
 }
 
-ASTNode* create_function_def_impl(ASTNode* type, char* name, ASTNode* params,
-                                  ASTNode* body, int is_public, int is_extern)
+ASTNode* create_function_def_impl(
+    ASTNode* type,
+    char* name,
+    ASTNode* params,
+    ASTNode* body,
+    int is_public,
+    int is_extern)
 {
-    return new FunctionDefNode(static_cast<TypeNode*>(type), std::string(name),
-                               static_cast<ParameterListNode*>(params),
-                               static_cast<StatementListNode*>(body),
-                               is_public != 0,
-                               is_extern != 0);
+    return new FunctionDefNode(
+        static_cast<TypeNode*>(type),
+        std::string(name),
+        static_cast<ParameterListNode*>(params),
+        static_cast<StatementListNode*>(body),
+        is_public != 0,
+        is_extern != 0);
 }
 
 ASTNode* create_type_node_impl(TypeNode::TypeKind type)
@@ -250,13 +264,17 @@ ASTNode* add_statement_impl(ASTNode* list, ASTNode* stmt)
 
 ASTNode* create_assignment_impl(char* name, ASTNode* expr, int line)
 {
-    auto* node = new AssignmentNode(std::string(name),
-                                    static_cast<ExpressionNode*>(expr));
+    auto* node = new AssignmentNode(
+        std::string(name),
+        static_cast<ExpressionNode*>(expr));
     node->line = line;
     return node;
 }
 
-ASTNode* create_deref_assignment_impl(ASTNode* pointer_expr, ASTNode* expr, int line)
+ASTNode* create_deref_assignment_impl(
+    ASTNode* pointer_expr,
+    ASTNode* expr,
+    int line)
 {
     auto* node = new DerefAssignmentNode(
         static_cast<ExpressionNode*>(pointer_expr),
@@ -316,7 +334,7 @@ ASTNode* create_identifier_at_impl(char* name, int line, int col)
 {
     auto* node = new IdentifierNode(std::string(name));
     node->line = line;
-    node->col  = col;
+    node->col = col;
     return node;
 }
 
@@ -390,11 +408,16 @@ ASTNode* create_binary_op_impl(int op, ASTNode* left, ASTNode* right)
     default:
         throw std::runtime_error("Unknown binary operator");
     }
-    return new BinaryOpNode(opType, static_cast<ExpressionNode*>(left),
-                            static_cast<ExpressionNode*>(right));
+    return new BinaryOpNode(
+        opType,
+        static_cast<ExpressionNode*>(left),
+        static_cast<ExpressionNode*>(right));
 }
 
-ASTNode* create_fold_expression_impl(int op, ASTNode* pack_expr, int is_right_fold)
+ASTNode* create_fold_expression_impl(
+    int op,
+    ASTNode* pack_expr,
+    int is_right_fold)
 {
     BinaryOpNode::OpType opType;
     switch(op)
@@ -417,9 +440,10 @@ ASTNode* create_fold_expression_impl(int op, ASTNode* pack_expr, int is_right_fo
     default:
         throw std::runtime_error("Unsupported fold operator");
     }
-    return new FoldExpressionNode(opType,
-                                  static_cast<ExpressionNode*>(pack_expr),
-                                  is_right_fold != 0);
+    return new FoldExpressionNode(
+        opType,
+        static_cast<ExpressionNode*>(pack_expr),
+        is_right_fold != 0);
 }
 
 ASTNode* create_unary_op_impl(int op, ASTNode* operand)
@@ -451,24 +475,33 @@ ASTNode* create_unary_op_impl(int op, ASTNode* operand)
     return new UnaryOpNode(opType, static_cast<ExpressionNode*>(operand));
 }
 
-ASTNode* create_update_expression_impl(int kind, int is_prefix, ASTNode* operand,
-                                       int line)
+ASTNode* create_update_expression_impl(
+    int kind,
+    int is_prefix,
+    ASTNode* operand,
+    int line)
 {
     UpdateExpressionNode::Kind opKind =
         (kind == 1) ? UpdateExpressionNode::KIND_DECREMENT
                     : UpdateExpressionNode::KIND_INCREMENT;
     auto* node = new UpdateExpressionNode(
-        opKind, is_prefix != 0, static_cast<ExpressionNode*>(operand));
+        opKind,
+        is_prefix != 0,
+        static_cast<ExpressionNode*>(operand));
     node->line = line;
     return node;
 }
 
-ASTNode* create_ternary_expression_impl(ASTNode* cond, ASTNode* t, ASTNode* f,
-                                   int line)
+ASTNode* create_ternary_expression_impl(
+    ASTNode* cond,
+    ASTNode* t,
+    ASTNode* f,
+    int line)
 {
-    auto* node = new TernaryNode(static_cast<ExpressionNode*>(cond),
-                                 static_cast<ExpressionNode*>(t),
-                                 static_cast<ExpressionNode*>(f));
+    auto* node = new TernaryNode(
+        static_cast<ExpressionNode*>(cond),
+        static_cast<ExpressionNode*>(t),
+        static_cast<ExpressionNode*>(f));
     node->line = line;
     return node;
 }
@@ -501,15 +534,19 @@ ASTNode* create_cexpr_expression_impl(ASTNode* expr, int line)
     return node;
 }
 
-ASTNode* create_inline_asm_impl(ASTNode* type, char* asm_text, char* arch_name,
-                                ASTNode* args, int is_volatile, int line)
+ASTNode* create_inline_asm_impl(
+    ASTNode* type,
+    char* asm_text,
+    char* arch_name,
+    ASTNode* args,
+    int is_volatile,
+    int line)
 {
-    auto* node = new InlineAsmNode(static_cast<TypeNode*>(type),
-                                   asm_text ? std::string(asm_text)
-                                            : std::string(),
-                                   arch_name ? std::string(arch_name)
-                                             : std::string(),
-                                   is_volatile != 0);
+    auto* node = new InlineAsmNode(
+        static_cast<TypeNode*>(type),
+        asm_text ? std::string(asm_text) : std::string(),
+        arch_name ? std::string(arch_name) : std::string(),
+        is_volatile != 0);
     node->line = line;
     if(args)
     {
@@ -521,16 +558,18 @@ ASTNode* create_inline_asm_impl(ASTNode* type, char* asm_text, char* arch_name,
 
 ASTNode* create_module_asm_impl(char* asm_text, char* arch_name, int line)
 {
-    auto* node = new ModuleAsmNode(asm_text ? std::string(asm_text)
-                                            : std::string(),
-                                   arch_name ? std::string(arch_name)
-                                             : std::string());
+    auto* node = new ModuleAsmNode(
+        asm_text ? std::string(asm_text) : std::string(),
+        arch_name ? std::string(arch_name) : std::string());
     node->line = line;
     return node;
 }
 
-ASTNode* create_function_call_impl(char* name, ASTNode* arg1, ASTNode* arg2,
-                              int line)
+ASTNode* create_function_call_impl(
+    char* name,
+    ASTNode* arg1,
+    ASTNode* arg2,
+    int line)
 {
     auto call = new FunctionCallNode(std::string(name));
     call->line = line;
@@ -565,8 +604,9 @@ ASTNode* create_format_argument_impl(char* name, ASTNode* value)
 {
     if(name && *name)
     {
-        return new FormatArgumentNode(std::string(name),
-                                      static_cast<ExpressionNode*>(value));
+        return new FormatArgumentNode(
+            std::string(name),
+            static_cast<ExpressionNode*>(value));
     }
     return new FormatArgumentNode(static_cast<ExpressionNode*>(value));
 }
@@ -603,21 +643,26 @@ ASTNode* create_function_call_multi_impl(char* name, ASTNode* args, int line)
     return call;
 }
 
-ASTNode* create_result_constructor_impl(char* variant, ASTNode* type_args,
-                                   ASTNode* args, int line)
+ASTNode* create_result_constructor_impl(
+    char* variant,
+    ASTNode* type_args,
+    ASTNode* args,
+    int line)
 {
     std::string variantStr = variant ? variant : "";
     const auto variantKey = find_enum_key(variantStr, kVariantKeywords);
     if(!variantKey.has_value() || *variantKey == VariantKeyword::Wildcard)
     {
-        fprintf(stderr, "Error (line %d): generic function calls are not "
-                        "supported\n",
-                line);
+        fprintf(
+            stderr,
+            "Error (line %d): generic function calls are not "
+            "supported\n",
+            line);
         return create_function_call_multi(variant, args, line);
     }
 
-    const bool isResult = *variantKey == VariantKeyword::Ok ||
-                          *variantKey == VariantKeyword::Err;
+    const bool isResult =
+        *variantKey == VariantKeyword::Ok || *variantKey == VariantKeyword::Err;
     const bool isOption = *variantKey == VariantKeyword::Some ||
                           *variantKey == VariantKeyword::None;
     const VariantFamily family =
@@ -629,9 +674,11 @@ ASTNode* create_result_constructor_impl(char* variant, ASTNode* type_args,
         auto* argList = static_cast<ArgumentListNode*>(args);
         if(*variantKey == VariantKeyword::None)
         {
-            fprintf(stderr,
-                    "Error (line %d): %s expects zero arguments\n",
-                    line, variantStr.c_str());
+            fprintf(
+                stderr,
+                "Error (line %d): %s expects zero arguments\n",
+                line,
+                variantStr.c_str());
         }
         else if(argList->args.size() == 1)
         {
@@ -639,62 +686,76 @@ ASTNode* create_result_constructor_impl(char* variant, ASTNode* type_args,
         }
         else
         {
-            fprintf(stderr, "Error (line %d): %s expects %s arguments\n", line,
-                    variantStr.c_str(),
-                    *variantKey == VariantKeyword::None ? "zero" : "one");
+            fprintf(
+                stderr,
+                "Error (line %d): %s expects %s arguments\n",
+                line,
+                variantStr.c_str(),
+                *variantKey == VariantKeyword::None ? "zero" : "one");
         }
     }
     else
     {
         if(*variantKey != VariantKeyword::None)
         {
-            fprintf(stderr,
-                    "Error (line %d): %s expects one argument\n",
-                    line, variantStr.c_str());
+            fprintf(
+                stderr,
+                "Error (line %d): %s expects one argument\n",
+                line,
+                variantStr.c_str());
         }
     }
 
     const char* flagField = isResult ? "is_ok" : "is_some";
     ASTNode* fields = create_struct_field_init_list(
-        strdup(flagField), create_bool_literal(*variantKey == VariantKeyword::Ok ||
-                                               *variantKey == VariantKeyword::Some));
+        strdup(flagField),
+        create_bool_literal(
+            *variantKey == VariantKeyword::Ok ||
+            *variantKey == VariantKeyword::Some));
 
     if(valueExpr)
     {
         if(*variantKey == VariantKeyword::Ok)
         {
-            fields =
-                add_struct_field_init(fields, strdup("ok"), valueExpr);
+            fields = add_struct_field_init(fields, strdup("ok"), valueExpr);
         }
         else if(*variantKey == VariantKeyword::Err)
         {
-            fields =
-                add_struct_field_init(fields, strdup("err"), valueExpr);
+            fields = add_struct_field_init(fields, strdup("err"), valueExpr);
         }
         else if(*variantKey == VariantKeyword::Some)
         {
-            fields =
-                add_struct_field_init(fields, strdup("value"), valueExpr);
+            fields = add_struct_field_init(fields, strdup("value"), valueExpr);
         }
     }
 
     return create_struct_literal(
         strdup(family == VariantFamily::Result ? "result" : "option"),
-                                 type_args, fields, line);
+        type_args,
+        fields,
+        line);
 }
 
-ASTNode* create_if_statement_impl(ASTNode* condition, ASTNode* then_branch,
-                             ASTNode* else_if_branch, ASTNode* else_branch)
+ASTNode* create_if_statement_impl(
+    ASTNode* condition,
+    ASTNode* then_branch,
+    ASTNode* else_if_branch,
+    ASTNode* else_branch)
 {
-    return create_if_statement_with_init(nullptr, condition, then_branch,
-                                         else_if_branch, else_branch);
+    return create_if_statement_with_init(
+        nullptr,
+        condition,
+        then_branch,
+        else_if_branch,
+        else_branch);
 }
 
-ASTNode* create_if_statement_with_init_impl(ASTNode* condition_init,
-                                            ASTNode* condition,
-                                       ASTNode* then_branch,
-                                       ASTNode* else_if_branch,
-                                       ASTNode* else_branch)
+ASTNode* create_if_statement_with_init_impl(
+    ASTNode* condition_init,
+    ASTNode* condition,
+    ASTNode* then_branch,
+    ASTNode* else_if_branch,
+    ASTNode* else_branch)
 {
     auto* thenBlock = dynamic_cast<BlockStatementNode*>(then_branch);
     auto* elseBlock = dynamic_cast<BlockStatementNode*>(else_branch);
@@ -705,29 +766,38 @@ ASTNode* create_if_statement_with_init_impl(ASTNode* condition_init,
         elseBlock ? elseBlock->statements
                   : dynamic_cast<StatementListNode*>(else_branch);
 
-    auto* ifNode = new IfNode(static_cast<StatementNode*>(condition_init),
-                              static_cast<ExpressionNode*>(condition), thenList,
-                              static_cast<IfNode*>(else_if_branch), elseList);
-    if (ifNode->conditionInit && ifNode->conditionInit->line <= 0) {
+    auto* ifNode = new IfNode(
+        static_cast<StatementNode*>(condition_init),
+        static_cast<ExpressionNode*>(condition),
+        thenList,
+        static_cast<IfNode*>(else_if_branch),
+        elseList);
+    if(ifNode->conditionInit && ifNode->conditionInit->line <= 0)
+    {
         int inferred_line = 0;
-        if (ifNode->thenBranch && !ifNode->thenBranch->statements.empty() &&
-            ifNode->thenBranch->statements[0] &&
-            ifNode->thenBranch->statements[0]->line > 1) {
+        if(ifNode->thenBranch && !ifNode->thenBranch->statements.empty() &&
+           ifNode->thenBranch->statements[0] &&
+           ifNode->thenBranch->statements[0]->line > 1)
+        {
             inferred_line = ifNode->thenBranch->statements[0]->line - 1;
-        } else if (ifNode->condition && ifNode->condition->line > 0) {
+        }
+        else if(ifNode->condition && ifNode->condition->line > 0)
+        {
             inferred_line = ifNode->condition->line;
         }
-        if (inferred_line > 0) {
+        if(inferred_line > 0)
+        {
             ifNode->conditionInit->line = inferred_line;
         }
     }
     return ifNode;
 }
 
-ASTNode* create_cexpr_if_statement_impl(ASTNode* condition,
-                                        ASTNode* then_branch,
-                                        ASTNode* else_if_branch,
-                                        ASTNode* else_branch)
+ASTNode* create_cexpr_if_statement_impl(
+    ASTNode* condition,
+    ASTNode* then_branch,
+    ASTNode* else_if_branch,
+    ASTNode* else_branch)
 {
     auto* thenBlock = dynamic_cast<BlockStatementNode*>(then_branch);
     auto* elseBlock = dynamic_cast<BlockStatementNode*>(else_branch);
@@ -737,27 +807,35 @@ ASTNode* create_cexpr_if_statement_impl(ASTNode* condition,
     StatementListNode* elseList =
         elseBlock ? elseBlock->statements
                   : dynamic_cast<StatementListNode*>(else_branch);
-    return new CexprIfNode(static_cast<ExpressionNode*>(condition), thenList,
-                           static_cast<CexprIfNode*>(else_if_branch),
-                           elseList);
+    return new CexprIfNode(
+        static_cast<ExpressionNode*>(condition),
+        thenList,
+        static_cast<CexprIfNode*>(else_if_branch),
+        elseList);
 }
 
 ASTNode* create_let_declaration_impl(ASTNode* type, char* name, ASTNode* expr)
 {
-    return new LetDeclNode(static_cast<TypeNode*>(type), std::string(name),
-                           static_cast<ExpressionNode*>(expr));
+    return new LetDeclNode(
+        static_cast<TypeNode*>(type),
+        std::string(name),
+        static_cast<ExpressionNode*>(expr));
 }
 
 ASTNode* create_cexpr_declaration_impl(ASTNode* type, char* name, ASTNode* expr)
 {
-    return new CexprDeclNode(static_cast<TypeNode*>(type), std::string(name),
-                             static_cast<ExpressionNode*>(expr));
+    return new CexprDeclNode(
+        static_cast<TypeNode*>(type),
+        std::string(name),
+        static_cast<ExpressionNode*>(expr));
 }
 
 ASTNode* create_var_declaration_impl(ASTNode* type, char* name, ASTNode* expr)
 {
-    return new VarDeclNode(static_cast<TypeNode*>(type), std::string(name),
-                           static_cast<ExpressionNode*>(expr));
+    return new VarDeclNode(
+        static_cast<TypeNode*>(type),
+        std::string(name),
+        static_cast<ExpressionNode*>(expr));
 }
 
 ASTNode* create_cast_expression_impl(int type, ASTNode* expr)
@@ -804,12 +882,15 @@ ASTNode* create_cast_expression_impl(int type, ASTNode* expr)
     default:
         throw std::runtime_error("Unsupported cast type");
     }
-    return new CastExpressionNode(targetType,
-                                  static_cast<ExpressionNode*>(expr));
+    return new CastExpressionNode(
+        targetType,
+        static_cast<ExpressionNode*>(expr));
 }
 
-ASTNode* create_narrow_cast_expression_impl(ASTNode* type, ASTNode* expr,
-                                            int line)
+ASTNode* create_narrow_cast_expression_impl(
+    ASTNode* type,
+    ASTNode* expr,
+    int line)
 {
     auto* target = dynamic_cast<TypeNode*>(type);
     auto* value = dynamic_cast<ExpressionNode*>(expr);
@@ -839,8 +920,8 @@ static std::string capitalizeFirst(const std::string& name)
     if(name.empty())
         return name;
     std::string out = name;
-    out[0] = static_cast<char>(std::toupper(
-        static_cast<unsigned char>(out[0])));
+    out[0] =
+        static_cast<char>(std::toupper(static_cast<unsigned char>(out[0])));
     return out;
 }
 
@@ -851,15 +932,17 @@ static TypeNode* cloneMemberType(TypeNode* t)
     if(auto* s = dynamic_cast<StructTypeRefNode*>(t))
         return new StructTypeRefNode(s->structName);
     if(auto* r = dynamic_cast<ReferenceTypeNode*>(t))
-        return new ReferenceTypeNode(cloneMemberType(r->elementType),
-                                     r->isMutable);
+        return new ReferenceTypeNode(
+            cloneMemberType(r->elementType),
+            r->isMutable);
     // Primitive / simple TypeNode — a shallow copy of kind is sufficient for
     // parameter / return type usage.
     return new TypeNode(t->kind);
 }
 
-static bool structHasMethodNamed(const StructDefNode* def,
-                                 const std::string& methodName)
+static bool structHasMethodNamed(
+    const StructDefNode* def,
+    const std::string& methodName)
 {
     if(!def || !def->members)
         return false;
@@ -871,8 +954,9 @@ static bool structHasMethodNamed(const StructDefNode* def,
     return false;
 }
 
-static void copyPropertyAccessorMetadata(StructMethodNode* method,
-                                         StructMemberNode* member)
+static void copyPropertyAccessorMetadata(
+    StructMethodNode* method,
+    StructMemberNode* member)
 {
     if(!method || !member)
         return;
@@ -909,7 +993,8 @@ static void synthesizePropertyMethods(StructDefNode* def)
 
         if(member->isMutexProperty && member->propertyLockFieldName.empty())
         {
-            member->propertyLockFieldName = makePropertyLockFieldName(member->name);
+            member->propertyLockFieldName =
+                makePropertyLockFieldName(member->name);
             auto* lockField = new StructMemberNode(
                 /*isVar=*/true,
                 new TypeNode(TypeNode::TYPE_I64),
@@ -925,19 +1010,20 @@ static void synthesizePropertyMethods(StructDefNode* def)
         // Getter: fn get<Member>(self: StructName) -> T { return self.<m>; }
         {
             auto* paramList = new ParameterListNode();
-            auto* selfParam = new ParameterNode(
-                new StructTypeRefNode(def->name), "self");
+            auto* selfParam =
+                new ParameterNode(new StructTypeRefNode(def->name), "self");
             paramList->parameters.push_back(selfParam);
 
             auto* body = new StatementListNode();
-            auto* access = new FieldAccessNode(std::string("self"),
-                                               member->name);
+            auto* access =
+                new FieldAccessNode(std::string("self"), member->name);
             body->statements.push_back(new ReturnNode(access));
 
             auto* getter = new StructMethodNode(
                 cloneMemberType(member->type),
                 std::string("get") + cap,
-                paramList, body,
+                paramList,
+                body,
                 /*isPublic=*/true,
                 /*isStatic=*/false);
             getter->sourceModule = def->sourceModule;
@@ -956,7 +1042,8 @@ static void synthesizePropertyMethods(StructDefNode* def)
         {
             auto* paramList = new ParameterListNode();
             auto* selfRefType = new ReferenceTypeNode(
-                new StructTypeRefNode(def->name), /*isMutable=*/true);
+                new StructTypeRefNode(def->name),
+                /*isMutable=*/true);
             auto* selfParam = new ParameterNode(selfRefType, "self");
             auto* valueParam =
                 new ParameterNode(cloneMemberType(member->type), "value");
@@ -966,13 +1053,16 @@ static void synthesizePropertyMethods(StructDefNode* def)
             auto* body = new StatementListNode();
             auto* valueExpr = new IdentifierNode("value");
             auto* assign = new FieldAssignmentNode(
-                std::string("self"), member->name, valueExpr);
+                std::string("self"),
+                member->name,
+                valueExpr);
             body->statements.push_back(assign);
 
             auto* setter = new StructMethodNode(
                 new TypeNode(TypeNode::TYPE_VOID),
                 std::string("set") + cap,
-                paramList, body,
+                paramList,
+                body,
                 /*isPublic=*/true,
                 /*isStatic=*/false);
             setter->sourceModule = def->sourceModule;
@@ -995,8 +1085,12 @@ static void synthesizeJsonSerdeMethods(StructDefNode* def)
         params->parameters.push_back(
             new ParameterNode(new StructTypeRefNode(def->name), "self"));
         auto* method = new StructMethodNode(
-            new TypeNode(TypeNode::TYPE_STR8), "to_json", params,
-            new StatementListNode(), /*isPublic=*/true, /*isStatic=*/false);
+            new TypeNode(TypeNode::TYPE_STR8),
+            "to_json",
+            params,
+            new StatementListNode(),
+            /*isPublic=*/true,
+            /*isStatic=*/false);
         method->sourceModule = def->sourceModule;
         method->isSynthesizedJsonSerializer = true;
         method->line = def->line;
@@ -1013,8 +1107,12 @@ static void synthesizeJsonSerdeMethods(StructDefNode* def)
         params->parameters.push_back(
             new ParameterNode(new TypeNode(TypeNode::TYPE_STR8), "json_text"));
         auto* method = new StructMethodNode(
-            resultType, "from_json", params, new StatementListNode(),
-            /*isPublic=*/true, /*isStatic=*/true);
+            resultType,
+            "from_json",
+            params,
+            new StatementListNode(),
+            /*isPublic=*/true,
+            /*isStatic=*/true);
         method->sourceModule = def->sourceModule;
         method->isSynthesizedJsonTextDeserializer = true;
         method->line = def->line;
@@ -1032,8 +1130,12 @@ static void synthesizeJsonSerdeMethods(StructDefNode* def)
         params->parameters.push_back(
             new ParameterNode(new TypeNode(TypeNode::TYPE_I64), "json_value"));
         auto* method = new StructMethodNode(
-            resultType, helperName, params, new StatementListNode(),
-            /*isPublic=*/false, /*isStatic=*/true);
+            resultType,
+            helperName,
+            params,
+            new StatementListNode(),
+            /*isPublic=*/false,
+            /*isStatic=*/true);
         method->sourceModule = def->sourceModule;
         method->isSynthesizedJsonValueDeserializer = true;
         method->line = def->line;
@@ -1041,14 +1143,21 @@ static void synthesizeJsonSerdeMethods(StructDefNode* def)
     }
 }
 
-ASTNode* create_struct_def_impl(char* name, char* base_name, ASTNode* members,
-                                int is_public, int derive_debug,
-                                int derive_json)
+ASTNode* create_struct_def_impl(
+    char* name,
+    char* base_name,
+    ASTNode* members,
+    int is_public,
+    int derive_debug,
+    int derive_json)
 {
     auto* def = new StructDefNode(
-        std::string(name), base_name ? std::string(base_name) : "",
-        static_cast<StructMemberListNode*>(members), is_public != 0,
-        derive_debug != 0, derive_json != 0);
+        std::string(name),
+        base_name ? std::string(base_name) : "",
+        static_cast<StructMemberListNode*>(members),
+        is_public != 0,
+        derive_debug != 0,
+        derive_json != 0);
 
     // Qualify nested enum names as Struct::Enum for type/literal resolution.
     if(def->members)
@@ -1068,30 +1177,43 @@ ASTNode* create_struct_def_impl(char* name, char* base_name, ASTNode* members,
     return def;
 }
 
-ASTNode* create_enum_def_impl(char* name, ASTNode* variants, int is_public,
-                         int backing_type)
+ASTNode* create_enum_def_impl(
+    char* name,
+    ASTNode* variants,
+    int is_public,
+    int backing_type)
 {
     return new EnumDefNode(
-        std::string(name), static_cast<EnumVariantListNode*>(variants),
-        is_public != 0, static_cast<TypeNode::TypeKind>(backing_type));
+        std::string(name),
+        static_cast<EnumVariantListNode*>(variants),
+        is_public != 0,
+        static_cast<TypeNode::TypeKind>(backing_type));
 }
 
-ASTNode* create_enum_variant_impl(char* name, int has_explicit_value,
-                             long long explicit_value)
+ASTNode* create_enum_variant_impl(
+    char* name,
+    int has_explicit_value,
+    long long explicit_value)
 {
-    return new EnumVariantNode(std::string(name), has_explicit_value != 0,
-                               static_cast<int64_t>(explicit_value));
+    return new EnumVariantNode(
+        std::string(name),
+        has_explicit_value != 0,
+        static_cast<int64_t>(explicit_value));
 }
 
-ASTNode* create_enum_variant_string_impl(char* name,
-                                         char* explicit_string_value)
+ASTNode* create_enum_variant_string_impl(
+    char* name,
+    char* explicit_string_value)
 {
-    return new EnumVariantNode(std::string(name),
-                               std::string(explicit_string_value));
+    return new EnumVariantNode(
+        std::string(name),
+        std::string(explicit_string_value));
 }
 
-ASTNode* create_enum_variant_ref_impl(char* name, char* ref_enum_name,
-                                 char* ref_variant_name)
+ASTNode* create_enum_variant_ref_impl(
+    char* name,
+    char* ref_enum_name,
+    char* ref_variant_name)
 {
     auto* node = new EnumVariantNode(std::string(name), false, 0);
     node->hasReferenceValue = true;
@@ -1152,37 +1274,50 @@ ASTNode* add_struct_member_impl(ASTNode* list, ASTNode* member)
     return memberList;
 }
 
-ASTNode* create_struct_member_impl(int is_var, ASTNode* type, char* name,
-                                   ASTNode* init_expr)
+ASTNode* create_struct_member_impl(
+    int is_var,
+    ASTNode* type,
+    char* name,
+    ASTNode* init_expr)
 {
-    return new StructMemberNode(is_var != 0, static_cast<TypeNode*>(type),
-                                std::string(name),
-                                static_cast<ExpressionNode*>(init_expr));
+    return new StructMemberNode(
+        is_var != 0,
+        static_cast<TypeNode*>(type),
+        std::string(name),
+        static_cast<ExpressionNode*>(init_expr));
 }
 
-ASTNode* create_struct_member_with_property_impl(int is_var, ASTNode* type,
-                                                 char* name, ASTNode* init_expr,
-                                                 int is_property,
-                                                 int is_readonly,
-                                                 int property_flags)
+ASTNode* create_struct_member_with_property_impl(
+    int is_var,
+    ASTNode* type,
+    char* name,
+    ASTNode* init_expr,
+    int is_property,
+    int is_readonly,
+    int property_flags)
 {
     auto* node = new StructMemberNode(
-        is_var != 0, static_cast<TypeNode*>(type), std::string(name),
+        is_var != 0,
+        static_cast<TypeNode*>(type),
+        std::string(name),
         static_cast<ExpressionNode*>(init_expr));
     node->isProperty = (is_property != 0);
     node->isReadonly = (is_readonly != 0);
     node->isAtomicProperty = (property_flags & PROPERTY_FLAG_ATOMIC) != 0;
     node->isMutexProperty = (property_flags & PROPERTY_FLAG_MUTEX) != 0;
-    node->isRecursiveProperty =
-        (property_flags & PROPERTY_FLAG_RECURSIVE) != 0;
+    node->isRecursiveProperty = (property_flags & PROPERTY_FLAG_RECURSIVE) != 0;
     node->isHiddenProperty = (property_flags & PROPERTY_FLAG_HIDDEN) != 0;
-    node->isProtectedProperty =
-        (property_flags & PROPERTY_FLAG_PROTECTED) != 0;
+    node->isProtectedProperty = (property_flags & PROPERTY_FLAG_PROTECTED) != 0;
     return node;
 }
 
-ASTNode* create_struct_method_impl(ASTNode* type, char* name, ASTNode* params,
-                                   ASTNode* body, int is_public, int is_static)
+ASTNode* create_struct_method_impl(
+    ASTNode* type,
+    char* name,
+    ASTNode* params,
+    ASTNode* body,
+    int is_public,
+    int is_static)
 {
     auto* p = static_cast<ParameterListNode*>(params);
     bool staticMethod = (is_static != 0);
@@ -1194,10 +1329,13 @@ ASTNode* create_struct_method_impl(ASTNode* type, char* name, ASTNode* params,
             staticMethod = true;
     }
 
-    return new StructMethodNode(static_cast<TypeNode*>(type), std::string(name),
-                                p,
-                                static_cast<StatementListNode*>(body),
-                                is_public != 0, staticMethod);
+    return new StructMethodNode(
+        static_cast<TypeNode*>(type),
+        std::string(name),
+        p,
+        static_cast<StatementListNode*>(body),
+        is_public != 0,
+        staticMethod);
 }
 
 ASTNode* add_struct_method_impl(ASTNode* list, ASTNode* method)
@@ -1207,11 +1345,15 @@ ASTNode* add_struct_method_impl(ASTNode* list, ASTNode* method)
     return memberList;
 }
 
-ASTNode* create_method_call_expr_impl(ASTNode* object, char* method_name,
-                                 ASTNode* args, int line)
+ASTNode* create_method_call_expr_impl(
+    ASTNode* object,
+    char* method_name,
+    ASTNode* args,
+    int line)
 {
-    auto* node = new MethodCallNode(static_cast<ExpressionNode*>(object),
-                                    std::string(method_name));
+    auto* node = new MethodCallNode(
+        static_cast<ExpressionNode*>(object),
+        std::string(method_name));
     node->line = line;
     if(args)
     {
@@ -1221,14 +1363,22 @@ ASTNode* create_method_call_expr_impl(ASTNode* object, char* method_name,
     return node;
 }
 
-ASTNode* create_method_call_impl(ASTNode* object, char* method, ASTNode* args, int line)
+ASTNode* create_method_call_impl(
+    ASTNode* object,
+    char* method,
+    ASTNode* args,
+    int line)
 {
     return create_method_call_expr_impl(object, method, args, line);
 }
 
 ASTNode* create_len_expression_impl(ASTNode* expr, int line)
 {
-    return create_method_call_impl(expr, const_cast<char*>("len"), nullptr, line);
+    return create_method_call_impl(
+        expr,
+        const_cast<char*>("len"),
+        nullptr,
+        line);
 }
 
 ASTNode* create_match_pattern_impl(char* name, char* binding, int line)
@@ -1261,16 +1411,20 @@ ASTNode* create_match_pattern_impl(char* name, char* binding, int line)
     }
     else
     {
-        fprintf(stderr,
-                "Error (line %d): unknown match pattern '%s'\n",
-                line, nameStr.c_str());
+        fprintf(
+            stderr,
+            "Error (line %d): unknown match pattern '%s'\n",
+            line,
+            nameStr.c_str());
         kind = MatchPatternNode::PATTERN_WILDCARD;
     }
 
     if(kind == MatchPatternNode::PATTERN_NONE && !bindStr.empty())
     {
-        fprintf(stderr,
-                "Error (line %d): None pattern cannot bind a value\n", line);
+        fprintf(
+            stderr,
+            "Error (line %d): None pattern cannot bind a value\n",
+            line);
         bindStr.clear();
     }
 
@@ -1288,8 +1442,9 @@ ASTNode* create_match_literal_pattern_impl(ASTNode* literal, int line)
 
 ASTNode* create_match_arm_impl(ASTNode* pattern, ASTNode* expr, int line)
 {
-    auto* node = new MatchArmNode(static_cast<MatchPatternNode*>(pattern),
-                                  static_cast<ExpressionNode*>(expr));
+    auto* node = new MatchArmNode(
+        static_cast<MatchPatternNode*>(pattern),
+        static_cast<ExpressionNode*>(expr));
     node->line = line;
     return node;
 }
@@ -1311,8 +1466,9 @@ ASTNode* add_match_arm_impl(ASTNode* list, ASTNode* arm)
 
 ASTNode* create_match_expression_impl(ASTNode* target, ASTNode* arms, int line)
 {
-    auto* node = new MatchExpressionNode(static_cast<ExpressionNode*>(target),
-                                         static_cast<MatchArmListNode*>(arms));
+    auto* node = new MatchExpressionNode(
+        static_cast<ExpressionNode*>(target),
+        static_cast<MatchArmListNode*>(arms));
     node->line = line;
     return node;
 }
@@ -1338,7 +1494,8 @@ ASTNode* create_pointer_type_impl(ASTNode* element_type)
 ASTNode* create_reference_type_impl(ASTNode* element_type, int is_mutable)
 {
     return new ReferenceTypeNode(
-        static_cast<TypeNode*>(element_type), is_mutable != 0);
+        static_cast<TypeNode*>(element_type),
+        is_mutable != 0);
 }
 
 ASTNode* create_trait_object_type_impl(char* trait_name)
@@ -1353,8 +1510,9 @@ ASTNode* create_closure_impl(ASTNode* body)
 
 ASTNode* create_closure_with_params_impl(ASTNode* params, ASTNode* body)
 {
-    return new ClosureNode(static_cast<ParameterListNode*>(params),
-                           static_cast<StatementListNode*>(body));
+    return new ClosureNode(
+        static_cast<ParameterListNode*>(params),
+        static_cast<StatementListNode*>(body));
 }
 
 std::string ClosureNode::toString() const
@@ -1411,16 +1569,20 @@ ASTNode* create_else_if_impl(ASTNode* condition, ASTNode* body)
     return create_else_if_with_init(nullptr, condition, body);
 }
 
-ASTNode* create_else_if_with_init_impl(ASTNode* condition_init, ASTNode* condition,
-                                  ASTNode* body)
+ASTNode* create_else_if_with_init_impl(
+    ASTNode* condition_init,
+    ASTNode* condition,
+    ASTNode* body)
 {
     auto* blockBody = dynamic_cast<BlockStatementNode*>(body);
-    StatementListNode* stmtList =
-        blockBody ? blockBody->statements
-                  : dynamic_cast<StatementListNode*>(body);
+    StatementListNode* stmtList = blockBody
+                                      ? blockBody->statements
+                                      : dynamic_cast<StatementListNode*>(body);
 
-    return new IfNode(static_cast<StatementNode*>(condition_init),
-                      static_cast<ExpressionNode*>(condition), stmtList);
+    return new IfNode(
+        static_cast<StatementNode*>(condition_init),
+        static_cast<ExpressionNode*>(condition),
+        stmtList);
 }
 
 ASTNode* add_else_if_impl(ASTNode* else_if_list, ASTNode* else_if)
@@ -1442,7 +1604,11 @@ ASTNode* add_else_if_impl(ASTNode* else_if_list, ASTNode* else_if)
 }
 
 // Print statement creation
-ASTNode* create_print_stmt_impl(int kind, char* format_str, ASTNode* args, int line)
+ASTNode* create_print_stmt_impl(
+    int kind,
+    char* format_str,
+    ASTNode* args,
+    int line)
 {
     PrintNode::PrintKind printKind;
     switch(kind)
@@ -1483,8 +1649,10 @@ ASTNode* create_print_stmt_impl(int kind, char* format_str, ASTNode* args, int l
 
 ASTNode* create_debug_print_stmt_impl(char* format_str, ASTNode* args, int line)
 {
-    auto* node =
-        new PrintNode(PrintNode::EPRINTLN_STDERR, std::string(format_str), true);
+    auto* node = new PrintNode(
+        PrintNode::EPRINTLN_STDERR,
+        std::string(format_str),
+        true);
     node->line = line;
 
     if(args)
@@ -1504,7 +1672,8 @@ ASTNode* create_debug_print_stmt_impl(char* format_str, ASTNode* args, int line)
 
 ASTNode* create_print_expr_stmt_impl(int kind, ASTNode* expr, int line)
 {
-    auto* node = new PrintNode(static_cast<PrintNode::PrintKind>(kind), "{}", false);
+    auto* node =
+        new PrintNode(static_cast<PrintNode::PrintKind>(kind), "{}", false);
     node->line = line;
     if(expr)
         node->addArgument(static_cast<ExpressionNode*>(expr));
@@ -1533,8 +1702,9 @@ ASTNode* create_format_expr_impl(char* format_str, ASTNode* args, int line)
 
 ASTNode* create_assert_eq_impl(ASTNode* left, ASTNode* right, int line)
 {
-    auto* node = new AssertEqNode(static_cast<ExpressionNode*>(left),
-                                  static_cast<ExpressionNode*>(right));
+    auto* node = new AssertEqNode(
+        static_cast<ExpressionNode*>(left),
+        static_cast<ExpressionNode*>(right));
     node->line = line;
     return node;
 }
@@ -1747,7 +1917,10 @@ ASTNode* create_field_access_impl(char* struct_name, char* field_name, int line)
     return node;
 }
 
-ASTNode* create_field_access_expr_impl(ASTNode* object, char* field_name, int line)
+ASTNode* create_field_access_expr_impl(
+    ASTNode* object,
+    char* field_name,
+    int line)
 {
     // For simple identifier, use the string-based constructor for backwards
     // compatibility
@@ -1759,24 +1932,31 @@ ASTNode* create_field_access_expr_impl(ASTNode* object, char* field_name, int li
     }
 
     // For chained access (e.g., a.b.c), use the expression-based constructor
-    auto* node = new FieldAccessNode(static_cast<ExpressionNode*>(object),
-                                     std::string(field_name));
+    auto* node = new FieldAccessNode(
+        static_cast<ExpressionNode*>(object),
+        std::string(field_name));
     node->line = line;
     return node;
 }
 
-ASTNode* create_field_assignment_impl(char* struct_name, char* field_name,
-                                 ASTNode* expr, int line)
+ASTNode* create_field_assignment_impl(
+    char* struct_name,
+    char* field_name,
+    ASTNode* expr,
+    int line)
 {
-    auto* node = new FieldAssignmentNode(std::string(struct_name),
-                                         std::string(field_name),
-                                         static_cast<ExpressionNode*>(expr));
+    auto* node = new FieldAssignmentNode(
+        std::string(struct_name),
+        std::string(field_name),
+        static_cast<ExpressionNode*>(expr));
     node->line = line;
     return node;
 }
 
-ASTNode* create_chained_field_assignment_impl(ASTNode* target, ASTNode* expr,
-                                         int line)
+ASTNode* create_chained_field_assignment_impl(
+    ASTNode* target,
+    ASTNode* expr,
+    int line)
 {
     // Check if target is a simple field access (a.b)
     if(auto* fieldAccess = dynamic_cast<FieldAccessNode*>(target))
@@ -1786,7 +1966,8 @@ ASTNode* create_chained_field_assignment_impl(ASTNode* target, ASTNode* expr,
         if(!fieldAccess->object && !fieldAccess->structName.empty())
         {
             auto* node = new FieldAssignmentNode(
-                fieldAccess->structName, fieldAccess->fieldName,
+                fieldAccess->structName,
+                fieldAccess->fieldName,
                 static_cast<ExpressionNode*>(expr));
             node->line = line;
             return node;
@@ -1794,8 +1975,9 @@ ASTNode* create_chained_field_assignment_impl(ASTNode* target, ASTNode* expr,
     }
 
     // For chained access or other expressions, use the expression-based version
-    auto* node = new FieldAssignmentNode(static_cast<ExpressionNode*>(target),
-                                         static_cast<ExpressionNode*>(expr));
+    auto* node = new FieldAssignmentNode(
+        static_cast<ExpressionNode*>(target),
+        static_cast<ExpressionNode*>(expr));
     node->line = line;
     return node;
 }
@@ -1971,7 +2153,8 @@ std::string UnaryOpNode::toString() const
 
 std::string UpdateExpressionNode::toString() const
 {
-    std::string op_str = (kind == UpdateExpressionNode::KIND_INCREMENT) ? "++" : "--";
+    std::string op_str =
+        (kind == UpdateExpressionNode::KIND_INCREMENT) ? "++" : "--";
     if(isPrefix)
         return "(" + op_str + operand->toString() + ")";
     return "(" + operand->toString() + op_str + ")";
@@ -1999,8 +2182,7 @@ std::string SizeofExpressionNode::toString() const
 
 std::string CexprExpressionNode::toString() const
 {
-    return "cexpr(" +
-           (expression ? expression->toString() : "<unknown>") + ")";
+    return "cexpr(" + (expression ? expression->toString() : "<unknown>") + ")";
 }
 
 std::string InlineAsmNode::toString() const
@@ -2223,20 +2405,35 @@ std::string CastExpressionNode::toString() const
     case TypeNode::TYPE_DOUBLE:
         typeName = "f64";
         break;
-    case TypeNode::TYPE_I8: typeName = "i8"; break;
-    case TypeNode::TYPE_I16: typeName = "i16"; break;
-    case TypeNode::TYPE_I32: typeName = "i32"; break;
-    case TypeNode::TYPE_I64: typeName = "i64"; break;
-    case TypeNode::TYPE_U8: typeName = "u8"; break;
-    case TypeNode::TYPE_U16: typeName = "u16"; break;
-    case TypeNode::TYPE_U32: typeName = "u32"; break;
-    case TypeNode::TYPE_U64: typeName = "u64"; break;
+    case TypeNode::TYPE_I8:
+        typeName = "i8";
+        break;
+    case TypeNode::TYPE_I16:
+        typeName = "i16";
+        break;
+    case TypeNode::TYPE_I32:
+        typeName = "i32";
+        break;
+    case TypeNode::TYPE_I64:
+        typeName = "i64";
+        break;
+    case TypeNode::TYPE_U8:
+        typeName = "u8";
+        break;
+    case TypeNode::TYPE_U16:
+        typeName = "u16";
+        break;
+    case TypeNode::TYPE_U32:
+        typeName = "u32";
+        break;
+    case TypeNode::TYPE_U64:
+        typeName = "u64";
+        break;
     default:
         typeName = "unknown";
     }
     if(checkedNarrow)
-        return "narrow_cast<" + typeName + ">(" + expression->toString() +
-               ")";
+        return "narrow_cast<" + typeName + ">(" + expression->toString() + ")";
     return typeName + "(" + expression->toString() + ")";
 }
 
@@ -2304,7 +2501,8 @@ std::string StructDefNode::toString() const
                 result += ", ";
             result += typeParams[i];
             auto boundIt = typeParamTraitBounds.find(typeParams[i]);
-            if(boundIt != typeParamTraitBounds.end() && !boundIt->second.empty())
+            if(boundIt != typeParamTraitBounds.end() &&
+               !boundIt->second.empty())
                 result += ": " + boundIt->second;
         }
         result += ">";
@@ -2342,7 +2540,8 @@ std::string EnumVariantListNode::toString() const
 
 std::string EnumDefNode::toString() const
 {
-    auto backingTypeName = [](TypeNode::TypeKind kind) -> std::string {
+    auto backingTypeName = [](TypeNode::TypeKind kind) -> std::string
+    {
         switch(kind)
         {
         case TypeNode::TYPE_INT:
@@ -2521,82 +2720,111 @@ std::string ArrayFillNode::toString() const
            (count ? count->toString() : "") + "]";
 }
 
-ASTNode* create_for_range_impl(char* var_name, ASTNode* range, ASTNode* body,
-                          int line)
+ASTNode* create_for_range_impl(
+    char* var_name,
+    ASTNode* range,
+    ASTNode* body,
+    int line)
 {
     auto* blockBody = dynamic_cast<BlockStatementNode*>(body);
     StatementListNode* stmtList = blockBody ? blockBody->statements : nullptr;
 
-    auto* node = new ForNode(std::string(var_name),
-                             static_cast<ExpressionNode*>(range), stmtList);
+    auto* node = new ForNode(
+        std::string(var_name),
+        static_cast<ExpressionNode*>(range),
+        stmtList);
     node->line = line;
     return node;
 }
 
-ASTNode* create_for_iterator_impl(char* var_name, ASTNode* iterable, ASTNode* body,
-                             int line)
+ASTNode* create_for_iterator_impl(
+    char* var_name,
+    ASTNode* iterable,
+    ASTNode* body,
+    int line)
 {
     auto* blockBody = dynamic_cast<BlockStatementNode*>(body);
     StatementListNode* stmtList = blockBody ? blockBody->statements : nullptr;
 
-    auto* node = new ForNode(std::string(var_name),
-                             static_cast<ExpressionNode*>(iterable), stmtList);
+    auto* node = new ForNode(
+        std::string(var_name),
+        static_cast<ExpressionNode*>(iterable),
+        stmtList);
     node->line = line;
     return node;
 }
 
-ASTNode* create_while_statement_impl(ASTNode* condition, ASTNode* body, int line,
-                                int uses_colon_without_guard)
+ASTNode* create_while_statement_impl(
+    ASTNode* condition,
+    ASTNode* body,
+    int line,
+    int uses_colon_without_guard)
 {
     auto* blockBody = dynamic_cast<BlockStatementNode*>(body);
-    StatementListNode* stmtList =
-        blockBody ? blockBody->statements
-                  : dynamic_cast<StatementListNode*>(body);
-    auto* node = new WhileNode(static_cast<ExpressionNode*>(condition), stmtList,
-                               uses_colon_without_guard != 0);
+    StatementListNode* stmtList = blockBody
+                                      ? blockBody->statements
+                                      : dynamic_cast<StatementListNode*>(body);
+    auto* node = new WhileNode(
+        static_cast<ExpressionNode*>(condition),
+        stmtList,
+        uses_colon_without_guard != 0);
     node->line = line;
     return node;
 }
 
-ASTNode* create_try_catch_stmt_impl(ASTNode* try_block, char* catch_name,
-                                    ASTNode* catch_type, ASTNode* catch_block,
-                                    int line)
+ASTNode* create_try_catch_stmt_impl(
+    ASTNode* try_block,
+    char* catch_name,
+    ASTNode* catch_type,
+    ASTNode* catch_block,
+    int line)
 {
     auto* tryStmt = dynamic_cast<BlockStatementNode*>(try_block);
     auto* catchStmt = dynamic_cast<BlockStatementNode*>(catch_block);
-    auto* node = new TryCatchNode(tryStmt,
-                                  catch_name ? std::string(catch_name)
-                                             : std::string(),
-                                  static_cast<TypeNode*>(catch_type),
-                                  catchStmt);
+    auto* node = new TryCatchNode(
+        tryStmt,
+        catch_name ? std::string(catch_name) : std::string(),
+        static_cast<TypeNode*>(catch_type),
+        catchStmt);
     node->line = line;
     return node;
 }
 
-ASTNode* create_for_enumerate_impl(char* index_var, char* val_var, ASTNode* iterable,
-                               ASTNode* body, int line)
+ASTNode* create_for_enumerate_impl(
+    char* index_var,
+    char* val_var,
+    ASTNode* iterable,
+    ASTNode* body,
+    int line)
 {
     auto* blockBody = dynamic_cast<BlockStatementNode*>(body);
     StatementListNode* stmtList = blockBody ? blockBody->statements : nullptr;
 
-    auto* node = new ForNode(std::string(val_var),
-                             static_cast<ExpressionNode*>(iterable), stmtList,
-                             std::string(index_var));
+    auto* node = new ForNode(
+        std::string(val_var),
+        static_cast<ExpressionNode*>(iterable),
+        stmtList,
+        std::string(index_var));
     node->line = line;
     return node;
 }
 
 ASTNode* create_array_fill_impl(ASTNode* value, ASTNode* count)
 {
-    return new ArrayFillNode(static_cast<ExpressionNode*>(value),
-                             static_cast<ExpressionNode*>(count));
+    return new ArrayFillNode(
+        static_cast<ExpressionNode*>(value),
+        static_cast<ExpressionNode*>(count));
 }
 
-ASTNode* create_range_expression_impl(ASTNode* start, ASTNode* end, int inclusive)
+ASTNode* create_range_expression_impl(
+    ASTNode* start,
+    ASTNode* end,
+    int inclusive)
 {
-    return new RangeExpressionNode(static_cast<ExpressionNode*>(start),
-                                   static_cast<ExpressionNode*>(end),
-                                   inclusive != 0);
+    return new RangeExpressionNode(
+        static_cast<ExpressionNode*>(start),
+        static_cast<ExpressionNode*>(end),
+        inclusive != 0);
 }
 
 ASTNode* create_mod_declaration_impl(char* name, int line)
@@ -2606,29 +2834,45 @@ ASTNode* create_mod_declaration_impl(char* name, int line)
     return node;
 }
 
-ASTNode* create_use_declaration_impl(char* module_name, char* item_name, int line)
+ASTNode* create_use_declaration_impl(
+    char* module_name,
+    char* item_name,
+    int line)
 {
-    auto* node = new UseDeclNode(std::string(module_name),
-                                 std::string(item_name), false);
+    auto* node = new UseDeclNode(
+        std::string(module_name),
+        std::string(item_name),
+        false);
     node->line = line;
     return node;
 }
 
-ASTNode* create_use_declaration_alias_impl(char* module_name, char* item_name,
-                                           char* alias_name, int line)
+ASTNode* create_use_declaration_alias_impl(
+    char* module_name,
+    char* item_name,
+    char* alias_name,
+    int line)
 {
-    auto* node = new UseDeclNode(std::string(module_name),
-                                 std::string(item_name), false,
-                                 std::string(alias_name));
+    auto* node = new UseDeclNode(
+        std::string(module_name),
+        std::string(item_name),
+        false,
+        std::string(alias_name));
     node->line = line;
     return node;
 }
 
-ASTNode* create_use_module_alias_declaration_impl(char* module_name,
-                                                  char* alias_name, int line)
+ASTNode* create_use_module_alias_declaration_impl(
+    char* module_name,
+    char* alias_name,
+    int line)
 {
-    auto* node = new UseDeclNode(std::string(module_name), "", false,
-                                 std::string(alias_name), true);
+    auto* node = new UseDeclNode(
+        std::string(module_name),
+        "",
+        false,
+        std::string(alias_name),
+        true);
     node->line = line;
     return node;
 }
@@ -2640,11 +2884,14 @@ ASTNode* create_use_all_declaration_impl(char* module_name, int line)
     return node;
 }
 
-ASTNode* create_type_alias_impl(char* name, ASTNode* type_params,
-                           ASTNode* aliased_type)
+ASTNode* create_type_alias_impl(
+    char* name,
+    ASTNode* type_params,
+    ASTNode* aliased_type)
 {
-    auto* node =
-        new TypeAliasNode(std::string(name), static_cast<TypeNode*>(aliased_type));
+    auto* node = new TypeAliasNode(
+        std::string(name),
+        static_cast<TypeNode*>(aliased_type));
     if(type_params)
     {
         auto* params = static_cast<TypeParamListNode*>(type_params);
@@ -2693,7 +2940,8 @@ std::string TypeAliasNode::toString() const
                 out += ", ";
             out += typeParams[i];
             auto boundIt = typeParamTraitBounds.find(typeParams[i]);
-            if(boundIt != typeParamTraitBounds.end() && !boundIt->second.empty())
+            if(boundIt != typeParamTraitBounds.end() &&
+               !boundIt->second.empty())
                 out += ": " + boundIt->second;
         }
         out += ">";
@@ -2736,8 +2984,8 @@ std::string ContinueNode::toString() const
 
 std::string ThrowNode::toString() const
 {
-    return "throw " + (expression ? expression->toString() : std::string())
-           + ";";
+    return "throw " + (expression ? expression->toString() : std::string()) +
+           ";";
 }
 
 std::string TryCatchNode::toString() const
@@ -2747,7 +2995,7 @@ std::string TryCatchNode::toString() const
     out += " catch ";
     out += catchName;
     out += ": ";
-    out += catchType ? catchType->toString() : "<?>"; 
+    out += catchType ? catchType->toString() : "<?>";
     out += " ";
     out += catchBlock ? catchBlock->toString() : "{}";
     return out;
@@ -2761,21 +3009,21 @@ std::string PrintNode::toString() const
         result = "debug!(\"";
     }
     else
-    switch(kind)
-    {
-    case PRINT_STDOUT:
-        result = "print!(\"";
-        break;
-    case PRINTLN_STDOUT:
-        result = "println!(\"";
-        break;
-    case PRINT_STDERR:
-        result = "eprint!(\"";
-        break;
-    case EPRINTLN_STDERR:
-        result = "eprintln!(\"";
-        break;
-    }
+        switch(kind)
+        {
+        case PRINT_STDOUT:
+            result = "print!(\"";
+            break;
+        case PRINTLN_STDOUT:
+            result = "println!(\"";
+            break;
+        case PRINT_STDERR:
+            result = "eprint!(\"";
+            break;
+        case EPRINTLN_STDERR:
+            result = "eprintln!(\"";
+            break;
+        }
     result += formatString + "\"";
     for(const auto& arg : arguments)
     {
@@ -2824,8 +3072,8 @@ std::string AssertNode::toString() const
 
 std::string StaticAssertNode::toString() const
 {
-    return "static_assert!(" +
-           (condition ? condition->toString() : "false") + ");";
+    return "static_assert!(" + (condition ? condition->toString() : "false") +
+           ");";
 }
 
 // Generic list type
@@ -2865,8 +3113,9 @@ std::string MultiArrayTypeNode::toString() const
 // Map type
 ASTNode* create_map_type_impl(ASTNode* key_type, ASTNode* value_type)
 {
-    return new MapTypeNode(static_cast<TypeNode*>(key_type),
-                           static_cast<TypeNode*>(value_type));
+    return new MapTypeNode(
+        static_cast<TypeNode*>(key_type),
+        static_cast<TypeNode*>(value_type));
 }
 
 std::string MapTypeNode::toString() const
@@ -2877,8 +3126,9 @@ std::string MapTypeNode::toString() const
 // Map entry
 ASTNode* create_map_entry_impl(ASTNode* key, ASTNode* value)
 {
-    return new MapEntryNode(static_cast<ExpressionNode*>(key),
-                            static_cast<ExpressionNode*>(value));
+    return new MapEntryNode(
+        static_cast<ExpressionNode*>(key),
+        static_cast<ExpressionNode*>(value));
 }
 
 std::string MapEntryNode::toString() const
@@ -2927,8 +3177,9 @@ std::string MapLiteralNode::toString() const
 // Index expression
 ASTNode* create_index_expression_impl(ASTNode* base, ASTNode* index, int line)
 {
-    auto* node = new IndexExpressionNode(static_cast<ExpressionNode*>(base),
-                                         static_cast<ExpressionNode*>(index));
+    auto* node = new IndexExpressionNode(
+        static_cast<ExpressionNode*>(base),
+        static_cast<ExpressionNode*>(index));
     node->line = line;
     return node;
 }
@@ -3015,8 +3266,8 @@ std::string GenericStructTypeRefNode::getMangledName() const
         return out.empty() ? "unknown" : out;
     };
 
-    std::function<std::string(TypeNode*)> mangle_type = [&](TypeNode* t)
-        -> std::string
+    std::function<std::string(TypeNode*)> mangle_type =
+        [&](TypeNode* t) -> std::string
     {
         if(!t)
             return "unknown";
@@ -3132,24 +3383,27 @@ std::string TupleAccessNode::toString() const
 // Map iterator
 ASTNode* create_map_keys_iterator_impl(ASTNode* map_expr, int line)
 {
-    auto* node = new MapIteratorNode(static_cast<ExpressionNode*>(map_expr),
-                                     MapIteratorNode::ITER_KEYS);
+    auto* node = new MapIteratorNode(
+        static_cast<ExpressionNode*>(map_expr),
+        MapIteratorNode::ITER_KEYS);
     node->line = line;
     return node;
 }
 
 ASTNode* create_map_values_iterator_impl(ASTNode* map_expr, int line)
 {
-    auto* node = new MapIteratorNode(static_cast<ExpressionNode*>(map_expr),
-                                     MapIteratorNode::ITER_VALUES);
+    auto* node = new MapIteratorNode(
+        static_cast<ExpressionNode*>(map_expr),
+        MapIteratorNode::ITER_VALUES);
     node->line = line;
     return node;
 }
 
 ASTNode* create_map_entries_iterator_impl(ASTNode* map_expr, int line)
 {
-    auto* node = new MapIteratorNode(static_cast<ExpressionNode*>(map_expr),
-                                     MapIteratorNode::ITER_ENTRIES);
+    auto* node = new MapIteratorNode(
+        static_cast<ExpressionNode*>(map_expr),
+        MapIteratorNode::ITER_ENTRIES);
     node->line = line;
     return node;
 }
@@ -3216,7 +3470,8 @@ std::string ImplBlockNode::toString() const
                 result += ", ";
             result += typeParams[i];
             auto boundIt = typeParamTraitBounds.find(typeParams[i]);
-            if(boundIt != typeParamTraitBounds.end() && !boundIt->second.empty())
+            if(boundIt != typeParamTraitBounds.end() &&
+               !boundIt->second.empty())
                 result += ": " + boundIt->second;
         }
         result += ">";
@@ -3297,23 +3552,33 @@ ASTNode* create_bounded_type_param_list_impl(char* param, char* trait_name)
     return node;
 }
 
-ASTNode* add_bounded_type_param_impl(ASTNode* list, char* param, char* trait_name)
+ASTNode* add_bounded_type_param_impl(
+    ASTNode* list,
+    char* param,
+    char* trait_name)
 {
     auto* paramList = static_cast<TypeParamListNode*>(list);
     paramList->addParam(std::string(param), std::string(trait_name));
     return paramList;
 }
 
-ASTNode* create_generic_struct_def_impl(char* name, char* base_name,
-                                   ASTNode* type_params, ASTNode* members,
-                                   int is_public, int derive_debug,
-                                   int derive_json)
+ASTNode* create_generic_struct_def_impl(
+    char* name,
+    char* base_name,
+    ASTNode* type_params,
+    ASTNode* members,
+    int is_public,
+    int derive_debug,
+    int derive_json)
 {
     std::string baseName = base_name ? std::string(base_name) : "";
-    auto* node = new StructDefNode(std::string(name), baseName,
-                                   static_cast<StructMemberListNode*>(members),
-                                   is_public != 0, derive_debug != 0,
-                                   derive_json != 0);
+    auto* node = new StructDefNode(
+        std::string(name),
+        baseName,
+        static_cast<StructMemberListNode*>(members),
+        is_public != 0,
+        derive_debug != 0,
+        derive_json != 0);
 
     if(type_params)
     {
@@ -3342,8 +3607,10 @@ ASTNode* add_trait_method_impl(ASTNode* trait, ASTNode* method)
     return traitDef;
 }
 
-ASTNode* create_impl_block_impl(char* struct_name, ASTNode* type_params,
-                           char* trait_name)
+ASTNode* create_impl_block_impl(
+    char* struct_name,
+    ASTNode* type_params,
+    char* trait_name)
 {
     auto* node = new ImplBlockNode(std::string(struct_name));
     if(trait_name)
@@ -3368,8 +3635,11 @@ ASTNode* add_impl_method_impl(ASTNode* impl, ASTNode* method)
     return implBlock;
 }
 
-ASTNode* create_struct_literal_impl(char* struct_name, ASTNode* type_args,
-                               ASTNode* fields, int line)
+ASTNode* create_struct_literal_impl(
+    char* struct_name,
+    ASTNode* type_args,
+    ASTNode* fields,
+    int line)
 {
     auto* node = new StructLiteralNode(std::string(struct_name));
     node->line = line;
@@ -3416,7 +3686,10 @@ ASTNode* create_struct_field_init_list_impl(char* field_name, ASTNode* value)
     return node;
 }
 
-ASTNode* add_struct_field_init_impl(ASTNode* list, char* field_name, ASTNode* value)
+ASTNode* add_struct_field_init_impl(
+    ASTNode* list,
+    char* field_name,
+    ASTNode* value)
 {
     auto* lit = static_cast<StructLiteralNode*>(list);
     lit->fields.push_back(
@@ -3451,6 +3724,7 @@ std::string ConceptApplicationNode::toString() const
     }
     return result + ">";
 }
+
 std::string ConceptDefNode::toString() const
 {
     std::string result = isPublic ? "pub concept " : "concept ";
@@ -3492,6 +3766,7 @@ std::string RequirementNode::toString() const
     }
     return result + ";";
 }
+
 std::string RequiresExpressionNode::toString() const
 {
     std::string result = "req(";

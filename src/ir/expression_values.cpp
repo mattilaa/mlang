@@ -3,10 +3,10 @@
 #include "ir/common.h"
 #include "llvm_compat.h"
 
-#include <llvm/Config/llvm-config.h>
 #include <algorithm>
 #include <functional>
 #include <limits>
+#include <llvm/Config/llvm-config.h>
 
 using mlang::ir_detail::ast_analysis::contains_update_expression;
 using mlang::ir_detail::common::Helpers;
@@ -26,23 +26,35 @@ std::string narrowTypeName(TypeNode::TypeKind kind)
 {
     switch(kind)
     {
-    case TypeNode::TYPE_BIT: return "bit";
+    case TypeNode::TYPE_BIT:
+        return "bit";
     case TypeNode::TYPE_INT:
-    case TypeNode::TYPE_I32: return "i32";
-    case TypeNode::TYPE_I8: return "i8";
-    case TypeNode::TYPE_I16: return "i16";
-    case TypeNode::TYPE_I64: return "i64";
-    case TypeNode::TYPE_U8: return "u8";
-    case TypeNode::TYPE_U16: return "u16";
-    case TypeNode::TYPE_U32: return "u32";
-    case TypeNode::TYPE_U64: return "u64";
-    default: return "non-integer";
+    case TypeNode::TYPE_I32:
+        return "i32";
+    case TypeNode::TYPE_I8:
+        return "i8";
+    case TypeNode::TYPE_I16:
+        return "i16";
+    case TypeNode::TYPE_I64:
+        return "i64";
+    case TypeNode::TYPE_U8:
+        return "u8";
+    case TypeNode::TYPE_U16:
+        return "u16";
+    case TypeNode::TYPE_U32:
+        return "u32";
+    case TypeNode::TYPE_U64:
+        return "u64";
+    default:
+        return "non-integer";
     }
 }
 
-bool constantFitsIntegerCast(const llvm::ConstantInt* value,
-                            bool sourceUnsigned, unsigned targetBits,
-                            bool targetUnsigned)
+bool constantFitsIntegerCast(
+    const llvm::ConstantInt* value,
+    bool sourceUnsigned,
+    unsigned targetBits,
+    bool targetUnsigned)
 {
     const llvm::APInt& raw = value->getValue();
     if(targetUnsigned)
@@ -55,28 +67,31 @@ bool constantFitsIntegerCast(const llvm::ConstantInt* value,
     }
 
     const uint64_t targetMax =
-        targetBits >= 64 ? static_cast<uint64_t>(std::numeric_limits<int64_t>::max())
-                         : ((uint64_t{1} << (targetBits - 1)) - 1);
+        targetBits >= 64
+            ? static_cast<uint64_t>(std::numeric_limits<int64_t>::max())
+            : ((uint64_t{1} << (targetBits - 1)) - 1);
     if(sourceUnsigned)
         return raw.getLimitedValue() <= targetMax;
 
     const int64_t signedValue = raw.getSExtValue();
-    const int64_t targetMin =
-        targetBits >= 64 ? std::numeric_limits<int64_t>::min()
-                         : -(int64_t{1} << (targetBits - 1));
+    const int64_t targetMin = targetBits >= 64
+                                  ? std::numeric_limits<int64_t>::min()
+                                  : -(int64_t{1} << (targetBits - 1));
     return signedValue >= targetMin &&
            signedValue <= static_cast<int64_t>(targetMax);
 }
 } // namespace
 
-void CodeGenerator::emitNarrowCastRuntimeCheck(CastExpressionNode* node,
-                                               llvm::Value* valid)
+void CodeGenerator::emitNarrowCastRuntimeCheck(
+    CastExpressionNode* node,
+    llvm::Value* valid)
 {
     llvm::Function* function = builder.GetInsertBlock()->getParent();
     if(!function)
     {
-        reportError(node->line,
-                    "narrow_cast runtime check requires a function body");
+        reportError(
+            node->line,
+            "narrow_cast runtime check requires a function body");
         return;
     }
 
@@ -92,20 +107,21 @@ void CodeGenerator::emitNarrowCastRuntimeCheck(CastExpressionNode* node,
     llvm::Value* formatStr = builder.CreateGlobalString(
         "narrow_cast panic at %s:%d: value cannot be represented as %s\n",
         "narrow.panic.format");
-    llvm::Value* fileStr = builder.CreateGlobalString(
-        diagnosticFileName(),
-        "narrow.panic.file");
+    llvm::Value* fileStr =
+        builder.CreateGlobalString(diagnosticFileName(), "narrow.panic.file");
     llvm::Value* typeStr = builder.CreateGlobalString(
-        narrowTypeName(node->targetType), "narrow.panic.type");
+        narrowTypeName(node->targetType),
+        "narrow.panic.type");
 #else
     llvm::Value* formatStr = builder.CreateGlobalStringPtr(
         "narrow_cast panic at %s:%d: value cannot be represented as %s\n",
         "narrow.panic.format");
-    llvm::Value* fileStr = builder.CreateGlobalStringPtr(
-        diagnosticFileName(),
-        "narrow.panic.file");
+    llvm::Value* fileStr =
+        builder
+            .CreateGlobalStringPtr(diagnosticFileName(), "narrow.panic.file");
     llvm::Value* typeStr = builder.CreateGlobalStringPtr(
-        narrowTypeName(node->targetType), "narrow.panic.type");
+        narrowTypeName(node->targetType),
+        "narrow.panic.type");
 #endif
 #if LLVM_VERSION_MAJOR >= 15
     llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
@@ -117,7 +133,9 @@ void CodeGenerator::emitNarrowCastRuntimeCheck(CastExpressionNode* node,
         builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
     builder.CreateCall(
         fprintfFunc,
-        {stderrVal, formatStr, fileStr,
+        {stderrVal,
+         formatStr,
+         fileStr,
          llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), node->line),
          typeStr});
     builder.CreateCall(abortFunc, {});
@@ -134,12 +152,12 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
     TypeNode* sourceTypeNode =
         inferExpressionTypeNode(node->expression, node->line);
 
-    if(node->checkedNarrow &&
-       (!value->getType()->isIntegerTy() ||
-        !isNarrowIntegerKind(node->targetType)))
+    if(node->checkedNarrow && (!value->getType()->isIntegerTy() ||
+                               !isNarrowIntegerKind(node->targetType)))
     {
-        reportError(node->line,
-                    "narrow_cast requires integer source and target types");
+        reportError(
+            node->line,
+            "narrow_cast requires integer source and target types");
         return nullptr;
     }
 
@@ -151,8 +169,9 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
 
         if(!value->getType()->isIntegerTy())
         {
-            reportError(node->line,
-                        "bit cast expects an integer or bool value");
+            reportError(
+                node->line,
+                "bit cast expects an integer or bool value");
             return nullptr;
         }
 
@@ -175,13 +194,16 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
            !llvm::isa<llvm::ConstantInt>(value))
         {
             llvm::Value* valid = builder.CreateICmpULE(
-                value, llvm::ConstantInt::get(value->getType(), 1),
+                value,
+                llvm::ConstantInt::get(value->getType(), 1),
                 "narrow.bit.valid");
             emitNarrowCastRuntimeCheck(node, valid);
         }
 
         return builder.CreateICmpNE(
-            value, llvm::ConstantInt::get(value->getType(), 0), "bitcast");
+            value,
+            llvm::ConstantInt::get(value->getType(), 0),
+            "bitcast");
     }
 
     llvm::Type* targetType = getLLVMType(node->targetType);
@@ -195,28 +217,33 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
         bool sourceUnsigned =
             sourceType->isIntegerTy(1) ||
             (sourceTypeNode && isUnsignedType(sourceTypeNode->kind));
-        const bool targetUnsigned = targetType->isIntegerTy(1) ||
-                                    isUnsignedType(node->targetType);
+        const bool targetUnsigned =
+            targetType->isIntegerTy(1) || isUnsignedType(node->targetType);
 
         if(node->checkedNarrow)
         {
             if(auto* constant = llvm::dyn_cast<llvm::ConstantInt>(value))
             {
                 if(!constantFitsIntegerCast(
-                       constant, sourceUnsigned,
-                       targetType->getIntegerBitWidth(), targetUnsigned))
+                       constant,
+                       sourceUnsigned,
+                       targetType->getIntegerBitWidth(),
+                       targetUnsigned))
                 {
-                    reportError(node->line,
-                                "narrow_cast constant value cannot be "
-                                "represented as " +
-                                    narrowTypeName(node->targetType));
+                    reportError(
+                        node->line,
+                        "narrow_cast constant value cannot be "
+                        "represented as " +
+                            narrowTypeName(node->targetType));
                     return nullptr;
                 }
             }
         }
 
         llvm::Value* castValue = builder.CreateIntCast(
-            value, targetType, !sourceUnsigned,
+            value,
+            targetType,
+            !sourceUnsigned,
             sourceUnsigned ? "narrow.zextcast" : "narrow.sextcast");
 
         if(!node->checkedNarrow || !checkedNarrowCasts ||
@@ -224,20 +251,25 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
             return castValue;
 
         llvm::Value* restored = builder.CreateIntCast(
-            castValue, sourceType, !targetUnsigned, "narrow.roundtrip");
+            castValue,
+            sourceType,
+            !targetUnsigned,
+            "narrow.roundtrip");
         llvm::Value* valid =
             builder.CreateICmpEQ(value, restored, "narrow.roundtrip.ok");
         if(!sourceUnsigned && targetUnsigned)
         {
             llvm::Value* nonNegative = builder.CreateICmpSGE(
-                value, llvm::ConstantInt::get(sourceType, 0),
+                value,
+                llvm::ConstantInt::get(sourceType, 0),
                 "narrow.source.nonnegative");
             valid = builder.CreateAnd(valid, nonNegative, "narrow.valid");
         }
         else if(sourceUnsigned && !targetUnsigned)
         {
             llvm::Value* nonNegative = builder.CreateICmpSGE(
-                castValue, llvm::ConstantInt::get(targetType, 0),
+                castValue,
+                llvm::ConstantInt::get(targetType, 0),
                 "narrow.target.nonnegative");
             valid = builder.CreateAnd(valid, nonNegative, "narrow.valid");
         }
@@ -276,20 +308,20 @@ static bool isNumericTypeKind(TypeNode::TypeKind kind)
 {
     switch(kind)
     {
-        case TypeNode::TYPE_INT:
-        case TypeNode::TYPE_FLOAT:
-        case TypeNode::TYPE_DOUBLE:
-        case TypeNode::TYPE_I8:
-        case TypeNode::TYPE_I16:
-        case TypeNode::TYPE_I32:
-        case TypeNode::TYPE_I64:
-        case TypeNode::TYPE_U8:
-        case TypeNode::TYPE_U16:
-        case TypeNode::TYPE_U32:
-        case TypeNode::TYPE_U64:
-            return true;
-        default:
-            return false;
+    case TypeNode::TYPE_INT:
+    case TypeNode::TYPE_FLOAT:
+    case TypeNode::TYPE_DOUBLE:
+    case TypeNode::TYPE_I8:
+    case TypeNode::TYPE_I16:
+    case TypeNode::TYPE_I32:
+    case TypeNode::TYPE_I64:
+    case TypeNode::TYPE_U8:
+    case TypeNode::TYPE_U16:
+    case TypeNode::TYPE_U32:
+    case TypeNode::TYPE_U64:
+        return true;
+    default:
+        return false;
     }
 }
 
@@ -308,43 +340,46 @@ FunctionTypeNode* CodeGenerator::inferFunctionItemType(
     {
         if(!isOverloadVisible(overload) || !overload.node)
             continue;
-        if(!overload.node->parameters ||
-           overload.node->parameters->isVarArg ||
+        if(!overload.node->parameters || overload.node->parameters->isVarArg ||
            !overload.node->typeParams.empty())
         {
-            reportError(identifier->line,
-                        "cannot infer callable type for generic or variadic "
-                        "function item '" + identifier->name +
-                            "'; add an explicit fn(...) -> ... annotation");
+            reportError(
+                identifier->line,
+                "cannot infer callable type for generic or variadic "
+                "function item '" +
+                    identifier->name +
+                    "'; add an explicit fn(...) -> ... annotation");
             return nullptr;
         }
         if(match)
         {
-            reportError(identifier->line,
-                        "function item '" + identifier->name +
-                            "' is overloaded; add an explicit fn(...) -> ... "
-                            "annotation");
+            reportError(
+                identifier->line,
+                "function item '" + identifier->name +
+                    "' is overloaded; add an explicit fn(...) -> ... "
+                    "annotation");
             return nullptr;
         }
         match = overload.node;
     }
     if(!match)
     {
-        reportError(identifier->line,
-                    "no visible non-generic function item named '" +
-                        identifier->name + "'");
+        reportError(
+            identifier->line,
+            "no visible non-generic function item named '" + identifier->name +
+                "'");
         return nullptr;
     }
 
     auto* parameters = new TypeListNode();
     for(auto* parameter : match->parameters->parameters)
         parameters->addType(cloneTypeNode(parameter->type));
-    return new FunctionTypeNode(parameters,
-                                cloneTypeNode(match->returnType));
+    return new FunctionTypeNode(parameters, cloneTypeNode(match->returnType));
 }
 
 llvm::Value* CodeGenerator::generateFunctionItemValue(
-    IdentifierNode* identifier, FunctionTypeNode* callableType)
+    IdentifierNode* identifier,
+    FunctionTypeNode* callableType)
 {
     if(!identifier || !callableType)
         return nullptr;
@@ -368,7 +403,8 @@ llvm::Value* CodeGenerator::generateFunctionItemValue(
         for(auto* parameter : overload.node->parameters->parameters)
             candidateParams->addType(cloneTypeNode(parameter->type));
         auto* candidateType = new FunctionTypeNode(
-            candidateParams, cloneTypeNode(overload.node->returnType));
+            candidateParams,
+            cloneTypeNode(overload.node->returnType));
         if(typeMangle(candidateType) == typeMangle(callableType))
             matches.push_back(&overload);
     }
@@ -386,12 +422,14 @@ llvm::Value* CodeGenerator::generateFunctionItemValue(
         for(auto& parameter : target->args())
             thunkParams.push_back(parameter.getType());
         llvm::FunctionType* thunkType = llvm::FunctionType::get(
-            target->getReturnType(), thunkParams, false);
+            target->getReturnType(),
+            thunkParams,
+            false);
         static size_t functionItemThunkId = 0;
         llvm::Function* thunk = llvm::Function::Create(
-            thunkType, llvm::Function::PrivateLinkage,
-            "__mlang_function_item_" +
-                std::to_string(functionItemThunkId++),
+            thunkType,
+            llvm::Function::PrivateLinkage,
+            "__mlang_function_item_" + std::to_string(functionItemThunkId++),
             module.get());
         llvm::BasicBlock* entry =
             llvm::BasicBlock::Create(context, "entry", thunk);
@@ -414,35 +452,43 @@ llvm::Value* CodeGenerator::generateFunctionItemValue(
             llvm::dyn_cast_or_null<llvm::StructType>(valueType);
         if(!closureStruct || closureStruct->getNumElements() != 2)
         {
-            reportError(identifier->line,
-                        "unsupported callable representation for function "
-                        "item '" + identifier->name + "'");
+            reportError(
+                identifier->line,
+                "unsupported callable representation for function "
+                "item '" +
+                    identifier->name + "'");
             return nullptr;
         }
         llvm::Value* value = llvm::UndefValue::get(closureStruct);
         value = builder.CreateInsertValue(
-            value, builder.CreatePointerCast(thunk, erasedPointerType), 0,
+            value,
+            builder.CreatePointerCast(thunk, erasedPointerType),
+            0,
             "function.item.code");
         value = builder.CreateInsertValue(
             value,
             llvm::ConstantPointerNull::get(
                 llvm::cast<llvm::PointerType>(erasedPointerType)),
-            1, "function.item.environment");
+            1,
+            "function.item.environment");
         return value;
     }
     if(matches.size() > 1)
-        reportError(identifier->line,
-                    "ambiguous function item '" + identifier->name +
-                        "' for callable signature");
+        reportError(
+            identifier->line,
+            "ambiguous function item '" + identifier->name +
+                "' for callable signature");
     else
-        reportError(identifier->line,
-                    "function item '" + identifier->name +
-                        "' does not match the expected callable signature");
+        reportError(
+            identifier->line,
+            "function item '" + identifier->name +
+                "' does not match the expected callable signature");
     return nullptr;
 }
 
 std::string CodeGenerator::resolveFunctionItemTarget(
-    IdentifierNode* identifier, FunctionTypeNode* callableType)
+    IdentifierNode* identifier,
+    FunctionTypeNode* callableType)
 {
     if(!identifier || !callableType ||
        namedValues.count(identifier->name) != 0 ||
@@ -468,7 +514,8 @@ std::string CodeGenerator::resolveFunctionItemTarget(
         for(auto* parameter : overload.node->parameters->parameters)
             parameters->addType(cloneTypeNode(parameter->type));
         auto* candidate = new FunctionTypeNode(
-            parameters, cloneTypeNode(overload.node->returnType));
+            parameters,
+            cloneTypeNode(overload.node->returnType));
         if(typeMangle(candidate) != expected)
             continue;
         if(match)
@@ -495,8 +542,9 @@ std::set<std::string> CodeGenerator::getFunctionItemTargetsForName(
 // its declared width: `f([6, 7, 8])` with `fn f(v: list<i32>)` read 0 as the
 // second element. A list value carries no element type, so nothing else
 // would catch the mismatch. Other arguments generate as usual.
-llvm::Value* CodeGenerator::generateArgumentValue(ExpressionNode* arg,
-                                                  TypeNode* declaredType)
+llvm::Value* CodeGenerator::generateArgumentValue(
+    ExpressionNode* arg,
+    TypeNode* declaredType)
 {
     if(auto* callableType = dynamic_cast<FunctionTypeNode*>(declaredType))
     {
@@ -516,8 +564,10 @@ llvm::Value* CodeGenerator::generateArgumentValue(ExpressionNode* arg,
         if(llvm::Type* elemType = getLLVMTypeFromNode(listType->elementType))
         {
             if(auto* listLit = dynamic_cast<ListLiteralNode*>(arg))
-                return generateListLiteral(listLit, elemType,
-                                           listType->elementType);
+                return generateListLiteral(
+                    listLit,
+                    elemType,
+                    listType->elementType);
             if(auto* arrFill = dynamic_cast<ArrayFillNode*>(arg))
                 return generateArrayFill(arrFill, elemType);
         }
@@ -529,13 +579,15 @@ llvm::Value* CodeGenerator::generateArgumentValue(ExpressionNode* arg,
 // `argCount` arguments declares the same type there; nullptr otherwise, so an
 // ambiguous call keeps generating its arguments untyped.
 TypeNode* CodeGenerator::overloadParameterType(
-    const std::vector<FunctionOverloadInfo>& overloads, size_t argCount,
+    const std::vector<FunctionOverloadInfo>& overloads,
+    size_t argCount,
     size_t index) const
 {
     const bool hasConcreteSpecialization = std::any_of(
-        overloads.begin(), overloads.end(), [](const auto& info) {
-            return info.node && !info.node->concreteTypeBindings.empty();
-        });
+        overloads.begin(),
+        overloads.end(),
+        [](const auto& info)
+        { return info.node && !info.node->concreteTypeBindings.empty(); });
     TypeNode* found = nullptr;
     std::string foundKey;
     for(const auto& info : overloads)
@@ -558,9 +610,10 @@ TypeNode* CodeGenerator::overloadParameterType(
     return found;
 }
 
-llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
-                                                llvm::Type* declaredElemType,
-                                                TypeNode* declaredElemTypeNode)
+llvm::Value* CodeGenerator::generateListLiteral(
+    ListLiteralNode* node,
+    llvm::Type* declaredElemType,
+    TypeNode* declaredElemTypeNode)
 {
     initializeStdlibFunctions();
 
@@ -582,7 +635,9 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
 
         llvm::Value* listStruct = llvm::UndefValue::get(listStructType);
         listStruct = builder.CreateInsertValue(
-            listStruct, llvm::ConstantInt::get(i64Type, 0), 0);
+            listStruct,
+            llvm::ConstantInt::get(i64Type, 0),
+            0);
         listStruct = builder.CreateInsertValue(
             listStruct,
             llvm::ConstantPointerNull::get(
@@ -602,11 +657,12 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
         llvm::Value* val = nullptr;
         if(auto* nested = dynamic_cast<ListLiteralNode*>(elem))
         {
-            if(auto* nestedType = dynamic_cast<GenericListTypeNode*>(
-                   declaredElemTypeNode))
+            if(auto* nestedType =
+                   dynamic_cast<GenericListTypeNode*>(declaredElemTypeNode))
             {
                 val = generateListLiteral(
-                    nested, getLLVMTypeFromNode(nestedType->elementType),
+                    nested,
+                    getLLVMTypeFromNode(nestedType->elementType),
                     nestedType->elementType);
             }
         }
@@ -624,7 +680,8 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
         {
             auto* declaredTuple =
                 dynamic_cast<TupleTypeNode*>(declaredElemTypeNode);
-            auto* sourceTuple = llvm::dyn_cast<llvm::StructType>(val->getType());
+            auto* sourceTuple =
+                llvm::dyn_cast<llvm::StructType>(val->getType());
             auto* targetTuple = llvm::dyn_cast<llvm::StructType>(elementType);
             if(declaredTuple && sourceTuple && targetTuple &&
                sourceTuple->getNumElements() == targetTuple->getNumElements() &&
@@ -634,11 +691,13 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
             {
                 llvm::Value* convertedTuple =
                     llvm::UndefValue::get(targetTuple);
-                for(unsigned field = 0;
-                    field < targetTuple->getNumElements(); ++field)
+                for(unsigned field = 0; field < targetTuple->getNumElements();
+                    ++field)
                 {
                     llvm::Value* fieldValue = builder.CreateExtractValue(
-                        val, {field}, "list.tuple.field");
+                        val,
+                        {field},
+                        "list.tuple.field");
                     llvm::Type* targetFieldType =
                         targetTuple->getElementType(field);
                     if(fieldValue->getType() != targetFieldType)
@@ -653,38 +712,49 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
                                 targetFieldType->getIntegerBitWidth();
                             if(sourceBits > targetBits)
                                 fieldValue = builder.CreateTrunc(
-                                    fieldValue, targetFieldType,
+                                    fieldValue,
+                                    targetFieldType,
                                     "list.tuple.trunc");
                             else
                                 fieldValue = builder.CreateSExt(
-                                    fieldValue, targetFieldType,
+                                    fieldValue,
+                                    targetFieldType,
                                     "list.tuple.ext");
                         }
-                        else if(sourceFieldType->isFloatingPointTy() &&
-                                targetFieldType->isFloatingPointTy())
+                        else if(
+                            sourceFieldType->isFloatingPointTy() &&
+                            targetFieldType->isFloatingPointTy())
                             fieldValue = builder.CreateFPCast(
-                                fieldValue, targetFieldType,
+                                fieldValue,
+                                targetFieldType,
                                 "list.tuple.fpcast");
-                        else if(sourceFieldType->isIntegerTy() &&
-                                targetFieldType->isFloatingPointTy())
+                        else if(
+                            sourceFieldType->isIntegerTy() &&
+                            targetFieldType->isFloatingPointTy())
                             fieldValue = builder.CreateSIToFP(
-                                fieldValue, targetFieldType,
+                                fieldValue,
+                                targetFieldType,
                                 "list.tuple.sitofp");
-                        else if(sourceFieldType->isFloatingPointTy() &&
-                                targetFieldType->isIntegerTy())
+                        else if(
+                            sourceFieldType->isFloatingPointTy() &&
+                            targetFieldType->isIntegerTy())
                             fieldValue = builder.CreateFPToSI(
-                                fieldValue, targetFieldType,
+                                fieldValue,
+                                targetFieldType,
                                 "list.tuple.fptosi");
                         else
                         {
-                            reportError(node->line,
-                                        "list tuple element field type does "
-                                        "not match its declared type");
+                            reportError(
+                                node->line,
+                                "list tuple element field type does "
+                                "not match its declared type");
                             return nullptr;
                         }
                     }
                     convertedTuple = builder.CreateInsertValue(
-                        convertedTuple, fieldValue, {field},
+                        convertedTuple,
+                        fieldValue,
+                        {field},
                         "list.tuple.converted");
                 }
                 val = convertedTuple;
@@ -698,8 +768,9 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
                 else
                     val = builder.CreateSExt(val, elementType, "elem.ext");
             }
-            else if(val->getType()->isFloatingPointTy() &&
-                    elementType->isFloatingPointTy())
+            else if(
+                val->getType()->isFloatingPointTy() &&
+                elementType->isFloatingPointTy())
                 val = builder.CreateFPCast(val, elementType, "elem.fpcast");
         }
         elementValues.push_back(val);
@@ -710,8 +781,7 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
     // Allocate heap storage for elements. List/array mutation grows this
     // buffer with realloc, so stack-backed alloca storage would be invalid.
     llvm::Value* arraySizeVal = llvm::ConstantInt::get(i64Type, listSize);
-    uint64_t elemSizeU =
-        module->getDataLayout().getTypeAllocSize(elementType);
+    uint64_t elemSizeU = module->getDataLayout().getTypeAllocSize(elementType);
     llvm::Value* elemSize = llvm::ConstantInt::get(i64Type, elemSizeU);
     llvm::Value* byteSize =
         builder.CreateMul(arraySizeVal, elemSize, "list.bytes");
@@ -734,14 +804,17 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
 
     llvm::Value* listStruct = llvm::UndefValue::get(listStructType);
     listStruct = builder.CreateInsertValue(
-        listStruct, llvm::ConstantInt::get(i64Type, listSize), 0);
+        listStruct,
+        llvm::ConstantInt::get(i64Type, listSize),
+        0);
     listStruct = builder.CreateInsertValue(listStruct, dataAlloc, 1);
 
     return listStruct;
 }
 
-llvm::Value* CodeGenerator::generateArrayFill(ArrayFillNode* node,
-                                              llvm::Type* declaredElemType)
+llvm::Value* CodeGenerator::generateArrayFill(
+    ArrayFillNode* node,
+    llvm::Type* declaredElemType)
 {
     initializeStdlibFunctions();
 
@@ -783,8 +856,7 @@ llvm::Value* CodeGenerator::generateArrayFill(ArrayFillNode* node,
     // or later grow with realloc, so stack-backed storage would be invalid.
     uint64_t elemSizeU = module->getDataLayout().getTypeAllocSize(elemType);
     llvm::Value* elemSize = llvm::ConstantInt::get(i64Type, elemSizeU);
-    llvm::Value* byteSize =
-        builder.CreateMul(countVal, elemSize, "fill.bytes");
+    llvm::Value* byteSize = builder.CreateMul(countVal, elemSize, "fill.bytes");
     llvm::Value* dataAlloc =
         builder.CreateCall(mallocFunc, {byteSize}, "filldata");
 
@@ -829,9 +901,10 @@ llvm::Value* CodeGenerator::generateArrayFill(ArrayFillNode* node,
     return listStruct;
 }
 
-llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node,
-                                               llvm::Type* declaredKeyType,
-                                               llvm::Type* declaredValueType)
+llvm::Value* CodeGenerator::generateMapLiteral(
+    MapLiteralNode* node,
+    llvm::Type* declaredKeyType,
+    llvm::Type* declaredValueType)
 {
     initializeStdlibFunctions();
 
@@ -853,7 +926,9 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node,
         // Empty map
         llvm::Value* mapStruct = llvm::UndefValue::get(mapStructType);
         mapStruct = builder.CreateInsertValue(
-            mapStruct, llvm::ConstantInt::get(i64Type, 0), 0);
+            mapStruct,
+            llvm::ConstantInt::get(i64Type, 0),
+            0);
         mapStruct = builder.CreateInsertValue(
             mapStruct,
             llvm::ConstantPointerNull::get(
@@ -873,9 +948,9 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node,
     llvm::Type* keyType = declaredKeyType;
     llvm::Type* valueType = declaredValueType;
 
-    auto coerceMapLiteralValue =
-        [&](llvm::Value* value, llvm::Type* targetType,
-            const char* label) -> llvm::Value*
+    auto coerceMapLiteralValue = [&](llvm::Value* value,
+                                     llvm::Type* targetType,
+                                     const char* label) -> llvm::Value*
     {
         if(!value || !targetType || value->getType() == targetType)
             return value;
@@ -885,26 +960,35 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node,
             unsigned actualBits = actualType->getIntegerBitWidth();
             unsigned targetBits = targetType->getIntegerBitWidth();
             if(actualBits > targetBits)
-                return builder.CreateTrunc(value, targetType,
-                                           std::string(label) + ".trunc");
+                return builder.CreateTrunc(
+                    value,
+                    targetType,
+                    std::string(label) + ".trunc");
             if(actualBits < targetBits)
-                return builder.CreateSExt(value, targetType,
-                                          std::string(label) + ".ext");
+                return builder
+                    .CreateSExt(value, targetType, std::string(label) + ".ext");
             return value;
         }
         if(actualType->isFloatingPointTy() && targetType->isFloatingPointTy())
-            return builder.CreateFPCast(value, targetType,
-                                        std::string(label) + ".fpcast");
+            return builder.CreateFPCast(
+                value,
+                targetType,
+                std::string(label) + ".fpcast");
         if(actualType->isIntegerTy() && targetType->isFloatingPointTy())
-            return builder.CreateSIToFP(value, targetType,
-                                        std::string(label) + ".sitofp");
+            return builder.CreateSIToFP(
+                value,
+                targetType,
+                std::string(label) + ".sitofp");
         if(actualType->isFloatingPointTy() && targetType->isIntegerTy())
-            return builder.CreateFPToSI(value, targetType,
-                                        std::string(label) + ".fptosi");
+            return builder.CreateFPToSI(
+                value,
+                targetType,
+                std::string(label) + ".fptosi");
 
-        reportError(node->line,
-                    std::string("map literal ") + label +
-                        " type does not match declared map type");
+        reportError(
+            node->line,
+            std::string("map literal ") + label +
+                " type does not match declared map type");
         return nullptr;
     };
 
@@ -935,14 +1019,15 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node,
     // current stack frame, so stack-backed alloca arrays would dangle.
     llvm::Value* sizeVal = llvm::ConstantInt::get(i64Type, mapSize);
     uint64_t keySizeU = module->getDataLayout().getTypeAllocSize(keyType);
-    uint64_t valueSizeU =
-        module->getDataLayout().getTypeAllocSize(valueType);
+    uint64_t valueSizeU = module->getDataLayout().getTypeAllocSize(valueType);
     llvm::Value* keyBytes = builder.CreateMul(
-        sizeVal, llvm::ConstantInt::get(i64Type, keySizeU), "map.key.bytes");
-    llvm::Value* valueBytes =
-        builder.CreateMul(sizeVal,
-                          llvm::ConstantInt::get(i64Type, valueSizeU),
-                          "map.value.bytes");
+        sizeVal,
+        llvm::ConstantInt::get(i64Type, keySizeU),
+        "map.key.bytes");
+    llvm::Value* valueBytes = builder.CreateMul(
+        sizeVal,
+        llvm::ConstantInt::get(i64Type, valueSizeU),
+        "map.value.bytes");
     llvm::Value* keysAlloc =
         builder.CreateCall(mallocFunc, {keyBytes}, "mapkeys");
     llvm::Value* valsAlloc =
@@ -963,22 +1048,26 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node,
     // Create map struct
     llvm::Value* mapStruct = llvm::UndefValue::get(mapStructType);
     mapStruct = builder.CreateInsertValue(
-        mapStruct, llvm::ConstantInt::get(i64Type, mapSize), 0);
+        mapStruct,
+        llvm::ConstantInt::get(i64Type, mapSize),
+        0);
     mapStruct = builder.CreateInsertValue(mapStruct, keysAlloc, 1);
     mapStruct = builder.CreateInsertValue(mapStruct, valsAlloc, 2);
 
     return mapStruct;
 }
 
-llvm::Value* CodeGenerator::generateListIndexPointer(IndexExpressionNode* node,
-                                                     TypeNode*& elementTypeNode)
+llvm::Value* CodeGenerator::generateListIndexPointer(
+    IndexExpressionNode* node,
+    TypeNode*& elementTypeNode)
 {
     if(contains_update_expression(node->index))
     {
-        reportError(node->line,
-                    "index expression does not allow pre/post ++/--; update "
-                    "the index in a separate statement to avoid off-by-one "
-                    "and bounds bugs");
+        reportError(
+            node->line,
+            "index expression does not allow pre/post ++/--; update "
+            "the index in a separate statement to avoid off-by-one "
+            "and bounds bugs");
         return nullptr;
     }
 
@@ -987,8 +1076,7 @@ llvm::Value* CodeGenerator::generateListIndexPointer(IndexExpressionNode* node,
     auto* listType = dynamic_cast<GenericListTypeNode*>(baseType);
     if(!listType)
     {
-        reportError(node->line,
-                    "indexed assignment target must be an array");
+        reportError(node->line, "indexed assignment target must be an array");
         return nullptr;
     }
 
@@ -1016,10 +1104,11 @@ llvm::Value* CodeGenerator::generateListIndexPointer(IndexExpressionNode* node,
         if(evaluateCompileTimeInt(node->index, constantIndex) &&
            (constantIndex < 0 || constantIndex >= arrayType->capacity))
         {
-            reportError(node->line,
-                        "array index out of bounds: index=" +
-                            std::to_string(constantIndex) + " capacity=" +
-                            std::to_string(arrayType->capacity));
+            reportError(
+                node->line,
+                "array index out of bounds: index=" +
+                    std::to_string(constantIndex) +
+                    " capacity=" + std::to_string(arrayType->capacity));
             return nullptr;
         }
     }
@@ -1028,9 +1117,10 @@ llvm::Value* CodeGenerator::generateListIndexPointer(IndexExpressionNode* node,
     llvm::Type* elementType = getLLVMTypeFromNode(elementTypeNode);
     if(!elementType)
     {
-        reportError(node->line,
-                    "cannot index array with unresolved element type '" +
-                        Helpers::type_name_for_error(elementTypeNode) + "'");
+        reportError(
+            node->line,
+            "cannot index array with unresolved element type '" +
+                Helpers::type_name_for_error(elementTypeNode) + "'");
         return nullptr;
     }
 
@@ -1060,19 +1150,25 @@ llvm::Value* CodeGenerator::generateListIndexPointer(IndexExpressionNode* node,
     llvm::BasicBlock* failBlock =
         llvm::BasicBlock::Create(context, "index.assign.fail", function);
     llvm::Value* nonNegative = builder.CreateICmpSGE(
-        indexValue, llvm::ConstantInt::get(i64Type, 0), "index.nonnegative");
+        indexValue,
+        llvm::ConstantInt::get(i64Type, 0),
+        "index.nonnegative");
     llvm::Value* belowLength =
         builder.CreateICmpSLT(indexValue, listSize, "index.below_length");
-    builder.CreateCondBr(builder.CreateAnd(nonNegative, belowLength), okBlock,
-                         failBlock);
+    builder.CreateCondBr(
+        builder.CreateAnd(nonNegative, belowLength),
+        okBlock,
+        failBlock);
 
     builder.SetInsertPoint(failBlock);
 #if LLVM_VERSION_MAJOR >= 21
     llvm::Value* message = builder.CreateGlobalString(
-        "list/span index out of bounds\n", "index.assign.bounds.msg");
+        "list/span index out of bounds\n",
+        "index.assign.bounds.msg");
 #else
     llvm::Value* message = builder.CreateGlobalStringPtr(
-        "list/span index out of bounds\n", "index.assign.bounds.msg");
+        "list/span index out of bounds\n",
+        "index.assign.bounds.msg");
 #endif
 #if LLVM_VERSION_MAJOR >= 15
     llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
@@ -1087,8 +1183,8 @@ llvm::Value* CodeGenerator::generateListIndexPointer(IndexExpressionNode* node,
     builder.CreateUnreachable();
 
     builder.SetInsertPoint(okBlock);
-    return builder.CreateGEP(elementType, dataPtr, indexValue,
-                             "index.element.ptr");
+    return builder
+        .CreateGEP(elementType, dataPtr, indexValue, "index.element.ptr");
 }
 
 llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
@@ -1098,10 +1194,11 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
 
     if(contains_update_expression(node->index))
     {
-        reportError(node->line,
-                    "index expression does not allow pre/post ++/--; update "
-                    "the index in a separate statement to avoid off-by-one "
-                    "and bounds bugs");
+        reportError(
+            node->line,
+            "index expression does not allow pre/post ++/--; update "
+            "the index in a separate statement to avoid off-by-one "
+            "and bounds bugs");
         return nullptr;
     }
 
@@ -1145,31 +1242,30 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
             {
                 if(knownIndex < 0)
                 {
-                    reportError(node->line,
-                                "array index out of bounds: index=" +
-                                    std::to_string(knownIndex) +
-                                    " capacity=" +
-                                    std::to_string(*arrayCapacity));
+                    reportError(
+                        node->line,
+                        "array index out of bounds: index=" +
+                            std::to_string(knownIndex) +
+                            " capacity=" + std::to_string(*arrayCapacity));
                     return nullptr;
                 }
                 if(knownArrayLength && knownIndex >= *knownArrayLength)
                 {
-                    reportError(node->line,
-                                "array index out of bounds: index=" +
-                                    std::to_string(knownIndex) +
-                                    " len=" +
-                                    std::to_string(*knownArrayLength) +
-                                    " capacity=" +
-                                    std::to_string(*arrayCapacity));
+                    reportError(
+                        node->line,
+                        "array index out of bounds: index=" +
+                            std::to_string(knownIndex) +
+                            " len=" + std::to_string(*knownArrayLength) +
+                            " capacity=" + std::to_string(*arrayCapacity));
                     return nullptr;
                 }
                 if(knownIndex >= *arrayCapacity)
                 {
-                    reportError(node->line,
-                                "array index out of bounds: index=" +
-                                    std::to_string(knownIndex) +
-                                    " capacity=" +
-                                    std::to_string(*arrayCapacity));
+                    reportError(
+                        node->line,
+                        "array index out of bounds: index=" +
+                            std::to_string(knownIndex) +
+                            " capacity=" + std::to_string(*arrayCapacity));
                     return nullptr;
                 }
             }
@@ -1182,9 +1278,10 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         llvm::Type* elementType = getLLVMTypeFromNode(elemTypeNode);
         if(!elementType)
         {
-            reportError(node->line,
-                        "cannot index list with unresolved element type '" +
-                            Helpers::type_name_for_error(elemTypeNode) + "'");
+            reportError(
+                node->line,
+                "cannot index list with unresolved element type '" +
+                    Helpers::type_name_for_error(elemTypeNode) + "'");
             return nullptr;
         }
 
@@ -1200,10 +1297,9 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
             llvm::StructType::get(context, listStructTypes);
 
         // Load list struct
-        llvm::Value* listStruct = baseValue
-                                      ? baseValue
-                                      : builder.CreateLoad(listStructType,
-                                                           basePtr, "list");
+        llvm::Value* listStruct =
+            baseValue ? baseValue
+                      : builder.CreateLoad(listStructType, basePtr, "list");
         llvm::Value* listSize =
             builder.CreateExtractValue(listStruct, 0, "size");
         llvm::Value* dataPtr =
@@ -1222,7 +1318,9 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
             llvm::BasicBlock::Create(context, "index.fail", function);
 
         llvm::Value* nonNegative = builder.CreateICmpSGE(
-            indexVal, llvm::ConstantInt::get(i64Type, 0), "index.nonneg");
+            indexVal,
+            llvm::ConstantInt::get(i64Type, 0),
+            "index.nonneg");
         llvm::Value* withinUpper =
             builder.CreateICmpSLT(indexVal, listSize, "index.upper");
         llvm::Value* inBounds =
@@ -1232,10 +1330,12 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         builder.SetInsertPoint(failBB);
 #if LLVM_VERSION_MAJOR >= 21
         llvm::Value* formatStr = builder.CreateGlobalString(
-            "list/span index out of bounds\n", "index.bounds.msg");
+            "list/span index out of bounds\n",
+            "index.bounds.msg");
 #else
         llvm::Value* formatStr = builder.CreateGlobalStringPtr(
-            "list/span index out of bounds\n", "index.bounds.msg");
+            "list/span index out of bounds\n",
+            "index.bounds.msg");
 #endif
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
@@ -1283,20 +1383,22 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         llvm::Type* valueType = getLLVMTypeFromNode(valTypeNode);
         if(!keyType || !valueType)
         {
-            reportError(node->line,
-                        "cannot index map with unresolved key/value type '" +
-                            Helpers::type_name_for_error(keyTypeNode) + "'/'" +
-                            Helpers::type_name_for_error(valTypeNode) + "'");
+            reportError(
+                node->line,
+                "cannot index map with unresolved key/value type '" +
+                    Helpers::type_name_for_error(keyTypeNode) + "'/'" +
+                    Helpers::type_name_for_error(valTypeNode) + "'");
             return nullptr;
         }
         if(indexVal->getType() != keyType)
         {
             llvm::Type* indexType = indexVal->getType();
             if(indexType->isIntegerTy() && keyType->isIntegerTy())
-                indexVal = builder.CreateSExtOrTrunc(indexVal, keyType,
-                                                     "map.key.cast");
-            else if(indexType->isFloatingPointTy() &&
-                    keyType->isFloatingPointTy())
+                indexVal =
+                    builder
+                        .CreateSExtOrTrunc(indexVal, keyType, "map.key.cast");
+            else if(
+                indexType->isFloatingPointTy() && keyType->isFloatingPointTy())
                 indexVal =
                     builder.CreateFPCast(indexVal, keyType, "map.key.cast");
             else if(indexType->isIntegerTy() && keyType->isFloatingPointTy())
@@ -1319,10 +1421,9 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
             llvm::StructType::get(context, mapStructTypes);
 
         // Load map struct
-        llvm::Value* mapStruct = baseValue
-                                     ? baseValue
-                                     : builder.CreateLoad(mapStructType,
-                                                          basePtr, "map");
+        llvm::Value* mapStruct =
+            baseValue ? baseValue
+                      : builder.CreateLoad(mapStructType, basePtr, "map");
         llvm::Value* mapSize = builder.CreateExtractValue(mapStruct, 0, "size");
         llvm::Value* keysPtr = builder.CreateExtractValue(mapStruct, 1, "keys");
         llvm::Value* valsPtr = builder.CreateExtractValue(mapStruct, 2, "vals");
@@ -1396,9 +1497,10 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
 
         incBB->insertInto(function);
         builder.SetInsertPoint(incBB);
-        llvm::Value* nextIdx =
-            builder.CreateAdd(builder.CreateLoad(i64Type, idxVar, ""),
-                              llvm::ConstantInt::get(i64Type, 1), "nextidx");
+        llvm::Value* nextIdx = builder.CreateAdd(
+            builder.CreateLoad(i64Type, idxVar, ""),
+            llvm::ConstantInt::get(i64Type, 1),
+            "nextidx");
         builder.CreateStore(nextIdx, idxVar);
         builder.CreateBr(condBB);
 
@@ -1410,17 +1512,18 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
             llvm::BasicBlock::Create(context, "map.lookup.ok", function);
         llvm::BasicBlock* missingBB =
             llvm::BasicBlock::Create(context, "map.lookup.missing", function);
-        llvm::Value* found =
-            builder.CreateLoad(i1Type, foundVar, "map.found");
+        llvm::Value* found = builder.CreateLoad(i1Type, foundVar, "map.found");
         builder.CreateCondBr(found, okBB, missingBB);
 
         builder.SetInsertPoint(missingBB);
 #if LLVM_VERSION_MAJOR >= 21
         llvm::Value* formatStr = builder.CreateGlobalString(
-            "map key not found\n", "map.lookup.missing.msg");
+            "map key not found\n",
+            "map.lookup.missing.msg");
 #else
         llvm::Value* formatStr = builder.CreateGlobalStringPtr(
-            "map key not found\n", "map.lookup.missing.msg");
+            "map key not found\n",
+            "map.lookup.missing.msg");
 #endif
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
@@ -1439,8 +1542,9 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
     }
 
     std::string baseName = baseId ? baseId->name : "expression";
-    reportError(node->line,
-                "cannot index non-list/non-map variable: " + baseName);
+    reportError(
+        node->line,
+        "cannot index non-list/non-map variable: " + baseName);
     return nullptr;
 }
 
@@ -1473,7 +1577,10 @@ llvm::Value* CodeGenerator::generateTupleLiteral(TupleLiteralNode* node)
     for(size_t i = 0; i < elementValues.size(); ++i)
     {
         tupleVal = builder.CreateInsertValue(
-            tupleVal, elementValues[i], static_cast<unsigned>(i), "tuple.elem");
+            tupleVal,
+            elementValues[i],
+            static_cast<unsigned>(i),
+            "tuple.elem");
     }
 
     return tupleVal;
@@ -1503,8 +1610,10 @@ llvm::Value* CodeGenerator::generateTupleAccess(TupleAccessNode* node)
     auto it = tupleElementTypes.find(baseId->name);
     if(it == tupleElementTypes.end())
     {
-        reportError(node->line, "cannot access tuple element: '" +
-                                    baseId->name + "' is not a tuple");
+        reportError(
+            node->line,
+            "cannot access tuple element: '" + baseId->name +
+                "' is not a tuple");
         return nullptr;
     }
 
@@ -1513,10 +1622,11 @@ llvm::Value* CodeGenerator::generateTupleAccess(TupleAccessNode* node)
     // Bounds check
     if(node->index < 0 || static_cast<size_t>(node->index) >= elemTypes.size())
     {
-        reportError(node->line, "tuple index " + std::to_string(node->index) +
-                                    " out of bounds (tuple has " +
-                                    std::to_string(elemTypes.size()) +
-                                    " elements)");
+        reportError(
+            node->line,
+            "tuple index " + std::to_string(node->index) +
+                " out of bounds (tuple has " +
+                std::to_string(elemTypes.size()) + " elements)");
         return nullptr;
     }
 
@@ -1542,7 +1652,9 @@ llvm::Value* CodeGenerator::generateTupleAccess(TupleAccessNode* node)
 
     // Extract the element
     return builder.CreateExtractValue(
-        tupleVal, static_cast<unsigned>(node->index), "tuple.elem");
+        tupleVal,
+        static_cast<unsigned>(node->index),
+        "tuple.elem");
 }
 
 llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
@@ -1552,14 +1664,18 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
     // Check if this is a generic struct instantiation (has type arguments)
     if(node->structName == "result" && node->typeArgs.empty())
     {
-        reportError(node->line, "result literals require type arguments (e.g. "
-                                "Ok<i32, str8>(...))");
+        reportError(
+            node->line,
+            "result literals require type arguments (e.g. "
+            "Ok<i32, str8>(...))");
         return nullptr;
     }
     if(node->structName == "option" && node->typeArgs.empty())
     {
-        reportError(node->line, "option literals require type arguments (e.g. "
-                                "Some<i32>(...))");
+        reportError(
+            node->line,
+            "option literals require type arguments (e.g. "
+            "Some<i32>(...))");
         return nullptr;
     }
     if(!node->typeArgs.empty())
@@ -1580,8 +1696,9 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                 TypeNode* typeArg = Helpers::type_from_text(typeArgStr);
                 if(!typeArg)
                 {
-                    reportError(node->line,
-                                "invalid generic type argument: " + typeArgStr);
+                    reportError(
+                        node->line,
+                        "invalid generic type argument: " + typeArgStr);
                     return nullptr;
                 }
 
@@ -1605,7 +1722,9 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                 }
                 if(!typeParamNames.empty())
                     typeArg = substituteTypeParams(
-                        typeArg, typeParamNames, typeParamTypes);
+                        typeArg,
+                        typeParamNames,
+                        typeParamTypes);
                 typeArgNodes.push_back(typeArg);
             }
 
@@ -1632,8 +1751,10 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
     const auto& members = memberIt->second;
 
     auto convertStructLiteralFieldValue =
-        [&](llvm::Value* fieldValue, llvm::Type* expectedType,
-            TypeNode* expectedSemanticType, ExpressionNode* valueExpr,
+        [&](llvm::Value* fieldValue,
+            llvm::Type* expectedType,
+            TypeNode* expectedSemanticType,
+            ExpressionNode* valueExpr,
             const std::string& fullFieldName) -> llvm::Value*
     {
         if(auto* traitObj =
@@ -1646,13 +1767,17 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             {
                 traitValue =
                     fieldValue ? fieldValue : generateExpression(valueExpr);
-                return coerceTraitObjectValue(traitValue, expectedType,
-                                              node->line);
+                return coerceTraitObjectValue(
+                    traitValue,
+                    expectedType,
+                    node->line);
             }
             if(exprType)
-                return buildTraitObjectValue(valueExpr, traitObj->traitName,
-                                             node->line,
-                                             /*heapCopy=*/true);
+                return buildTraitObjectValue(
+                    valueExpr,
+                    traitObj->traitName,
+                    node->line,
+                    /*heapCopy=*/true);
 
             traitValue =
                 fieldValue ? fieldValue : generateExpression(valueExpr);
@@ -1721,10 +1846,11 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
         else
             expectedTypeStr = "unknown";
 
-        reportError(node->line, "type mismatch for field '" + fullFieldName +
-                                    "' in struct '" + structTypeName +
-                                    "': expected '" + expectedTypeStr +
-                                    "', got '" + actualTypeStr + "'");
+        reportError(
+            node->line,
+            "type mismatch for field '" + fullFieldName + "' in struct '" +
+                structTypeName + "': expected '" + expectedTypeStr +
+                "', got '" + actualTypeStr + "'");
         return nullptr;
     };
 
@@ -1738,25 +1864,33 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             return structRef->structName;
 
         if(auto* genericRef = dynamic_cast<GenericStructTypeRefNode*>(type))
-            return getOrCreateMonomorphizedStruct(genericRef->structName,
-                                                  genericRef->typeArgs);
+            return getOrCreateMonomorphizedStruct(
+                genericRef->structName,
+                genericRef->typeArgs);
 
         return "";
     };
 
     std::function<llvm::Value*(
-        const std::string&, llvm::StructType*,
-        const std::vector<std::pair<std::string, TypeNode*>>&, llvm::Value*,
-        const std::vector<std::string>&, size_t, ExpressionNode*,
-        const std::string&, bool)>
+        const std::string&,
+        llvm::StructType*,
+        const std::vector<std::pair<std::string, TypeNode*>>&,
+        llvm::Value*,
+        const std::vector<std::string>&,
+        size_t,
+        ExpressionNode*,
+        const std::string&,
+        bool)>
         applyNestedFieldInit =
             [&](const std::string& currentStructName,
                 llvm::StructType* currentStructType,
                 const std::vector<std::pair<std::string, TypeNode*>>&
                     currentMembers,
                 llvm::Value* currentStructVal,
-                const std::vector<std::string>& fieldParts, size_t partIndex,
-                ExpressionNode* valueExpr, const std::string& fullFieldName,
+                const std::vector<std::string>& fieldParts,
+                size_t partIndex,
+                ExpressionNode* valueExpr,
+                const std::string& fullFieldName,
                 bool enforceAccess) -> llvm::Value*
     {
         if(partIndex >= fieldParts.size())
@@ -1774,14 +1908,17 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
 
         if(memberIndex < 0)
         {
-            reportError(node->line, "unknown field '" + fieldParts[partIndex] +
-                                        "' in struct '" + currentStructName +
-                                        "'");
+            reportError(
+                node->line,
+                "unknown field '" + fieldParts[partIndex] + "' in struct '" +
+                    currentStructName + "'");
             return nullptr;
         }
-        if(enforceAccess &&
-           !canAccessStructField(currentStructName, memberIndex, node->line,
-                                 fieldParts[partIndex]))
+        if(enforceAccess && !canAccessStructField(
+                                currentStructName,
+                                memberIndex,
+                                node->line,
+                                fieldParts[partIndex]))
         {
             return nullptr;
         }
@@ -1790,9 +1927,10 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             getStructFieldLayout(currentStructName, memberIndex);
         if(!layout)
         {
-            reportError(node->line,
-                        "missing field layout for '" + fieldParts[partIndex] +
-                            "' in struct '" + currentStructName + "'");
+            reportError(
+                node->line,
+                "missing field layout for '" + fieldParts[partIndex] +
+                    "' in struct '" + currentStructName + "'");
             return nullptr;
         }
 
@@ -1807,11 +1945,12 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                         currentMembers[memberIndex].second);
                     if(expectedStructName.empty())
                     {
-                        reportError(node->line,
-                                    "field '" + fullFieldName +
-                                        "' in struct '" + currentStructName +
-                                        "' does not accept an anonymous object "
-                                        "literal");
+                        reportError(
+                            node->line,
+                            "field '" + fullFieldName + "' in struct '" +
+                                currentStructName +
+                                "' does not accept an anonymous object "
+                                "literal");
                         return nullptr;
                     }
 
@@ -1825,13 +1964,11 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
 
             if(!fieldValue)
             {
-                if(auto* expectedList =
-                       dynamic_cast<GenericListTypeNode*>(
-                           currentMembers[memberIndex].second))
+                if(auto* expectedList = dynamic_cast<GenericListTypeNode*>(
+                       currentMembers[memberIndex].second))
                 {
-                    if(auto* expectedArray =
-                           dynamic_cast<ArrayTypeNode*>(
-                               currentMembers[memberIndex].second))
+                    if(auto* expectedArray = dynamic_cast<ArrayTypeNode*>(
+                           currentMembers[memberIndex].second))
                     {
                         if(auto size = fixedArrayInitializerSize(valueExpr))
                         {
@@ -1865,35 +2002,39 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                            dynamic_cast<ListLiteralNode*>(valueExpr))
                         fieldValue =
                             generateListLiteral(listLit, expectedElemType);
-                    else if(auto* arrFill =
-                                dynamic_cast<ArrayFillNode*>(valueExpr))
+                    else if(
+                        auto* arrFill = dynamic_cast<ArrayFillNode*>(valueExpr))
                         fieldValue =
                             generateArrayFill(arrFill, expectedElemType);
                 }
-                else if(auto* expectedMap =
-                            dynamic_cast<MapTypeNode*>(
-                                currentMembers[memberIndex].second))
+                else if(
+                    auto* expectedMap = dynamic_cast<MapTypeNode*>(
+                        currentMembers[memberIndex].second))
                 {
                     llvm::Type* expectedKeyType =
                         getLLVMTypeFromNode(expectedMap->keyType);
                     llvm::Type* expectedValueType =
                         getLLVMTypeFromNode(expectedMap->valueType);
-                    if(auto* mapLit =
-                           dynamic_cast<MapLiteralNode*>(valueExpr))
+                    if(auto* mapLit = dynamic_cast<MapLiteralNode*>(valueExpr))
                     {
                         fieldValue = generateMapLiteral(
-                            mapLit, expectedKeyType, expectedValueType);
+                            mapLit,
+                            expectedKeyType,
+                            expectedValueType);
                     }
                 }
             }
 
             if(!fieldValue)
                 fieldValue = generateExpression(
-                    valueExpr, currentMembers[memberIndex].second);
+                    valueExpr,
+                    currentMembers[memberIndex].second);
             if(!fieldValue)
             {
-                reportError(node->line, "failed to generate value for field '" +
-                                            fullFieldName + "'");
+                reportError(
+                    node->line,
+                    "failed to generate value for field '" + fullFieldName +
+                        "'");
                 return nullptr;
             }
 
@@ -1902,8 +2043,11 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                     ? llvm::Type::getInt1Ty(context)
                     : currentStructType->getElementType(layout->storageIndex);
             fieldValue = convertStructLiteralFieldValue(
-                fieldValue, expectedType, currentMembers[memberIndex].second,
-                valueExpr, fullFieldName);
+                fieldValue,
+                expectedType,
+                currentMembers[memberIndex].second,
+                valueExpr,
+                fullFieldName);
             if(!fieldValue)
                 return nullptr;
 
@@ -1912,41 +2056,51 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                 llvm::Type* storageType =
                     currentStructType->getElementType(layout->storageIndex);
                 llvm::Value* currentStorage = builder.CreateExtractValue(
-                    currentStructVal, {layout->storageIndex},
+                    currentStructVal,
+                    {layout->storageIndex},
                     currentStructName + "." + fullFieldName + ".storage");
                 llvm::Value* zextValue = builder.CreateZExt(
-                    fieldValue, storageType,
+                    fieldValue,
+                    storageType,
                     currentStructName + "." + fullFieldName + ".zext");
                 llvm::Value* shifted = builder.CreateShl(
                     zextValue,
                     llvm::ConstantInt::get(storageType, layout->bitOffset),
                     currentStructName + "." + fullFieldName + ".shift");
                 llvm::Value* mask = llvm::ConstantInt::get(
-                    storageType, static_cast<uint64_t>(1u)
-                                     << layout->bitOffset);
+                    storageType,
+                    static_cast<uint64_t>(1u) << layout->bitOffset);
                 llvm::Value* cleared = builder.CreateAnd(
-                    currentStorage, builder.CreateNot(mask),
+                    currentStorage,
+                    builder.CreateNot(mask),
                     currentStructName + "." + fullFieldName + ".clear");
                 llvm::Value* combined = builder.CreateOr(
-                    cleared, shifted,
+                    cleared,
+                    shifted,
                     currentStructName + "." + fullFieldName + ".combine");
                 return builder.CreateInsertValue(
-                    currentStructVal, combined, {layout->storageIndex},
+                    currentStructVal,
+                    combined,
+                    {layout->storageIndex},
                     currentStructName + "." + fullFieldName);
             }
 
             fieldValue = applyStructCopySemantics(
-                fieldValue, currentMembers[memberIndex].second);
+                fieldValue,
+                currentMembers[memberIndex].second);
             return builder.CreateInsertValue(
-                currentStructVal, fieldValue, {layout->storageIndex},
+                currentStructVal,
+                fieldValue,
+                {layout->storageIndex},
                 currentStructName + "." + fullFieldName);
         }
 
         if(layout->packedBit)
         {
-            reportError(node->line, "field '" + fieldParts[partIndex] +
-                                        "' in struct '" + currentStructName +
-                                        "' is not a nested struct");
+            reportError(
+                node->line,
+                "field '" + fieldParts[partIndex] + "' in struct '" +
+                    currentStructName + "' is not a nested struct");
             return nullptr;
         }
 
@@ -1954,17 +2108,19 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             getNestedStructTypeName(currentMembers[memberIndex].second);
         if(nestedStructName.empty())
         {
-            reportError(node->line, "field '" + fieldParts[partIndex] +
-                                        "' in struct '" + currentStructName +
-                                        "' is not a nested struct");
+            reportError(
+                node->line,
+                "field '" + fieldParts[partIndex] + "' in struct '" +
+                    currentStructName + "' is not a nested struct");
             return nullptr;
         }
 
         auto nestedMembersIt = structMembers.find(nestedStructName);
         if(nestedMembersIt == structMembers.end())
         {
-            reportError(node->line,
-                        "no member info for struct: " + nestedStructName);
+            reportError(
+                node->line,
+                "no member info for struct: " + nestedStructName);
             return nullptr;
         }
 
@@ -1973,26 +2129,37 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
         auto* nestedStructType = llvm::dyn_cast<llvm::StructType>(storageType);
         if(!nestedStructType)
         {
-            reportError(node->line, "field '" + fieldParts[partIndex] +
-                                        "' in struct '" + currentStructName +
-                                        "' is not stored as a struct");
+            reportError(
+                node->line,
+                "field '" + fieldParts[partIndex] + "' in struct '" +
+                    currentStructName + "' is not stored as a struct");
             return nullptr;
         }
 
         llvm::Value* nestedValue = builder.CreateExtractValue(
-            currentStructVal, {layout->storageIndex},
+            currentStructVal,
+            {layout->storageIndex},
             currentStructName + "." + fieldParts[partIndex] + ".extract");
-        nestedValue = applyNestedFieldInit(nestedStructName, nestedStructType,
-                                           nestedMembersIt->second, nestedValue,
-                                           fieldParts, partIndex + 1, valueExpr,
-                                           fullFieldName, enforceAccess);
+        nestedValue = applyNestedFieldInit(
+            nestedStructName,
+            nestedStructType,
+            nestedMembersIt->second,
+            nestedValue,
+            fieldParts,
+            partIndex + 1,
+            valueExpr,
+            fullFieldName,
+            enforceAccess);
         if(!nestedValue)
             return nullptr;
 
         nestedValue = applyStructCopySemantics(
-            nestedValue, currentMembers[memberIndex].second);
+            nestedValue,
+            currentMembers[memberIndex].second);
         return builder.CreateInsertValue(
-            currentStructVal, nestedValue, {layout->storageIndex},
+            currentStructVal,
+            nestedValue,
+            {layout->storageIndex},
             currentStructName + "." + fieldParts[partIndex]);
     };
 
@@ -2005,15 +2172,18 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
     // `Outer {}` matches building each nested `Inner {}`. Explicit field
     // initializers in the literal below will overwrite anything set here.
     std::function<llvm::Value*(
-        const std::string&, llvm::StructType*,
-        const std::vector<std::pair<std::string, TypeNode*>>&, llvm::Value*,
+        const std::string&,
+        llvm::StructType*,
+        const std::vector<std::pair<std::string, TypeNode*>>&,
+        llvm::Value*,
         int)>
         applyMemberDefaults =
             [&](const std::string& currentStructName,
                 llvm::StructType* currentStructType,
                 const std::vector<std::pair<std::string, TypeNode*>>&
                     currentMembers,
-                llvm::Value* currentStructVal, int depth) -> llvm::Value*
+                llvm::Value* currentStructVal,
+                int depth) -> llvm::Value*
     {
         auto defaultsIt = structMemberDefaults.find(currentStructName);
         const std::map<std::string, ExpressionNode*>* defaults =
@@ -2038,17 +2208,21 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             if(!nestedType)
                 continue;
             llvm::Value* nestedValue = builder.CreateExtractValue(
-                currentStructVal, {layout->storageIndex},
-                currentStructName + "." + currentMembers[i].first +
-                    ".default");
-            nestedValue =
-                applyMemberDefaults(nestedName, nestedType,
-                                    nestedMembersIt->second, nestedValue,
-                                    depth + 1);
+                currentStructVal,
+                {layout->storageIndex},
+                currentStructName + "." + currentMembers[i].first + ".default");
+            nestedValue = applyMemberDefaults(
+                nestedName,
+                nestedType,
+                nestedMembersIt->second,
+                nestedValue,
+                depth + 1);
             if(!nestedValue)
                 return nullptr;
             currentStructVal = builder.CreateInsertValue(
-                currentStructVal, nestedValue, {layout->storageIndex},
+                currentStructVal,
+                nestedValue,
+                {layout->storageIndex},
                 currentStructName + "." + currentMembers[i].first);
         }
         if(defaults)
@@ -2056,8 +2230,14 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             for(const auto& kv : *defaults)
             {
                 currentStructVal = applyNestedFieldInit(
-                    currentStructName, currentStructType, currentMembers,
-                    currentStructVal, {kv.first}, 0, kv.second, kv.first,
+                    currentStructName,
+                    currentStructType,
+                    currentMembers,
+                    currentStructVal,
+                    {kv.first},
+                    0,
+                    kv.second,
+                    kv.first,
                     false);
                 if(!currentStructVal)
                     return nullptr;
@@ -2065,8 +2245,8 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
         }
         return currentStructVal;
     };
-    structVal = applyMemberDefaults(structTypeName, structType, members,
-                                    structVal, 0);
+    structVal =
+        applyMemberDefaults(structTypeName, structType, members, structVal, 0);
     if(!structVal)
         return nullptr;
 
@@ -2095,9 +2275,16 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             return nullptr;
         }
 
-        structVal =
-            applyNestedFieldInit(structTypeName, structType, members, structVal,
-                                 fieldParts, 0, valueExpr, fieldName, true);
+        structVal = applyNestedFieldInit(
+            structTypeName,
+            structType,
+            members,
+            structVal,
+            fieldParts,
+            0,
+            valueExpr,
+            fieldName,
+            true);
         if(!structVal)
             return nullptr;
     }
@@ -2238,7 +2425,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         {
             variableTypes[name] = TypeNode::TYPE_STRUCT;
             structVariableTypes[name] = getOrCreateMonomorphizedStruct(
-                genRef->structName, genRef->typeArgs);
+                genRef->structName,
+                genRef->typeArgs);
         }
         else if(auto* listType = dynamic_cast<GenericListTypeNode*>(type))
         {
@@ -2271,7 +2459,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     };
 
     auto generateArmValue =
-        [&](MatchArmNode* arm, int valueIndex, TypeNode* valueType,
+        [&](MatchArmNode* arm,
+            int valueIndex,
+            TypeNode* valueType,
             std::set<std::string>* outMovedState,
             std::map<std::string, std::string>* outPointerBorrowTarget,
             std::map<std::string, std::string>* outPointerBorrowParent,
@@ -2396,8 +2586,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
 
         if(isOkIndex < 0 || okIndex < 0 || errIndex < 0)
         {
-            reportError(node->line,
-                        "match expects result with is_ok/ok/err fields");
+            reportError(
+                node->line,
+                "match expects result with is_ok/ok/err fields");
             return nullptr;
         }
 
@@ -2407,8 +2598,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             errArm = wildcardArm;
         if(!okArm || !errArm)
         {
-            reportError(node->line,
-                        "match requires Ok and Err arms or wildcard");
+            reportError(
+                node->line,
+                "match requires Ok and Err arms or wildcard");
             return nullptr;
         }
 
@@ -2431,15 +2623,20 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         std::map<std::string, std::string> okPointerBorrowParent;
         std::map<std::string, std::set<std::string>> okActiveBorrowers;
         std::map<std::string, std::set<std::string>> okAggregateOrigins;
-        llvm::Value* okValue =
-            generateArmValue(okArm, okIndex, okType, &okMovedState,
-                             &okPointerBorrowTarget, &okPointerBorrowParent,
-                             &okActiveBorrowers,
-                             &okAggregateOrigins);
+        llvm::Value* okValue = generateArmValue(
+            okArm,
+            okIndex,
+            okType,
+            &okMovedState,
+            &okPointerBorrowTarget,
+            &okPointerBorrowParent,
+            &okActiveBorrowers,
+            &okAggregateOrigins);
         if(!okValue)
             return nullptr;
         llvm::BasicBlock* okEnd = builder.GetInsertBlock();
-        bool okFallsThrough = (mlang::llvm_compat::terminatorOrNull(okEnd) == nullptr);
+        bool okFallsThrough =
+            (mlang::llvm_compat::terminatorOrNull(okEnd) == nullptr);
         if(okFallsThrough)
             builder.CreateBr(mergeBB);
 
@@ -2450,15 +2647,20 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         std::map<std::string, std::string> errPointerBorrowParent;
         std::map<std::string, std::set<std::string>> errActiveBorrowers;
         std::map<std::string, std::set<std::string>> errAggregateOrigins;
-        llvm::Value* errValue =
-            generateArmValue(errArm, errIndex, errType, &errMovedState,
-                             &errPointerBorrowTarget, &errPointerBorrowParent,
-                             &errActiveBorrowers,
-                             &errAggregateOrigins);
+        llvm::Value* errValue = generateArmValue(
+            errArm,
+            errIndex,
+            errType,
+            &errMovedState,
+            &errPointerBorrowTarget,
+            &errPointerBorrowParent,
+            &errActiveBorrowers,
+            &errAggregateOrigins);
         if(!errValue)
             return nullptr;
         llvm::BasicBlock* errEnd = builder.GetInsertBlock();
-        bool errFallsThrough = (mlang::llvm_compat::terminatorOrNull(errEnd) == nullptr);
+        bool errFallsThrough =
+            (mlang::llvm_compat::terminatorOrNull(errEnd) == nullptr);
         if(errFallsThrough)
             builder.CreateBr(mergeBB);
 
@@ -2496,7 +2698,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         }
         llvm::Type* okValueType = armValues[0].first->getType();
 
-        auto castInBlock = [&](llvm::Value* val, llvm::Type* target,
+        auto castInBlock = [&](llvm::Value* val,
+                               llvm::Type* target,
                                llvm::BasicBlock* block) -> llvm::Value*
         {
             if(!val || !target || !block)
@@ -2504,7 +2707,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             llvm::Type* src = val->getType();
             if(src == target)
                 return val;
-            llvm::IRBuilder<> castBuilder(mlang::llvm_compat::terminatorOrNull(block));
+            llvm::IRBuilder<> castBuilder(
+                mlang::llvm_compat::terminatorOrNull(block));
             if(src->isIntegerTy() && target->isIntegerTy())
             {
                 unsigned srcBits = src->getIntegerBitWidth();
@@ -2533,21 +2737,22 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
                 unsigned errBits = errValueType->getIntegerBitWidth();
                 commonType = okBits >= errBits ? okValueType : errValueType;
             }
-            else if(okValueType->isFloatingPointTy() &&
-                    errValueType->isFloatingPointTy())
+            else if(
+                okValueType->isFloatingPointTy() &&
+                errValueType->isFloatingPointTy())
             {
                 commonType =
                     okValueType->isDoubleTy() || errValueType->isDoubleTy()
                         ? llvm::Type::getDoubleTy(context)
                         : llvm::Type::getFloatTy(context);
             }
-            else if(okValueType->isFloatingPointTy() &&
-                    errValueType->isIntegerTy())
+            else if(
+                okValueType->isFloatingPointTy() && errValueType->isIntegerTy())
             {
                 commonType = okValueType;
             }
-            else if(okValueType->isIntegerTy() &&
-                    errValueType->isFloatingPointTy())
+            else if(
+                okValueType->isIntegerTy() && errValueType->isFloatingPointTy())
             {
                 commonType = errValueType;
             }
@@ -2558,10 +2763,14 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
                 return nullptr;
             }
 
-            armValues[0].first = castInBlock(armValues[0].first, commonType,
-                                             armValues[0].second);
-            armValues[1].first = castInBlock(armValues[1].first, commonType,
-                                             armValues[1].second);
+            armValues[0].first = castInBlock(
+                armValues[0].first,
+                commonType,
+                armValues[0].second);
+            armValues[1].first = castInBlock(
+                armValues[1].first,
+                commonType,
+                armValues[1].second);
             okValueType = commonType;
         }
 
@@ -2572,7 +2781,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         }
 
         llvm::PHINode* phi = builder.CreatePHI(
-            okValueType, (unsigned)armValues.size(), "match.result");
+            okValueType,
+            (unsigned)armValues.size(),
+            "match.result");
         for(const auto& pair : armValues)
             phi->addIncoming(pair.first, pair.second);
         std::set<std::string> mergedMoved;
@@ -2616,9 +2827,12 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         {
             const bool presentOnEveryArm = std::all_of(
                 armPointerBorrowParents.begin() + 1,
-                armPointerBorrowParents.end(), [&](const auto& state) {
+                armPointerBorrowParents.end(),
+                [&](const auto& state)
+                {
                     auto parent = state.find(it->first);
-                    return parent != state.end() && parent->second == it->second;
+                    return parent != state.end() &&
+                           parent->second == it->second;
                 });
             if(!presentOnEveryArm)
                 it = pointerBorrowParent.erase(it);
@@ -2674,8 +2888,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
 
         if(isSomeIndex < 0 || valueIndex < 0)
         {
-            reportError(node->line,
-                        "match expects option with is_some/value fields");
+            reportError(
+                node->line,
+                "match expects option with is_some/value fields");
             return nullptr;
         }
 
@@ -2685,8 +2900,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             noneArm = wildcardArm;
         if(!someArm || !noneArm)
         {
-            reportError(node->line,
-                        "match requires Some and None arms or wildcard");
+            reportError(
+                node->line,
+                "match requires Some and None arms or wildcard");
             return nullptr;
         }
 
@@ -2709,15 +2925,20 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         std::map<std::string, std::string> somePointerBorrowParent;
         std::map<std::string, std::set<std::string>> someActiveBorrowers;
         std::map<std::string, std::set<std::string>> someAggregateOrigins;
-        llvm::Value* someValue =
-            generateArmValue(someArm, valueIndex, valueType, &someMovedState,
-                             &somePointerBorrowTarget, &somePointerBorrowParent,
-                             &someActiveBorrowers,
-                             &someAggregateOrigins);
+        llvm::Value* someValue = generateArmValue(
+            someArm,
+            valueIndex,
+            valueType,
+            &someMovedState,
+            &somePointerBorrowTarget,
+            &somePointerBorrowParent,
+            &someActiveBorrowers,
+            &someAggregateOrigins);
         if(!someValue)
             return nullptr;
         llvm::BasicBlock* someEnd = builder.GetInsertBlock();
-        bool someFallsThrough = (mlang::llvm_compat::terminatorOrNull(someEnd) == nullptr);
+        bool someFallsThrough =
+            (mlang::llvm_compat::terminatorOrNull(someEnd) == nullptr);
         if(someFallsThrough)
             builder.CreateBr(mergeBB);
 
@@ -2728,15 +2949,20 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         std::map<std::string, std::string> nonePointerBorrowParent;
         std::map<std::string, std::set<std::string>> noneActiveBorrowers;
         std::map<std::string, std::set<std::string>> noneAggregateOrigins;
-        llvm::Value* noneValue =
-            generateArmValue(noneArm, valueIndex, valueType, &noneMovedState,
-                             &nonePointerBorrowTarget, &nonePointerBorrowParent,
-                             &noneActiveBorrowers,
-                             &noneAggregateOrigins);
+        llvm::Value* noneValue = generateArmValue(
+            noneArm,
+            valueIndex,
+            valueType,
+            &noneMovedState,
+            &nonePointerBorrowTarget,
+            &nonePointerBorrowParent,
+            &noneActiveBorrowers,
+            &noneAggregateOrigins);
         if(!noneValue)
             return nullptr;
         llvm::BasicBlock* noneEnd = builder.GetInsertBlock();
-        bool noneFallsThrough = (mlang::llvm_compat::terminatorOrNull(noneEnd) == nullptr);
+        bool noneFallsThrough =
+            (mlang::llvm_compat::terminatorOrNull(noneEnd) == nullptr);
         if(noneFallsThrough)
             builder.CreateBr(mergeBB);
 
@@ -2774,7 +3000,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         }
         llvm::Type* someValueType = armValues[0].first->getType();
 
-        auto castInBlock = [&](llvm::Value* val, llvm::Type* target,
+        auto castInBlock = [&](llvm::Value* val,
+                               llvm::Type* target,
                                llvm::BasicBlock* block) -> llvm::Value*
         {
             if(!val || !target || !block)
@@ -2782,7 +3009,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             llvm::Type* src = val->getType();
             if(src == target)
                 return val;
-            llvm::IRBuilder<> castBuilder(mlang::llvm_compat::terminatorOrNull(block));
+            llvm::IRBuilder<> castBuilder(
+                mlang::llvm_compat::terminatorOrNull(block));
             if(src->isIntegerTy() && target->isIntegerTy())
             {
                 unsigned srcBits = src->getIntegerBitWidth();
@@ -2812,21 +3040,24 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
                 commonType =
                     someBits >= noneBits ? someValueType : noneValueType;
             }
-            else if(someValueType->isFloatingPointTy() &&
-                    noneValueType->isFloatingPointTy())
+            else if(
+                someValueType->isFloatingPointTy() &&
+                noneValueType->isFloatingPointTy())
             {
                 commonType =
                     someValueType->isDoubleTy() || noneValueType->isDoubleTy()
                         ? llvm::Type::getDoubleTy(context)
                         : llvm::Type::getFloatTy(context);
             }
-            else if(someValueType->isFloatingPointTy() &&
-                    noneValueType->isIntegerTy())
+            else if(
+                someValueType->isFloatingPointTy() &&
+                noneValueType->isIntegerTy())
             {
                 commonType = someValueType;
             }
-            else if(someValueType->isIntegerTy() &&
-                    noneValueType->isFloatingPointTy())
+            else if(
+                someValueType->isIntegerTy() &&
+                noneValueType->isFloatingPointTy())
             {
                 commonType = noneValueType;
             }
@@ -2837,10 +3068,14 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
                 return nullptr;
             }
 
-            armValues[0].first = castInBlock(armValues[0].first, commonType,
-                                             armValues[0].second);
-            armValues[1].first = castInBlock(armValues[1].first, commonType,
-                                             armValues[1].second);
+            armValues[0].first = castInBlock(
+                armValues[0].first,
+                commonType,
+                armValues[0].second);
+            armValues[1].first = castInBlock(
+                armValues[1].first,
+                commonType,
+                armValues[1].second);
             someValueType = commonType;
         }
 
@@ -2851,7 +3086,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         }
 
         llvm::PHINode* phi = builder.CreatePHI(
-            someValueType, (unsigned)armValues.size(), "match.result");
+            someValueType,
+            (unsigned)armValues.size(),
+            "match.result");
         for(const auto& pair : armValues)
             phi->addIncoming(pair.first, pair.second);
         std::set<std::string> mergedMoved;
@@ -2895,9 +3132,12 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         {
             const bool presentOnEveryArm = std::all_of(
                 armPointerBorrowParents.begin() + 1,
-                armPointerBorrowParents.end(), [&](const auto& state) {
+                armPointerBorrowParents.end(),
+                [&](const auto& state)
+                {
                     auto parent = state.find(it->first);
-                    return parent != state.end() && parent->second == it->second;
+                    return parent != state.end() &&
+                           parent->second == it->second;
                 });
             if(!presentOnEveryArm)
                 it = pointerBorrowParent.erase(it);
@@ -2939,8 +3179,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         {
             if(!litType->isIntegerTy())
             {
-                reportError(node->line,
-                            "literal pattern type does not match target");
+                reportError(
+                    node->line,
+                    "literal pattern type does not match target");
                 return nullptr;
             }
             unsigned dstBits = targetType->getIntegerBitWidth();
@@ -2959,8 +3200,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
                 litVal = builder.CreateFPCast(litVal, targetType, "match.lit");
             else if(!litType->isFloatingPointTy())
             {
-                reportError(node->line,
-                            "literal pattern type does not match target");
+                reportError(
+                    node->line,
+                    "literal pattern type does not match target");
                 return nullptr;
             }
             return builder.CreateFCmpOEQ(matchVal, litVal, "match.fcmp");
@@ -2969,14 +3211,16 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         {
             if(!litType->isPointerTy())
             {
-                reportError(node->line,
-                            "literal pattern type does not match target");
+                reportError(
+                    node->line,
+                    "literal pattern type does not match target");
                 return nullptr;
             }
             return builder.CreateICmpEQ(matchVal, litVal, "match.pcmp");
         }
-        reportError(node->line,
-                    "literal match expects numeric or pointer type");
+        reportError(
+            node->line,
+            "literal match expects numeric or pointer type");
         return nullptr;
     };
 
@@ -3191,7 +3435,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         llvm::BasicBlock* blk = pair.second;
         if(val->getType() == commonType)
             continue;
-        llvm::IRBuilder<> castBuilder(mlang::llvm_compat::terminatorOrNull(blk));
+        llvm::IRBuilder<> castBuilder(
+            mlang::llvm_compat::terminatorOrNull(blk));
         llvm::Value* casted = val;
         llvm::Type* src = val->getType();
         if(src->isIntegerTy() && commonType->isIntegerTy())
@@ -3215,8 +3460,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         pair.first = casted;
     }
     builder.SetInsertPoint(mergeBB);
-    llvm::PHINode* phi = builder.CreatePHI(
-        commonType, (unsigned)armValues.size(), "match.result");
+    llvm::PHINode* phi =
+        builder
+            .CreatePHI(commonType, (unsigned)armValues.size(), "match.result");
     for(const auto& pair : armValues)
         phi->addIncoming(pair.first, pair.second);
     std::set<std::string> mergedMoved;
@@ -3259,7 +3505,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     {
         const bool presentOnEveryArm = std::all_of(
             armPointerBorrowParents.begin() + 1,
-            armPointerBorrowParents.end(), [&](const auto& state) {
+            armPointerBorrowParents.end(),
+            [&](const auto& state)
+            {
                 auto parent = state.find(it->first);
                 return parent != state.end() && parent->second == it->second;
             });

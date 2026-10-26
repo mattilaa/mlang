@@ -2,10 +2,10 @@
 #include "ir/common.h"
 #include "llvm_compat.h"
 
-#include <llvm/Config/llvm-config.h>
-#include <llvm/IR/Verifier.h>
 #include <algorithm>
 #include <functional>
+#include <llvm/Config/llvm-config.h>
+#include <llvm/IR/Verifier.h>
 
 using mlang::ir_detail::common::Helpers;
 
@@ -87,9 +87,9 @@ void CodeGenerator::generateStructMethods(StructDefNode* node)
     }
 }
 
-llvm::Function*
-CodeGenerator::generateMethodDeclaration(const std::string& structName,
-                                         StructMethodNode* method)
+llvm::Function* CodeGenerator::generateMethodDeclaration(
+    const std::string& structName,
+    StructMethodNode* method)
 {
     // Method name is mangled: StructName_methodName
     std::string mangledName = structName + "_" + method->name;
@@ -126,8 +126,9 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
         llvm::Type* paramType = parameterLLVMType(param->type);
         if(!paramType)
         {
-            reportError(param->line,
-                        "unknown type: " + Helpers::type_name_for_error(param->type));
+            reportError(
+                param->line,
+                "unknown type: " + Helpers::type_name_for_error(param->type));
             paramType = llvm::Type::getInt32Ty(context);
         }
         paramTypes.push_back(paramType);
@@ -136,15 +137,20 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
     llvm::Type* returnType = parameterLLVMType(method->returnType);
     if(!returnType)
     {
-        reportError(method->line,
-                    "unknown type: " + Helpers::type_name_for_error(method->returnType));
+        reportError(
+            method->line,
+            "unknown type: " +
+                Helpers::type_name_for_error(method->returnType));
         returnType = llvm::Type::getVoidTy(context);
     }
 
     llvm::FunctionType* funcType =
         llvm::FunctionType::get(returnType, paramTypes, false);
     llvm::Function* function = llvm::Function::Create(
-        funcType, llvm::Function::ExternalLinkage, mangledName, module.get());
+        funcType,
+        llvm::Function::ExternalLinkage,
+        mangledName,
+        module.get());
 
     // Set parameter names
     unsigned idx = 0;
@@ -199,10 +205,14 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
 
             std::string signatureKey = qname + "#" + function->getName().str();
 
-            FunctionOverloadInfo info{nullptr,      function,
-                                      signatureKey, function->getName().str(),
-                                      false,        method->isPublic,
-                                      srcModule};
+            FunctionOverloadInfo info{
+                nullptr,
+                function,
+                signatureKey,
+                function->getName().str(),
+                false,
+                method->isPublic,
+                srcModule};
             overloads.push_back(info);
         }
     }
@@ -210,9 +220,9 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
     return function;
 }
 
-llvm::Function*
-CodeGenerator::generateMethodDefinition(const std::string& structName,
-                                        StructMethodNode* method)
+llvm::Function* CodeGenerator::generateMethodDefinition(
+    const std::string& structName,
+    StructMethodNode* method)
 {
     std::string mangledName = structName + "_" + method->name;
 
@@ -321,7 +331,8 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
     builder.SetInsertPoint(bb);
     // mlang -g: the method's DISubprogram while its body is generated.
-    DebugFunctionScope debugScope(*this, function, method, structName + "::" + method->name);
+    DebugFunctionScope
+        debugScope(*this, function, method, structName + "::" + method->name);
 
     // Clear scope
     namedValues.clear();
@@ -394,14 +405,22 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     unsigned methodParamIdx = 0;
     for(auto& arg : function->args())
     {
-        ReferenceTypeNode* inoutType = argIdx < inoutForArg.size() ? inoutForArg[argIdx] : nullptr;
-        llvm::Type* localType = inoutType ? getLLVMTypeFromNode(inoutType->elementType) : arg.getType();
+        ReferenceTypeNode* inoutType =
+            argIdx < inoutForArg.size() ? inoutForArg[argIdx] : nullptr;
+        llvm::Type* localType =
+            inoutType ? getLLVMTypeFromNode(inoutType->elementType)
+                      : arg.getType();
         llvm::AllocaInst* alloca = builder.CreateAlloca(
-            localType, nullptr, std::string(arg.getName()) + ".addr");
+            localType,
+            nullptr,
+            std::string(arg.getName()) + ".addr");
         llvm::Value* paramValue = &arg;
         if(inoutType)
         {
-            paramValue = builder.CreateLoad(localType, &arg, std::string(arg.getName()) + ".in");
+            paramValue = builder.CreateLoad(
+                localType,
+                &arg,
+                std::string(arg.getName()) + ".in");
             inoutParams.push_back({&arg, std::string(arg.getName())});
         }
         else if(arg.getType()->isStructTy())
@@ -465,8 +484,9 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
                            dynamic_cast<MapTypeNode*>(refType->elementType))
                     {
                         mapKeyValueTypes[std::string(arg.getName())] =
-                            std::make_pair(mapInner->keyType,
-                                           mapInner->valueType);
+                            std::make_pair(
+                                mapInner->keyType,
+                                mapInner->valueType);
                     }
                 }
                 else
@@ -494,7 +514,8 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
                        dynamic_cast<GenericStructTypeRefNode*>(paramNode->type))
                 {
                     std::string mangled = getOrCreateMonomorphizedStruct(
-                        genStructType->structName, genStructType->typeArgs);
+                        genStructType->structName,
+                        genStructType->typeArgs);
                     structVariableTypes[std::string(arg.getName())] = mangled;
                 }
                 if(auto* genListType =
@@ -539,8 +560,12 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
                         traitObjType->traitName;
                 }
                 // mlang -g: the parameter, with its MLang type.
-                debugDeclareVariable(std::string(arg.getName()), alloca, paramNode->type,
-                                     paramNode, argIdx + 1);
+                debugDeclareVariable(
+                    std::string(arg.getName()),
+                    alloca,
+                    paramNode->type,
+                    paramNode,
+                    argIdx + 1);
                 methodParamIdx++;
             }
         }
@@ -564,23 +589,28 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
 
     if(method->isSynthesizedJsonSerializer)
     {
-        bool ok = generateJsonSerializerMethodBody(structName, method, function);
+        bool ok =
+            generateJsonSerializerMethodBody(structName, method, function);
         restoreMethodCodegenState();
         return ok ? function : nullptr;
     }
 
     if(method->isSynthesizedJsonTextDeserializer)
     {
-        bool ok = generateJsonTextDeserializerMethodBody(structName, method,
-                                                         function);
+        bool ok = generateJsonTextDeserializerMethodBody(
+            structName,
+            method,
+            function);
         restoreMethodCodegenState();
         return ok ? function : nullptr;
     }
 
     if(method->isSynthesizedJsonValueDeserializer)
     {
-        bool ok = generateJsonValueDeserializerMethodBody(structName, method,
-                                                          function);
+        bool ok = generateJsonValueDeserializerMethodBody(
+            structName,
+            method,
+            function);
         restoreMethodCodegenState();
         return ok ? function : nullptr;
     }
@@ -618,14 +648,16 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
 }
 
 bool CodeGenerator::generateMutexPropertyMethodBody(
-    const std::string& structName, StructMethodNode* method,
+    const std::string& structName,
+    StructMethodNode* method,
     llvm::Function* function)
 {
     if(!method || !function || method->propertyFieldName.empty() ||
        method->propertyLockFieldName.empty())
     {
-        reportError(method ? method->line : 0,
-                    "invalid synthesized mutex property accessor");
+        reportError(
+            method ? method->line : 0,
+            "invalid synthesized mutex property accessor");
         return false;
     }
 
@@ -653,16 +685,18 @@ bool CodeGenerator::generateMutexPropertyMethodBody(
 
     if(fieldIndex < 0 || !fieldType)
     {
-        reportError(method->line, "struct '" + structName +
-                                      "' has no field named '" +
-                                      method->propertyFieldName + "'");
+        reportError(
+            method->line,
+            "struct '" + structName + "' has no field named '" +
+                method->propertyFieldName + "'");
         return false;
     }
     if(lockFieldIndex < 0)
     {
-        reportError(method->line, "struct '" + structName +
-                                      "' has no lock field named '" +
-                                      method->propertyLockFieldName + "'");
+        reportError(
+            method->line,
+            "struct '" + structName + "' has no lock field named '" +
+                method->propertyLockFieldName + "'");
         return false;
     }
 
@@ -678,16 +712,18 @@ bool CodeGenerator::generateMutexPropertyMethodBody(
         return false;
     if(fieldLayout->packedBit)
     {
-        reportError(method->line,
-                    "@property(mutex) is not supported on packed bit fields");
+        reportError(
+            method->line,
+            "@property(mutex) is not supported on packed bit fields");
         return false;
     }
 
     llvm::Value* selfStorage = namedValues["self"];
     if(!selfStorage)
     {
-        reportError(method->line,
-                    "internal error: missing self for mutex property method");
+        reportError(
+            method->line,
+            "internal error: missing self for mutex property method");
         return false;
     }
 
@@ -702,19 +738,25 @@ bool CodeGenerator::generateMutexPropertyMethodBody(
     llvm::Type* llvmFieldType = getLLVMTypeFromNode(fieldType);
     if(!llvmFieldType)
     {
-        reportError(method->line,
-                    "unknown type: " + Helpers::type_name_for_error(fieldType));
+        reportError(
+            method->line,
+            "unknown type: " + Helpers::type_name_for_error(fieldType));
         return false;
     }
 
-    llvm::Value* fieldPtr =
-        builder.CreateStructGEP(structType, selfPtr, fieldLayout->storageIndex,
-                                method->propertyFieldName + "_ptr");
-    llvm::Value* lockPtr =
-        builder.CreateStructGEP(structType, selfPtr, lockLayout->storageIndex,
-                                method->propertyLockFieldName + "_ptr");
+    llvm::Value* fieldPtr = builder.CreateStructGEP(
+        structType,
+        selfPtr,
+        fieldLayout->storageIndex,
+        method->propertyFieldName + "_ptr");
+    llvm::Value* lockPtr = builder.CreateStructGEP(
+        structType,
+        selfPtr,
+        lockLayout->storageIndex,
+        method->propertyLockFieldName + "_ptr");
     llvm::Value* rawHandle = ensurePropertyMutexHandle(
-        lockPtr, method->isRecursiveMutexPropertyAccessor,
+        lockPtr,
+        method->isRecursiveMutexPropertyAccessor,
         method->propertyFieldName + ".mutex");
     if(!rawHandle)
         return false;
@@ -726,7 +768,9 @@ bool CodeGenerator::generateMutexPropertyMethodBody(
         llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
     llvm::Value* mutexPtr = builder.CreateIntToPtr(
-        rawHandle, ptrType, method->propertyFieldName + ".mutex.ptr");
+        rawHandle,
+        ptrType,
+        method->propertyFieldName + ".mutex.ptr");
     builder.CreateCall(pthreadMutexLockFunc, {mutexPtr});
 
     if(!method->isPropertySetter)
@@ -736,8 +780,9 @@ bool CodeGenerator::generateMutexPropertyMethodBody(
         builder.CreateCall(pthreadMutexUnlockFunc, {mutexPtr});
         exitCleanupScope();
         if(currentFunctionExceptionFrame)
-            builder.CreateCall(exceptionsPopFrameFunc,
-                               {currentFunctionExceptionFrame});
+            builder.CreateCall(
+                exceptionsPopFrameFunc,
+                {currentFunctionExceptionFrame});
         builder.CreateRet(loaded);
         llvm::verifyFunction(*function);
         return true;
@@ -746,8 +791,9 @@ bool CodeGenerator::generateMutexPropertyMethodBody(
     llvm::Value* valueStorage = namedValues["value"];
     if(!valueStorage)
     {
-        reportError(method->line,
-                    "internal error: missing setter value for mutex property");
+        reportError(
+            method->line,
+            "internal error: missing setter value for mutex property");
         return false;
     }
 
@@ -757,21 +803,24 @@ bool CodeGenerator::generateMutexPropertyMethodBody(
     builder.CreateCall(pthreadMutexUnlockFunc, {mutexPtr});
     exitCleanupScope();
     if(currentFunctionExceptionFrame)
-        builder.CreateCall(exceptionsPopFrameFunc,
-                           {currentFunctionExceptionFrame});
+        builder.CreateCall(
+            exceptionsPopFrameFunc,
+            {currentFunctionExceptionFrame});
     builder.CreateRetVoid();
     llvm::verifyFunction(*function);
     return true;
 }
 
 bool CodeGenerator::generateAtomicPropertyMethodBody(
-    const std::string& structName, StructMethodNode* method,
+    const std::string& structName,
+    StructMethodNode* method,
     llvm::Function* function)
 {
     if(!method || !function || method->propertyFieldName.empty())
     {
-        reportError(method ? method->line : 0,
-                    "invalid synthesized atomic property accessor");
+        reportError(
+            method ? method->line : 0,
+            "invalid synthesized atomic property accessor");
         return false;
     }
 
@@ -797,9 +846,10 @@ bool CodeGenerator::generateAtomicPropertyMethodBody(
 
     if(fieldIndex < 0 || !fieldType)
     {
-        reportError(method->line, "struct '" + structName +
-                                      "' has no field named '" +
-                                      method->propertyFieldName + "'");
+        reportError(
+            method->line,
+            "struct '" + structName + "' has no field named '" +
+                method->propertyFieldName + "'");
         return false;
     }
 
@@ -817,9 +867,10 @@ bool CodeGenerator::generateAtomicPropertyMethodBody(
     case TypeNode::TYPE_U64:
         break;
     default:
-        reportError(method->line,
-                    "@property(atomic) only supports bool and integer "
-                    "primitive fields");
+        reportError(
+            method->line,
+            "@property(atomic) only supports bool and integer "
+            "primitive fields");
         return false;
     }
 
@@ -833,17 +884,19 @@ bool CodeGenerator::generateAtomicPropertyMethodBody(
         return false;
     if(layout->packedBit)
     {
-        reportError(method->line,
-                    "@property(atomic) is not supported on packed bit "
-                    "fields");
+        reportError(
+            method->line,
+            "@property(atomic) is not supported on packed bit "
+            "fields");
         return false;
     }
 
     llvm::Value* selfStorage = namedValues["self"];
     if(!selfStorage)
     {
-        reportError(method->line,
-                    "internal error: missing self for atomic property method");
+        reportError(
+            method->line,
+            "internal error: missing self for atomic property method");
         return false;
     }
 
@@ -858,14 +911,17 @@ bool CodeGenerator::generateAtomicPropertyMethodBody(
     llvm::Type* llvmFieldType = getLLVMTypeFromNode(fieldType);
     if(!llvmFieldType)
     {
-        reportError(method->line,
-                    "unknown type: " + Helpers::type_name_for_error(fieldType));
+        reportError(
+            method->line,
+            "unknown type: " + Helpers::type_name_for_error(fieldType));
         return false;
     }
 
-    llvm::Value* fieldPtr =
-        builder.CreateStructGEP(structType, selfPtr, layout->storageIndex,
-                                method->propertyFieldName + "_ptr");
+    llvm::Value* fieldPtr = builder.CreateStructGEP(
+        structType,
+        selfPtr,
+        layout->storageIndex,
+        method->propertyFieldName + "_ptr");
 
     // LLVM has no atomic access narrower than a byte, and a bool field stores
     // 0 or 1 in a whole byte, so `bool` properties do their atomics as i8.
@@ -881,12 +937,14 @@ bool CodeGenerator::generateAtomicPropertyMethodBody(
         loadInst->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
         llvm::Value* result = loadInst;
         if(accessType != llvmFieldType)
-            result = builder.CreateTrunc(loadInst, llvmFieldType,
-                                         "atomic.prop.bool");
+            result =
+                builder
+                    .CreateTrunc(loadInst, llvmFieldType, "atomic.prop.bool");
         exitCleanupScope();
         if(currentFunctionExceptionFrame)
-            builder.CreateCall(exceptionsPopFrameFunc,
-                               {currentFunctionExceptionFrame});
+            builder.CreateCall(
+                exceptionsPopFrameFunc,
+                {currentFunctionExceptionFrame});
         builder.CreateRet(result);
         llvm::verifyFunction(*function);
         return true;
@@ -895,8 +953,9 @@ bool CodeGenerator::generateAtomicPropertyMethodBody(
     llvm::Value* valueStorage = namedValues["value"];
     if(!valueStorage)
     {
-        reportError(method->line,
-                    "internal error: missing setter value for atomic property");
+        reportError(
+            method->line,
+            "internal error: missing setter value for atomic property");
         return false;
     }
 
@@ -918,7 +977,10 @@ bool CodeGenerator::generateAtomicPropertyMethodBody(
     expected->setAlignment(atomicPropertyAlign(accessType));
     expected->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
     auto* cmpxchg = builder.CreateAtomicCmpXchg(
-        fieldPtr, expected, desired, atomicPropertyAlign(accessType),
+        fieldPtr,
+        expected,
+        desired,
+        atomicPropertyAlign(accessType),
         llvm::AtomicOrdering::SequentiallyConsistent,
         llvm::AtomicOrdering::SequentiallyConsistent);
     cmpxchg->setWeak(false);
@@ -929,8 +991,9 @@ bool CodeGenerator::generateAtomicPropertyMethodBody(
     builder.SetInsertPoint(doneBB);
     exitCleanupScope();
     if(currentFunctionExceptionFrame)
-        builder.CreateCall(exceptionsPopFrameFunc,
-                           {currentFunctionExceptionFrame});
+        builder.CreateCall(
+            exceptionsPopFrameFunc,
+            {currentFunctionExceptionFrame});
     builder.CreateRetVoid();
     llvm::verifyFunction(*function);
     return true;
@@ -942,10 +1005,11 @@ llvm::Value* CodeGenerator::getJsonLastErrorString()
     return builder.CreateCall(jsonLastErrorFunc, {}, "json.last_error");
 }
 
-llvm::Value* CodeGenerator::buildJsonResultValue(llvm::Function* function,
-                                                 bool isOk,
-                                                 llvm::Value* payload,
-                                                 int payloadIndexOverride)
+llvm::Value* CodeGenerator::buildJsonResultValue(
+    llvm::Function* function,
+    bool isOk,
+    llvm::Value* payload,
+    int payloadIndexOverride)
 {
     if(!function || !function->getReturnType()->isStructTy())
         return nullptr;
@@ -970,17 +1034,17 @@ llvm::Value* CodeGenerator::buildJsonResultValue(llvm::Function* function,
             errIndex = static_cast<int>(i);
     }
 
-    int payloadIndex = payloadIndexOverride >= 0
-                           ? payloadIndexOverride
-                           : (isOk ? okIndex : errIndex);
+    int payloadIndex = payloadIndexOverride >= 0 ? payloadIndexOverride
+                                                 : (isOk ? okIndex : errIndex);
     if(isOkIndex < 0 || payloadIndex < 0)
         return nullptr;
 
     llvm::Value* result = llvm::Constant::getNullValue(retStruct);
     result = builder.CreateInsertValue(
-        result, llvm::ConstantInt::get(llvm::Type::getInt1Ty(context),
-                                       isOk ? 1 : 0),
-        static_cast<unsigned>(isOkIndex), "json.result.flag");
+        result,
+        llvm::ConstantInt::get(llvm::Type::getInt1Ty(context), isOk ? 1 : 0),
+        static_cast<unsigned>(isOkIndex),
+        "json.result.flag");
 
     llvm::Type* expectedType =
         retStruct->getStructElementType(static_cast<unsigned>(payloadIndex));
@@ -988,48 +1052,64 @@ llvm::Value* CodeGenerator::buildJsonResultValue(llvm::Function* function,
     {
         if(payload->getType()->isIntegerTy() && expectedType->isIntegerTy())
         {
-            payload = builder.CreateIntCast(payload, expectedType, true,
-                                            "json.result.intcast");
+            payload = builder.CreateIntCast(
+                payload,
+                expectedType,
+                true,
+                "json.result.intcast");
         }
-        else if(payload->getType()->isIntegerTy() &&
-                expectedType->isFloatingPointTy())
+        else if(
+            payload->getType()->isIntegerTy() &&
+            expectedType->isFloatingPointTy())
         {
-            payload = builder.CreateSIToFP(payload, expectedType,
-                                           "json.result.sitofp");
+            payload =
+                builder
+                    .CreateSIToFP(payload, expectedType, "json.result.sitofp");
         }
-        else if(payload->getType()->isFloatingPointTy() &&
-                expectedType->isIntegerTy())
+        else if(
+            payload->getType()->isFloatingPointTy() &&
+            expectedType->isIntegerTy())
         {
-            payload = builder.CreateFPToSI(payload, expectedType,
-                                           "json.result.fptosi");
+            payload =
+                builder
+                    .CreateFPToSI(payload, expectedType, "json.result.fptosi");
         }
-        else if(payload->getType()->isFloatingPointTy() &&
-                expectedType->isFloatingPointTy())
+        else if(
+            payload->getType()->isFloatingPointTy() &&
+            expectedType->isFloatingPointTy())
         {
-            payload = builder.CreateFPCast(payload, expectedType,
-                                           "json.result.fpcast");
+            payload =
+                builder
+                    .CreateFPCast(payload, expectedType, "json.result.fpcast");
         }
-        else if(payload->getType()->isPointerTy() &&
-                expectedType->isPointerTy())
+        else if(
+            payload->getType()->isPointerTy() && expectedType->isPointerTy())
         {
-            payload = builder.CreateBitCast(payload, expectedType,
-                                            "json.result.ptrcast");
+            payload = builder.CreateBitCast(
+                payload,
+                expectedType,
+                "json.result.ptrcast");
         }
     }
 
     if(payload)
     {
         result = builder.CreateInsertValue(
-            result, payload, static_cast<unsigned>(payloadIndex),
+            result,
+            payload,
+            static_cast<unsigned>(payloadIndex),
             "json.result.payload");
     }
     return result;
 }
 
 bool CodeGenerator::populateStructFromJsonValue(
-    const std::string& structName, llvm::Value* jsonValueHandle,
-    llvm::Value* outStructAlloca, llvm::Function* function,
-    llvm::BasicBlock* failBB, llvm::AllocaInst* errorSlot)
+    const std::string& structName,
+    llvm::Value* jsonValueHandle,
+    llvm::Value* outStructAlloca,
+    llvm::Function* function,
+    llvm::BasicBlock* failBB,
+    llvm::AllocaInst* errorSlot)
 {
     initializeStdlibFunctions();
     if(!jsonValueHandle || !outStructAlloca || !function || !failBB ||
@@ -1049,7 +1129,8 @@ bool CodeGenerator::populateStructFromJsonValue(
     if(!structType)
         return false;
 
-    auto branchToFailWithError = [&](llvm::Value* errVal) {
+    auto branchToFailWithError = [&](llvm::Value* errVal)
+    {
         builder.CreateStore(errVal, errorSlot);
         builder.CreateBr(failBB);
     };
@@ -1061,14 +1142,17 @@ bool CodeGenerator::populateStructFromJsonValue(
     llvm::Value* rootKind =
         builder.CreateCall(jsonValueKindFunc, {jsonValueHandle}, "json.kind");
     llvm::Value* isObject = builder.CreateICmpEQ(
-        rootKind, llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 6),
+        rootKind,
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 6),
         "json.is_object");
     builder.CreateCondBr(isObject, objectOkBB, objectFailBB);
 
     builder.SetInsertPoint(objectFailBB);
     branchToFailWithError(
-        Helpers::create_global_cstring(builder, "std::json from_json: expected object",
-                              "json.expected_object"));
+        Helpers::create_global_cstring(
+            builder,
+            "std::json from_json: expected object",
+            "json.expected_object"));
 
     builder.SetInsertPoint(objectOkBB);
 
@@ -1086,23 +1170,29 @@ bool CodeGenerator::populateStructFromJsonValue(
             getStructFieldLayout(structName, static_cast<int>(idx));
         if(!layout || layout->packedBit)
         {
-            reportError(0, "field '" + memberName + "' of struct '" +
-                               structName +
-                               "' is not supported for Json derive");
+            reportError(
+                0,
+                "field '" + memberName + "' of struct '" + structName +
+                    "' is not supported for Json derive");
             return false;
         }
 
-        llvm::Value* keyVal =
-            Helpers::create_global_cstring(builder, memberName, "json.field.key");
+        llvm::Value* keyVal = Helpers::create_global_cstring(
+            builder,
+            memberName,
+            "json.field.key");
         llvm::Value* childHandle = builder.CreateCall(
-            jsonObjectGetFunc, {jsonValueHandle, keyVal}, "json.field.handle");
+            jsonObjectGetFunc,
+            {jsonValueHandle, keyVal},
+            "json.field.handle");
 
         llvm::BasicBlock* childOkBB =
             llvm::BasicBlock::Create(context, "json.field.ok", function);
         llvm::BasicBlock* childMissingBB =
             llvm::BasicBlock::Create(context, "json.field.missing", function);
         llvm::Value* childExists = builder.CreateICmpNE(
-            childHandle, llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), 0),
+            childHandle,
+            llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), 0),
             "json.field.exists");
         builder.CreateCondBr(childExists, childOkBB, childMissingBB);
 
@@ -1111,7 +1201,9 @@ bool CodeGenerator::populateStructFromJsonValue(
 
         builder.SetInsertPoint(childOkBB);
         llvm::Value* fieldPtr = builder.CreateStructGEP(
-            structType, outStructAlloca, layout->storageIndex,
+            structType,
+            outStructAlloca,
+            layout->storageIndex,
             memberName + ".json.ptr");
 
         auto* structRef = dynamic_cast<StructTypeRefNode*>(memberType);
@@ -1121,17 +1213,19 @@ bool CodeGenerator::populateStructFromJsonValue(
                 resolveVisibleEnumName(structRef->structName);
             if(!enumName.empty())
             {
-                reportError(0, "field '" + memberName + "' of struct '" +
-                                   structName +
-                                   "' has unsupported Json derive type");
+                reportError(
+                    0,
+                    "field '" + memberName + "' of struct '" + structName +
+                        "' has unsupported Json derive type");
                 return false;
             }
 
             std::string childStruct = structRef->structName;
             if(!jsonStructs.count(childStruct))
             {
-                reportError(0, "struct '" + childStruct +
-                                   "' does not derive Json");
+                reportError(
+                    0,
+                    "struct '" + childStruct + "' does not derive Json");
                 return false;
             }
 
@@ -1139,22 +1233,30 @@ bool CodeGenerator::populateStructFromJsonValue(
             if(!childStructType)
                 return false;
             auto* nestedAlloca = builder.CreateAlloca(
-                childStructType, nullptr, memberName + ".json.tmp");
-            builder.CreateStore(llvm::Constant::getNullValue(childStructType),
-                                nestedAlloca);
+                childStructType,
+                nullptr,
+                memberName + ".json.tmp");
+            builder.CreateStore(
+                llvm::Constant::getNullValue(childStructType),
+                nestedAlloca);
 
             llvm::BasicBlock* nestedFailBB =
-                llvm::BasicBlock::Create(context, "json.nested.fail",
-                                         function);
-            if(!populateStructFromJsonValue(childStruct, childHandle,
-                                            nestedAlloca, function,
-                                            nestedFailBB, errorSlot))
+                llvm::BasicBlock::Create(context, "json.nested.fail", function);
+            if(!populateStructFromJsonValue(
+                   childStruct,
+                   childHandle,
+                   nestedAlloca,
+                   function,
+                   nestedFailBB,
+                   errorSlot))
             {
                 return false;
             }
 
             llvm::Value* nestedValue = builder.CreateLoad(
-                childStructType, nestedAlloca, memberName + ".json.value");
+                childStructType,
+                nestedAlloca,
+                memberName + ".json.value");
             builder.CreateCall(jsonValueFreeFunc, {childHandle});
             builder.CreateStore(nestedValue, fieldPtr);
 
@@ -1197,31 +1299,36 @@ bool CodeGenerator::populateStructFromJsonValue(
             expectedKind = 4;
             break;
         default:
-            reportError(0, "field '" + memberName + "' of struct '" +
-                               structName +
-                               "' has unsupported Json derive type");
+            reportError(
+                0,
+                "field '" + memberName + "' of struct '" + structName +
+                    "' has unsupported Json derive type");
             return false;
         }
 
-        llvm::Value* childKind = builder.CreateCall(jsonValueKindFunc,
-                                                    {childHandle},
-                                                    "json.field.kind");
+        llvm::Value* childKind = builder.CreateCall(
+            jsonValueKindFunc,
+            {childHandle},
+            "json.field.kind");
         llvm::BasicBlock* kindOkBB =
             llvm::BasicBlock::Create(context, "json.kind.ok", function);
         llvm::BasicBlock* kindFailBB =
             llvm::BasicBlock::Create(context, "json.kind.fail", function);
         llvm::Value* kindMatches = builder.CreateICmpEQ(
             childKind,
-            llvm::ConstantInt::get(llvm::Type::getInt32Ty(context),
-                                   expectedKind),
+            llvm::ConstantInt::get(
+                llvm::Type::getInt32Ty(context),
+                expectedKind),
             "json.kind.match");
         builder.CreateCondBr(kindMatches, kindOkBB, kindFailBB);
 
         builder.SetInsertPoint(kindFailBB);
         builder.CreateCall(jsonValueFreeFunc, {childHandle});
-        branchToFailWithError(Helpers::create_global_cstring(
-            builder, "std::json from_json: field type mismatch",
-            "json.type_mismatch"));
+        branchToFailWithError(
+            Helpers::create_global_cstring(
+                builder,
+                "std::json from_json: field type mismatch",
+                "json.type_mismatch"));
 
         builder.SetInsertPoint(kindOkBB);
 
@@ -1229,11 +1336,11 @@ bool CodeGenerator::populateStructFromJsonValue(
         {
         case TypeNode::TYPE_BOOL:
         {
-            llvm::Value* rawBool = builder.CreateCall(jsonAsBoolFunc,
-                                                      {childHandle},
-                                                      "json.bool");
+            llvm::Value* rawBool =
+                builder.CreateCall(jsonAsBoolFunc, {childHandle}, "json.bool");
             llvm::Value* boolVal = builder.CreateICmpNE(
-                rawBool, llvm::ConstantInt::get(rawBool->getType(), 0),
+                rawBool,
+                llvm::ConstantInt::get(rawBool->getType(), 0),
                 "json.bool.i1");
             builder.CreateStore(boolVal, fieldPtr);
             break;
@@ -1248,25 +1355,24 @@ bool CodeGenerator::populateStructFromJsonValue(
         case TypeNode::TYPE_U32:
         case TypeNode::TYPE_U64:
         {
-            llvm::Value* rawInt = builder.CreateCall(jsonAsI64Func,
-                                                     {childHandle},
-                                                     "json.i64");
-            bool isUnsigned =
-                memberType->kind == TypeNode::TYPE_U8 ||
-                memberType->kind == TypeNode::TYPE_U16 ||
-                memberType->kind == TypeNode::TYPE_U32 ||
-                memberType->kind == TypeNode::TYPE_U64;
-            llvm::Value* castInt =
-                builder.CreateIntCast(rawInt, llvmFieldType, !isUnsigned,
-                                      "json.int.cast");
+            llvm::Value* rawInt =
+                builder.CreateCall(jsonAsI64Func, {childHandle}, "json.i64");
+            bool isUnsigned = memberType->kind == TypeNode::TYPE_U8 ||
+                              memberType->kind == TypeNode::TYPE_U16 ||
+                              memberType->kind == TypeNode::TYPE_U32 ||
+                              memberType->kind == TypeNode::TYPE_U64;
+            llvm::Value* castInt = builder.CreateIntCast(
+                rawInt,
+                llvmFieldType,
+                !isUnsigned,
+                "json.int.cast");
             builder.CreateStore(castInt, fieldPtr);
             break;
         }
         case TypeNode::TYPE_FLOAT:
         {
-            llvm::Value* rawFloat = builder.CreateCall(jsonAsF64Func,
-                                                       {childHandle},
-                                                       "json.f64");
+            llvm::Value* rawFloat =
+                builder.CreateCall(jsonAsF64Func, {childHandle}, "json.f64");
             builder.CreateStore(
                 builder.CreateFPTrunc(rawFloat, llvmFieldType, "json.f32"),
                 fieldPtr);
@@ -1274,17 +1380,15 @@ bool CodeGenerator::populateStructFromJsonValue(
         }
         case TypeNode::TYPE_DOUBLE:
         {
-            llvm::Value* rawFloat = builder.CreateCall(jsonAsF64Func,
-                                                       {childHandle},
-                                                       "json.f64");
+            llvm::Value* rawFloat =
+                builder.CreateCall(jsonAsF64Func, {childHandle}, "json.f64");
             builder.CreateStore(rawFloat, fieldPtr);
             break;
         }
         case TypeNode::TYPE_STR8:
         {
-            llvm::Value* rawString = builder.CreateCall(jsonAsStringFunc,
-                                                        {childHandle},
-                                                        "json.str");
+            llvm::Value* rawString =
+                builder.CreateCall(jsonAsStringFunc, {childHandle}, "json.str");
             builder.CreateStore(rawString, fieldPtr);
             break;
         }
@@ -1299,7 +1403,8 @@ bool CodeGenerator::populateStructFromJsonValue(
 }
 
 bool CodeGenerator::generateJsonSerializerMethodBody(
-    const std::string& structName, StructMethodNode* method,
+    const std::string& structName,
+    StructMethodNode* method,
     llvm::Function* function)
 {
     auto memberIt = structMembers.find(structName);
@@ -1319,8 +1424,7 @@ bool CodeGenerator::generateJsonSerializerMethodBody(
     {
         llvm::Type* allocaType = alloca->getAllocatedType();
         if(allocaType->isPointerTy())
-            selfPtr = builder.CreateLoad(allocaType, alloca,
-                                         "self.json.ptr");
+            selfPtr = builder.CreateLoad(allocaType, alloca, "self.json.ptr");
     }
 
     llvm::Value* selfValue =
@@ -1329,15 +1433,17 @@ bool CodeGenerator::generateJsonSerializerMethodBody(
         buildStructSerdeJsonString(selfValue, structName, method->line);
     exitCleanupScope();
     if(currentFunctionExceptionFrame)
-        builder.CreateCall(exceptionsPopFrameFunc,
-                           {currentFunctionExceptionFrame});
+        builder.CreateCall(
+            exceptionsPopFrameFunc,
+            {currentFunctionExceptionFrame});
     builder.CreateRet(jsonValue);
     llvm::verifyFunction(*function);
     return true;
 }
 
 bool CodeGenerator::generateJsonTextDeserializerMethodBody(
-    const std::string& structName, StructMethodNode* method,
+    const std::string& structName,
+    StructMethodNode* method,
     llvm::Function* function)
 {
     initializeStdlibFunctions();
@@ -1364,9 +1470,12 @@ bool CodeGenerator::generateJsonTextDeserializerMethodBody(
     auto* errorSlot = builder.CreateAlloca(ptrType, nullptr, "json.err.slot");
     builder.CreateStore(llvm::ConstantInt::get(int64Type, 0), docSlot);
     builder.CreateStore(llvm::ConstantInt::get(int64Type, 0), rootSlot);
-    builder.CreateStore(Helpers::create_global_cstring(builder, "std::json from_json failed",
-                                              "json.default.err"),
-                        errorSlot);
+    builder.CreateStore(
+        Helpers::create_global_cstring(
+            builder,
+            "std::json from_json failed",
+            "json.default.err"),
+        errorSlot);
 
     llvm::BasicBlock* failBB =
         llvm::BasicBlock::Create(context, "json.text.fail", function);
@@ -1378,7 +1487,9 @@ bool CodeGenerator::generateJsonTextDeserializerMethodBody(
         builder.CreateCall(jsonParseFunc, {jsonText}, "json.doc");
     builder.CreateStore(docHandle, docSlot);
     llvm::Value* parseOk = builder.CreateICmpNE(
-        docHandle, llvm::ConstantInt::get(int64Type, 0), "json.parse.ok");
+        docHandle,
+        llvm::ConstantInt::get(int64Type, 0),
+        "json.parse.ok");
     builder.CreateCondBr(parseOk, parseOkBB, parseFailBB);
 
     builder.SetInsertPoint(parseFailBB);
@@ -1394,7 +1505,9 @@ bool CodeGenerator::generateJsonTextDeserializerMethodBody(
     llvm::BasicBlock* rootFailBB =
         llvm::BasicBlock::Create(context, "json.root.fail", function);
     llvm::Value* rootOk = builder.CreateICmpNE(
-        rootHandle, llvm::ConstantInt::get(int64Type, 0), "json.root.exists");
+        rootHandle,
+        llvm::ConstantInt::get(int64Type, 0),
+        "json.root.exists");
     builder.CreateCondBr(rootOk, rootOkBB, rootFailBB);
 
     builder.SetInsertPoint(rootFailBB);
@@ -1405,8 +1518,13 @@ bool CodeGenerator::generateJsonTextDeserializerMethodBody(
     auto* outAlloca =
         builder.CreateAlloca(structType, nullptr, "json.struct.tmp");
     builder.CreateStore(llvm::Constant::getNullValue(structType), outAlloca);
-    if(!populateStructFromJsonValue(structName, rootHandle, outAlloca, function,
-                                    failBB, errorSlot))
+    if(!populateStructFromJsonValue(
+           structName,
+           rootHandle,
+           outAlloca,
+           function,
+           failBB,
+           errorSlot))
     {
         return false;
     }
@@ -1417,8 +1535,9 @@ bool CodeGenerator::generateJsonTextDeserializerMethodBody(
     builder.CreateCall(jsonDocFreeFunc, {docHandle});
     exitCleanupScope();
     if(currentFunctionExceptionFrame)
-        builder.CreateCall(exceptionsPopFrameFunc,
-                           {currentFunctionExceptionFrame});
+        builder.CreateCall(
+            exceptionsPopFrameFunc,
+            {currentFunctionExceptionFrame});
     builder.CreateRet(buildJsonResultValue(function, true, outValue));
 
     builder.SetInsertPoint(failBB);
@@ -1432,15 +1551,17 @@ bool CodeGenerator::generateJsonTextDeserializerMethodBody(
     builder.CreateCall(jsonDocFreeFunc, {failDoc});
     exitCleanupScope();
     if(currentFunctionExceptionFrame)
-        builder.CreateCall(exceptionsPopFrameFunc,
-                           {currentFunctionExceptionFrame});
+        builder.CreateCall(
+            exceptionsPopFrameFunc,
+            {currentFunctionExceptionFrame});
     builder.CreateRet(buildJsonResultValue(function, false, storedErr));
     llvm::verifyFunction(*function);
     return true;
 }
 
 bool CodeGenerator::generateJsonValueDeserializerMethodBody(
-    const std::string& structName, StructMethodNode* method,
+    const std::string& structName,
+    StructMethodNode* method,
     llvm::Function* function)
 {
     initializeStdlibFunctions();
@@ -1463,17 +1584,25 @@ bool CodeGenerator::generateJsonValueDeserializerMethodBody(
         builder.CreateLoad(int64Type, jsonValueStorage, "json.value.handle");
 
     auto* errorSlot = builder.CreateAlloca(ptrType, nullptr, "json.err.slot");
-    builder.CreateStore(Helpers::create_global_cstring(builder, "std::json from_json failed",
-                                              "json.default.err"),
-                        errorSlot);
+    builder.CreateStore(
+        Helpers::create_global_cstring(
+            builder,
+            "std::json from_json failed",
+            "json.default.err"),
+        errorSlot);
     auto* outAlloca =
         builder.CreateAlloca(structType, nullptr, "json.struct.tmp");
     builder.CreateStore(llvm::Constant::getNullValue(structType), outAlloca);
 
     llvm::BasicBlock* failBB =
         llvm::BasicBlock::Create(context, "json.value.fail", function);
-    if(!populateStructFromJsonValue(structName, jsonValue, outAlloca, function,
-                                    failBB, errorSlot))
+    if(!populateStructFromJsonValue(
+           structName,
+           jsonValue,
+           outAlloca,
+           function,
+           failBB,
+           errorSlot))
     {
         return false;
     }
@@ -1482,8 +1611,9 @@ bool CodeGenerator::generateJsonValueDeserializerMethodBody(
         builder.CreateLoad(structType, outAlloca, "json.struct.value");
     exitCleanupScope();
     if(currentFunctionExceptionFrame)
-        builder.CreateCall(exceptionsPopFrameFunc,
-                           {currentFunctionExceptionFrame});
+        builder.CreateCall(
+            exceptionsPopFrameFunc,
+            {currentFunctionExceptionFrame});
     builder.CreateRet(buildJsonResultValue(function, true, outValue));
 
     builder.SetInsertPoint(failBB);
@@ -1491,16 +1621,17 @@ bool CodeGenerator::generateJsonValueDeserializerMethodBody(
         builder.CreateLoad(ptrType, errorSlot, "json.fail.err");
     exitCleanupScope();
     if(currentFunctionExceptionFrame)
-        builder.CreateCall(exceptionsPopFrameFunc,
-                           {currentFunctionExceptionFrame});
+        builder.CreateCall(
+            exceptionsPopFrameFunc,
+            {currentFunctionExceptionFrame});
     builder.CreateRet(buildJsonResultValue(function, false, storedErr));
     llvm::verifyFunction(*function);
     return true;
 }
 
-llvm::Value*
-CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
-                                      MultiArrayTypeNode* multiarrayType)
+llvm::Value* CodeGenerator::generateMultiarrayMath(
+    MethodCallNode* node,
+    MultiArrayTypeNode* multiarrayType)
 {
     initializeStdlibFunctions();
 
@@ -1516,8 +1647,9 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
     if(!scalarType ||
        (!scalarType->isIntegerTy() && !scalarType->isFloatingPointTy()))
     {
-        reportError(node->line,
-                    "matrix operations require numeric multiarray elements");
+        reportError(
+            node->line,
+            "matrix operations require numeric multiarray elements");
         return nullptr;
     }
 
@@ -1545,7 +1677,8 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         llvm::BasicBlock* fail =
             llvm::BasicBlock::Create(context, "matrix.shape.fail", function);
         llvm::Value* valid = builder.CreateICmpEQ(
-            actual, llvm::ConstantInt::get(i64Type, expected),
+            actual,
+            llvm::ConstantInt::get(i64Type, expected),
             "matrix.shape.matches");
         builder.CreateCondBr(valid, ok, fail);
         builder.SetInsertPoint(fail);
@@ -1568,7 +1701,8 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         builder.SetInsertPoint(ok);
     };
 
-    auto loadListData = [&](llvm::Value* pointer, int64_t expected,
+    auto loadListData = [&](llvm::Value* pointer,
+                            int64_t expected,
                             const std::string& operation)
     {
         llvm::Value* list =
@@ -1585,15 +1719,19 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         llvm::BasicBlock* ok =
             llvm::BasicBlock::Create(context, "matrix.operation.ok", function);
         llvm::BasicBlock* fail = llvm::BasicBlock::Create(
-            context, "matrix.operation.fail", function);
+            context,
+            "matrix.operation.fail",
+            function);
         builder.CreateCondBr(condition, ok, fail);
         builder.SetInsertPoint(fail);
 #if LLVM_VERSION_MAJOR >= 21
         llvm::Value* text = builder.CreateGlobalString(
-            (message + "\n").c_str(), "matrix.operation.message");
+            (message + "\n").c_str(),
+            "matrix.operation.message");
 #else
         llvm::Value* text = builder.CreateGlobalStringPtr(
-            (message + "\n").c_str(), "matrix.operation.message");
+            (message + "\n").c_str(),
+            "matrix.operation.message");
 #endif
         llvm::Value* stderrValue =
             builder.CreateLoad(ptrType, stderrPtr, "stderr");
@@ -1603,37 +1741,39 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         builder.SetInsertPoint(ok);
     };
 
-    auto flattenMatrix = [&](int64_t rows, int64_t columns,
-                             const std::string& operation)
+    auto flattenMatrix =
+        [&](int64_t rows, int64_t columns, const std::string& operation)
     {
         uint64_t scalarBytes =
             module->getDataLayout().getTypeAllocSize(scalarType);
         llvm::Value* flat = builder.CreateCall(
             mallocFunc,
-            {llvm::ConstantInt::get(i64Type,
-                                    rows * columns * scalarBytes)},
+            {llvm::ConstantInt::get(i64Type, rows * columns * scalarBytes)},
             "matrix.flat.data");
-        llvm::Value* rowData =
-            loadListData(receiver, rows, operation);
+        llvm::Value* rowData = loadListData(receiver, rows, operation);
         for(int64_t row = 0; row < rows; ++row)
         {
             llvm::Value* rowValue = builder.CreateGEP(
-                listType, rowData, llvm::ConstantInt::get(i64Type, row));
-            llvm::Value* values =
-                loadListData(rowValue, columns, operation);
+                listType,
+                rowData,
+                llvm::ConstantInt::get(i64Type, row));
+            llvm::Value* values = loadListData(rowValue, columns, operation);
             for(int64_t column = 0; column < columns; ++column)
             {
                 llvm::Value* value = builder.CreateLoad(
                     scalarType,
                     builder.CreateGEP(
-                        scalarType, values,
+                        scalarType,
+                        values,
                         llvm::ConstantInt::get(i64Type, column)));
                 builder.CreateStore(
                     value,
                     builder.CreateGEP(
-                        scalarType, flat,
-                        llvm::ConstantInt::get(i64Type,
-                                               row * columns + column)));
+                        scalarType,
+                        flat,
+                        llvm::ConstantInt::get(
+                            i64Type,
+                            row * columns + column)));
             }
         }
         return flat;
@@ -1645,7 +1785,8 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         uint64_t scalarBytes =
             module->getDataLayout().getTypeAllocSize(scalarType);
         llvm::Value* outputRows = builder.CreateCall(
-            mallocFunc, {llvm::ConstantInt::get(i64Type, rows * rowBytes)},
+            mallocFunc,
+            {llvm::ConstantInt::get(i64Type, rows * rowBytes)},
             "matrix.result.rows");
         for(int64_t row = 0; row < rows; ++row)
         {
@@ -1658,27 +1799,36 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
                 llvm::Value* value = builder.CreateLoad(
                     scalarType,
                     builder.CreateGEP(
-                        scalarType, flat,
-                        llvm::ConstantInt::get(i64Type,
-                                               row * columns + column)));
+                        scalarType,
+                        flat,
+                        llvm::ConstantInt::get(
+                            i64Type,
+                            row * columns + column)));
                 builder.CreateStore(
                     value,
                     builder.CreateGEP(
-                        scalarType, outputData,
+                        scalarType,
+                        outputData,
                         llvm::ConstantInt::get(i64Type, column)));
             }
             llvm::Value* rowValue = llvm::UndefValue::get(listType);
             rowValue = builder.CreateInsertValue(
-                rowValue, llvm::ConstantInt::get(i64Type, columns), 0);
+                rowValue,
+                llvm::ConstantInt::get(i64Type, columns),
+                0);
             rowValue = builder.CreateInsertValue(rowValue, outputData, 1);
             builder.CreateStore(
                 rowValue,
-                builder.CreateGEP(listType, outputRows,
-                                  llvm::ConstantInt::get(i64Type, row)));
+                builder.CreateGEP(
+                    listType,
+                    outputRows,
+                    llvm::ConstantInt::get(i64Type, row)));
         }
         llvm::Value* result = llvm::UndefValue::get(listType);
         result = builder.CreateInsertValue(
-            result, llvm::ConstantInt::get(i64Type, rows), 0);
+            result,
+            llvm::ConstantInt::get(i64Type, rows),
+            0);
         return builder.CreateInsertValue(result, outputRows, 1);
     };
 
@@ -1687,19 +1837,20 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         if(!value || value->getType() == scalarType)
             return value;
         if(value->getType()->isIntegerTy() && scalarType->isIntegerTy())
-            return builder.CreateSExtOrTrunc(value, scalarType,
-                                             "matrix.scalar.cast");
+            return builder
+                .CreateSExtOrTrunc(value, scalarType, "matrix.scalar.cast");
         if(value->getType()->isFloatingPointTy() &&
            scalarType->isFloatingPointTy())
-            return builder.CreateFPCast(value, scalarType,
-                                        "matrix.scalar.cast");
+            return builder
+                .CreateFPCast(value, scalarType, "matrix.scalar.cast");
         if(value->getType()->isIntegerTy() && scalarType->isFloatingPointTy())
-            return builder.CreateSIToFP(value, scalarType,
-                                        "matrix.scalar.cast");
+            return builder
+                .CreateSIToFP(value, scalarType, "matrix.scalar.cast");
         return nullptr;
     };
 
-    auto arithmetic = [&](llvm::Value* left, llvm::Value* right,
+    auto arithmetic = [&](llvm::Value* left,
+                          llvm::Value* right,
                           const std::string& operation) -> llvm::Value*
     {
         const bool floating = scalarType->isFloatingPointTy();
@@ -1727,15 +1878,17 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         auto* id = dynamic_cast<IdentifierNode*>(node->object);
         if(!multiarrayType->elementsMutable || !id)
         {
-            reportError(node->line,
-                        method + "() requires a mutmultiarray variable");
+            reportError(
+                node->line,
+                method + "() requires a mutmultiarray variable");
             return nullptr;
         }
         if(constantVariables.count(id->name) != 0)
         {
-            reportError(node->line,
-                        "cannot mutate multiarray '" + id->name +
-                            "' because it was declared with let; use var");
+            reportError(
+                node->line,
+                "cannot mutate multiarray '" + id->name +
+                    "' because it was declared with let; use var");
             return nullptr;
         }
     }
@@ -1753,36 +1906,35 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         }
         if(dimensions.size() != 2)
         {
-            reportError(node->line,
-                        method + "() requires a two-dimensional matrix");
+            reportError(
+                node->line,
+                method + "() requires a two-dimensional matrix");
             return nullptr;
         }
         const int64_t rows = dimensions[0]->capacity;
         const int64_t columns = dimensions[1]->capacity;
         if(method != "transpose" && rows != columns)
         {
-            reportError(node->line,
-                        method + "() requires a square matrix");
+            reportError(node->line, method + "() requires a square matrix");
             return nullptr;
         }
         if(method != "transpose" && !scalarType->isFloatTy() &&
            !scalarType->isDoubleTy())
         {
-            reportError(node->line,
-                        method + "() requires f32 or f64 matrix elements");
+            reportError(
+                node->line,
+                method + "() requires f32 or f64 matrix elements");
             return nullptr;
         }
 
-        llvm::Value* input =
-            flattenMatrix(rows, columns, method + "()");
+        llvm::Value* input = flattenMatrix(rows, columns, method + "()");
         uint64_t scalarBytes =
             module->getDataLayout().getTypeAllocSize(scalarType);
         if(method == "transpose")
         {
             llvm::Value* output = builder.CreateCall(
                 mallocFunc,
-                {llvm::ConstantInt::get(i64Type,
-                                        rows * columns * scalarBytes)},
+                {llvm::ConstantInt::get(i64Type, rows * columns * scalarBytes)},
                 "matrix.transpose.data");
             for(int64_t row = 0; row < rows; ++row)
             {
@@ -1791,15 +1943,19 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
                     llvm::Value* value = builder.CreateLoad(
                         scalarType,
                         builder.CreateGEP(
-                            scalarType, input,
-                            llvm::ConstantInt::get(i64Type,
-                                                   row * columns + column)));
+                            scalarType,
+                            input,
+                            llvm::ConstantInt::get(
+                                i64Type,
+                                row * columns + column)));
                     builder.CreateStore(
                         value,
                         builder.CreateGEP(
-                            scalarType, output,
-                            llvm::ConstantInt::get(i64Type,
-                                                   column * rows + row)));
+                            scalarType,
+                            output,
+                            llvm::ConstantInt::get(
+                                i64Type,
+                                column * rows + row)));
                 }
             }
             return buildMatrix(output, columns, rows);
@@ -1809,25 +1965,27 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         const char* suffix = scalarType->isFloatTy() ? "f32" : "f64";
         if(method == "determinant")
         {
-            llvm::FunctionType* helperType = llvm::FunctionType::get(
-                scalarType, {ptrType, i64Type}, false);
+            llvm::FunctionType* helperType =
+                llvm::FunctionType::get(scalarType, {ptrType, i64Type}, false);
             llvm::FunctionCallee helper = module->getOrInsertFunction(
                 std::string("__mlang_std_matrix_determinant_") + suffix,
                 helperType);
             return builder.CreateCall(
-                helper, {input, llvm::ConstantInt::get(i64Type, rows)},
+                helper,
+                {input, llvm::ConstantInt::get(i64Type, rows)},
                 "matrix.determinant");
         }
 
         llvm::Value* output = builder.CreateCall(
             mallocFunc,
-            {llvm::ConstantInt::get(i64Type,
-                                    rows * columns * scalarBytes)},
+            {llvm::ConstantInt::get(i64Type, rows * columns * scalarBytes)},
             "matrix.operation.data");
         if(method == "inverse")
         {
             llvm::FunctionType* helperType = llvm::FunctionType::get(
-                i32Type, {ptrType, ptrType, i64Type}, false);
+                i32Type,
+                {ptrType, ptrType, i64Type},
+                false);
             llvm::FunctionCallee helper = module->getOrInsertFunction(
                 std::string("__mlang_std_matrix_inverse_") + suffix,
                 helperType);
@@ -1835,9 +1993,10 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
                 helper,
                 {input, output, llvm::ConstantInt::get(i64Type, rows)},
                 "matrix.inverse.status");
-            abortUnless(builder.CreateICmpEQ(
-                            status, llvm::ConstantInt::get(i32Type, 1)),
-                        "inverse() requires a non-singular matrix");
+            abortUnless(
+                builder
+                    .CreateICmpEQ(status, llvm::ConstantInt::get(i32Type, 1)),
+                "inverse() requires a non-singular matrix");
             return buildMatrix(output, rows, columns);
         }
 
@@ -1846,7 +2005,9 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
             {llvm::ConstantInt::get(i64Type, rows * scalarBytes)},
             "matrix.eigenvalues.data");
         llvm::FunctionType* helperType = llvm::FunctionType::get(
-            i32Type, {ptrType, ptrType, ptrType, i64Type}, false);
+            i32Type,
+            {ptrType, ptrType, ptrType, i64Type},
+            false);
         llvm::FunctionCallee helper = module->getOrInsertFunction(
             std::string("__mlang_std_matrix_eigen_symmetric_") + suffix,
             helperType);
@@ -1854,16 +2015,17 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
             helper,
             {input, values, output, llvm::ConstantInt::get(i64Type, rows)},
             "matrix.eigen.status");
-        abortUnless(builder.CreateICmpEQ(
-                        status, llvm::ConstantInt::get(i32Type, 1)),
-                    method +
-                        "() requires a real symmetric matrix and a "
-                        "converging eigensolver");
+        abortUnless(
+            builder.CreateICmpEQ(status, llvm::ConstantInt::get(i32Type, 1)),
+            method + "() requires a real symmetric matrix and a "
+                     "converging eigensolver");
         if(method == "eigenvectors")
             return buildMatrix(output, rows, columns);
         llvm::Value* result = llvm::UndefValue::get(listType);
         result = builder.CreateInsertValue(
-            result, llvm::ConstantInt::get(i64Type, rows), 0);
+            result,
+            llvm::ConstantInt::get(i64Type, rows),
+            0);
         return builder.CreateInsertValue(result, values, 1);
     }
 
@@ -1874,8 +2036,8 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
             reportError(node->line, "sum() takes no arguments");
             return nullptr;
         }
-        llvm::AllocaInst* total = createEntryBlockAlloca(
-            function, scalarType, "matrix.sum.total");
+        llvm::AllocaInst* total =
+            createEntryBlockAlloca(function, scalarType, "matrix.sum.total");
         builder.CreateStore(llvm::Constant::getNullValue(scalarType), total);
 
         std::function<void(size_t, llvm::Value*)> reduce;
@@ -1884,8 +2046,8 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
             ArrayTypeNode* dimension = dimensions[depth];
             llvm::Value* data =
                 loadListData(parent, dimension->capacity, "sum()");
-            llvm::AllocaInst* index = createEntryBlockAlloca(
-                function, i64Type, "matrix.sum.index");
+            llvm::AllocaInst* index =
+                createEntryBlockAlloca(function, i64Type, "matrix.sum.index");
             builder.CreateStore(llvm::ConstantInt::get(i64Type, 0), index);
             llvm::BasicBlock* condition =
                 llvm::BasicBlock::Create(context, "matrix.sum.cond", function);
@@ -1898,8 +2060,10 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
             llvm::Value* i = builder.CreateLoad(i64Type, index);
             builder.CreateCondBr(
                 builder.CreateICmpSLT(
-                    i, llvm::ConstantInt::get(i64Type, dimension->capacity)),
-                body, done);
+                    i,
+                    llvm::ConstantInt::get(i64Type, dimension->capacity)),
+                body,
+                done);
             builder.SetInsertPoint(body);
             llvm::Type* elementType =
                 getLLVMTypeFromNode(dimension->elementType);
@@ -1944,8 +2108,9 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         scalar = coerceScalar(generateExpression(node->arguments[0]));
         if(!scalar)
         {
-            reportError(node->line,
-                        method + "() requires a compatible numeric scalar");
+            reportError(
+                node->line,
+                method + "() requires a compatible numeric scalar");
             return nullptr;
         }
     }
@@ -1956,8 +2121,9 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         right = getLValuePointer(node->arguments[0], node->line);
         if(!rightType || !right)
         {
-            reportError(node->line,
-                        method + "() requires a multiarray argument");
+            reportError(
+                node->line,
+                method + "() requires a multiarray argument");
             return nullptr;
         }
         if(elementwiseOperation)
@@ -1968,9 +2134,10 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
             rightShape.erase(0, rightShape.find('<'));
             if(leftShape != rightShape)
             {
-                reportError(node->line,
-                            method + "() requires a multiarray with the same "
-                                     "shape and element type");
+                reportError(
+                    node->line,
+                    method + "() requires a multiarray with the same "
+                             "shape and element type");
                 return nullptr;
             }
         }
@@ -1990,9 +2157,10 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
            dimensions[1]->capacity != rightDimensions[0]->capacity ||
            scalarTypeNode->toString() != rightScalarTypeNode->toString())
         {
-            reportError(node->line,
-                        method + "() requires two numeric 2D matrices whose "
-                                 "inner dimensions and element types match");
+            reportError(
+                node->line,
+                method + "() requires two numeric 2D matrices whose "
+                         "inner dimensions and element types match");
             return nullptr;
         }
         const int64_t rows = dimensions[0]->capacity;
@@ -2002,12 +2170,15 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         llvm::Value* rightRows = loadListData(right, inner, method + "()");
         uint64_t rowBytes = module->getDataLayout().getTypeAllocSize(listType);
         llvm::Value* outputRows = builder.CreateCall(
-            mallocFunc, {llvm::ConstantInt::get(i64Type, rows * rowBytes)},
+            mallocFunc,
+            {llvm::ConstantInt::get(i64Type, rows * rowBytes)},
             "matrix.matmul.rows");
         for(int64_t row = 0; row < rows; ++row)
         {
             llvm::Value* leftRow = builder.CreateGEP(
-                listType, leftRows, llvm::ConstantInt::get(i64Type, row));
+                listType,
+                leftRows,
+                llvm::ConstantInt::get(i64Type, row));
             llvm::Value* leftData = loadListData(leftRow, inner, method + "()");
             uint64_t scalarBytes =
                 module->getDataLayout().getTypeAllocSize(scalarType);
@@ -2020,45 +2191,60 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
                 llvm::Value* total = llvm::Constant::getNullValue(scalarType);
                 for(int64_t k = 0; k < inner; ++k)
                 {
-                    llvm::Value* rightRow =
-                        builder.CreateGEP(listType, rightRows,
-                                          llvm::ConstantInt::get(i64Type, k));
+                    llvm::Value* rightRow = builder.CreateGEP(
+                        listType,
+                        rightRows,
+                        llvm::ConstantInt::get(i64Type, k));
                     llvm::Value* rightData =
                         loadListData(rightRow, columns, method + "()");
                     llvm::Value* leftValue = builder.CreateLoad(
                         scalarType,
-                        builder.CreateGEP(scalarType, leftData,
-                                          llvm::ConstantInt::get(i64Type, k)));
+                        builder.CreateGEP(
+                            scalarType,
+                            leftData,
+                            llvm::ConstantInt::get(i64Type, k)));
                     llvm::Value* rightValue = builder.CreateLoad(
-                        scalarType, builder.CreateGEP(scalarType, rightData,
-                                                      llvm::ConstantInt::get(
-                                                          i64Type, column)));
+                        scalarType,
+                        builder.CreateGEP(
+                            scalarType,
+                            rightData,
+                            llvm::ConstantInt::get(i64Type, column)));
                     total = arithmetic(
-                        total, arithmetic(leftValue, rightValue, "scale"),
+                        total,
+                        arithmetic(leftValue, rightValue, "scale"),
                         "add");
                 }
                 builder.CreateStore(
                     total,
-                    builder.CreateGEP(scalarType, outputData,
-                                      llvm::ConstantInt::get(i64Type, column)));
+                    builder.CreateGEP(
+                        scalarType,
+                        outputData,
+                        llvm::ConstantInt::get(i64Type, column)));
             }
             llvm::Value* rowValue = llvm::UndefValue::get(listType);
             rowValue = builder.CreateInsertValue(
-                rowValue, llvm::ConstantInt::get(i64Type, columns), 0);
+                rowValue,
+                llvm::ConstantInt::get(i64Type, columns),
+                0);
             rowValue = builder.CreateInsertValue(rowValue, outputData, 1);
             builder.CreateStore(
                 rowValue,
-                builder.CreateGEP(listType, outputRows,
-                                  llvm::ConstantInt::get(i64Type, row)));
+                builder.CreateGEP(
+                    listType,
+                    outputRows,
+                    llvm::ConstantInt::get(i64Type, row)));
         }
         llvm::Value* result = llvm::UndefValue::get(listType);
         result = builder.CreateInsertValue(
-            result, llvm::ConstantInt::get(i64Type, rows), 0);
+            result,
+            llvm::ConstantInt::get(i64Type, rows),
+            0);
         return builder.CreateInsertValue(result, outputRows, 1);
     }
 
     std::function<llvm::Value*(size_t, llvm::Value*, llvm::Value*)> transform;
-    transform = [&](size_t depth, llvm::Value* leftParent,
+    transform = [&](size_t depth,
+                    llvm::Value* leftParent,
                     llvm::Value* rightParent) -> llvm::Value*
     {
         ArrayTypeNode* dimension = dimensions[depth];
@@ -2084,11 +2270,16 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         {
             llvm::Value* index = llvm::ConstantInt::get(i64Type, i);
             llvm::Value* leftElement = builder.CreateGEP(
-                elementType, leftData, index, "matrix.left.element");
-            llvm::Value* rightElement =
-                rightData ? builder.CreateGEP(elementType, rightData, index,
-                                              "matrix.right.element")
-                          : nullptr;
+                elementType,
+                leftData,
+                index,
+                "matrix.left.element");
+            llvm::Value* rightElement = rightData ? builder.CreateGEP(
+                                                        elementType,
+                                                        rightData,
+                                                        index,
+                                                        "matrix.right.element")
+                                                  : nullptr;
             llvm::Value* value = nullptr;
             if(depth + 1 == dimensions.size())
             {
@@ -2102,14 +2293,19 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
             else
                 value = transform(depth + 1, leftElement, rightElement);
             llvm::Value* outputElement = builder.CreateGEP(
-                elementType, outputData, index, "matrix.output.element");
+                elementType,
+                outputData,
+                index,
+                "matrix.output.element");
             builder.CreateStore(value, outputElement);
         }
         if(assigning)
             return builder.CreateLoad(listType, leftParent);
         llvm::Value* result = llvm::UndefValue::get(listType);
         result = builder.CreateInsertValue(
-            result, llvm::ConstantInt::get(i64Type, dimension->capacity), 0);
+            result,
+            llvm::ConstantInt::get(i64Type, dimension->capacity),
+            0);
         return builder.CreateInsertValue(result, outputData, 1);
     };
 
@@ -2117,10 +2313,9 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
     return assigning ? successfulVoidExpression(context) : result;
 }
 
-
-llvm::Value*
-CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
-                                     MultiArrayTypeNode* multiarrayType)
+llvm::Value* CodeGenerator::generateMultiarrayGet(
+    MethodCallNode* node,
+    MultiArrayTypeNode* multiarrayType)
 {
     std::vector<ArrayTypeNode*> dimensions;
     TypeNode* scalarTypeNode = multiarrayType;
@@ -2131,16 +2326,15 @@ CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
     }
     if(node->arguments.size() != dimensions.size())
     {
-        reportError(node->line,
-                    "mutmultiarray.get() expects " +
-                        std::to_string(dimensions.size()) + " indexes, got " +
-                        std::to_string(node->arguments.size()));
+        reportError(
+            node->line,
+            "mutmultiarray.get() expects " + std::to_string(dimensions.size()) +
+                " indexes, got " + std::to_string(node->arguments.size()));
         return nullptr;
     }
 
     llvm::Type* scalarType = getLLVMTypeFromNode(scalarTypeNode);
-    llvm::Value* currentPointer =
-        getLValuePointer(node->object, node->line);
+    llvm::Value* currentPointer = getLValuePointer(node->object, node->line);
     if(!scalarType || !currentPointer)
         return nullptr;
 
@@ -2154,10 +2348,10 @@ CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
 #endif
     llvm::StructType* listStructType =
         llvm::StructType::get(context, {i64Type, ptrType});
-    llvm::AllocaInst* found = builder.CreateAlloca(boolType, nullptr,
-                                                   "multiarray.get.found");
-    llvm::AllocaInst* result = builder.CreateAlloca(
-        scalarType, nullptr, "multiarray.get.value");
+    llvm::AllocaInst* found =
+        builder.CreateAlloca(boolType, nullptr, "multiarray.get.found");
+    llvm::AllocaInst* result =
+        builder.CreateAlloca(scalarType, nullptr, "multiarray.get.value");
     builder.CreateStore(llvm::ConstantInt::getFalse(context), found);
     builder.CreateStore(llvm::Constant::getNullValue(scalarType), result);
 
@@ -2167,7 +2361,9 @@ CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
         ++dimensionIndex)
     {
         llvm::Value* listValue = builder.CreateLoad(
-            listStructType, currentPointer, "multiarray.get.dimension");
+            listStructType,
+            currentPointer,
+            "multiarray.get.dimension");
         llvm::Value* length =
             builder.CreateExtractValue(listValue, 0, "multiarray.get.len");
         llvm::Value* data =
@@ -2177,19 +2373,25 @@ CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
         if(!index)
             return nullptr;
         if(index->getType() != i64Type)
-            index = builder.CreateSExtOrTrunc(index, i64Type,
-                                              "multiarray.get.index");
+            index =
+                builder
+                    .CreateSExtOrTrunc(index, i64Type, "multiarray.get.index");
 
-        llvm::Value* nonNegative = builder.CreateICmpSGE(
-            index, llvm::ConstantInt::get(i64Type, 0));
+        llvm::Value* nonNegative =
+            builder.CreateICmpSGE(index, llvm::ConstantInt::get(i64Type, 0));
         llvm::Value* belowLength = builder.CreateICmpSLT(index, length);
-        llvm::Value* inBounds =
-            builder.CreateAnd(nonNegative, belowLength,
-                              "multiarray.get.in_bounds");
+        llvm::Value* inBounds = builder.CreateAnd(
+            nonNegative,
+            belowLength,
+            "multiarray.get.in_bounds");
         llvm::BasicBlock* presentBlock = llvm::BasicBlock::Create(
-            context, "multiarray.get.present", function);
+            context,
+            "multiarray.get.present",
+            function);
         llvm::BasicBlock* missingBlock = llvm::BasicBlock::Create(
-            context, "multiarray.get.missing", function);
+            context,
+            "multiarray.get.missing",
+            function);
         builder.CreateCondBr(inBounds, presentBlock, missingBlock);
 
         builder.SetInsertPoint(missingBlock);
@@ -2198,12 +2400,15 @@ CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
         builder.SetInsertPoint(presentBlock);
         llvm::Type* elementType =
             getLLVMTypeFromNode(dimensions[dimensionIndex]->elementType);
-        currentPointer = builder.CreateGEP(elementType, data, index,
-                                           "multiarray.get.element");
+        currentPointer =
+            builder
+                .CreateGEP(elementType, data, index, "multiarray.get.element");
         if(dimensionIndex + 1 == dimensions.size())
         {
             llvm::Value* value = builder.CreateLoad(
-                scalarType, currentPointer, "multiarray.get.loaded");
+                scalarType,
+                currentPointer,
+                "multiarray.get.loaded");
             builder.CreateStore(value, result);
             builder.CreateStore(llvm::ConstantInt::getTrue(context), found);
             builder.CreateBr(endBlock);
@@ -2218,15 +2423,20 @@ CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
     llvm::StructType* optionType = getStructType(optionName);
     if(!optionType || optionType->getNumElements() < 2)
     {
-        reportError(node->line,
-                    "failed to construct option for mutmultiarray.get()");
+        reportError(
+            node->line,
+            "failed to construct option for mutmultiarray.get()");
         return nullptr;
     }
     llvm::Value* optionValue = llvm::UndefValue::get(optionType);
     optionValue = builder.CreateInsertValue(
-        optionValue, builder.CreateLoad(boolType, found), 0);
+        optionValue,
+        builder.CreateLoad(boolType, found),
+        0);
     optionValue = builder.CreateInsertValue(
-        optionValue, builder.CreateLoad(scalarType, result), 1);
+        optionValue,
+        builder.CreateLoad(scalarType, result),
+        1);
     return optionValue;
 }
 
@@ -2239,8 +2449,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         for(const auto& movedPlace : movedVariables)
             if(borrowPlacesOverlap(receiverPlace, movedPlace))
             {
-                reportError(node->line,
-                            "use of moved value: '" + movedPlace + "'");
+                reportError(
+                    node->line,
+                    "use of moved value: '" + movedPlace + "'");
                 return nullptr;
             }
 
@@ -2252,20 +2463,21 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         if(!aggregate.empty() && isMutBorrower(aggregate) &&
            dynamic_cast<PointerTypeNode*>(resultType))
         {
-            reportError(node->line,
-                        "cannot extract a mutable borrow from aggregate '" +
-                            aggregate + "' because that would duplicate its "
-                            "exclusive reference");
+            reportError(
+                node->line,
+                "cannot extract a mutable borrow from aggregate '" + aggregate +
+                    "' because that would duplicate its "
+                    "exclusive reference");
             return nullptr;
         }
     }
-    auto retainInsertedAggregateBorrow = [&](ExpressionNode* value,
-                                             bool replacesAllContents = false) {
+    auto retainInsertedAggregateBorrow =
+        [&](ExpressionNode* value, bool replacesAllContents = false)
+    {
         const std::string owner = resolveBorrowOwnerFromLValue(node->object);
         if(owner.empty())
             return;
-        if(replacesAllContents &&
-           dynamic_cast<IdentifierNode*>(node->object))
+        if(replacesAllContents && dynamic_cast<IdentifierNode*>(node->object))
         {
             trackAggregateBorrowOrigins(owner, value);
             return;
@@ -2313,16 +2525,20 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             }
                         }
                     if(!isShared)
-                        previousExclusivePlaces.emplace_back(byOwner.first,
-                                                             sourcePlace);
+                        previousExclusivePlaces
+                            .emplace_back(byOwner.first, sourcePlace);
                 }
         }
         trackAggregateBorrowOrigins(owner, value);
-        if(!replacesAllContents &&
-           !mergeAggregateBorrowStateAfterUpdate(
-               owner, previousOrigins, previousPlaces,
-               previousExclusivePlaces, previousExclusiveKeys,
-               previousExclusiveOwner, previousExclusivePlace, node->line))
+        if(!replacesAllContents && !mergeAggregateBorrowStateAfterUpdate(
+                                       owner,
+                                       previousOrigins,
+                                       previousPlaces,
+                                       previousExclusivePlaces,
+                                       previousExclusiveKeys,
+                                       previousExclusiveOwner,
+                                       previousExclusivePlace,
+                                       node->line))
             return;
         if(!previousOrigins.empty())
         {
@@ -2341,9 +2557,17 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         }
     };
     TypeNode* directReceiverType = nullptr;
-    static const std::set<std::string> mutatingContainerMethods = {
-        "clear", "dedup", "extend", "fill", "pop", "push", "push_str",
-        "reverse", "sort", "sort_desc"};
+    static const std::set<std::string> mutatingContainerMethods =
+        {"clear",
+         "dedup",
+         "extend",
+         "fill",
+         "pop",
+         "push",
+         "push_str",
+         "reverse",
+         "sort",
+         "sort_desc"};
     TypeNode* borrowCheckedReceiverType =
         mutatingContainerMethods.count(method) != 0
             ? getLValueType(node->object, node->line)
@@ -2356,28 +2580,28 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
          borrowCheckedReceiverType->kind == TypeNode::TYPE_STRING ||
          borrowCheckedReceiverType->kind == TypeNode::TYPE_STR8 ||
          borrowCheckedReceiverType->kind == TypeNode::TYPE_STR16);
-    if(isBuiltinMutableContainer &&
-       mutatingContainerMethods.count(method) != 0)
+    if(isBuiltinMutableContainer && mutatingContainerMethods.count(method) != 0)
     {
         const std::string owner = resolveBorrowOwnerFromLValue(node->object);
-        if(!owner.empty() &&
-           immutableReferenceVariables.count(owner) != 0)
+        if(!owner.empty() && immutableReferenceVariables.count(owner) != 0)
         {
-            reportError(node->line,
-                        "cannot mutate through immutable reference '" + owner +
-                            "'");
+            reportError(
+                node->line,
+                "cannot mutate through immutable reference '" + owner + "'");
             return nullptr;
         }
         if(!owner.empty())
         {
             const std::string receiverPlace =
                 resolveBorrowPlaceFromLValue(node->object);
-            auto rejectOverlappingBorrow = [&](const std::string& borrower) {
+            auto rejectOverlappingBorrow = [&](const std::string& borrower)
+            {
                 if(!borrowerPlaceOverlaps(borrower, owner, receiverPlace))
                     return false;
-                reportError(node->line,
-                            "cannot mutate container '" + owner +
-                                "' while borrowed by '" + borrower + "'");
+                reportError(
+                    node->line,
+                    "cannot mutate container '" + owner +
+                        "' while borrowed by '" + borrower + "'");
                 return true;
             };
 
@@ -2396,10 +2620,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     const bool matrixMethod =
         method == "sum" || method == "add" || method == "subtract" ||
         method == "hadamard" || method == "offset" || method == "scale" ||
-        method == "matmul" || method == "multiply" ||
-        method == "transpose" || method == "determinant" ||
-        method == "inverse" || method == "eigenvalues" ||
-        method == "eigenvectors" ||
+        method == "matmul" || method == "multiply" || method == "transpose" ||
+        method == "determinant" || method == "inverse" ||
+        method == "eigenvalues" || method == "eigenvectors" ||
         method == "add_assign" || method == "subtract_assign" ||
         method == "hadamard_assign" || method == "offset_assign" ||
         method == "scale_assign";
@@ -2418,8 +2641,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             dynamic_cast<MultiArrayTypeNode*>(directReceiverType);
         if(multiarrayType && !multiarrayType->elementsMutable)
         {
-            reportError(node->line,
-                        "get() is available on mutmultiarray values");
+            reportError(
+                node->line,
+                "get() is available on mutmultiarray values");
             return nullptr;
         }
         if(multiarrayType)
@@ -2433,22 +2657,23 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             node->methodName == "push" || node->methodName == "pop" ||
             node->methodName == "clear" || node->methodName == "fill" ||
             node->methodName == "extend" || node->methodName == "sort" ||
-            node->methodName == "sort_desc" ||
-            node->methodName == "reverse";
+            node->methodName == "sort_desc" || node->methodName == "reverse";
         if(mutability != multiarrayMutability.end() && mutatingMethod)
         {
             if(!mutability->second)
             {
-                reportError(node->line,
-                            "mutation requires mutmultiarray; '" +
-                                receiver->name + "' is immutable");
+                reportError(
+                    node->line,
+                    "mutation requires mutmultiarray; '" + receiver->name +
+                        "' is immutable");
                 return nullptr;
             }
             if(constantVariables.count(receiver->name) != 0)
             {
-                reportError(node->line,
-                            "cannot mutate multiarray '" + receiver->name +
-                                "' because it was declared with let; use var");
+                reportError(
+                    node->line,
+                    "cannot mutate multiarray '" + receiver->name +
+                        "' because it was declared with let; use var");
                 return nullptr;
             }
         }
@@ -2472,8 +2697,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(
                    aliasIt->second.aliasedType))
             {
-                current = getOrCreateMonomorphizedStruct(genRef->structName,
-                                                         genRef->typeArgs);
+                current = getOrCreateMonomorphizedStruct(
+                    genRef->structName,
+                    genRef->typeArgs);
                 break;
             }
             break;
@@ -2500,8 +2726,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             else
                 wholeOwnersInCall.insert(implicitWholeOwner);
         }
-        auto pathsOverlap = [](const std::string& lhs,
-                               const std::string& rhs) {
+        auto pathsOverlap = [](const std::string& lhs, const std::string& rhs)
+        {
             return lhs == rhs ||
                    (lhs.size() > rhs.size() &&
                     lhs.compare(0, rhs.size(), rhs) == 0 &&
@@ -2510,22 +2736,28 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     rhs.compare(0, lhs.size(), lhs) == 0 &&
                     rhs[lhs.size()] == '.');
         };
-        auto registerBorrowInCall =
-            [&](const std::string& owner, const std::string& path,
-                bool isWholeOwner, bool isShared) -> bool {
-            auto overlapsPaths = [&](const auto& pathMap) {
+        auto registerBorrowInCall = [&](const std::string& owner,
+                                        const std::string& path,
+                                        bool isWholeOwner,
+                                        bool isShared) -> bool
+        {
+            auto overlapsPaths = [&](const auto& pathMap)
+            {
                 auto it = pathMap.find(owner);
                 if(it == pathMap.end())
                     return false;
-                return std::any_of(it->second.begin(), it->second.end(),
-                                   [&](const auto& existing) {
-                                       return pathsOverlap(path, existing);
-                                   });
+                return std::any_of(
+                    it->second.begin(),
+                    it->second.end(),
+                    [&](const auto& existing)
+                    { return pathsOverlap(path, existing); });
             };
-            auto failOverlap = [&]() {
-                reportError(node->line,
-                            "cannot borrow overlapping parts of '" + owner +
-                                "' in call to '" + calleeName + "'");
+            auto failOverlap = [&]()
+            {
+                reportError(
+                    node->line,
+                    "cannot borrow overlapping parts of '" + owner +
+                        "' in call to '" + calleeName + "'");
                 return false;
             };
 
@@ -2560,9 +2792,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             subpathsInCall[owner].insert(path);
             return true;
         };
-        auto describeBorrowPath =
-            [&](ExpressionNode* expr, std::string& ownerOut,
-                std::string& pathOut, bool& isWholeOwnerOut) -> bool
+        auto describeBorrowPath = [&](ExpressionNode* expr,
+                                      std::string& ownerOut,
+                                      std::string& pathOut,
+                                      bool& isWholeOwnerOut) -> bool
         {
             ownerOut = resolveBorrowOwnerFromLValue(expr);
             if(ownerOut.empty())
@@ -2774,9 +3007,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 }
                 if(mutIt != activeMutBorrower.end())
                 {
-                    reportError(node->line,
-                                "cannot borrow '" + owner +
-                                    "' as mutable more than once at a time");
+                    reportError(
+                        node->line,
+                        "cannot borrow '" + owner +
+                            "' as mutable more than once at a time");
                     return false;
                 }
             }
@@ -2796,15 +3030,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                    !activeIt->second.empty() && !sharedReferenceArg)
                 {
                     std::string by = *activeIt->second.begin();
-                    reportError(node->line,
-                                "cannot borrow '" + owner +
-                                    "' while already borrowed by '" + by + "'");
+                    reportError(
+                        node->line,
+                        "cannot borrow '" + owner +
+                            "' while already borrowed by '" + by + "'");
                     return false;
                 }
             }
 
-            if(!registerBorrowInCall(owner, path, isWholeOwner,
-                                     sharedReferenceArg))
+            if(!registerBorrowInCall(
+                   owner,
+                   path,
+                   isWholeOwner,
+                   sharedReferenceArg))
                 return false;
         }
 
@@ -2816,9 +3054,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                sharedSubpathsInCall.find(movedOwner) !=
                    sharedSubpathsInCall.end())
             {
-                reportError(node->line, "cannot move '" + movedOwner +
-                                            "' while borrowed in call to '" +
-                                            calleeName + "'");
+                reportError(
+                    node->line,
+                    "cannot move '" + movedOwner +
+                        "' while borrowed in call to '" + calleeName + "'");
                 return false;
             }
         }
@@ -2826,25 +3065,29 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         return true;
     };
 
-    auto validateTraitReceiverBorrow =
-        [&](const std::string& receiverOwner, bool hasSharedReceiver,
-            bool requiresMutableReceiver) -> bool {
+    auto validateTraitReceiverBorrow = [&](const std::string& receiverOwner,
+                                           bool hasSharedReceiver,
+                                           bool requiresMutableReceiver) -> bool
+    {
         if(receiverOwner.empty())
             return true;
         if(requiresMutableReceiver)
         {
             if(immutableReferenceVariables.count(receiverOwner) != 0)
             {
-                reportError(node->line,
-                            "cannot call mutating method through immutable "
-                            "reference '" + receiverOwner + "'");
+                reportError(
+                    node->line,
+                    "cannot call mutating method through immutable "
+                    "reference '" +
+                        receiverOwner + "'");
                 return false;
             }
             if(constantVariables.count(receiverOwner) != 0)
             {
-                reportError(node->line,
-                            "cannot call mutating method on immutable value '" +
-                                receiverOwner + "'");
+                reportError(
+                    node->line,
+                    "cannot call mutating method on immutable value '" +
+                        receiverOwner + "'");
                 return false;
             }
         }
@@ -2856,8 +3099,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         std::string mutableBorrower;
         for(const auto& mutBorrow : activeMutBorrower)
         {
-            if(borrowerPlaceOverlaps(mutBorrow.second, receiverOwner,
-                                     receiverPlace))
+            if(borrowerPlaceOverlaps(
+                   mutBorrow.second,
+                   receiverOwner,
+                   receiverPlace))
             {
                 hasMutableBorrow = true;
                 mutableBorrower = mutBorrow.second;
@@ -2870,8 +3115,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         {
             for(const auto& borrower : activeIt->second)
             {
-                if(borrowerPlaceOverlaps(borrower, receiverOwner,
-                                         receiverPlace))
+                if(borrowerPlaceOverlaps(
+                       borrower,
+                       receiverOwner,
+                       receiverPlace))
                 {
                     hasSharedBorrow = true;
                     sharedBorrower = borrower;
@@ -2881,11 +3128,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         }
         for(const auto& borrow : pointerBorrowTarget)
         {
-            if(borrow.second != receiverOwner ||
-               isMutBorrower(borrow.first))
+            if(borrow.second != receiverOwner || isMutBorrower(borrow.first))
                 continue;
-            if(borrowerPlaceOverlaps(borrow.first, receiverOwner,
-                                     receiverPlace))
+            if(borrowerPlaceOverlaps(
+                   borrow.first,
+                   receiverOwner,
+                   receiverPlace))
             {
                 hasSharedBorrow = true;
                 if(sharedBorrower.empty())
@@ -2896,10 +3144,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         if((hasSharedBorrow && !hasSharedReceiver) ||
            (hasMutableBorrow && hasSharedReceiver))
         {
-            const std::string by = hasMutableBorrow ? mutableBorrower
-                                                     : sharedBorrower;
-            reportError(node->line, "cannot call method on '" + receiverOwner +
-                                        "' while borrowed by '" + by + "'");
+            const std::string by =
+                hasMutableBorrow ? mutableBorrower : sharedBorrower;
+            reportError(
+                node->line,
+                "cannot call method on '" + receiverOwner +
+                    "' while borrowed by '" + by + "'");
             return false;
         }
         return true;
@@ -2939,14 +3189,17 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                traitObjectType->isStructTy())
             {
                 receiverValue = builder.CreateLoad(
-                    traitObjectType, receiverValue, "traitobj.load");
+                    traitObjectType,
+                    receiverValue,
+                    "traitobj.load");
             }
 
             auto traitIt = traitDefinitions.find(traitName);
             if(traitIt == traitDefinitions.end())
             {
                 for(auto it = traitDefinitions.begin();
-                    it != traitDefinitions.end(); ++it)
+                    it != traitDefinitions.end();
+                    ++it)
                 {
                     if(Helpers::trait_names_equivalent(it->first, traitName))
                     {
@@ -2957,8 +3210,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
             if(traitIt == traitDefinitions.end() || !traitIt->second)
             {
-                reportError(node->line,
-                            "unknown trait object type '" + traitName + "'");
+                reportError(
+                    node->line,
+                    "unknown trait object type '" + traitName + "'");
                 return nullptr;
             }
 
@@ -2977,17 +3231,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
             if(!traitMethod)
             {
-                reportError(node->line, "trait '" + traitName +
-                                            "' has no method named '" +
-                                            node->methodName + "'");
+                reportError(
+                    node->line,
+                    "trait '" + traitName + "' has no method named '" +
+                        node->methodName + "'");
                 return nullptr;
             }
             if(traitMethod->isStatic)
             {
-                reportError(node->line,
-                            "static trait method '" + traitName +
-                                "::" + node->methodName +
-                                "' cannot be called on a trait object");
+                reportError(
+                    node->line,
+                    "static trait method '" + traitName +
+                        "::" + node->methodName +
+                        "' cannot be called on a trait object");
                 return nullptr;
             }
 
@@ -3000,11 +3256,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 return nullptr;
             auto* vtableStructType = llvm::cast<llvm::StructType>(vtableType);
             llvm::Value* typedVtablePtr = builder.CreateBitCast(
-                vtablePtr, llvm::PointerType::get(context, 0),
+                vtablePtr,
+                llvm::PointerType::get(context, 0),
                 "traitobj.vtable.cast");
             llvm::Value* slotPtr = builder.CreateStructGEP(
-                vtableStructType, typedVtablePtr,
-                static_cast<unsigned>(methodIndex), "traitobj.slot");
+                vtableStructType,
+                typedVtablePtr,
+                static_cast<unsigned>(methodIndex),
+                "traitobj.slot");
 #if LLVM_VERSION_MAJOR >= 15
             llvm::Type* opaquePtr = llvm::PointerType::get(context, 0);
 #else
@@ -3025,9 +3284,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Type* paramType = parameterLLVMType(param->type);
                     if(!paramType)
                     {
-                        reportError(node->line,
-                                    "unknown type: " +
-                                        Helpers::type_name_for_error(param->type));
+                        reportError(
+                            node->line,
+                            "unknown type: " +
+                                Helpers::type_name_for_error(param->type));
                         return nullptr;
                     }
                     paramTypes.push_back(paramType);
@@ -3036,15 +3296,18 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             llvm::Type* returnType = parameterLLVMType(traitMethod->returnType);
             if(!returnType)
             {
-                reportError(node->line,
-                            "unknown type: " +
-                                Helpers::type_name_for_error(traitMethod->returnType));
+                reportError(
+                    node->line,
+                    "unknown type: " +
+                        Helpers::type_name_for_error(traitMethod->returnType));
                 return nullptr;
             }
             llvm::FunctionType* fnType =
                 llvm::FunctionType::get(returnType, paramTypes, false);
             llvm::Value* fn = builder.CreateBitCast(
-                fnPtr, llvm::PointerType::get(context, 0), "traitobj.fn.cast");
+                fnPtr,
+                llvm::PointerType::get(context, 0),
+                "traitobj.fn.cast");
 
             std::vector<bool> sharedReferenceArgs;
             bool traitMethodHasSharedReceiver = false;
@@ -3057,10 +3320,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         continue;
                     if(parameter->name == "self")
                     {
-                        traitMethodHasSharedReceiver =
-                            parameter->isSharedSelf;
-                        if(auto* reference =
-                               dynamic_cast<ReferenceTypeNode*>(parameter->type))
+                        traitMethodHasSharedReceiver = parameter->isSharedSelf;
+                        if(auto* reference = dynamic_cast<ReferenceTypeNode*>(
+                               parameter->type))
                         {
                             traitMethodHasSharedReceiver =
                                 !reference->isMutable;
@@ -3071,19 +3333,23 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     }
                     auto* reference =
                         dynamic_cast<ReferenceTypeNode*>(parameter->type);
-                    sharedReferenceArgs.push_back(reference &&
-                                                  !reference->isMutable);
+                    sharedReferenceArgs.push_back(
+                        reference && !reference->isMutable);
                 }
             }
             const std::string receiverOwner =
                 resolveBorrowOwnerFromLValue(node->object);
             if(!validateTraitReceiverBorrow(
-                   receiverOwner, traitMethodHasSharedReceiver,
+                   receiverOwner,
+                   traitMethodHasSharedReceiver,
                    traitMethodRequiresMutableReceiver))
                 return nullptr;
             if(!validateTemporaryBorrowArguments(
-                   node->arguments, node->methodName, receiverOwner,
-                   traitMethodHasSharedReceiver, sharedReferenceArgs))
+                   node->arguments,
+                   node->methodName,
+                   receiverOwner,
+                   traitMethodHasSharedReceiver,
+                   sharedReferenceArgs))
                 return nullptr;
 
             std::vector<llvm::Value*> callArgs;
@@ -3128,25 +3394,37 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                            expectedType->isIntegerTy())
                         {
                             argVal = builder.CreateIntCast(
-                                argVal, expectedType, true, "trait.arg.cast");
+                                argVal,
+                                expectedType,
+                                true,
+                                "trait.arg.cast");
                         }
-                        else if(argVal->getType()->isIntegerTy() &&
-                                expectedType->isFloatingPointTy())
+                        else if(
+                            argVal->getType()->isIntegerTy() &&
+                            expectedType->isFloatingPointTy())
                         {
-                            argVal = builder.CreateSIToFP(argVal, expectedType,
-                                                          "trait.arg.sitofp");
+                            argVal = builder.CreateSIToFP(
+                                argVal,
+                                expectedType,
+                                "trait.arg.sitofp");
                         }
-                        else if(argVal->getType()->isFloatingPointTy() &&
-                                expectedType->isFloatingPointTy())
+                        else if(
+                            argVal->getType()->isFloatingPointTy() &&
+                            expectedType->isFloatingPointTy())
                         {
-                            argVal = builder.CreateFPCast(argVal, expectedType,
-                                                          "trait.arg.fpcast");
+                            argVal = builder.CreateFPCast(
+                                argVal,
+                                expectedType,
+                                "trait.arg.fpcast");
                         }
-                        else if(argVal->getType()->isPointerTy() &&
-                                expectedType->isPointerTy())
+                        else if(
+                            argVal->getType()->isPointerTy() &&
+                            expectedType->isPointerTy())
                         {
-                            argVal = builder.CreateBitCast(argVal, expectedType,
-                                                           "trait.arg.ptrcast");
+                            argVal = builder.CreateBitCast(
+                                argVal,
+                                expectedType,
+                                "trait.arg.ptrcast");
                         }
                         else
                         {
@@ -3180,7 +3458,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             if(traitIt == traitDefinitions.end())
             {
                 for(auto it = traitDefinitions.begin();
-                    it != traitDefinitions.end(); ++it)
+                    it != traitDefinitions.end();
+                    ++it)
                 {
                     if(Helpers::trait_names_equivalent(it->first, traitName))
                     {
@@ -3191,8 +3470,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
             if(traitIt == traitDefinitions.end() || !traitIt->second)
             {
-                reportError(node->line,
-                            "unknown trait object type '" + traitName + "'");
+                reportError(
+                    node->line,
+                    "unknown trait object type '" + traitName + "'");
                 return nullptr;
             }
             TraitDefNode* traitDef = traitIt->second;
@@ -3210,17 +3490,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
             if(!traitMethod)
             {
-                reportError(node->line, "trait '" + traitName +
-                                            "' has no method named '" +
-                                            node->methodName + "'");
+                reportError(
+                    node->line,
+                    "trait '" + traitName + "' has no method named '" +
+                        node->methodName + "'");
                 return nullptr;
             }
             if(traitMethod->isStatic)
             {
-                reportError(node->line,
-                            "static trait method '" + traitName +
-                                "::" + node->methodName +
-                                "' cannot be called on a trait object");
+                reportError(
+                    node->line,
+                    "static trait method '" + traitName +
+                        "::" + node->methodName +
+                        "' cannot be called on a trait object");
                 return nullptr;
             }
             llvm::Value* objAlloc = namedValues[objId->name];
@@ -3230,23 +3512,29 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 return nullptr;
             }
             llvm::Type* objType = getTraitObjectType(traitName);
-            llvm::Value* obj = builder.CreateLoad(objType, objAlloc,
-                                                  objId->name + ".traitobj");
-            llvm::Value* dataPtr = builder.CreateExtractValue(
-                obj, 0, objId->name + ".traitobj.data");
+            llvm::Value* obj =
+                builder
+                    .CreateLoad(objType, objAlloc, objId->name + ".traitobj");
+            llvm::Value* dataPtr =
+                builder
+                    .CreateExtractValue(obj, 0, objId->name + ".traitobj.data");
             llvm::Value* vtablePtr = builder.CreateExtractValue(
-                obj, 1, objId->name + ".traitobj.vtable");
+                obj,
+                1,
+                objId->name + ".traitobj.vtable");
             llvm::Type* vtableType = getTraitVTableType(traitName);
             if(!vtableType)
                 return nullptr;
             auto* vtableStructType = llvm::cast<llvm::StructType>(vtableType);
             llvm::Value* typedVtablePtr = builder.CreateBitCast(
-                vtablePtr, llvm::PointerType::get(context, 0),
+                vtablePtr,
+                llvm::PointerType::get(context, 0),
                 objId->name + ".traitobj.vtable.cast");
-            llvm::Value* slotPtr =
-                builder.CreateStructGEP(vtableStructType, typedVtablePtr,
-                                        static_cast<unsigned>(methodIndex),
-                                        objId->name + ".traitobj.slot");
+            llvm::Value* slotPtr = builder.CreateStructGEP(
+                vtableStructType,
+                typedVtablePtr,
+                static_cast<unsigned>(methodIndex),
+                objId->name + ".traitobj.slot");
 #if LLVM_VERSION_MAJOR >= 15
             llvm::Type* opaquePtr = llvm::PointerType::get(context, 0);
 #else
@@ -3254,7 +3542,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
             llvm::Value* fnPtr = builder.CreateLoad(
-                opaquePtr, slotPtr, objId->name + ".traitobj.fn");
+                opaquePtr,
+                slotPtr,
+                objId->name + ".traitobj.fn");
 
             std::vector<llvm::Type*> paramTypes;
             paramTypes.push_back(opaquePtr);
@@ -3267,9 +3557,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Type* paramType = parameterLLVMType(param->type);
                     if(!paramType)
                     {
-                        reportError(node->line,
-                                    "unknown type: " +
-                                        Helpers::type_name_for_error(param->type));
+                        reportError(
+                            node->line,
+                            "unknown type: " +
+                                Helpers::type_name_for_error(param->type));
                         return nullptr;
                     }
                     paramTypes.push_back(paramType);
@@ -3278,16 +3569,18 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             llvm::Type* returnType = parameterLLVMType(traitMethod->returnType);
             if(!returnType)
             {
-                reportError(node->line,
-                            "unknown type: " +
-                                Helpers::type_name_for_error(traitMethod->returnType));
+                reportError(
+                    node->line,
+                    "unknown type: " +
+                        Helpers::type_name_for_error(traitMethod->returnType));
                 return nullptr;
             }
             llvm::FunctionType* fnType =
                 llvm::FunctionType::get(returnType, paramTypes, false);
-            llvm::Value* fn =
-                builder.CreateBitCast(fnPtr, llvm::PointerType::get(context, 0),
-                                      objId->name + ".traitobj.fn.cast");
+            llvm::Value* fn = builder.CreateBitCast(
+                fnPtr,
+                llvm::PointerType::get(context, 0),
+                objId->name + ".traitobj.fn.cast");
 
             std::vector<bool> sharedReferenceArgs;
             bool traitMethodHasSharedReceiver = false;
@@ -3300,10 +3593,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         continue;
                     if(parameter->name == "self")
                     {
-                        traitMethodHasSharedReceiver =
-                            parameter->isSharedSelf;
-                        if(auto* reference =
-                               dynamic_cast<ReferenceTypeNode*>(parameter->type))
+                        traitMethodHasSharedReceiver = parameter->isSharedSelf;
+                        if(auto* reference = dynamic_cast<ReferenceTypeNode*>(
+                               parameter->type))
                         {
                             traitMethodHasSharedReceiver =
                                 !reference->isMutable;
@@ -3314,17 +3606,21 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     }
                     auto* reference =
                         dynamic_cast<ReferenceTypeNode*>(parameter->type);
-                    sharedReferenceArgs.push_back(reference &&
-                                                  !reference->isMutable);
+                    sharedReferenceArgs.push_back(
+                        reference && !reference->isMutable);
                 }
             }
             if(!validateTraitReceiverBorrow(
-                   objId->name, traitMethodHasSharedReceiver,
+                   objId->name,
+                   traitMethodHasSharedReceiver,
                    traitMethodRequiresMutableReceiver))
                 return nullptr;
             if(!validateTemporaryBorrowArguments(
-                   node->arguments, node->methodName, objId->name,
-                   traitMethodHasSharedReceiver, sharedReferenceArgs))
+                   node->arguments,
+                   node->methodName,
+                   objId->name,
+                   traitMethodHasSharedReceiver,
+                   sharedReferenceArgs))
                 return nullptr;
 
             std::vector<llvm::Value*> callArgs;
@@ -3369,25 +3665,37 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                            expectedType->isIntegerTy())
                         {
                             argVal = builder.CreateIntCast(
-                                argVal, expectedType, true, "trait.arg.cast");
+                                argVal,
+                                expectedType,
+                                true,
+                                "trait.arg.cast");
                         }
-                        else if(argVal->getType()->isIntegerTy() &&
-                                expectedType->isFloatingPointTy())
+                        else if(
+                            argVal->getType()->isIntegerTy() &&
+                            expectedType->isFloatingPointTy())
                         {
-                            argVal = builder.CreateSIToFP(argVal, expectedType,
-                                                          "trait.arg.sitofp");
+                            argVal = builder.CreateSIToFP(
+                                argVal,
+                                expectedType,
+                                "trait.arg.sitofp");
                         }
-                        else if(argVal->getType()->isFloatingPointTy() &&
-                                expectedType->isFloatingPointTy())
+                        else if(
+                            argVal->getType()->isFloatingPointTy() &&
+                            expectedType->isFloatingPointTy())
                         {
-                            argVal = builder.CreateFPCast(argVal, expectedType,
-                                                          "trait.arg.fpcast");
+                            argVal = builder.CreateFPCast(
+                                argVal,
+                                expectedType,
+                                "trait.arg.fpcast");
                         }
-                        else if(argVal->getType()->isPointerTy() &&
-                                expectedType->isPointerTy())
+                        else if(
+                            argVal->getType()->isPointerTy() &&
+                            expectedType->isPointerTy())
                         {
-                            argVal = builder.CreateBitCast(argVal, expectedType,
-                                                           "trait.arg.ptrcast");
+                            argVal = builder.CreateBitCast(
+                                argVal,
+                                expectedType,
+                                "trait.arg.ptrcast");
                         }
                         else
                         {
@@ -3399,9 +3707,11 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         }
                     }
                 }
-                consumeMoveFromExpression(argExpr, node->line,
-                                          "passing argument to trait method '" +
-                                              node->methodName + "'");
+                consumeMoveFromExpression(
+                    argExpr,
+                    node->line,
+                    "passing argument to trait method '" + node->methodName +
+                        "'");
                 callArgs.push_back(argVal);
                 ++argIndex;
             }
@@ -3420,8 +3730,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             traitName = traitObjType->traitName;
         }
 
-        const bool wasSuppressingReadValidation =
-            suppressBorrowReadValidation;
+        const bool wasSuppressingReadValidation = suppressBorrowReadValidation;
         suppressBorrowReadValidation = true;
         llvm::Value* receiverValue = generateExpression(node->object);
         suppressBorrowReadValidation = wasSuppressingReadValidation;
@@ -3434,7 +3743,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                traitObjectType->isStructTy())
             {
                 receiverValue = builder.CreateLoad(
-                    traitObjectType, receiverValue, "traitobj.load");
+                    traitObjectType,
+                    receiverValue,
+                    "traitobj.load");
             }
         }
 
@@ -3460,7 +3771,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             if(traitIt == traitDefinitions.end())
             {
                 for(auto it = traitDefinitions.begin();
-                    it != traitDefinitions.end(); ++it)
+                    it != traitDefinitions.end();
+                    ++it)
                 {
                     if(Helpers::trait_names_equivalent(it->first, traitName))
                     {
@@ -3471,8 +3783,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
             if(traitIt == traitDefinitions.end() || !traitIt->second)
             {
-                reportError(node->line,
-                            "unknown trait object type '" + traitName + "'");
+                reportError(
+                    node->line,
+                    "unknown trait object type '" + traitName + "'");
                 return nullptr;
             }
             TraitDefNode* traitDef = traitIt->second;
@@ -3490,17 +3803,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
             if(!traitMethod)
             {
-                reportError(node->line, "trait '" + traitName +
-                                            "' has no method named '" +
-                                            node->methodName + "'");
+                reportError(
+                    node->line,
+                    "trait '" + traitName + "' has no method named '" +
+                        node->methodName + "'");
                 return nullptr;
             }
             if(traitMethod->isStatic)
             {
-                reportError(node->line,
-                            "static trait method '" + traitName +
-                                "::" + node->methodName +
-                                "' cannot be called on a trait object");
+                reportError(
+                    node->line,
+                    "static trait method '" + traitName +
+                        "::" + node->methodName +
+                        "' cannot be called on a trait object");
                 return nullptr;
             }
 
@@ -3513,11 +3828,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 return nullptr;
             auto* vtableStructType = llvm::cast<llvm::StructType>(vtableType);
             llvm::Value* typedVtablePtr = builder.CreateBitCast(
-                vtablePtr, llvm::PointerType::get(context, 0),
+                vtablePtr,
+                llvm::PointerType::get(context, 0),
                 "traitobj.vtable.cast");
             llvm::Value* slotPtr = builder.CreateStructGEP(
-                vtableStructType, typedVtablePtr,
-                static_cast<unsigned>(methodIndex), "traitobj.slot");
+                vtableStructType,
+                typedVtablePtr,
+                static_cast<unsigned>(methodIndex),
+                "traitobj.slot");
 #if LLVM_VERSION_MAJOR >= 15
             llvm::Type* opaquePtr = llvm::PointerType::get(context, 0);
 #else
@@ -3538,9 +3856,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Type* paramType = parameterLLVMType(param->type);
                     if(!paramType)
                     {
-                        reportError(node->line,
-                                    "unknown type: " +
-                                        Helpers::type_name_for_error(param->type));
+                        reportError(
+                            node->line,
+                            "unknown type: " +
+                                Helpers::type_name_for_error(param->type));
                         return nullptr;
                     }
                     paramTypes.push_back(paramType);
@@ -3549,15 +3868,18 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             llvm::Type* returnType = parameterLLVMType(traitMethod->returnType);
             if(!returnType)
             {
-                reportError(node->line,
-                            "unknown type: " +
-                                Helpers::type_name_for_error(traitMethod->returnType));
+                reportError(
+                    node->line,
+                    "unknown type: " +
+                        Helpers::type_name_for_error(traitMethod->returnType));
                 return nullptr;
             }
             llvm::FunctionType* fnType =
                 llvm::FunctionType::get(returnType, paramTypes, false);
             llvm::Value* fn = builder.CreateBitCast(
-                fnPtr, llvm::PointerType::get(context, 0), "traitobj.fn.cast");
+                fnPtr,
+                llvm::PointerType::get(context, 0),
+                "traitobj.fn.cast");
 
             std::vector<llvm::Value*> callArgs;
             callArgs.push_back(dataPtr);
@@ -3576,25 +3898,37 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                            expectedType->isIntegerTy())
                         {
                             argVal = builder.CreateIntCast(
-                                argVal, expectedType, true, "trait.arg.cast");
+                                argVal,
+                                expectedType,
+                                true,
+                                "trait.arg.cast");
                         }
-                        else if(argVal->getType()->isIntegerTy() &&
-                                expectedType->isFloatingPointTy())
+                        else if(
+                            argVal->getType()->isIntegerTy() &&
+                            expectedType->isFloatingPointTy())
                         {
-                            argVal = builder.CreateSIToFP(argVal, expectedType,
-                                                          "trait.arg.sitofp");
+                            argVal = builder.CreateSIToFP(
+                                argVal,
+                                expectedType,
+                                "trait.arg.sitofp");
                         }
-                        else if(argVal->getType()->isFloatingPointTy() &&
-                                expectedType->isFloatingPointTy())
+                        else if(
+                            argVal->getType()->isFloatingPointTy() &&
+                            expectedType->isFloatingPointTy())
                         {
-                            argVal = builder.CreateFPCast(argVal, expectedType,
-                                                          "trait.arg.fpcast");
+                            argVal = builder.CreateFPCast(
+                                argVal,
+                                expectedType,
+                                "trait.arg.fpcast");
                         }
-                        else if(argVal->getType()->isPointerTy() &&
-                                expectedType->isPointerTy())
+                        else if(
+                            argVal->getType()->isPointerTy() &&
+                            expectedType->isPointerTy())
                         {
-                            argVal = builder.CreateBitCast(argVal, expectedType,
-                                                           "trait.arg.ptrcast");
+                            argVal = builder.CreateBitCast(
+                                argVal,
+                                expectedType,
+                                "trait.arg.ptrcast");
                         }
                         else
                         {
@@ -3626,25 +3960,28 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 {
                     if(node->arguments.size() != 1)
                     {
-                        reportError(node->line,
-                                    "push_str expects one argument");
+                        reportError(
+                            node->line,
+                            "push_str expects one argument");
                         return nullptr;
                     }
                     if(constantVariables.count(objId->name))
                     {
-                        reportError(node->line,
-                                    "cannot call push_str on immutable "
-                                    "string '" +
-                                        objId->name + "'");
+                        reportError(
+                            node->line,
+                            "cannot call push_str on immutable "
+                            "string '" +
+                                objId->name + "'");
                         return nullptr;
                     }
                     auto borrowIt = activeBorrowers.find(objId->name);
                     if(borrowIt != activeBorrowers.end() &&
                        !borrowIt->second.empty())
                     {
-                        reportError(node->line, "cannot mutate '" +
-                                                    objId->name +
-                                                    "' while it is borrowed");
+                        reportError(
+                            node->line,
+                            "cannot mutate '" + objId->name +
+                                "' while it is borrowed");
                         return nullptr;
                     }
                     auto mutBorrowIt = activeMutBorrower.find(objId->name);
@@ -3660,28 +3997,37 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Value* allocaPtr = namedValues[objId->name];
                     if(!allocaPtr)
                     {
-                        reportError(node->line,
-                                    "unknown variable: " + objId->name);
+                        reportError(
+                            node->line,
+                            "unknown variable: " + objId->name);
                         return nullptr;
                     }
 #if LLVM_VERSION_MAJOR >= 15
                     llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
                     llvm::Type* ptrType = llvm::PointerType::get(
-                        llvm::Type::getInt8Ty(context), 0);
+                        llvm::Type::getInt8Ty(context),
+                        0);
 #endif
                     llvm::Value* currentStr = builder.CreateLoad(
-                        ptrType, allocaPtr, objId->name + ".load");
+                        ptrType,
+                        allocaPtr,
+                        objId->name + ".load");
                     llvm::Value* suffix =
                         generateExpression(node->arguments[0]);
                     if(!suffix)
                         return nullptr;
                     llvm::FunctionType* concatFnType = llvm::FunctionType::get(
-                        ptrType, {ptrType, ptrType}, false);
+                        ptrType,
+                        {ptrType, ptrType},
+                        false);
                     llvm::FunctionCallee concatFn = module->getOrInsertFunction(
-                        "__mlang_std_strbuf_concat", concatFnType);
+                        "__mlang_std_strbuf_concat",
+                        concatFnType);
                     llvm::Value* newStr = builder.CreateCall(
-                        concatFn, {currentStr, suffix}, "push_str.result");
+                        concatFn,
+                        {currentStr, suffix},
+                        "push_str.result");
                     builder.CreateStore(newStr, allocaPtr);
                     return llvm::Constant::getNullValue(ptrType);
                 }
@@ -3696,24 +4042,31 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Value* allocaPtr = namedValues[objId->name];
                     if(!allocaPtr)
                     {
-                        reportError(node->line,
-                                    "unknown variable: " + objId->name);
+                        reportError(
+                            node->line,
+                            "unknown variable: " + objId->name);
                         return nullptr;
                     }
 #if LLVM_VERSION_MAJOR >= 15
                     llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
                     llvm::Type* ptrType = llvm::PointerType::get(
-                        llvm::Type::getInt8Ty(context), 0);
+                        llvm::Type::getInt8Ty(context),
+                        0);
 #endif
                     llvm::Value* currentStr = builder.CreateLoad(
-                        ptrType, allocaPtr, objId->name + ".load");
+                        ptrType,
+                        allocaPtr,
+                        objId->name + ".load");
                     llvm::FunctionType* cloneFnType =
                         llvm::FunctionType::get(ptrType, {ptrType}, false);
                     llvm::FunctionCallee cloneFn = module->getOrInsertFunction(
-                        "__mlang_std_strbuf_clone", cloneFnType);
-                    return builder.CreateCall(cloneFn, {currentStr},
-                                              objId->name + ".clone");
+                        "__mlang_std_strbuf_clone",
+                        cloneFnType);
+                    return builder.CreateCall(
+                        cloneFn,
+                        {currentStr},
+                        objId->name + ".clone");
                 }
                 // --- len() ---
                 if(node->methodName == "len")
@@ -3726,60 +4079,74 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Value* allocaPtr = namedValues[objId->name];
                     if(!allocaPtr)
                     {
-                        reportError(node->line,
-                                    "unknown variable: " + objId->name);
+                        reportError(
+                            node->line,
+                            "unknown variable: " + objId->name);
                         return nullptr;
                     }
 #if LLVM_VERSION_MAJOR >= 15
                     llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
                     llvm::Type* ptrType = llvm::PointerType::get(
-                        llvm::Type::getInt8Ty(context), 0);
+                        llvm::Type::getInt8Ty(context),
+                        0);
 #endif
                     llvm::Value* currentStr = builder.CreateLoad(
-                        ptrType, allocaPtr, objId->name + ".load");
+                        ptrType,
+                        allocaPtr,
+                        objId->name + ".load");
                     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
                     llvm::FunctionType* lenFnType =
                         llvm::FunctionType::get(i64Type, {ptrType}, false);
                     llvm::FunctionCallee lenFn = module->getOrInsertFunction(
-                        "__mlang_std_strbuf_len", lenFnType);
-                    return builder.CreateCall(lenFn, {currentStr},
-                                              objId->name + ".len");
+                        "__mlang_std_strbuf_len",
+                        lenFnType);
+                    return builder
+                        .CreateCall(lenFn, {currentStr}, objId->name + ".len");
                 }
                 // --- is_empty() ---
                 if(node->methodName == "is_empty")
                 {
                     if(!node->arguments.empty())
                     {
-                        reportError(node->line,
-                                    "is_empty() takes no arguments");
+                        reportError(
+                            node->line,
+                            "is_empty() takes no arguments");
                         return nullptr;
                     }
                     llvm::Value* allocaPtr = namedValues[objId->name];
                     if(!allocaPtr)
                     {
-                        reportError(node->line,
-                                    "unknown variable: " + objId->name);
+                        reportError(
+                            node->line,
+                            "unknown variable: " + objId->name);
                         return nullptr;
                     }
 #if LLVM_VERSION_MAJOR >= 15
                     llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
                     llvm::Type* ptrType = llvm::PointerType::get(
-                        llvm::Type::getInt8Ty(context), 0);
+                        llvm::Type::getInt8Ty(context),
+                        0);
 #endif
                     llvm::Value* currentStr = builder.CreateLoad(
-                        ptrType, allocaPtr, objId->name + ".load");
+                        ptrType,
+                        allocaPtr,
+                        objId->name + ".load");
                     llvm::Type* intType = llvm::Type::getInt32Ty(context);
                     llvm::FunctionType* emptyFnType =
                         llvm::FunctionType::get(intType, {ptrType}, false);
                     llvm::FunctionCallee emptyFn = module->getOrInsertFunction(
-                        "__mlang_std_strbuf_is_empty", emptyFnType);
-                    return builder.CreateCall(emptyFn, {currentStr},
-                                              objId->name + ".is_empty");
+                        "__mlang_std_strbuf_is_empty",
+                        emptyFnType);
+                    return builder.CreateCall(
+                        emptyFn,
+                        {currentStr},
+                        objId->name + ".is_empty");
                 }
-                reportError(node->line, "string has no method named '" +
-                                            node->methodName + "'");
+                reportError(
+                    node->line,
+                    "string has no method named '" + node->methodName + "'");
                 return nullptr;
             }
         }
@@ -3800,8 +4167,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Value* allocaPtr = namedValues[objId->name];
                     if(!allocaPtr)
                     {
-                        reportError(node->line,
-                                    "unknown variable: " + objId->name);
+                        reportError(
+                            node->line,
+                            "unknown variable: " + objId->name);
                         return nullptr;
                     }
                     // List struct layout: {i64 count, ptr data}
@@ -3812,16 +4180,21 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
                     llvm::Type* ptrType = llvm::PointerType::get(
-                        llvm::Type::getInt8Ty(context), 0);
+                        llvm::Type::getInt8Ty(context),
+                        0);
 #endif
-                    std::vector<llvm::Type*> listStructTypes = {i64Type,
-                                                                ptrType};
+                    std::vector<llvm::Type*> listStructTypes =
+                        {i64Type, ptrType};
                     llvm::StructType* listStructType =
                         llvm::StructType::get(context, listStructTypes);
                     llvm::Value* listStruct = builder.CreateLoad(
-                        listStructType, allocaPtr, objId->name + ".load");
-                    return builder.CreateExtractValue(listStruct, 0,
-                                                      objId->name + ".len");
+                        listStructType,
+                        allocaPtr,
+                        objId->name + ".load");
+                    return builder.CreateExtractValue(
+                        listStruct,
+                        0,
+                        objId->name + ".len");
                 }
                 // ---- helper lambdas for Vec methods ----
                 llvm::Value* allocaPtr2 = namedValues[objId->name];
@@ -3852,10 +4225,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         elemTypeNode2 = elit->second;
                     }
                 }
-                bool elemIsI64 = (elemKind2 == TypeNode::TYPE_I64 ||
-                                  elemKind2 == TypeNode::TYPE_U64);
-                bool elemIsStr = (elemKind2 == TypeNode::TYPE_STRING ||
-                                  elemKind2 == TypeNode::TYPE_STR8);
+                bool elemIsI64 =
+                    (elemKind2 == TypeNode::TYPE_I64 ||
+                     elemKind2 == TypeNode::TYPE_U64);
+                bool elemIsStr =
+                    (elemKind2 == TypeNode::TYPE_STRING ||
+                     elemKind2 == TypeNode::TYPE_STR8);
                 auto arrayCapIt2 = arrayCapacities.find(objId->name);
                 bool receiverIsArray2 = arrayCapIt2 != arrayCapacities.end();
                 llvm::Value* arrayCapacity2 =
@@ -3869,9 +4244,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         return true;
                     if(add < 0)
                     {
-                        reportError(node->line, methodName +
-                                                    "() source length must be "
-                                                    "non-negative");
+                        reportError(
+                            node->line,
+                            methodName + "() source length must be "
+                                         "non-negative");
                         return false;
                     }
                     if(add > arrayCapIt2->second)
@@ -3894,8 +4270,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             methodName + "() would exceed " +
                                 std::string("array<T, N> capacity: len=") +
                                 std::to_string(lenIt->second) +
-                                " add=" + std::to_string(add) +
-                                " capacity=" +
+                                " add=" + std::to_string(add) + " capacity=" +
                                 std::to_string(arrayCapIt2->second));
                         return false;
                     }
@@ -3915,7 +4290,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 auto callVecVoidFn = [&](const std::string& fnName)
                 {
                     llvm::FunctionType* ft = llvm::FunctionType::get(
-                        voidType2, {opaquePtrType}, false);
+                        voidType2,
+                        {opaquePtrType},
+                        false);
                     llvm::FunctionCallee fn =
                         module->getOrInsertFunction(fnName, ft);
                     builder.CreateCall(fn, {allocaPtr2});
@@ -3931,9 +4308,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         if(lenIt != arrayKnownLengths.end() &&
                            lenIt->second <= 0)
                         {
-                            reportError(node->line,
-                                        methodName +
-                                            "() requires a non-empty array");
+                            reportError(
+                                node->line,
+                                methodName + "() requires a non-empty array");
                             return false;
                         }
                     }
@@ -3942,11 +4319,16 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Function* function =
                         builder.GetInsertBlock()->getParent();
                     llvm::BasicBlock* okBB = llvm::BasicBlock::Create(
-                        context, methodName + ".non_empty", function);
+                        context,
+                        methodName + ".non_empty",
+                        function);
                     llvm::BasicBlock* failBB = llvm::BasicBlock::Create(
-                        context, methodName + ".empty", function);
+                        context,
+                        methodName + ".empty",
+                        function);
                     llvm::Value* nonEmpty = builder.CreateICmpSGT(
-                        count, llvm::ConstantInt::get(i64Type2, 0),
+                        count,
+                        llvm::ConstantInt::get(i64Type2, 0),
                         methodName + ".has_items");
                     builder.CreateCondBr(nonEmpty, okBB, failBB);
 
@@ -3977,20 +4359,24 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 {
                     if(!node->arguments.empty())
                     {
-                        reportError(node->line,
-                                    "is_empty() takes no arguments");
+                        reportError(
+                            node->line,
+                            "is_empty() takes no arguments");
                         return nullptr;
                     }
                     // reuse the len path: compare count == 0
-                    std::vector<llvm::Type*> lsTypes = {i64Type2,
-                                                        opaquePtrType};
+                    std::vector<llvm::Type*> lsTypes =
+                        {i64Type2, opaquePtrType};
                     llvm::StructType* lsType =
                         llvm::StructType::get(context, lsTypes);
-                    llvm::Value* ls = builder.CreateLoad(lsType, allocaPtr2,
-                                                         objId->name + ".load");
+                    llvm::Value* ls = builder.CreateLoad(
+                        lsType,
+                        allocaPtr2,
+                        objId->name + ".load");
                     llvm::Value* cnt = builder.CreateExtractValue(ls, 0);
                     return builder.CreateICmpEQ(
-                        cnt, llvm::ConstantInt::get(i64Type2, 0),
+                        cnt,
+                        llvm::ConstantInt::get(i64Type2, 0),
                         objId->name + ".is_empty");
                 }
                 // --- fill(val) ---
@@ -3998,8 +4384,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 {
                     if(!receiverIsArray2)
                     {
-                        reportError(node->line,
-                                    "fill() is only available for array<T, N>");
+                        reportError(
+                            node->line,
+                            "fill() is only available for array<T, N>");
                         return nullptr;
                     }
                     if(node->arguments.size() != 1)
@@ -4015,12 +4402,13 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     {
                         llvm::FunctionType* ft = llvm::FunctionType::get(
                             voidType2,
-                            {opaquePtrType, opaquePtrType, i64Type2}, false);
-                        llvm::FunctionCallee fn =
-                            module->getOrInsertFunction(
-                                "__mlang_std_array_fill_str", ft);
-                        builder.CreateCall(
-                            fn, {allocaPtr2, val2, arrayCapacity2});
+                            {opaquePtrType, opaquePtrType, i64Type2},
+                            false);
+                        llvm::FunctionCallee fn = module->getOrInsertFunction(
+                            "__mlang_std_array_fill_str",
+                            ft);
+                        builder
+                            .CreateCall(fn, {allocaPtr2, val2, arrayCapacity2});
                         updateKnownArrayLength2(arrayCapIt2->second);
                         retainInsertedAggregateBorrow(node->arguments[0], true);
                         return successfulVoidExpression(context);
@@ -4031,12 +4419,13 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             val2 = builder.CreateSExt(val2, i64Type2);
                         llvm::FunctionType* ft = llvm::FunctionType::get(
                             voidType2,
-                            {opaquePtrType, i64Type2, i64Type2}, false);
-                        llvm::FunctionCallee fn =
-                            module->getOrInsertFunction(
-                                "__mlang_std_array_fill_i64", ft);
-                        builder.CreateCall(
-                            fn, {allocaPtr2, val2, arrayCapacity2});
+                            {opaquePtrType, i64Type2, i64Type2},
+                            false);
+                        llvm::FunctionCallee fn = module->getOrInsertFunction(
+                            "__mlang_std_array_fill_i64",
+                            ft);
+                        builder
+                            .CreateCall(fn, {allocaPtr2, val2, arrayCapacity2});
                         updateKnownArrayLength2(arrayCapIt2->second);
                         retainInsertedAggregateBorrow(node->arguments[0], true);
                         return successfulVoidExpression(context);
@@ -4054,12 +4443,13 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             val2 = builder.CreateTrunc(val2, i32Type2);
                         llvm::FunctionType* ft = llvm::FunctionType::get(
                             voidType2,
-                            {opaquePtrType, i32Type2, i64Type2}, false);
-                        llvm::FunctionCallee fn =
-                            module->getOrInsertFunction(
-                                "__mlang_std_array_fill_i32", ft);
-                        builder.CreateCall(
-                            fn, {allocaPtr2, val2, arrayCapacity2});
+                            {opaquePtrType, i32Type2, i64Type2},
+                            false);
+                        llvm::FunctionCallee fn = module->getOrInsertFunction(
+                            "__mlang_std_array_fill_i32",
+                            ft);
+                        builder
+                            .CreateCall(fn, {allocaPtr2, val2, arrayCapacity2});
                         updateKnownArrayLength2(arrayCapIt2->second);
                         retainInsertedAggregateBorrow(node->arguments[0], true);
                         return successfulVoidExpression(context);
@@ -4070,16 +4460,21 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                       : val2->getType();
                     if(!elemLlvmType || val2->getType() != elemLlvmType)
                     {
-                        reportError(node->line,
-                                    "fill() argument type mismatch for array "
-                                    "element");
+                        reportError(
+                            node->line,
+                            "fill() argument type mismatch for array "
+                            "element");
                         return nullptr;
                     }
                     llvm::AllocaInst* tmpElem = builder.CreateAlloca(
-                        elemLlvmType, nullptr, "array.fill.tmp");
+                        elemLlvmType,
+                        nullptr,
+                        "array.fill.tmp");
                     builder.CreateStore(val2, tmpElem);
                     llvm::Value* elemPtrAsOpaque = builder.CreateBitCast(
-                        tmpElem, opaquePtrType, "array.fill.ptr");
+                        tmpElem,
+                        opaquePtrType,
+                        "array.fill.ptr");
                     uint64_t elemSizeU =
                         module->getDataLayout().getTypeAllocSize(elemLlvmType);
                     llvm::Value* elemSize =
@@ -4088,12 +4483,15 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         voidType2,
                         {opaquePtrType, opaquePtrType, i64Type2, i64Type2},
                         false);
-                    llvm::FunctionCallee fnRaw =
-                        module->getOrInsertFunction(
-                            "__mlang_std_array_fill_raw", ftRaw);
-                    builder.CreateCall(fnRaw,
-                                       {allocaPtr2, elemPtrAsOpaque, elemSize,
-                                        arrayCapacity2});
+                    llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
+                        "__mlang_std_array_fill_raw",
+                        ftRaw);
+                    builder.CreateCall(
+                        fnRaw,
+                        {allocaPtr2,
+                         elemPtrAsOpaque,
+                         elemSize,
+                         arrayCapacity2});
                     updateKnownArrayLength2(arrayCapIt2->second);
                     retainInsertedAggregateBorrow(node->arguments[0], true);
                     return successfulVoidExpression(context);
@@ -4126,14 +4524,15 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         if(val2->getType() != i64Type2)
                             val2 = builder.CreateSExt(val2, i64Type2);
                     }
-                    else if(elemKind2 == TypeNode::TYPE_INT ||
-                            elemKind2 == TypeNode::TYPE_I32 ||
-                            elemKind2 == TypeNode::TYPE_U32 ||
-                            elemKind2 == TypeNode::TYPE_I16 ||
-                            elemKind2 == TypeNode::TYPE_U16 ||
-                            elemKind2 == TypeNode::TYPE_I8 ||
-                            elemKind2 == TypeNode::TYPE_U8 ||
-                            elemKind2 == TypeNode::TYPE_BOOL)
+                    else if(
+                        elemKind2 == TypeNode::TYPE_INT ||
+                        elemKind2 == TypeNode::TYPE_I32 ||
+                        elemKind2 == TypeNode::TYPE_U32 ||
+                        elemKind2 == TypeNode::TYPE_I16 ||
+                        elemKind2 == TypeNode::TYPE_U16 ||
+                        elemKind2 == TypeNode::TYPE_I8 ||
+                        elemKind2 == TypeNode::TYPE_U8 ||
+                        elemKind2 == TypeNode::TYPE_BOOL)
                     {
                         fnName2 = "__mlang_std_vec_push_i32";
                         valType2 = i32Type2;
@@ -4153,44 +4552,54 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             return nullptr;
                         }
                         llvm::AllocaInst* tmpElem = builder.CreateAlloca(
-                            elemLlvmType, nullptr, "vec.push.tmp");
+                            elemLlvmType,
+                            nullptr,
+                            "vec.push.tmp");
                         if(val2->getType() != elemLlvmType)
                         {
-                            reportError(node->line,
-                                        "push() argument type mismatch for "
-                                        "list element");
+                            reportError(
+                                node->line,
+                                "push() argument type mismatch for "
+                                "list element");
                             return nullptr;
                         }
                         builder.CreateStore(val2, tmpElem);
                         llvm::Value* elemPtrAsOpaque = builder.CreateBitCast(
-                            tmpElem, opaquePtrType, "vec.push.ptr");
+                            tmpElem,
+                            opaquePtrType,
+                            "vec.push.ptr");
                         uint64_t elemSizeU =
                             module->getDataLayout().getTypeAllocSize(
                                 elemLlvmType);
                         llvm::Value* elemSize = llvm::ConstantInt::get(
-                            i64Type2, (uint64_t)elemSizeU);
+                            i64Type2,
+                            (uint64_t)elemSizeU);
                         llvm::FunctionType* ftRaw = llvm::FunctionType::get(
                             voidType2,
                             receiverIsArray2
-                                ? std::vector<llvm::Type*>{
-                                      opaquePtrType, opaquePtrType, i64Type2,
-                                      i64Type2}
-                                : std::vector<llvm::Type*>{
-                                      opaquePtrType, opaquePtrType, i64Type2},
+                                ? std::vector<
+                                      llvm::
+                                          Type*>{opaquePtrType, opaquePtrType, i64Type2, i64Type2}
+                                : std::vector<
+                                      llvm::
+                                          Type*>{opaquePtrType, opaquePtrType, i64Type2},
                             false);
                         llvm::FunctionCallee fnRaw =
                             module->getOrInsertFunction(
-                                receiverIsArray2
-                                    ? "__mlang_std_array_push_raw"
-                                    : "__mlang_std_vec_push_raw",
+                                receiverIsArray2 ? "__mlang_std_array_push_raw"
+                                                 : "__mlang_std_vec_push_raw",
                                 ftRaw);
                         if(receiverIsArray2)
-                            builder.CreateCall(fnRaw,
-                                               {allocaPtr2, elemPtrAsOpaque,
-                                                elemSize, arrayCapacity2});
+                            builder.CreateCall(
+                                fnRaw,
+                                {allocaPtr2,
+                                 elemPtrAsOpaque,
+                                 elemSize,
+                                 arrayCapacity2});
                         else
                             builder.CreateCall(
-                                fnRaw, {allocaPtr2, elemPtrAsOpaque, elemSize});
+                                fnRaw,
+                                {allocaPtr2, elemPtrAsOpaque, elemSize});
                         if(receiverIsArray2)
                         {
                             auto lenIt = arrayKnownLengths.find(objId->name);
@@ -4203,10 +4612,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionType* ft2 = llvm::FunctionType::get(
                         voidType2,
                         receiverIsArray2
-                            ? std::vector<llvm::Type*>{
-                                  opaquePtrType, valType2, i64Type2}
-                            : std::vector<llvm::Type*>{opaquePtrType,
-                                                       valType2},
+                            ? std::vector<
+                                  llvm::
+                                      Type*>{opaquePtrType, valType2, i64Type2}
+                            : std::vector<llvm::Type*>{opaquePtrType, valType2},
                         false);
                     if(receiverIsArray2)
                     {
@@ -4221,7 +4630,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         module->getOrInsertFunction(fnName2, ft2);
                     if(receiverIsArray2)
                         builder.CreateCall(
-                            fn2, {allocaPtr2, val2, arrayCapacity2});
+                            fn2,
+                            {allocaPtr2, val2, arrayCapacity2});
                     else
                         builder.CreateCall(fn2, {allocaPtr2, val2});
                     if(receiverIsArray2)
@@ -4252,28 +4662,30 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                       : getLLVMType(elemKind2);
                     if(!elemLlvmType)
                     {
-                        reportError(node->line,
-                                    "unsupported container element type for "
-                                    "extend()");
+                        reportError(
+                            node->line,
+                            "unsupported container element type for "
+                            "extend()");
                         return nullptr;
                     }
 
                     TypeNode* srcType =
-                        inferExpressionTypeNode(node->arguments[0],
-                                                node->line);
+                        inferExpressionTypeNode(node->arguments[0], node->line);
                     TypeNode* srcElemType = nullptr;
                     if(auto* srcArray = dynamic_cast<ArrayTypeNode*>(srcType))
                         srcElemType = srcArray->elementType;
-                    else if(auto* srcList =
-                                dynamic_cast<GenericListTypeNode*>(srcType))
+                    else if(
+                        auto* srcList =
+                            dynamic_cast<GenericListTypeNode*>(srcType))
                         srcElemType = srcList->elementType;
                     else if(srcType && srcType->kind == TypeNode::TYPE_LIST)
                         srcElemType = nullptr;
                     else
                     {
-                        reportError(node->line,
-                                    "extend() expects a list<T>, vec![...], or "
-                                    "array<T, N> argument");
+                        reportError(
+                            node->line,
+                            "extend() expects a list<T>, vec![...], or "
+                            "array<T, N> argument");
                         return nullptr;
                     }
                     if(srcElemType)
@@ -4291,9 +4703,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         if(srcElemLlvm && srcElemLlvm != elemLlvmType &&
                            !literalIntegerCoercion)
                         {
-                            reportError(node->line,
-                                        "extend() argument element type does "
-                                        "not match array element type");
+                            reportError(
+                                node->line,
+                                "extend() argument element type does "
+                                "not match array element type");
                             return nullptr;
                         }
                     }
@@ -4301,26 +4714,28 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Value* srcPtr = nullptr;
                     if(dynamic_cast<IdentifierNode*>(node->arguments[0]) ||
                        dynamic_cast<FieldAccessNode*>(node->arguments[0]))
-                        srcPtr = getLValuePointer(node->arguments[0],
-                                                  node->line);
+                        srcPtr =
+                            getLValuePointer(node->arguments[0], node->line);
 
                     if(!srcPtr)
                     {
                         llvm::Value* srcValue = nullptr;
                         if(auto* listLit = dynamic_cast<ListLiteralNode*>(
                                node->arguments[0]))
-                            srcValue = generateListLiteral(listLit,
-                                                           elemLlvmType);
-                        else if(auto* arrFill = dynamic_cast<ArrayFillNode*>(
-                                    node->arguments[0]))
-                            srcValue = generateArrayFill(arrFill,
-                                                         elemLlvmType);
+                            srcValue =
+                                generateListLiteral(listLit, elemLlvmType);
+                        else if(
+                            auto* arrFill = dynamic_cast<ArrayFillNode*>(
+                                node->arguments[0]))
+                            srcValue = generateArrayFill(arrFill, elemLlvmType);
                         else
                             srcValue = generateExpression(node->arguments[0]);
                         if(!srcValue)
                             return nullptr;
                         llvm::AllocaInst* tmpList = builder.CreateAlloca(
-                            srcValue->getType(), nullptr, "array.extend.tmp");
+                            srcValue->getType(),
+                            nullptr,
+                            "array.extend.tmp");
                         builder.CreateStore(srcValue, tmpList);
                         srcPtr = tmpList;
                     }
@@ -4348,15 +4763,17 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             module->getDataLayout().getTypeAllocSize(
                                 elemLlvmType);
                         llvm::Value* elemSize = llvm::ConstantInt::get(
-                            i64Type2, (uint64_t)elemSizeU);
+                            i64Type2,
+                            (uint64_t)elemSizeU);
                         llvm::FunctionType* ftRaw = llvm::FunctionType::get(
                             voidType2,
                             receiverIsArray2
-                                ? std::vector<llvm::Type*>{
-                                      opaquePtrType, opaquePtrType, i64Type2,
-                                      i64Type2}
-                                : std::vector<llvm::Type*>{
-                                      opaquePtrType, opaquePtrType, i64Type2},
+                                ? std::vector<
+                                      llvm::
+                                          Type*>{opaquePtrType, opaquePtrType, i64Type2, i64Type2}
+                                : std::vector<
+                                      llvm::
+                                          Type*>{opaquePtrType, opaquePtrType, i64Type2},
                             false);
                         llvm::FunctionCallee fnRaw =
                             module->getOrInsertFunction(
@@ -4365,19 +4782,20 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                     : "__mlang_std_vec_extend_raw",
                                 ftRaw);
                         if(receiverIsArray2)
-                            builder.CreateCall(fnRaw,
-                                               {allocaPtr2, srcPtr, elemSize,
-                                                arrayCapacity2});
+                            builder.CreateCall(
+                                fnRaw,
+                                {allocaPtr2, srcPtr, elemSize, arrayCapacity2});
                         else
-                            builder.CreateCall(fnRaw,
-                                               {allocaPtr2, srcPtr, elemSize});
+                            builder.CreateCall(
+                                fnRaw,
+                                {allocaPtr2, srcPtr, elemSize});
                         if(receiverIsArray2)
                         {
                             auto lenIt = arrayKnownLengths.find(objId->name);
                             if(lenIt != arrayKnownLengths.end() &&
                                sourceKnownLength)
-                                updateKnownArrayLength2(lenIt->second +
-                                                        *sourceKnownLength);
+                                updateKnownArrayLength2(
+                                    lenIt->second + *sourceKnownLength);
                             else
                                 updateKnownArrayLength2(std::nullopt);
                         }
@@ -4387,16 +4805,18 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionType* ft = llvm::FunctionType::get(
                         voidType2,
                         receiverIsArray2
-                            ? std::vector<llvm::Type*>{
-                                  opaquePtrType, opaquePtrType, i64Type2}
-                            : std::vector<llvm::Type*>{
-                                  opaquePtrType, opaquePtrType},
+                            ? std::vector<
+                                  llvm::
+                                      Type*>{opaquePtrType, opaquePtrType, i64Type2}
+                            : std::vector<
+                                  llvm::Type*>{opaquePtrType, opaquePtrType},
                         false);
                     llvm::FunctionCallee fn =
                         module->getOrInsertFunction(fnName, ft);
                     if(receiverIsArray2)
-                        builder.CreateCall(fn,
-                                           {allocaPtr2, srcPtr, arrayCapacity2});
+                        builder.CreateCall(
+                            fn,
+                            {allocaPtr2, srcPtr, arrayCapacity2});
                     else
                         builder.CreateCall(fn, {allocaPtr2, srcPtr});
                     if(receiverIsArray2)
@@ -4404,8 +4824,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         auto lenIt = arrayKnownLengths.find(objId->name);
                         if(lenIt != arrayKnownLengths.end() &&
                            sourceKnownLength)
-                            updateKnownArrayLength2(lenIt->second +
-                                                    *sourceKnownLength);
+                            updateKnownArrayLength2(
+                                lenIt->second + *sourceKnownLength);
                         else
                             updateKnownArrayLength2(std::nullopt);
                     }
@@ -4420,12 +4840,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         reportError(node->line, "pop() takes no arguments");
                         return nullptr;
                     }
-                    std::vector<llvm::Type*> lsTypes = {i64Type2,
-                                                        opaquePtrType};
+                    std::vector<llvm::Type*> lsTypes =
+                        {i64Type2, opaquePtrType};
                     llvm::StructType* lsType =
                         llvm::StructType::get(context, lsTypes);
-                    llvm::Value* ls = builder.CreateLoad(lsType, allocaPtr2,
-                                                         objId->name + ".load");
+                    llvm::Value* ls = builder.CreateLoad(
+                        lsType,
+                        allocaPtr2,
+                        objId->name + ".load");
                     llvm::Value* cnt = builder.CreateExtractValue(ls, 0);
                     if(!emitNonEmptyCheck2(cnt, "pop"))
                         return nullptr;
@@ -4457,11 +4879,15 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             retType3 = i32Type2;
                         }
                         llvm::FunctionType* ft3 = llvm::FunctionType::get(
-                            retType3, {opaquePtrType}, false);
+                            retType3,
+                            {opaquePtrType},
+                            false);
                         llvm::FunctionCallee fn3 =
                             module->getOrInsertFunction(fnName3, ft3);
                         llvm::Value* popped = builder.CreateCall(
-                            fn3, {allocaPtr2}, objId->name + ".pop");
+                            fn3,
+                            {allocaPtr2},
+                            objId->name + ".pop");
                         if(receiverIsArray2)
                         {
                             auto lenIt = arrayKnownLengths.find(objId->name);
@@ -4476,25 +4902,31 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                       : nullptr;
                     if(!elemLlvmType)
                     {
-                        reportError(node->line,
-                                    "unsupported list element type for pop()");
+                        reportError(
+                            node->line,
+                            "unsupported list element type for pop()");
                         return nullptr;
                     }
-                    llvm::AllocaInst* tmpElem = builder.CreateAlloca(
-                        elemLlvmType, nullptr, "vec.pop.tmp");
+                    llvm::AllocaInst* tmpElem =
+                        builder
+                            .CreateAlloca(elemLlvmType, nullptr, "vec.pop.tmp");
                     llvm::Value* tmpElemPtr = builder.CreateBitCast(
-                        tmpElem, opaquePtrType, "vec.pop.ptr");
+                        tmpElem,
+                        opaquePtrType,
+                        "vec.pop.ptr");
                     uint64_t elemSizeU =
                         module->getDataLayout().getTypeAllocSize(elemLlvmType);
                     llvm::Value* elemSize =
                         llvm::ConstantInt::get(i64Type2, (uint64_t)elemSizeU);
                     llvm::FunctionType* ftRaw = llvm::FunctionType::get(
-                        i32Type2, {opaquePtrType, opaquePtrType, i64Type2},
+                        i32Type2,
+                        {opaquePtrType, opaquePtrType, i64Type2},
                         false);
                     llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
-                        "__mlang_std_vec_pop_raw", ftRaw);
-                    builder.CreateCall(fnRaw,
-                                       {allocaPtr2, tmpElemPtr, elemSize});
+                        "__mlang_std_vec_pop_raw",
+                        ftRaw);
+                    builder
+                        .CreateCall(fnRaw, {allocaPtr2, tmpElemPtr, elemSize});
                     if(receiverIsArray2)
                     {
                         auto lenIt = arrayKnownLengths.find(objId->name);
@@ -4502,8 +4934,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                            lenIt->second > 0)
                             updateKnownArrayLength2(lenIt->second - 1);
                     }
-                    return builder.CreateLoad(elemLlvmType, tmpElem,
-                                              objId->name + ".pop");
+                    return builder.CreateLoad(
+                        elemLlvmType,
+                        tmpElem,
+                        objId->name + ".pop");
                 }
                 // --- clear() ---
                 if(node->methodName == "clear")
@@ -4513,7 +4947,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         reportError(node->line, "clear() takes no arguments");
                         return nullptr;
                     }
-                    llvm::Value* result = callVecVoidFn("__mlang_std_vec_clear");
+                    llvm::Value* result =
+                        callVecVoidFn("__mlang_std_vec_clear");
                     updateKnownArrayLength2(0);
                     clearAggregateBorrowOrigins(objId->name);
                     return result;
@@ -4523,8 +4958,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 {
                     if(node->arguments.size() != 1)
                     {
-                        reportError(node->line,
-                                    "contains() takes one argument");
+                        reportError(
+                            node->line,
+                            "contains() takes one argument");
                         return nullptr;
                     }
                     llvm::Value* val4 = generateExpression(node->arguments[0]);
@@ -4548,19 +4984,24 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             val4 = builder.CreateTrunc(val4, i32Type2);
                     }
                     llvm::FunctionType* ft4 = llvm::FunctionType::get(
-                        i32Type2, {opaquePtrType, valType4}, false);
+                        i32Type2,
+                        {opaquePtrType, valType4},
+                        false);
                     llvm::FunctionCallee fn4 =
                         module->getOrInsertFunction(fnName4, ft4);
-                    return builder.CreateCall(fn4, {allocaPtr2, val4},
-                                              objId->name + ".contains");
+                    return builder.CreateCall(
+                        fn4,
+                        {allocaPtr2, val4},
+                        objId->name + ".contains");
                 }
                 // --- index_of(val) ---
                 if(node->methodName == "index_of")
                 {
                     if(node->arguments.size() != 1)
                     {
-                        reportError(node->line,
-                                    "index_of() takes one argument");
+                        reportError(
+                            node->line,
+                            "index_of() takes one argument");
                         return nullptr;
                     }
                     llvm::Value* val5 = generateExpression(node->arguments[0]);
@@ -4584,11 +5025,15 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             val5 = builder.CreateTrunc(val5, i32Type2);
                     }
                     llvm::FunctionType* ft5 = llvm::FunctionType::get(
-                        i64Type2, {opaquePtrType, valType5}, false);
+                        i64Type2,
+                        {opaquePtrType, valType5},
+                        false);
                     llvm::FunctionCallee fn5 =
                         module->getOrInsertFunction(fnName5, ft5);
-                    return builder.CreateCall(fn5, {allocaPtr2, val5},
-                                              objId->name + ".index_of");
+                    return builder.CreateCall(
+                        fn5,
+                        {allocaPtr2, val5},
+                        objId->name + ".index_of");
                 }
                 // --- sort() ---
                 if(node->methodName == "sort")
@@ -4598,22 +5043,23 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         reportError(node->line, "sort() takes no arguments");
                         return nullptr;
                     }
-                    return callVecVoidFn(elemIsI64
-                                             ? "__mlang_std_vec_sort_i64"
-                                             : "__mlang_std_vec_sort_i32");
+                    return callVecVoidFn(
+                        elemIsI64 ? "__mlang_std_vec_sort_i64"
+                                  : "__mlang_std_vec_sort_i32");
                 }
                 // --- sort_desc() ---
                 if(node->methodName == "sort_desc")
                 {
                     if(!node->arguments.empty())
                     {
-                        reportError(node->line,
-                                    "sort_desc() takes no arguments");
+                        reportError(
+                            node->line,
+                            "sort_desc() takes no arguments");
                         return nullptr;
                     }
-                    return callVecVoidFn(elemIsI64
-                                             ? "__mlang_std_vec_sort_desc_i64"
-                                             : "__mlang_std_vec_sort_desc_i32");
+                    return callVecVoidFn(
+                        elemIsI64 ? "__mlang_std_vec_sort_desc_i64"
+                                  : "__mlang_std_vec_sort_desc_i32");
                 }
                 // --- reverse() ---
                 if(node->methodName == "reverse")
@@ -4647,12 +5093,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         return nullptr;
                     }
                     // v[0] — direct GEP (same pattern as last())
-                    std::vector<llvm::Type*> lsTypes5 = {i64Type2,
-                                                         opaquePtrType};
+                    std::vector<llvm::Type*> lsTypes5 =
+                        {i64Type2, opaquePtrType};
                     llvm::StructType* lsType5 =
                         llvm::StructType::get(context, lsTypes5);
                     llvm::Value* ls5 = builder.CreateLoad(
-                        lsType5, allocaPtr2, objId->name + ".load");
+                        lsType5,
+                        allocaPtr2,
+                        objId->name + ".load");
                     llvm::Value* cnt5 =
                         builder.CreateExtractValue(ls5, 0, "count");
                     if(!emitNonEmptyCheck2(cnt5, "first"))
@@ -4664,16 +5112,18 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                       : getLLVMType(elemKind2);
                     if(!elemType5)
                     {
-                        reportError(node->line,
-                                    "unsupported list element type for "
-                                    "first()");
+                        reportError(
+                            node->line,
+                            "unsupported list element type for "
+                            "first()");
                         return nullptr;
                     }
                     llvm::Value* zero5 = llvm::ConstantInt::get(i64Type2, 0);
-                    llvm::Value* gep5 = builder.CreateGEP(elemType5, dataPtr5,
-                                                          zero5, "first.ptr");
-                    return builder.CreateLoad(elemType5, gep5,
-                                              objId->name + ".first");
+                    llvm::Value* gep5 =
+                        builder
+                            .CreateGEP(elemType5, dataPtr5, zero5, "first.ptr");
+                    return builder
+                        .CreateLoad(elemType5, gep5, objId->name + ".first");
                 }
                 // --- last() ---
                 if(node->methodName == "last")
@@ -4684,18 +5134,22 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         return nullptr;
                     }
                     // v[v.len() - 1]
-                    std::vector<llvm::Type*> lsTypes6 = {i64Type2,
-                                                         opaquePtrType};
+                    std::vector<llvm::Type*> lsTypes6 =
+                        {i64Type2, opaquePtrType};
                     llvm::StructType* lsType6 =
                         llvm::StructType::get(context, lsTypes6);
                     llvm::Value* ls6 = builder.CreateLoad(
-                        lsType6, allocaPtr2, objId->name + ".load");
+                        lsType6,
+                        allocaPtr2,
+                        objId->name + ".load");
                     llvm::Value* cnt6 =
                         builder.CreateExtractValue(ls6, 0, "count");
                     if(!emitNonEmptyCheck2(cnt6, "last"))
                         return nullptr;
                     llvm::Value* lastIdx = builder.CreateSub(
-                        cnt6, llvm::ConstantInt::get(i64Type2, 1), "lastIdx");
+                        cnt6,
+                        llvm::ConstantInt::get(i64Type2, 1),
+                        "lastIdx");
                     // Generate via list indexing using lastIdx directly
                     // We replicate the GEP logic to avoid parsing -1 as a
                     // literal
@@ -4706,18 +5160,23 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                       : getLLVMType(elemKind2);
                     if(!elemType6)
                     {
-                        reportError(node->line,
-                                    "unsupported list element type for "
-                                    "last()");
+                        reportError(
+                            node->line,
+                            "unsupported list element type for "
+                            "last()");
                         return nullptr;
                     }
-                    llvm::Value* gep6 = builder.CreateGEP(elemType6, dataPtr6,
-                                                          lastIdx, "last.ptr");
-                    return builder.CreateLoad(elemType6, gep6,
-                                              objId->name + ".last");
+                    llvm::Value* gep6 = builder.CreateGEP(
+                        elemType6,
+                        dataPtr6,
+                        lastIdx,
+                        "last.ptr");
+                    return builder
+                        .CreateLoad(elemType6, gep6, objId->name + ".last");
                 }
-                reportError(node->line, "Vec has no method named '" +
-                                            node->methodName + "'");
+                reportError(
+                    node->line,
+                    "Vec has no method named '" + node->methodName + "'");
                 return nullptr;
             }
         }
@@ -4738,17 +5197,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Value* allocaPtr = namedValues[objId->name];
                     if(!allocaPtr)
                     {
-                        reportError(node->line,
-                                    "unknown variable: " + objId->name);
+                        reportError(
+                            node->line,
+                            "unknown variable: " + objId->name);
                         return nullptr;
                     }
                     auto dstMapIt = mapKeyValueTypes.find(objId->name);
                     if(dstMapIt == mapKeyValueTypes.end() ||
                        !dstMapIt->second.first || !dstMapIt->second.second)
                     {
-                        reportError(node->line,
-                                    "map.extend() requires known map key and "
-                                    "value types");
+                        reportError(
+                            node->line,
+                            "map.extend() requires known map key and "
+                            "value types");
                         return nullptr;
                     }
                     llvm::Type* dstKeyType =
@@ -4757,23 +5218,24 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         getLLVMTypeFromNode(dstMapIt->second.second);
                     if(!dstKeyType || !dstValueType)
                     {
-                        reportError(node->line,
-                                    "unsupported map key/value type for "
-                                    "extend()");
+                        reportError(
+                            node->line,
+                            "unsupported map key/value type for "
+                            "extend()");
                         return nullptr;
                     }
 
                     TypeNode* srcType =
-                        inferExpressionTypeNode(node->arguments[0],
-                                                node->line);
+                        inferExpressionTypeNode(node->arguments[0], node->line);
                     MapTypeNode* srcMapType =
                         dynamic_cast<MapTypeNode*>(srcType);
-                    if(!srcMapType && (!srcType ||
-                                       srcType->kind != TypeNode::TYPE_MAP))
+                    if(!srcMapType &&
+                       (!srcType || srcType->kind != TypeNode::TYPE_MAP))
                     {
-                        reportError(node->line,
-                                    "map.extend() expects a map<K, V> "
-                                    "argument");
+                        reportError(
+                            node->line,
+                            "map.extend() expects a map<K, V> "
+                            "argument");
                         return nullptr;
                     }
                     if(srcMapType &&
@@ -4786,9 +5248,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         if(srcKeyType != dstKeyType ||
                            srcValueType != dstValueType)
                         {
-                            reportError(node->line,
-                                        "map.extend() argument key/value "
-                                        "types do not match destination map");
+                            reportError(
+                                node->line,
+                                "map.extend() argument key/value "
+                                "types do not match destination map");
                             return nullptr;
                         }
                     }
@@ -4796,21 +5259,25 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Value* srcPtr = nullptr;
                     if(dynamic_cast<IdentifierNode*>(node->arguments[0]) ||
                        dynamic_cast<FieldAccessNode*>(node->arguments[0]))
-                        srcPtr = getLValuePointer(node->arguments[0],
-                                                  node->line);
+                        srcPtr =
+                            getLValuePointer(node->arguments[0], node->line);
                     if(!srcPtr)
                     {
                         llvm::Value* srcValue = nullptr;
                         if(auto* mapLit = dynamic_cast<MapLiteralNode*>(
                                node->arguments[0]))
-                            srcValue = generateMapLiteral(mapLit, dstKeyType,
-                                                          dstValueType);
+                            srcValue = generateMapLiteral(
+                                mapLit,
+                                dstKeyType,
+                                dstValueType);
                         else
                             srcValue = generateExpression(node->arguments[0]);
                         if(!srcValue)
                             return nullptr;
                         llvm::AllocaInst* tmpMap = builder.CreateAlloca(
-                            srcValue->getType(), nullptr, "map.extend.tmp");
+                            srcValue->getType(),
+                            nullptr,
+                            "map.extend.tmp");
                         builder.CreateStore(srcValue, tmpMap);
                         srcPtr = tmpMap;
                     }
@@ -4820,7 +5287,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
                     llvm::Type* ptrType = llvm::PointerType::get(
-                        llvm::Type::getInt8Ty(context), 0);
+                        llvm::Type::getInt8Ty(context),
+                        0);
 #endif
                     uint64_t keySizeU =
                         module->getDataLayout().getTypeAllocSize(dstKeyType);
@@ -4832,11 +5300,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         llvm::ConstantInt::get(i64Type, valueSizeU);
                     llvm::FunctionType* ft = llvm::FunctionType::get(
                         llvm::Type::getVoidTy(context),
-                        {ptrType, ptrType, i64Type, i64Type}, false);
+                        {ptrType, ptrType, i64Type, i64Type},
+                        false);
                     llvm::FunctionCallee fn = module->getOrInsertFunction(
-                        "__mlang_std_map_extend_raw", ft);
+                        "__mlang_std_map_extend_raw",
+                        ft);
                     builder.CreateCall(
-                        fn, {allocaPtr, srcPtr, keySize, valueSize});
+                        fn,
+                        {allocaPtr, srcPtr, keySize, valueSize});
                     return successfulVoidExpression(context);
                 }
                 if(node->methodName == "len")
@@ -4849,8 +5320,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Value* allocaPtr = namedValues[objId->name];
                     if(!allocaPtr)
                     {
-                        reportError(node->line,
-                                    "unknown variable: " + objId->name);
+                        reportError(
+                            node->line,
+                            "unknown variable: " + objId->name);
                         return nullptr;
                     }
                     // Map struct layout: {i64 count, ptr keys, ptr vals}
@@ -4859,19 +5331,23 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
                     llvm::Type* ptrType = llvm::PointerType::get(
-                        llvm::Type::getInt8Ty(context), 0);
+                        llvm::Type::getInt8Ty(context),
+                        0);
 #endif
-                    std::vector<llvm::Type*> mapStructTypes = {i64Type, ptrType,
-                                                               ptrType};
+                    std::vector<llvm::Type*> mapStructTypes =
+                        {i64Type, ptrType, ptrType};
                     llvm::StructType* mapStructType =
                         llvm::StructType::get(context, mapStructTypes);
                     llvm::Value* mapStruct = builder.CreateLoad(
-                        mapStructType, allocaPtr, objId->name + ".load");
-                    return builder.CreateExtractValue(mapStruct, 0,
-                                                      objId->name + ".len");
+                        mapStructType,
+                        allocaPtr,
+                        objId->name + ".load");
+                    return builder
+                        .CreateExtractValue(mapStruct, 0, objId->name + ".len");
                 }
-                reportError(node->line, "map has no method named '" +
-                                            node->methodName + "'");
+                reportError(
+                    node->line,
+                    "map has no method named '" + node->methodName + "'");
                 return nullptr;
             }
         }
@@ -4880,8 +5356,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         auto typeIt = structVariableTypes.find(objId->name);
         if(typeIt == structVariableTypes.end())
         {
-            reportError(node->line,
-                        "'" + objId->name + "' is not a struct variable");
+            reportError(
+                node->line,
+                "'" + objId->name + "' is not a struct variable");
             return nullptr;
         }
         structTypeName = resolveStructAliasName(typeIt->second);
@@ -4899,8 +5376,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             llvm::Type* allocaType = alloca->getAllocatedType();
             if(allocaType->isPointerTy())
             {
-                objPtr = builder.CreateLoad(allocaType, alloca,
-                                            objId->name + ".ptr");
+                objPtr =
+                    builder
+                        .CreateLoad(allocaType, alloca, objId->name + ".ptr");
             }
         }
     }
@@ -4936,9 +5414,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::FunctionType* concatFnType =
                     llvm::FunctionType::get(ptrType, {ptrType, ptrType}, false);
                 llvm::FunctionCallee concatFn = module->getOrInsertFunction(
-                    "__mlang_std_strbuf_concat", concatFnType);
+                    "__mlang_std_strbuf_concat",
+                    concatFnType);
                 llvm::Value* newStr = builder.CreateCall(
-                    concatFn, {currentStr, suffix}, "field.push_str.result");
+                    concatFn,
+                    {currentStr, suffix},
+                    "field.push_str.result");
                 builder.CreateStore(newStr, recvPtr);
                 return llvm::Constant::getNullValue(ptrType);
             }
@@ -4954,7 +5435,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::FunctionType* cloneFnType =
                     llvm::FunctionType::get(ptrType, {ptrType}, false);
                 llvm::FunctionCallee cloneFn = module->getOrInsertFunction(
-                    "__mlang_std_strbuf_clone", cloneFnType);
+                    "__mlang_std_strbuf_clone",
+                    cloneFnType);
                 return builder.CreateCall(cloneFn, {currentStr}, "field.clone");
             }
             if(node->methodName == "len")
@@ -4970,7 +5452,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::FunctionType* lenFnType =
                     llvm::FunctionType::get(i64Type, {ptrType}, false);
                 llvm::FunctionCallee lenFn = module->getOrInsertFunction(
-                    "__mlang_std_strbuf_len", lenFnType);
+                    "__mlang_std_strbuf_len",
+                    lenFnType);
                 return builder.CreateCall(lenFn, {currentStr}, "field.len");
             }
             if(node->methodName == "is_empty")
@@ -4986,12 +5469,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::FunctionType* emptyFnType =
                     llvm::FunctionType::get(intType, {ptrType}, false);
                 llvm::FunctionCallee emptyFn = module->getOrInsertFunction(
-                    "__mlang_std_strbuf_is_empty", emptyFnType);
-                return builder.CreateCall(emptyFn, {currentStr},
-                                          "field.is_empty");
+                    "__mlang_std_strbuf_is_empty",
+                    emptyFnType);
+                return builder
+                    .CreateCall(emptyFn, {currentStr}, "field.is_empty");
             }
-            reportError(node->line, "string has no method named '" +
-                                        node->methodName + "'");
+            reportError(
+                node->line,
+                "string has no method named '" + node->methodName + "'");
             return nullptr;
         }
         if(recvType && recvType->kind == TypeNode::TYPE_LIST)
@@ -5028,36 +5513,42 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             llvm::Type* opaquePtrType =
                 llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
-            bool elemIsI64 = (elemKind == TypeNode::TYPE_I64 ||
-                              elemKind == TypeNode::TYPE_U64);
-            bool elemIsStr = (elemKind == TypeNode::TYPE_STRING ||
-                              elemKind == TypeNode::TYPE_STR8);
-            bool elemIsI32Like = (elemKind == TypeNode::TYPE_INT ||
-                                  elemKind == TypeNode::TYPE_I32 ||
-                                  elemKind == TypeNode::TYPE_U32 ||
-                                  elemKind == TypeNode::TYPE_I16 ||
-                                  elemKind == TypeNode::TYPE_U16 ||
-                                  elemKind == TypeNode::TYPE_I8 ||
-                                  elemKind == TypeNode::TYPE_U8 ||
-                                  elemKind == TypeNode::TYPE_BOOL);
+            bool elemIsI64 =
+                (elemKind == TypeNode::TYPE_I64 ||
+                 elemKind == TypeNode::TYPE_U64);
+            bool elemIsStr =
+                (elemKind == TypeNode::TYPE_STRING ||
+                 elemKind == TypeNode::TYPE_STR8);
+            bool elemIsI32Like =
+                (elemKind == TypeNode::TYPE_INT ||
+                 elemKind == TypeNode::TYPE_I32 ||
+                 elemKind == TypeNode::TYPE_U32 ||
+                 elemKind == TypeNode::TYPE_I16 ||
+                 elemKind == TypeNode::TYPE_U16 ||
+                 elemKind == TypeNode::TYPE_I8 ||
+                 elemKind == TypeNode::TYPE_U8 ||
+                 elemKind == TypeNode::TYPE_BOOL);
             llvm::Value* arrayCapacity =
                 receiverIsArray
                     ? llvm::ConstantInt::get(i64Type, arrayCapacityValue)
                     : nullptr;
             auto emitFieldListNonEmptyCheck =
-                [&](llvm::Value* count,
-                    const std::string& methodName) -> bool
+                [&](llvm::Value* count, const std::string& methodName) -> bool
             {
                 initializeFormatFunctions();
                 llvm::Function* function =
                     builder.GetInsertBlock()->getParent();
                 llvm::BasicBlock* okBB = llvm::BasicBlock::Create(
-                    context, "fieldlist." + methodName + ".non_empty",
+                    context,
+                    "fieldlist." + methodName + ".non_empty",
                     function);
                 llvm::BasicBlock* failBB = llvm::BasicBlock::Create(
-                    context, "fieldlist." + methodName + ".empty", function);
+                    context,
+                    "fieldlist." + methodName + ".empty",
+                    function);
                 llvm::Value* nonEmpty = builder.CreateICmpSGT(
-                    count, llvm::ConstantInt::get(i64Type, 0),
+                    count,
+                    llvm::ConstantInt::get(i64Type, 0),
                     "fieldlist." + methodName + ".has_items");
                 builder.CreateCondBr(nonEmpty, okBB, failBB);
 
@@ -5090,14 +5581,15 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     reportError(node->line, "len() takes no arguments");
                     return nullptr;
                 }
-                std::vector<llvm::Type*> listStructTypes = {i64Type,
-                                                            opaquePtrType};
+                std::vector<llvm::Type*> listStructTypes =
+                    {i64Type, opaquePtrType};
                 llvm::StructType* listStructType =
                     llvm::StructType::get(context, listStructTypes);
-                llvm::Value* listStruct = builder.CreateLoad(
-                    listStructType, recvPtr, "fieldlist.load");
-                return builder.CreateExtractValue(listStruct, 0,
-                                                  "fieldlist.len");
+                llvm::Value* listStruct =
+                    builder
+                        .CreateLoad(listStructType, recvPtr, "fieldlist.load");
+                return builder
+                    .CreateExtractValue(listStruct, 0, "fieldlist.len");
             }
             if(node->methodName == "is_empty")
             {
@@ -5112,16 +5604,18 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::Value* ls =
                     builder.CreateLoad(lsType, recvPtr, "fieldlist.load");
                 llvm::Value* cnt = builder.CreateExtractValue(ls, 0);
-                return builder.CreateICmpEQ(cnt,
-                                            llvm::ConstantInt::get(i64Type, 0),
-                                            "fieldlist.is_empty");
+                return builder.CreateICmpEQ(
+                    cnt,
+                    llvm::ConstantInt::get(i64Type, 0),
+                    "fieldlist.is_empty");
             }
             if(node->methodName == "fill")
             {
                 if(!receiverIsArray)
                 {
-                    reportError(node->line,
-                                "fill() is only available for array<T, N>");
+                    reportError(
+                        node->line,
+                        "fill() is only available for array<T, N>");
                     return nullptr;
                 }
                 if(node->arguments.size() != 1)
@@ -5136,10 +5630,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 if(elemIsStr)
                 {
                     llvm::FunctionType* ft = llvm::FunctionType::get(
-                        voidType, {opaquePtrType, opaquePtrType, i64Type},
+                        voidType,
+                        {opaquePtrType, opaquePtrType, i64Type},
                         false);
                     llvm::FunctionCallee fn = module->getOrInsertFunction(
-                        "__mlang_std_array_fill_str", ft);
+                        "__mlang_std_array_fill_str",
+                        ft);
                     builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
                     retainInsertedAggregateBorrow(node->arguments[0]);
                     return successfulVoidExpression(context);
@@ -5149,9 +5645,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     if(val->getType() != i64Type)
                         val = builder.CreateSExt(val, i64Type);
                     llvm::FunctionType* ft = llvm::FunctionType::get(
-                        voidType, {opaquePtrType, i64Type, i64Type}, false);
+                        voidType,
+                        {opaquePtrType, i64Type, i64Type},
+                        false);
                     llvm::FunctionCallee fn = module->getOrInsertFunction(
-                        "__mlang_std_array_fill_i64", ft);
+                        "__mlang_std_array_fill_i64",
+                        ft);
                     builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
                     retainInsertedAggregateBorrow(node->arguments[0]);
                     return successfulVoidExpression(context);
@@ -5161,9 +5660,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     if(val->getType() != i32Type)
                         val = builder.CreateTrunc(val, i32Type);
                     llvm::FunctionType* ft = llvm::FunctionType::get(
-                        voidType, {opaquePtrType, i32Type, i64Type}, false);
+                        voidType,
+                        {opaquePtrType, i32Type, i64Type},
+                        false);
                     llvm::FunctionCallee fn = module->getOrInsertFunction(
-                        "__mlang_std_array_fill_i32", ft);
+                        "__mlang_std_array_fill_i32",
+                        ft);
                     builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
                     retainInsertedAggregateBorrow(node->arguments[0]);
                     return successfulVoidExpression(context);
@@ -5175,28 +5677,34 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         : val->getType();
                 if(!elemLlvmType || val->getType() != elemLlvmType)
                 {
-                    reportError(node->line,
-                                "fill() argument type mismatch for array "
-                                "element");
+                    reportError(
+                        node->line,
+                        "fill() argument type mismatch for array "
+                        "element");
                     return nullptr;
                 }
-                llvm::AllocaInst* tmpElem = builder.CreateAlloca(
-                    elemLlvmType, nullptr, "array.fill.tmp");
+                llvm::AllocaInst* tmpElem =
+                    builder
+                        .CreateAlloca(elemLlvmType, nullptr, "array.fill.tmp");
                 builder.CreateStore(val, tmpElem);
                 llvm::Value* elemPtrAsOpaque = builder.CreateBitCast(
-                    tmpElem, opaquePtrType, "array.fill.ptr");
+                    tmpElem,
+                    opaquePtrType,
+                    "array.fill.ptr");
                 uint64_t elemSizeU =
                     module->getDataLayout().getTypeAllocSize(elemLlvmType);
                 llvm::Value* elemSize =
                     llvm::ConstantInt::get(i64Type, elemSizeU);
                 llvm::FunctionType* ftRaw = llvm::FunctionType::get(
                     voidType,
-                    {opaquePtrType, opaquePtrType, i64Type, i64Type}, false);
+                    {opaquePtrType, opaquePtrType, i64Type, i64Type},
+                    false);
                 llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
-                    "__mlang_std_array_fill_raw", ftRaw);
-                builder.CreateCall(fnRaw,
-                                   {recvPtr, elemPtrAsOpaque, elemSize,
-                                    arrayCapacity});
+                    "__mlang_std_array_fill_raw",
+                    ftRaw);
+                builder.CreateCall(
+                    fnRaw,
+                    {recvPtr, elemPtrAsOpaque, elemSize, arrayCapacity});
                 retainInsertedAggregateBorrow(node->arguments[0]);
                 return successfulVoidExpression(context);
             }
@@ -5243,25 +5751,30 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                            !elemLlvmType->isIntegerTy(32))
                         {
                             llvm::AllocaInst* tmpElem = builder.CreateAlloca(
-                                elemLlvmType, nullptr, "fieldlist.push.tmp");
+                                elemLlvmType,
+                                nullptr,
+                                "fieldlist.push.tmp");
                             builder.CreateStore(val, tmpElem);
                             llvm::Value* elemPtrAsOpaque =
-                                builder.CreateBitCast(tmpElem, opaquePtrType,
-                                                      "fieldlist.push.ptr");
+                                builder.CreateBitCast(
+                                    tmpElem,
+                                    opaquePtrType,
+                                    "fieldlist.push.ptr");
                             uint64_t elemSizeU =
                                 module->getDataLayout().getTypeAllocSize(
                                     elemLlvmType);
                             llvm::Value* elemSize = llvm::ConstantInt::get(
-                                i64Type, (uint64_t)elemSizeU);
+                                i64Type,
+                                (uint64_t)elemSizeU);
                             llvm::FunctionType* ftRaw = llvm::FunctionType::get(
                                 voidType,
                                 receiverIsArray
-                                    ? std::vector<llvm::Type*>{
-                                          opaquePtrType, opaquePtrType, i64Type,
-                                          i64Type}
-                                    : std::vector<llvm::Type*>{
-                                          opaquePtrType, opaquePtrType,
-                                          i64Type},
+                                    ? std::vector<
+                                          llvm::
+                                              Type*>{opaquePtrType, opaquePtrType, i64Type, i64Type}
+                                    : std::vector<
+                                          llvm::
+                                              Type*>{opaquePtrType, opaquePtrType, i64Type},
                                 false);
                             llvm::FunctionCallee fnRaw =
                                 module->getOrInsertFunction(
@@ -5270,13 +5783,16 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                         : "__mlang_std_vec_push_raw",
                                     ftRaw);
                             if(receiverIsArray)
-                                builder.CreateCall(fnRaw,
-                                                   {recvPtr, elemPtrAsOpaque,
-                                                    elemSize, arrayCapacity});
+                                builder.CreateCall(
+                                    fnRaw,
+                                    {recvPtr,
+                                     elemPtrAsOpaque,
+                                     elemSize,
+                                     arrayCapacity});
                             else
-                                builder.CreateCall(fnRaw,
-                                                   {recvPtr, elemPtrAsOpaque,
-                                                    elemSize});
+                                builder.CreateCall(
+                                    fnRaw,
+                                    {recvPtr, elemPtrAsOpaque, elemSize});
                             retainInsertedAggregateBorrow(node->arguments[0]);
                             return successfulVoidExpression(context);
                         }
@@ -5298,8 +5814,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::FunctionType* ft = llvm::FunctionType::get(
                     voidType,
                     receiverIsArray
-                        ? std::vector<llvm::Type*>{opaquePtrType, valType,
-                                                   i64Type}
+                        ? std::vector<
+                              llvm::Type*>{opaquePtrType, valType, i64Type}
                         : std::vector<llvm::Type*>{opaquePtrType, valType},
                     false);
                 llvm::FunctionCallee fn =
@@ -5324,19 +5840,21 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 {
                     if(*sourceKnownLength < 0)
                     {
-                        reportError(node->line,
-                                    "extend() source length must be "
-                                    "non-negative");
+                        reportError(
+                            node->line,
+                            "extend() source length must be "
+                            "non-negative");
                         return nullptr;
                     }
                     if(*sourceKnownLength > arrayCapacityValue)
                     {
-                        reportError(node->line,
-                                    "extend() would exceed array<T, N> "
-                                    "capacity: add=" +
-                                        std::to_string(*sourceKnownLength) +
-                                        " capacity=" +
-                                        std::to_string(arrayCapacityValue));
+                        reportError(
+                            node->line,
+                            "extend() would exceed array<T, N> "
+                            "capacity: add=" +
+                                std::to_string(*sourceKnownLength) +
+                                " capacity=" +
+                                std::to_string(arrayCapacityValue));
                         return nullptr;
                     }
                 }
@@ -5347,9 +5865,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         : getLLVMType(elemKind);
                 if(!elemLlvmType)
                 {
-                    reportError(node->line,
-                                "unsupported container element type for "
-                                "extend()");
+                    reportError(
+                        node->line,
+                        "unsupported container element type for "
+                        "extend()");
                     return nullptr;
                 }
 
@@ -5358,35 +5877,36 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 TypeNode* srcElemType = nullptr;
                 if(auto* srcArray = dynamic_cast<ArrayTypeNode*>(srcType))
                     srcElemType = srcArray->elementType;
-                else if(auto* srcList =
-                            dynamic_cast<GenericListTypeNode*>(srcType))
+                else if(
+                    auto* srcList = dynamic_cast<GenericListTypeNode*>(srcType))
                     srcElemType = srcList->elementType;
                 else if(srcType && srcType->kind == TypeNode::TYPE_LIST)
                     srcElemType = nullptr;
                 else
                 {
-                    reportError(node->line,
-                                "extend() expects a list<T>, vec![...], or "
-                                "array<T, N> argument");
+                    reportError(
+                        node->line,
+                        "extend() expects a list<T>, vec![...], or "
+                        "array<T, N> argument");
                     return nullptr;
                 }
                 if(srcElemType)
                 {
-                    llvm::Type* srcElemLlvm =
-                        getLLVMTypeFromNode(srcElemType);
+                    llvm::Type* srcElemLlvm = getLLVMTypeFromNode(srcElemType);
                     bool sourceIsLiteral =
                         dynamic_cast<ListLiteralNode*>(node->arguments[0]) ||
                         dynamic_cast<ArrayFillNode*>(node->arguments[0]);
-                    bool literalIntegerCoercion =
-                        sourceIsLiteral && srcElemLlvm &&
-                        srcElemLlvm->isIntegerTy() &&
-                        elemLlvmType->isIntegerTy();
+                    bool literalIntegerCoercion = sourceIsLiteral &&
+                                                  srcElemLlvm &&
+                                                  srcElemLlvm->isIntegerTy() &&
+                                                  elemLlvmType->isIntegerTy();
                     if(srcElemLlvm && srcElemLlvm != elemLlvmType &&
                        !literalIntegerCoercion)
                     {
-                        reportError(node->line,
-                                    "extend() argument element type does not "
-                                    "match array element type");
+                        reportError(
+                            node->line,
+                            "extend() argument element type does not "
+                            "match array element type");
                         return nullptr;
                     }
                 }
@@ -5402,16 +5922,18 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     if(auto* listLit =
                            dynamic_cast<ListLiteralNode*>(node->arguments[0]))
                         srcValue = generateListLiteral(listLit, elemLlvmType);
-                    else if(auto* arrFill =
-                                dynamic_cast<ArrayFillNode*>(
-                                    node->arguments[0]))
+                    else if(
+                        auto* arrFill =
+                            dynamic_cast<ArrayFillNode*>(node->arguments[0]))
                         srcValue = generateArrayFill(arrFill, elemLlvmType);
                     else
                         srcValue = generateExpression(node->arguments[0]);
                     if(!srcValue)
                         return nullptr;
                     llvm::AllocaInst* tmpList = builder.CreateAlloca(
-                        srcValue->getType(), nullptr, "array.extend.tmp");
+                        srcValue->getType(),
+                        nullptr,
+                        "array.extend.tmp");
                     builder.CreateStore(srcValue, tmpList);
                     srcPtr = tmpList;
                 }
@@ -5428,28 +5950,27 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 if(!(elemIsStr || elemIsI64 || elemIsI32Like))
                 {
                     uint64_t elemSizeU =
-                        module->getDataLayout().getTypeAllocSize(
-                            elemLlvmType);
-                    llvm::Value* elemSize = llvm::ConstantInt::get(
-                        i64Type, (uint64_t)elemSizeU);
+                        module->getDataLayout().getTypeAllocSize(elemLlvmType);
+                    llvm::Value* elemSize =
+                        llvm::ConstantInt::get(i64Type, (uint64_t)elemSizeU);
                     llvm::FunctionType* ftRaw = llvm::FunctionType::get(
                         voidType,
                         receiverIsArray
-                            ? std::vector<llvm::Type*>{
-                                  opaquePtrType, opaquePtrType, i64Type,
-                                  i64Type}
-                            : std::vector<llvm::Type*>{
-                                  opaquePtrType, opaquePtrType, i64Type},
+                            ? std::vector<
+                                  llvm::
+                                      Type*>{opaquePtrType, opaquePtrType, i64Type, i64Type}
+                            : std::vector<
+                                  llvm::
+                                      Type*>{opaquePtrType, opaquePtrType, i64Type},
                         false);
-                    llvm::FunctionCallee fnRaw =
-                        module->getOrInsertFunction(
-                            receiverIsArray ? "__mlang_std_array_extend_raw"
-                                            : "__mlang_std_vec_extend_raw",
-                            ftRaw);
+                    llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
+                        receiverIsArray ? "__mlang_std_array_extend_raw"
+                                        : "__mlang_std_vec_extend_raw",
+                        ftRaw);
                     if(receiverIsArray)
-                        builder.CreateCall(fnRaw,
-                                           {recvPtr, srcPtr, elemSize,
-                                            arrayCapacity});
+                        builder.CreateCall(
+                            fnRaw,
+                            {recvPtr, srcPtr, elemSize, arrayCapacity});
                     else
                         builder.CreateCall(fnRaw, {recvPtr, srcPtr, elemSize});
                     retainInsertedAggregateBorrow(node->arguments[0]);
@@ -5458,10 +5979,11 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::FunctionType* ft = llvm::FunctionType::get(
                     voidType,
                     receiverIsArray
-                        ? std::vector<llvm::Type*>{
-                              opaquePtrType, opaquePtrType, i64Type}
-                        : std::vector<llvm::Type*>{
-                              opaquePtrType, opaquePtrType},
+                        ? std::vector<
+                              llvm::
+                                  Type*>{opaquePtrType, opaquePtrType, i64Type}
+                        : std::vector<
+                              llvm::Type*>{opaquePtrType, opaquePtrType},
                     false);
                 llvm::FunctionCallee fn =
                     module->getOrInsertFunction(fnName, ft);
@@ -5495,15 +6017,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         : getLLVMType(elemKind);
                 if(!elemLlvmType)
                 {
-                    reportError(node->line,
-                                "unsupported list element type for first()");
+                    reportError(
+                        node->line,
+                        "unsupported list element type for first()");
                     return nullptr;
                 }
                 llvm::Value* zero = llvm::ConstantInt::get(i64Type, 0);
                 llvm::Value* elemPtr = builder.CreateGEP(
-                    elemLlvmType, dataPtr, zero, "fieldlist.first.ptr");
-                return builder.CreateLoad(elemLlvmType, elemPtr,
-                                          "fieldlist.first");
+                    elemLlvmType,
+                    dataPtr,
+                    zero,
+                    "fieldlist.first.ptr");
+                return builder
+                    .CreateLoad(elemLlvmType, elemPtr, "fieldlist.first");
             }
             if(node->methodName == "last")
             {
@@ -5521,7 +6047,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 if(!emitFieldListNonEmptyCheck(cnt, "last"))
                     return nullptr;
                 llvm::Value* lastIdx = builder.CreateSub(
-                    cnt, llvm::ConstantInt::get(i64Type, 1), "lastIdx");
+                    cnt,
+                    llvm::ConstantInt::get(i64Type, 1),
+                    "lastIdx");
                 llvm::Value* dataPtr =
                     builder.CreateExtractValue(ls, 1, "dataptr");
                 llvm::Type* elemLlvmType =
@@ -5530,14 +6058,18 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         : getLLVMType(elemKind);
                 if(!elemLlvmType)
                 {
-                    reportError(node->line,
-                                "unsupported list element type for last()");
+                    reportError(
+                        node->line,
+                        "unsupported list element type for last()");
                     return nullptr;
                 }
                 llvm::Value* elemPtr = builder.CreateGEP(
-                    elemLlvmType, dataPtr, lastIdx, "fieldlist.last.ptr");
-                return builder.CreateLoad(elemLlvmType, elemPtr,
-                                          "fieldlist.last");
+                    elemLlvmType,
+                    dataPtr,
+                    lastIdx,
+                    "fieldlist.last.ptr");
+                return builder
+                    .CreateLoad(elemLlvmType, elemPtr, "fieldlist.last");
             }
             if(node->methodName == "pop")
             {
@@ -5556,11 +6088,16 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::Function* function =
                     builder.GetInsertBlock()->getParent();
                 llvm::BasicBlock* okBB = llvm::BasicBlock::Create(
-                    context, "fieldlist.pop.non_empty", function);
+                    context,
+                    "fieldlist.pop.non_empty",
+                    function);
                 llvm::BasicBlock* failBB = llvm::BasicBlock::Create(
-                    context, "fieldlist.pop.empty", function);
+                    context,
+                    "fieldlist.pop.empty",
+                    function);
                 llvm::Value* nonEmpty = builder.CreateICmpSGT(
-                    cnt, llvm::ConstantInt::get(i64Type, 0),
+                    cnt,
+                    llvm::ConstantInt::get(i64Type, 0),
                     "fieldlist.pop.has_items");
                 builder.CreateCondBr(nonEmpty, okBB, failBB);
 
@@ -5601,7 +6138,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         retType = i32Type;
                     }
                     llvm::FunctionType* ft = llvm::FunctionType::get(
-                        retType, {opaquePtrType}, false);
+                        retType,
+                        {opaquePtrType},
+                        false);
                     llvm::FunctionCallee fn =
                         module->getOrInsertFunction(fnName, ft);
                     return builder.CreateCall(fn, {recvPtr}, "fieldlist.pop");
@@ -5613,25 +6152,33 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     recvElemType ? getLLVMTypeFromNode(recvElemType) : nullptr;
                 if(!elemLlvmType)
                 {
-                    reportError(node->line,
-                                "unsupported list element type for pop()");
+                    reportError(
+                        node->line,
+                        "unsupported list element type for pop()");
                     return nullptr;
                 }
                 llvm::AllocaInst* tmpElem = builder.CreateAlloca(
-                    elemLlvmType, nullptr, "fieldlist.pop.tmp");
+                    elemLlvmType,
+                    nullptr,
+                    "fieldlist.pop.tmp");
                 llvm::Value* tmpElemPtr = builder.CreateBitCast(
-                    tmpElem, opaquePtrType, "fieldlist.pop.ptr");
+                    tmpElem,
+                    opaquePtrType,
+                    "fieldlist.pop.ptr");
                 uint64_t elemSizeU =
                     module->getDataLayout().getTypeAllocSize(elemLlvmType);
                 llvm::Value* elemSize =
                     llvm::ConstantInt::get(i64Type, (uint64_t)elemSizeU);
                 llvm::FunctionType* ftRaw = llvm::FunctionType::get(
-                    i32Type, {opaquePtrType, opaquePtrType, i64Type}, false);
-                llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
-                    "__mlang_std_vec_pop_raw", ftRaw);
+                    i32Type,
+                    {opaquePtrType, opaquePtrType, i64Type},
+                    false);
+                llvm::FunctionCallee fnRaw =
+                    module
+                        ->getOrInsertFunction("__mlang_std_vec_pop_raw", ftRaw);
                 builder.CreateCall(fnRaw, {recvPtr, tmpElemPtr, elemSize});
-                return builder.CreateLoad(elemLlvmType, tmpElem,
-                                          "fieldlist.pop");
+                return builder
+                    .CreateLoad(elemLlvmType, tmpElem, "fieldlist.pop");
             }
             if(node->methodName == "clear")
             {
@@ -5675,11 +6222,13 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         val = builder.CreateTrunc(val, i32Type);
                 }
                 llvm::FunctionType* ft = llvm::FunctionType::get(
-                    i32Type, {opaquePtrType, valType}, false);
+                    i32Type,
+                    {opaquePtrType, valType},
+                    false);
                 llvm::FunctionCallee fn =
                     module->getOrInsertFunction(fnName, ft);
-                return builder.CreateCall(fn, {recvPtr, val},
-                                          "fieldlist.contains");
+                return builder
+                    .CreateCall(fn, {recvPtr, val}, "fieldlist.contains");
             }
             if(node->methodName == "index_of")
             {
@@ -5709,11 +6258,13 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         val = builder.CreateTrunc(val, i32Type);
                 }
                 llvm::FunctionType* ft = llvm::FunctionType::get(
-                    i64Type, {opaquePtrType, valType}, false);
+                    i64Type,
+                    {opaquePtrType, valType},
+                    false);
                 llvm::FunctionCallee fn =
                     module->getOrInsertFunction(fnName, ft);
-                return builder.CreateCall(fn, {recvPtr, val},
-                                          "fieldlist.index_of");
+                return builder
+                    .CreateCall(fn, {recvPtr, val}, "fieldlist.index_of");
             }
             if(node->methodName == "sort")
             {
@@ -5735,8 +6286,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             {
                 if(!node->arguments.empty())
                 {
-                    reportError(node->line,
-                                "sort_desc() takes no arguments");
+                    reportError(node->line, "sort_desc() takes no arguments");
                     return nullptr;
                 }
                 llvm::FunctionType* ft =
@@ -5774,13 +6324,15 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 }
                 llvm::FunctionType* ft =
                     llvm::FunctionType::get(voidType, {opaquePtrType}, false);
-                llvm::FunctionCallee fn = module->getOrInsertFunction(
-                    "__mlang_std_vec_dedup_i32", ft);
+                llvm::FunctionCallee fn =
+                    module
+                        ->getOrInsertFunction("__mlang_std_vec_dedup_i32", ft);
                 builder.CreateCall(fn, {recvPtr});
                 return successfulVoidExpression(context);
             }
-            reportError(node->line,
-                        "Vec has no method named '" + node->methodName + "'");
+            reportError(
+                node->line,
+                "Vec has no method named '" + node->methodName + "'");
             return nullptr;
         }
         if(recvType && recvType->kind == TypeNode::TYPE_MAP)
@@ -5796,9 +6348,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 if(!dstMapType || !dstMapType->keyType ||
                    !dstMapType->valueType)
                 {
-                    reportError(node->line,
-                                "map.extend() requires known map key and "
-                                "value types");
+                    reportError(
+                        node->line,
+                        "map.extend() requires known map key and "
+                        "value types");
                     return nullptr;
                 }
                 llvm::Value* recvPtr =
@@ -5811,20 +6364,22 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     getLLVMTypeFromNode(dstMapType->valueType);
                 if(!dstKeyType || !dstValueType)
                 {
-                    reportError(node->line,
-                                "unsupported map key/value type for "
-                                "extend()");
+                    reportError(
+                        node->line,
+                        "unsupported map key/value type for "
+                        "extend()");
                     return nullptr;
                 }
 
                 TypeNode* srcType =
                     inferExpressionTypeNode(node->arguments[0], node->line);
                 MapTypeNode* srcMapType = dynamic_cast<MapTypeNode*>(srcType);
-                if(!srcMapType && (!srcType ||
-                                   srcType->kind != TypeNode::TYPE_MAP))
+                if(!srcMapType &&
+                   (!srcType || srcType->kind != TypeNode::TYPE_MAP))
                 {
-                    reportError(node->line,
-                                "map.extend() expects a map<K, V> argument");
+                    reportError(
+                        node->line,
+                        "map.extend() expects a map<K, V> argument");
                     return nullptr;
                 }
                 if(srcMapType &&
@@ -5834,12 +6389,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         getLLVMTypeFromNode(srcMapType->keyType);
                     llvm::Type* srcValueType =
                         getLLVMTypeFromNode(srcMapType->valueType);
-                    if(srcKeyType != dstKeyType ||
-                       srcValueType != dstValueType)
+                    if(srcKeyType != dstKeyType || srcValueType != dstValueType)
                     {
-                        reportError(node->line,
-                                    "map.extend() argument key/value types do "
-                                    "not match destination map");
+                        reportError(
+                            node->line,
+                            "map.extend() argument key/value types do "
+                            "not match destination map");
                         return nullptr;
                     }
                 }
@@ -5847,22 +6402,24 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::Value* srcPtr = nullptr;
                 if(dynamic_cast<IdentifierNode*>(node->arguments[0]) ||
                    dynamic_cast<FieldAccessNode*>(node->arguments[0]))
-                    srcPtr =
-                        getLValuePointer(node->arguments[0], node->line);
+                    srcPtr = getLValuePointer(node->arguments[0], node->line);
                 if(!srcPtr)
                 {
                     llvm::Value* srcValue = nullptr;
                     if(auto* mapLit =
                            dynamic_cast<MapLiteralNode*>(node->arguments[0]))
-                        srcValue =
-                            generateMapLiteral(mapLit, dstKeyType,
-                                               dstValueType);
+                        srcValue = generateMapLiteral(
+                            mapLit,
+                            dstKeyType,
+                            dstValueType);
                     else
                         srcValue = generateExpression(node->arguments[0]);
                     if(!srcValue)
                         return nullptr;
                     llvm::AllocaInst* tmpMap = builder.CreateAlloca(
-                        srcValue->getType(), nullptr, "map.extend.tmp");
+                        srcValue->getType(),
+                        nullptr,
+                        "map.extend.tmp");
                     builder.CreateStore(srcValue, tmpMap);
                     srcPtr = tmpMap;
                 }
@@ -5884,11 +6441,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::ConstantInt::get(i64Type, valueSizeU);
                 llvm::FunctionType* ft = llvm::FunctionType::get(
                     llvm::Type::getVoidTy(context),
-                    {ptrType, ptrType, i64Type, i64Type}, false);
-                llvm::FunctionCallee fn = module->getOrInsertFunction(
-                    "__mlang_std_map_extend_raw", ft);
-                builder.CreateCall(fn,
-                                   {recvPtr, srcPtr, keySize, valueSize});
+                    {ptrType, ptrType, i64Type, i64Type},
+                    false);
+                llvm::FunctionCallee fn =
+                    module
+                        ->getOrInsertFunction("__mlang_std_map_extend_raw", ft);
+                builder.CreateCall(fn, {recvPtr, srcPtr, keySize, valueSize});
                 return successfulVoidExpression(context);
             }
             if(node->methodName == "len")
@@ -5909,16 +6467,17 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::Type* ptrType =
                     llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
-                std::vector<llvm::Type*> mapStructTypes = {i64Type, ptrType,
-                                                           ptrType};
+                std::vector<llvm::Type*> mapStructTypes =
+                    {i64Type, ptrType, ptrType};
                 llvm::StructType* mapStructType =
                     llvm::StructType::get(context, mapStructTypes);
                 llvm::Value* mapStruct =
                     builder.CreateLoad(mapStructType, recvPtr, "fieldmap.load");
                 return builder.CreateExtractValue(mapStruct, 0, "fieldmap.len");
             }
-            reportError(node->line,
-                        "map has no method named '" + node->methodName + "'");
+            reportError(
+                node->line,
+                "map has no method named '" + node->methodName + "'");
             return nullptr;
         }
 
@@ -5974,9 +6533,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
         if(fieldIndex < 0 || !fieldType)
         {
-            reportError(node->line, "struct '" + ownerTypeName +
-                                        "' has no field named '" + fieldName +
-                                        "'");
+            reportError(
+                node->line,
+                "struct '" + ownerTypeName + "' has no field named '" +
+                    fieldName + "'");
             return nullptr;
         }
 
@@ -5985,7 +6545,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             return nullptr;
         llvm::Type* llvmFieldType = getLLVMTypeFromNode(fieldType);
         llvm::Value* fieldPtr = builder.CreateStructGEP(
-            ownerType, basePtr, static_cast<unsigned>(fieldIndex),
+            ownerType,
+            basePtr,
+            static_cast<unsigned>(fieldIndex),
             fieldName + "_ptr");
         return builder.CreateLoad(llvmFieldType, fieldPtr, fieldName);
     };
@@ -6007,8 +6569,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             if(!genericType->typeArgs.empty())
                 payloadType = genericType->typeArgs.front();
         }
-        else if(auto* concreteType =
-                    dynamic_cast<StructTypeRefNode*>(containerType))
+        else if(
+            auto* concreteType =
+                dynamic_cast<StructTypeRefNode*>(containerType))
         {
             auto typeArgs =
                 monomorphizedTypeArgs.find(concreteType->structName);
@@ -6018,8 +6581,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         }
         if(!payloadType)
         {
-            reportError(node->line,
-                        typeLabel + "::unwrap_or() needs a concrete payload type");
+            reportError(
+                node->line,
+                typeLabel + "::unwrap_or() needs a concrete payload type");
             return nullptr;
         }
 
@@ -6035,40 +6599,54 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             if(fallback->getType()->isIntegerTy() &&
                payload->getType()->isIntegerTy())
                 fallback = builder.CreateIntCast(
-                    fallback, payload->getType(),
+                    fallback,
+                    payload->getType(),
                     !isUnsignedType(payloadType->kind),
                     typeLabel + ".unwrap_or.cast");
-            else if(fallback->getType()->isIntegerTy() &&
-                    payload->getType()->isFloatingPointTy())
+            else if(
+                fallback->getType()->isIntegerTy() &&
+                payload->getType()->isFloatingPointTy())
                 fallback = builder.CreateSIToFP(
-                    fallback, payload->getType(),
+                    fallback,
+                    payload->getType(),
                     typeLabel + ".unwrap_or.cast");
-            else if(fallback->getType()->isFloatingPointTy() &&
-                    payload->getType()->isIntegerTy())
+            else if(
+                fallback->getType()->isFloatingPointTy() &&
+                payload->getType()->isIntegerTy())
                 fallback = builder.CreateFPToSI(
-                    fallback, payload->getType(),
+                    fallback,
+                    payload->getType(),
                     typeLabel + ".unwrap_or.cast");
-            else if(fallback->getType()->isFloatingPointTy() &&
-                    payload->getType()->isFloatingPointTy())
+            else if(
+                fallback->getType()->isFloatingPointTy() &&
+                payload->getType()->isFloatingPointTy())
                 fallback = builder.CreateFPCast(
-                    fallback, payload->getType(),
+                    fallback,
+                    payload->getType(),
                     typeLabel + ".unwrap_or.cast");
             else
             {
-                reportError(node->line,
-                            "unwrap_or() fallback type does not match " +
-                                typeLabel + " payload type");
+                reportError(
+                    node->line,
+                    "unwrap_or() fallback type does not match " + typeLabel +
+                        " payload type");
                 return nullptr;
             }
         }
 
         llvm::Function* function = builder.GetInsertBlock()->getParent();
         llvm::BasicBlock* payloadBlock = llvm::BasicBlock::Create(
-            context, typeLabel + ".unwrap_or.payload", function);
+            context,
+            typeLabel + ".unwrap_or.payload",
+            function);
         llvm::BasicBlock* fallbackBlock = llvm::BasicBlock::Create(
-            context, typeLabel + ".unwrap_or.fallback", function);
+            context,
+            typeLabel + ".unwrap_or.fallback",
+            function);
         llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create(
-            context, typeLabel + ".unwrap_or.merge", function);
+            context,
+            typeLabel + ".unwrap_or.merge",
+            function);
         builder.CreateCondBr(hasPayload, payloadBlock, fallbackBlock);
 
         builder.SetInsertPoint(payloadBlock);
@@ -6081,7 +6659,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
         builder.SetInsertPoint(mergeBlock);
         llvm::PHINode* result = builder.CreatePHI(
-            payload->getType(), 2, typeLabel + ".unwrap_or.result");
+            payload->getType(),
+            2,
+            typeLabel + ".unwrap_or.result");
         result->addIncoming(payload, payloadEnd);
         result->addIncoming(fallback, fallbackEnd);
         return result;
@@ -6091,13 +6671,13 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     {
         if(node->methodName == "unwrap_or")
             return emitValueOr("is_some", "value", "option");
-        if(node->methodName == "is_some" ||
-           node->methodName == "is_none")
+        if(node->methodName == "is_some" || node->methodName == "is_none")
         {
             if(!node->arguments.empty())
             {
-                reportError(node->line, node->methodName +
-                                            "() takes no arguments");
+                reportError(
+                    node->line,
+                    node->methodName + "() takes no arguments");
                 return nullptr;
             }
             llvm::Value* isSome =
@@ -6121,12 +6701,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 return nullptr;
 
             llvm::Function* function = builder.GetInsertBlock()->getParent();
-            llvm::BasicBlock* valueBlock =
-                llvm::BasicBlock::Create(context, "option.unwrap.value",
-                                         function);
-            llvm::BasicBlock* panicBlock =
-                llvm::BasicBlock::Create(context, "option.unwrap.panic",
-                                         function);
+            llvm::BasicBlock* valueBlock = llvm::BasicBlock::Create(
+                context,
+                "option.unwrap.value",
+                function);
+            llvm::BasicBlock* panicBlock = llvm::BasicBlock::Create(
+                context,
+                "option.unwrap.panic",
+                function);
             builder.CreateCondBr(isSome, valueBlock, panicBlock);
 
             builder.SetInsertPoint(panicBlock);
@@ -6149,16 +6731,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 #if LLVM_VERSION_MAJOR >= 15
             llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
 #else
-            llvm::Type* opaquePtrType = llvm::PointerType::get(
-                llvm::Type::getInt8Ty(context), 0);
+            llvm::Type* opaquePtrType =
+                llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
             llvm::Value* stderrValue =
                 builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
             builder.CreateCall(
                 fprintfFunc,
-                {stderrValue, formatStr, fileStr,
-                 llvm::ConstantInt::get(llvm::Type::getInt32Ty(context),
-                                        node->line)});
+                {stderrValue,
+                 formatStr,
+                 fileStr,
+                 llvm::ConstantInt::get(
+                     llvm::Type::getInt32Ty(context),
+                     node->line)});
             builder.CreateCall(abortFunc, {});
             builder.CreateUnreachable();
 
@@ -6202,9 +6787,11 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
             if(warnResultUnwrap)
             {
-                reportWarning(node->line, node->col,
-                              "result.unwrap() may panic on Err; consider "
-                              "match/is_ok/is_err");
+                reportWarning(
+                    node->line,
+                    node->col,
+                    "result.unwrap() may panic on Err; consider "
+                    "match/is_ok/is_err");
             }
             return loadStructField(objPtr, structTypeName, "ok");
         }
@@ -6223,26 +6810,30 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     auto structIt = structMethods.find(structTypeName);
     if(structIt == structMethods.end())
     {
-        reportError(node->line,
-                    "struct '" + structTypeName + "' has no methods");
+        reportError(
+            node->line,
+            "struct '" + structTypeName + "' has no methods");
         return nullptr;
     }
 
     auto methodIt = structIt->second.find(node->methodName);
     if(methodIt == structIt->second.end())
     {
-        reportError(node->line, "struct '" + structTypeName +
-                                    "' has no method named '" +
-                                    node->methodName + "'");
+        reportError(
+            node->line,
+            "struct '" + structTypeName + "' has no method named '" +
+                node->methodName + "'");
         return nullptr;
     }
 
     if(node->methodName == "unwrap" && isResultType(structTypeName) &&
        warnResultUnwrap)
     {
-        reportWarning(node->line, node->col,
-                      "result.unwrap() may panic on Err; consider "
-                      "match/is_ok/is_err");
+        reportWarning(
+            node->line,
+            node->col,
+            "result.unwrap() may panic on Err; consider "
+            "match/is_ok/is_err");
     }
 
     bool isPublic = methodIt->second.first;
@@ -6250,10 +6841,11 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     (void)isPublic;
     if(methodNode && methodNode->isStatic)
     {
-        reportError(node->line, "static method '" + structTypeName +
-                                    "::" + node->methodName +
-                                    "' must be called as " + structTypeName +
-                                    "::" + node->methodName + "(...)");
+        reportError(
+            node->line,
+            "static method '" + structTypeName + "::" + node->methodName +
+                "' must be called as " + structTypeName +
+                "::" + node->methodName + "(...)");
         return nullptr;
     }
 
@@ -6269,11 +6861,11 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
     if(node->arguments.size() != declaredParams.size())
     {
-        reportError(node->line, "method '" + node->methodName + "' expects " +
-                                    std::to_string(declaredParams.size()) +
-                                    " argument(s), but " +
-                                    std::to_string(node->arguments.size()) +
-                                    " provided");
+        reportError(
+            node->line,
+            "method '" + node->methodName + "' expects " +
+                std::to_string(declaredParams.size()) + " argument(s), but " +
+                std::to_string(node->arguments.size()) + " provided");
         return nullptr;
     }
 
@@ -6343,9 +6935,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         }
         if(constantVariables.count(receiverOwner) != 0)
         {
-            reportError(node->line,
-                        "cannot call mutating method on immutable value '" +
-                            receiverOwner + "'");
+            reportError(
+                node->line,
+                "cannot call mutating method on immutable value '" +
+                    receiverOwner + "'");
             return nullptr;
         }
     }
@@ -6361,9 +6954,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     if(!methodModule.empty() && !isPublic &&
        !Helpers::is_same_module_family(methodModule, currentModule))
     {
-        reportError(node->line, "method '" + node->methodName +
-                                    "' is private in module '" + methodModule +
-                                    "'");
+        reportError(
+            node->line,
+            "method '" + node->methodName + "' is private in module '" +
+                methodModule + "'");
         return nullptr;
     }
 
@@ -6457,8 +7051,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         {
             for(const auto& borrower : activeIt->second)
             {
-                if(borrowerPlaceOverlaps(borrower, receiverOwner,
-                                         receiverPlace))
+                if(borrowerPlaceOverlaps(
+                       borrower,
+                       receiverOwner,
+                       receiverPlace))
                 {
                     hasSharedBorrow = true;
                     sharedBorrower = borrower;
@@ -6470,8 +7066,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         std::string mutableBorrower;
         for(const auto& mutBorrow : activeMutBorrower)
         {
-            if(borrowerPlaceOverlaps(mutBorrow.second, receiverOwner,
-                                     receiverPlace))
+            if(borrowerPlaceOverlaps(
+                   mutBorrow.second,
+                   receiverOwner,
+                   receiverPlace))
             {
                 hasMutableBorrow = true;
                 mutableBorrower = mutBorrow.second;
@@ -6481,10 +7079,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         if((hasSharedBorrow && !methodHasSharedReceiver) ||
            (hasMutableBorrow && methodHasSharedReceiver))
         {
-            std::string by = hasMutableBorrow ? mutableBorrower
-                                              : sharedBorrower;
-            reportError(node->line, "cannot call method on '" + receiverOwner +
-                                        "' while borrowed by '" + by + "'");
+            std::string by =
+                hasMutableBorrow ? mutableBorrower : sharedBorrower;
+            reportError(
+                node->line,
+                "cannot call method on '" + receiverOwner +
+                    "' while borrowed by '" + by + "'");
             return nullptr;
         }
     }
@@ -6497,15 +7097,17 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     sharedReferenceArgs.reserve(declaredParams.size());
     for(auto* parameter : declaredParams)
     {
-        auto* reference = parameter
-                              ? dynamic_cast<ReferenceTypeNode*>(parameter->type)
-                              : nullptr;
+        auto* reference =
+            parameter ? dynamic_cast<ReferenceTypeNode*>(parameter->type)
+                      : nullptr;
         sharedReferenceArgs.push_back(reference && !reference->isMutable);
     }
-    if(!validateTemporaryBorrowArguments(node->arguments, node->methodName,
-                                         receiverOwner,
-                                         methodHasSharedReceiver,
-                                         sharedReferenceArgs))
+    if(!validateTemporaryBorrowArguments(
+           node->arguments,
+           node->methodName,
+           receiverOwner,
+           methodHasSharedReceiver,
+           sharedReferenceArgs))
         return nullptr;
 
     // Add other arguments with the same coercion rules as normal function
@@ -6537,9 +7139,13 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             if(auto* mutRef = dynamic_cast<ReferenceTypeNode*>(declParam->type))
             {
                 auto* unary = dynamic_cast<UnaryOpNode*>(arg);
-                if(mutRef->isMutable && !(unary && unary->op == UnaryOpNode::OP_ADDR_MUT))
+                if(mutRef->isMutable &&
+                   !(unary && unary->op == UnaryOpNode::OP_ADDR_MUT))
                 {
-                    reportError(node->line, "parameter '" + declParam->name + "' expects &mut argument");
+                    reportError(
+                        node->line,
+                        "parameter '" + declParam->name +
+                            "' expects &mut argument");
                     return nullptr;
                 }
             }
@@ -6564,20 +7170,23 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             builder.CreateSExt(argVal, expectedType, "sext");
                     }
                 }
-                else if(actualType->isIntegerTy() &&
-                        expectedType->isFloatingPointTy())
+                else if(
+                    actualType->isIntegerTy() &&
+                    expectedType->isFloatingPointTy())
                 {
                     argVal =
                         builder.CreateSIToFP(argVal, expectedType, "sitofp");
                 }
-                else if(actualType->isFloatingPointTy() &&
-                        expectedType->isIntegerTy())
+                else if(
+                    actualType->isFloatingPointTy() &&
+                    expectedType->isIntegerTy())
                 {
                     argVal =
                         builder.CreateFPToSI(argVal, expectedType, "fptosi");
                 }
-                else if(actualType->isFloatingPointTy() &&
-                        expectedType->isFloatingPointTy())
+                else if(
+                    actualType->isFloatingPointTy() &&
+                    expectedType->isFloatingPointTy())
                 {
                     argVal =
                         builder.CreateFPCast(argVal, expectedType, "fpcast");
@@ -6617,11 +7226,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     else
                         expectedStr = "unknown";
 
-                    reportError(node->line,
-                                "argument " + std::to_string(argIndex + 1) +
-                                    " of method '" + node->methodName +
-                                    "' has wrong type: expected '" +
-                                    expectedStr + "', got '" + actualStr + "'");
+                    reportError(
+                        node->line,
+                        "argument " + std::to_string(argIndex + 1) +
+                            " of method '" + node->methodName +
+                            "' has wrong type: expected '" + expectedStr +
+                            "', got '" + actualStr + "'");
                     return nullptr;
                 }
             }
@@ -6636,9 +7246,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         unary && unary->op == UnaryOpNode::OP_ADDR_MUT;
                     if(!isRefMut)
                     {
-                        reportError(node->line, "parameter '" +
-                                                    declParam->name +
-                                                    "' expects &mut argument");
+                        reportError(
+                            node->line,
+                            "parameter '" + declParam->name +
+                                "' expects &mut argument");
                         return nullptr;
                     }
                 }
@@ -6646,9 +7257,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
             if(!dynamic_cast<ReferenceTypeNode*>(declParam->type))
             {
-                consumeMoveFromExpression(arg, node->line,
-                                          "passing argument to method '" +
-                                              node->methodName + "'");
+                consumeMoveFromExpression(
+                    arg,
+                    node->line,
+                    "passing argument to method '" + node->methodName + "'");
             }
         }
 
@@ -6670,8 +7282,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             setActiveDropFlag(receiverOwner, false);
         return call;
     }
-    llvm::CallInst* call =
-        builder.CreateCall(callee, args, "methodcall");
+    llvm::CallInst* call = builder.CreateCall(callee, args, "methodcall");
     if(consumesReceiver)
         setActiveDropFlag(receiverOwner, false);
     return call;

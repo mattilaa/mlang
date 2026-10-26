@@ -6,7 +6,8 @@
 #include <string>
 #include <utility>
 
-namespace mlang::diag {
+namespace mlang::diag
+{
 
 struct ParserDiagnostic
 {
@@ -32,8 +33,10 @@ inline ParserDiagnostic end_parser_diagnostic_capture()
     return result;
 }
 
-inline bool capture_parser_diagnostic(int line, int column,
-                                      const std::string& message)
+inline bool capture_parser_diagnostic(
+    int line,
+    int column,
+    const std::string& message)
 {
     if(!parser_diagnostic_capture_enabled)
         return false;
@@ -100,8 +103,9 @@ inline std::string classify_error_code(const std::string& message)
     return "MLANG-E2999";
 }
 
-inline std::string format_message_with_code(const std::string& code,
-                                            const std::string& message)
+inline std::string format_message_with_code(
+    const std::string& code,
+    const std::string& message)
 {
     return "[" + code + "] " + message + " [" + docs_ref(code) + "]";
 }
@@ -116,11 +120,12 @@ inline std::string format_warning_message(const std::string& message)
     return format_message_with_code(classify_warning_code(message), message);
 }
 
-inline void print_diagnostic_location(std::ostream& os,
-                                      const std::string& file,
-                                      int line,
-                                      int col,
-                                      const char* level)
+inline void print_diagnostic_location(
+    std::ostream& os,
+    const std::string& file,
+    int line,
+    int col,
+    const char* level)
 {
     if(line > 0 && col > 0)
         os << file << ":" << line << ":" << col << ": " << level << ": ";

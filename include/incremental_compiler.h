@@ -56,15 +56,21 @@ struct IncrementalDocument
 class IncrementalCompiler
 {
 public:
-    bool openDocument(const std::string& uri, const std::string& path,
-                      const std::string& text, int version = -1);
+    bool openDocument(
+        const std::string& uri,
+        const std::string& path,
+        const std::string& text,
+        int version = -1);
 
-    bool setDocumentText(const std::string& uri, const std::string& text,
-                         int version = -1);
+    bool setDocumentText(
+        const std::string& uri,
+        const std::string& text,
+        int version = -1);
 
-    bool applyChanges(const std::string& uri,
-                      const std::vector<IncrementalTextChange>& changes,
-                      int version = -1);
+    bool applyChanges(
+        const std::string& uri,
+        const std::vector<IncrementalTextChange>& changes,
+        int version = -1);
 
     void closeDocument(const std::string& uri);
 
@@ -73,12 +79,14 @@ public:
 
     ProgramNode* parseDocument(const std::string& uri);
 
-    static bool applyChangeToText(std::string& text,
-                                  const IncrementalTextChange& change);
+    static bool applyChangeToText(
+        std::string& text,
+        const IncrementalTextChange& change);
 
 private:
-    static std::optional<size_t> lspPositionToOffset(std::string_view text,
-                                                     const Position& position);
+    static std::optional<size_t> lspPositionToOffset(
+        std::string_view text,
+        const Position& position);
 
     static ProgramNode* parseText(std::string_view text);
 

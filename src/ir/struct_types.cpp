@@ -24,12 +24,15 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
                 members.push_back(baseMember);
             auto baseAccessIt = structFieldAccessInfo.find(node->baseName);
             if(baseAccessIt != structFieldAccessInfo.end())
-                accessInfo.insert(accessInfo.end(),
-                                  baseAccessIt->second.begin(),
-                                  baseAccessIt->second.end());
+                accessInfo.insert(
+                    accessInfo.end(),
+                    baseAccessIt->second.begin(),
+                    baseAccessIt->second.end());
             if(baseLayoutIt != structFieldLayouts.end())
-                layouts.insert(layouts.end(), baseLayoutIt->second.begin(),
-                               baseLayoutIt->second.end());
+                layouts.insert(
+                    layouts.end(),
+                    baseLayoutIt->second.begin(),
+                    baseLayoutIt->second.end());
             if(baseStructType)
             {
                 for(unsigned i = 0; i < baseStructType->getNumElements(); ++i)
@@ -38,8 +41,9 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
         }
         else
         {
-            reportError(node->line,
-                        "base struct '" + node->baseName + "' not found");
+            reportError(
+                node->line,
+                "base struct '" + node->baseName + "' not found");
         }
     }
 
@@ -106,8 +110,9 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
         {
             auto baseDefaultsIt = structMemberDefaults.find(node->baseName);
             if(baseDefaultsIt != structMemberDefaults.end())
-                defaults.insert(baseDefaultsIt->second.begin(),
-                                baseDefaultsIt->second.end());
+                defaults.insert(
+                    baseDefaultsIt->second.begin(),
+                    baseDefaultsIt->second.end());
         }
         for(auto* member : node->members->members)
         {
@@ -126,6 +131,7 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
         structBases[node->name] = node->baseName;
     }
 }
+
 llvm::StructType* CodeGenerator::getStructType(const std::string& name)
 {
     auto it = structTypes.find(name);
@@ -147,8 +153,10 @@ llvm::Type* CodeGenerator::getTraitObjectType(const std::string& traitName)
     auto it = traitObjectTypes.find(traitName);
     if(it != traitObjectTypes.end())
         return it->second;
-    auto* ty = llvm::StructType::create(context, {opaquePtr, opaquePtr},
-                                        "trait.obj." + traitName);
+    auto* ty = llvm::StructType::create(
+        context,
+        {opaquePtr, opaquePtr},
+        "trait.obj." + traitName);
     traitObjectTypes[traitName] = ty;
     return ty;
 }
@@ -192,9 +200,9 @@ llvm::Type* CodeGenerator::getTraitVTableType(const std::string& traitName)
     return ty;
 }
 
-llvm::GlobalVariable*
-CodeGenerator::ensureTraitVTable(const std::string& concreteTypeName,
-                                 const std::string& traitName)
+llvm::GlobalVariable* CodeGenerator::ensureTraitVTable(
+    const std::string& concreteTypeName,
+    const std::string& traitName)
 {
     std::string key = concreteTypeName + "::" + traitName;
     auto it = traitVTableGlobals.find(key);
@@ -233,18 +241,20 @@ CodeGenerator::ensureTraitVTable(const std::string& concreteTypeName,
         auto methodsIt = structMethods.find(concreteTypeName);
         if(methodsIt == structMethods.end())
         {
-            reportError(traitMethod->line, "unknown struct '" +
-                                               concreteTypeName +
-                                               "' for trait object dispatch");
+            reportError(
+                traitMethod->line,
+                "unknown struct '" + concreteTypeName +
+                    "' for trait object dispatch");
             return nullptr;
         }
         auto mit = methodsIt->second.find(traitMethod->name);
         if(mit == methodsIt->second.end() || !mit->second.second)
         {
-            reportError(traitMethod->line,
-                        "missing method '" + traitMethod->name +
-                            "' for trait object dispatch on '" +
-                            concreteTypeName + "'");
+            reportError(
+                traitMethod->line,
+                "missing method '" + traitMethod->name +
+                    "' for trait object dispatch on '" + concreteTypeName +
+                    "'");
             return nullptr;
         }
         StructMethodNode* concreteMethod = mit->second.second;
@@ -266,17 +276,24 @@ CodeGenerator::ensureTraitVTable(const std::string& concreteTypeName,
     }
 
     auto* init = llvm::ConstantStruct::get(
-        llvm::cast<llvm::StructType>(vtableType), entries);
+        llvm::cast<llvm::StructType>(vtableType),
+        entries);
     auto* gv = new llvm::GlobalVariable(
-        *module, llvm::cast<llvm::StructType>(vtableType), true,
-        llvm::GlobalValue::PrivateLinkage, init, "__mlang_trait_vtable." + key);
+        *module,
+        llvm::cast<llvm::StructType>(vtableType),
+        true,
+        llvm::GlobalValue::PrivateLinkage,
+        init,
+        "__mlang_trait_vtable." + key);
     traitVTableGlobals[key] = gv;
     return gv;
 }
 
-llvm::Value* CodeGenerator::buildTraitObjectValue(ExpressionNode* expr,
-                                                  const std::string& traitName,
-                                                  int line, bool heapCopy)
+llvm::Value* CodeGenerator::buildTraitObjectValue(
+    ExpressionNode* expr,
+    const std::string& traitName,
+    int line,
+    bool heapCopy)
 {
     llvm::Value* dataPtr = getLValuePointer(expr, line);
     if(!dataPtr)
@@ -293,8 +310,9 @@ llvm::Value* CodeGenerator::buildTraitObjectValue(ExpressionNode* expr,
     }
     else if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(lvalueType))
     {
-        concreteTypeName = getOrCreateMonomorphizedStruct(genRef->structName,
-                                                          genRef->typeArgs);
+        concreteTypeName = getOrCreateMonomorphizedStruct(
+            genRef->structName,
+            genRef->typeArgs);
     }
     else
     {
@@ -322,8 +340,10 @@ llvm::Value* CodeGenerator::buildTraitObjectValue(ExpressionNode* expr,
     }
     if(implementedTraitName.empty())
     {
-        reportError(line, "type '" + concreteTypeName +
-                              "' does not implement trait '" + traitName + "'");
+        reportError(
+            line,
+            "type '" + concreteTypeName + "' does not implement trait '" +
+                traitName + "'");
         return nullptr;
     }
 
@@ -369,9 +389,10 @@ llvm::Value* CodeGenerator::buildTraitObjectValue(ExpressionNode* expr,
     return obj;
 }
 
-llvm::Value* CodeGenerator::coerceTraitObjectValue(llvm::Value* value,
-                                                   llvm::Type* expectedType,
-                                                   int line)
+llvm::Value* CodeGenerator::coerceTraitObjectValue(
+    llvm::Value* value,
+    llvm::Type* expectedType,
+    int line)
 {
     if(!value || !expectedType)
         return nullptr;
@@ -393,10 +414,13 @@ llvm::Value* CodeGenerator::coerceTraitObjectValue(llvm::Value* value,
     llvm::Value* vtablePtr =
         builder.CreateExtractValue(value, 1, "trait.obj.vtable");
     llvm::Value* coerced = llvm::Constant::getNullValue(expectedType);
-    coerced = builder.CreateInsertValue(coerced, dataPtr, 0,
-                                        "trait.obj.coerced.data");
-    coerced = builder.CreateInsertValue(coerced, vtablePtr, 1,
-                                        "trait.obj.coerced.vtable");
+    coerced =
+        builder
+            .CreateInsertValue(coerced, dataPtr, 0, "trait.obj.coerced.data");
+    coerced = builder.CreateInsertValue(
+        coerced,
+        vtablePtr,
+        1,
+        "trait.obj.coerced.vtable");
     return coerced;
 }
-

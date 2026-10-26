@@ -35,11 +35,17 @@ void CodeGenerator::ensureResultBuiltin(ProgramNode* program)
 
     auto* members = new StructMemberListNode();
     members->addMember(new StructMemberNode(
-        false, new TypeNode(TypeNode::TYPE_BOOL), "is_ok", nullptr));
+        false,
+        new TypeNode(TypeNode::TYPE_BOOL),
+        "is_ok",
+        nullptr));
     members->addMember(
         new StructMemberNode(false, new StructTypeRefNode("T"), "ok", nullptr));
-    members->addMember(new StructMemberNode(false, new StructTypeRefNode("E"),
-                                            "err", nullptr));
+    members->addMember(new StructMemberNode(
+        false,
+        new StructTypeRefNode("E"),
+        "err",
+        nullptr));
 
     auto make_self_param = []() -> ParameterNode*
     {
@@ -49,7 +55,8 @@ void CodeGenerator::ensureResultBuiltin(ProgramNode* program)
         return new ParameterNode(selfType, "self");
     };
 
-    auto make_simple_method = [&](const std::string& name, TypeNode* retType,
+    auto make_simple_method = [&](const std::string& name,
+                                  TypeNode* retType,
                                   ExpressionNode* retExpr) -> StructMethodNode*
     {
         auto* params = new ParameterListNode();
@@ -61,23 +68,36 @@ void CodeGenerator::ensureResultBuiltin(ProgramNode* program)
     };
 
     members->addMethod(make_simple_method(
-        "is_ok", new TypeNode(TypeNode::TYPE_BOOL),
+        "is_ok",
+        new TypeNode(TypeNode::TYPE_BOOL),
         static_cast<ExpressionNode*>(create_field_access_expr(
-            new IdentifierNode("self"), strdup("is_ok"), 0))));
+            new IdentifierNode("self"),
+            strdup("is_ok"),
+            0))));
     members->addMethod(make_simple_method(
-        "is_err", new TypeNode(TypeNode::TYPE_BOOL),
-        new BinaryOpNode(BinaryOpNode::OP_EQ,
-                         static_cast<ExpressionNode*>(create_field_access_expr(
-                             new IdentifierNode("self"), strdup("is_ok"), 0)),
-                         new BoolLiteralNode(false))));
+        "is_err",
+        new TypeNode(TypeNode::TYPE_BOOL),
+        new BinaryOpNode(
+            BinaryOpNode::OP_EQ,
+            static_cast<ExpressionNode*>(create_field_access_expr(
+                new IdentifierNode("self"),
+                strdup("is_ok"),
+                0)),
+            new BoolLiteralNode(false))));
     members->addMethod(make_simple_method(
-        "unwrap", new StructTypeRefNode("T"),
+        "unwrap",
+        new StructTypeRefNode("T"),
         static_cast<ExpressionNode*>(create_field_access_expr(
-            new IdentifierNode("self"), strdup("ok"), 0))));
+            new IdentifierNode("self"),
+            strdup("ok"),
+            0))));
     members->addMethod(make_simple_method(
-        "unwrap_err", new StructTypeRefNode("E"),
+        "unwrap_err",
+        new StructTypeRefNode("E"),
         static_cast<ExpressionNode*>(create_field_access_expr(
-            new IdentifierNode("self"), strdup("err"), 0))));
+            new IdentifierNode("self"),
+            strdup("err"),
+            0))));
 
     auto* resultDef = new StructDefNode("result", "", members, true);
     resultDef->typeParams = {"T", "E"};
@@ -92,9 +112,15 @@ void CodeGenerator::ensureOptionBuiltin(ProgramNode* program)
 
     auto* members = new StructMemberListNode();
     members->addMember(new StructMemberNode(
-        false, new TypeNode(TypeNode::TYPE_BOOL), "is_some", nullptr));
-    members->addMember(new StructMemberNode(false, new StructTypeRefNode("T"),
-                                            "value", nullptr));
+        false,
+        new TypeNode(TypeNode::TYPE_BOOL),
+        "is_some",
+        nullptr));
+    members->addMember(new StructMemberNode(
+        false,
+        new StructTypeRefNode("T"),
+        "value",
+        nullptr));
 
     auto make_self_param = []() -> ParameterNode*
     {
@@ -103,7 +129,8 @@ void CodeGenerator::ensureOptionBuiltin(ProgramNode* program)
         return new ParameterNode(selfType, "self");
     };
 
-    auto make_simple_method = [&](const std::string& name, TypeNode* retType,
+    auto make_simple_method = [&](const std::string& name,
+                                  TypeNode* retType,
                                   ExpressionNode* retExpr) -> StructMethodNode*
     {
         auto* params = new ParameterListNode();
@@ -115,20 +142,29 @@ void CodeGenerator::ensureOptionBuiltin(ProgramNode* program)
     };
 
     members->addMethod(make_simple_method(
-        "is_some", new TypeNode(TypeNode::TYPE_BOOL),
+        "is_some",
+        new TypeNode(TypeNode::TYPE_BOOL),
         static_cast<ExpressionNode*>(create_field_access_expr(
-            new IdentifierNode("self"), strdup("is_some"), 0))));
+            new IdentifierNode("self"),
+            strdup("is_some"),
+            0))));
     members->addMethod(make_simple_method(
-        "is_none", new TypeNode(TypeNode::TYPE_BOOL),
-        new BinaryOpNode(BinaryOpNode::OP_EQ,
-                         static_cast<ExpressionNode*>(create_field_access_expr(
-                             new IdentifierNode("self"), strdup("is_some"),
-                             0)),
-                         new BoolLiteralNode(false))));
+        "is_none",
+        new TypeNode(TypeNode::TYPE_BOOL),
+        new BinaryOpNode(
+            BinaryOpNode::OP_EQ,
+            static_cast<ExpressionNode*>(create_field_access_expr(
+                new IdentifierNode("self"),
+                strdup("is_some"),
+                0)),
+            new BoolLiteralNode(false))));
     members->addMethod(make_simple_method(
-        "unwrap", new StructTypeRefNode("T"),
+        "unwrap",
+        new StructTypeRefNode("T"),
         static_cast<ExpressionNode*>(create_field_access_expr(
-            new IdentifierNode("self"), strdup("value"), 0))));
+            new IdentifierNode("self"),
+            strdup("value"),
+            0))));
 
     auto* optionDef = new StructDefNode("option", "", members, true);
     optionDef->typeParams = {"T"};

@@ -78,7 +78,10 @@ void CodeGenerator::generateTestMain(
     llvm::Type* i8PtrType = llvm::PointerType::get(context, 0);
     llvm::FunctionType* mainType = llvm::FunctionType::get(i32Type, {}, false);
     llvm::Function* mainFn = llvm::Function::Create(
-        mainType, llvm::Function::ExternalLinkage, "main", module.get());
+        mainType,
+        llvm::Function::ExternalLinkage,
+        "main",
+        module.get());
 
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(context, "entry", mainFn);
@@ -101,17 +104,25 @@ void CodeGenerator::generateTestMain(
     };
     llvm::FunctionType* reportTestType = llvm::FunctionType::get(
         llvm::Type::getVoidTy(context),
-        {i32Type, i32Type, i8PtrType, i8PtrType, i32Type}, false);
+        {i32Type, i32Type, i8PtrType, i8PtrType, i32Type},
+        false);
     llvm::FunctionType* reportSummaryType = llvm::FunctionType::get(
-        llvm::Type::getVoidTy(context), {i32Type, i32Type, i32Type}, false);
+        llvm::Type::getVoidTy(context),
+        {i32Type, i32Type, i32Type},
+        false);
     llvm::FunctionType* setCurrentTestType = llvm::FunctionType::get(
-        llvm::Type::getVoidTy(context), {i32Type, i32Type, i8PtrType}, false);
+        llvm::Type::getVoidTy(context),
+        {i32Type, i32Type, i8PtrType},
+        false);
     llvm::FunctionCallee reportTestFunc = module->getOrInsertFunction(
-        "__mlang_std_testing_report_test", reportTestType);
+        "__mlang_std_testing_report_test",
+        reportTestType);
     llvm::FunctionCallee reportSummaryFunc = module->getOrInsertFunction(
-        "__mlang_std_testing_report_summary", reportSummaryType);
+        "__mlang_std_testing_report_summary",
+        reportSummaryType);
     llvm::FunctionCallee setCurrentTestFunc = module->getOrInsertFunction(
-        "__mlang_std_testing_set_current_test", setCurrentTestType);
+        "__mlang_std_testing_set_current_test",
+        setCurrentTestType);
     llvm::Value* passStatus = make_cstr("PASS", "test.status.pass");
     llvm::Value* failStatus = make_cstr("FAIL", "test.status.fail");
     const std::string defaultSuite = defaultSuiteFromSourceFile(sourceFileName);
@@ -140,18 +151,24 @@ void CodeGenerator::generateTestMain(
         llvm::Value* totalCur =
             builder.CreateLoad(i32Type, totalTests, "tests.cur");
         llvm::Value* totalNext = builder.CreateAdd(
-            totalCur, llvm::ConstantInt::get(i32Type, 1), "tests.next");
+            totalCur,
+            llvm::ConstantInt::get(i32Type, 1),
+            "tests.next");
         builder.CreateStore(totalNext, totalTests);
         llvm::Value* testName = make_cstr(displayName, "test.name");
         llvm::Value* testIndex = totalNext;
-        builder.CreateCall(setCurrentTestFunc,
-                           {testIndex, totalNext, testName});
+        builder
+            .CreateCall(setCurrentTestFunc, {testIndex, totalNext, testName});
         llvm::Value* result = builder.CreateCall(callee, {});
         if(callee->getReturnType()->isVoidTy())
         {
-            builder.CreateCall(reportTestFunc,
-                               {testIndex, totalNext, passStatus, testName,
-                                llvm::ConstantInt::get(i32Type, 0)});
+            builder.CreateCall(
+                reportTestFunc,
+                {testIndex,
+                 totalNext,
+                 passStatus,
+                 testName,
+                 llvm::ConstantInt::get(i32Type, 0)});
             continue;
         }
 
@@ -160,8 +177,11 @@ void CodeGenerator::generateTestMain(
         {
             if(resultI32->getType()->isIntegerTy())
             {
-                resultI32 = builder.CreateIntCast(resultI32, i32Type, true,
-                                                  "test.rc.cast");
+                resultI32 = builder.CreateIntCast(
+                    resultI32,
+                    i32Type,
+                    true,
+                    "test.rc.cast");
             }
             else
             {
@@ -170,7 +190,9 @@ void CodeGenerator::generateTestMain(
         }
 
         llvm::Value* isFail = builder.CreateICmpNE(
-            resultI32, llvm::ConstantInt::get(i32Type, 0), "testfail");
+            resultI32,
+            llvm::ConstantInt::get(i32Type, 0),
+            "testfail");
         llvm::Value* failInc = builder.CreateZExt(isFail, i32Type, "failinc");
         llvm::Value* cur =
             builder.CreateLoad(i32Type, failures, "failures.cur");
@@ -186,15 +208,20 @@ void CodeGenerator::generateTestMain(
         builder.CreateCondBr(isFail, failBB, passBB);
 
         builder.SetInsertPoint(passBB);
-        builder.CreateCall(reportTestFunc,
-                           {testIndex, totalNext, passStatus, testName,
-                            llvm::ConstantInt::get(i32Type, 0)});
+        builder.CreateCall(
+            reportTestFunc,
+            {testIndex,
+             totalNext,
+             passStatus,
+             testName,
+             llvm::ConstantInt::get(i32Type, 0)});
         builder.CreateBr(contBB);
 
         failBB->insertInto(mainFn);
         builder.SetInsertPoint(failBB);
-        builder.CreateCall(reportTestFunc, {testIndex, totalNext, failStatus,
-                                            testName, resultI32});
+        builder.CreateCall(
+            reportTestFunc,
+            {testIndex, totalNext, failStatus, testName, resultI32});
         builder.CreateBr(contBB);
 
         contBB->insertInto(mainFn);
@@ -215,8 +242,10 @@ void CodeGenerator::generateTestMain(
         llvm::StructType* structType = getStructType(structName);
         if(!structType)
         {
-            reportError(method->line, "fixture struct '" + structName +
-                                          "' is not defined or has no fields");
+            reportError(
+                method->line,
+                "fixture struct '" + structName +
+                    "' is not defined or has no fields");
             continue;
         }
 
@@ -224,9 +253,10 @@ void CodeGenerator::generateTestMain(
         llvm::Function* methodFn = module->getFunction(testMangled);
         if(!methodFn)
         {
-            reportError(method->line, "fixture test method '" + structName +
-                                          "::" + method->name +
-                                          "' was not generated");
+            reportError(
+                method->line,
+                "fixture test method '" + structName + "::" + method->name +
+                    "' was not generated");
             continue;
         }
 
@@ -245,12 +275,14 @@ void CodeGenerator::generateTestMain(
         llvm::Value* totalCur =
             builder.CreateLoad(i32Type, totalTests, "tests.cur");
         llvm::Value* totalNext = builder.CreateAdd(
-            totalCur, llvm::ConstantInt::get(i32Type, 1), "tests.next");
+            totalCur,
+            llvm::ConstantInt::get(i32Type, 1),
+            "tests.next");
         builder.CreateStore(totalNext, totalTests);
         llvm::Value* testName = make_cstr(displayName, "fxtest.name");
         llvm::Value* testIndex = totalNext;
-        builder.CreateCall(setCurrentTestFunc,
-                           {testIndex, totalNext, testName});
+        builder
+            .CreateCall(setCurrentTestFunc, {testIndex, totalNext, testName});
 
         // Fresh, zero-initialized fixture instance per test.
         llvm::AllocaInst* fxAlloca =
@@ -275,9 +307,13 @@ void CodeGenerator::generateTestMain(
         {
             if(teardownFn)
                 builder.CreateCall(teardownFn, {fxAlloca});
-            builder.CreateCall(reportTestFunc,
-                               {testIndex, totalNext, passStatus, testName,
-                                llvm::ConstantInt::get(i32Type, 0)});
+            builder.CreateCall(
+                reportTestFunc,
+                {testIndex,
+                 totalNext,
+                 passStatus,
+                 testName,
+                 llvm::ConstantInt::get(i32Type, 0)});
             continue;
         }
 
@@ -286,8 +322,11 @@ void CodeGenerator::generateTestMain(
         {
             if(resultI32->getType()->isIntegerTy())
             {
-                resultI32 = builder.CreateIntCast(resultI32, i32Type, true,
-                                                  "fxtest.rc.cast");
+                resultI32 = builder.CreateIntCast(
+                    resultI32,
+                    i32Type,
+                    true,
+                    "fxtest.rc.cast");
             }
             else
             {
@@ -299,7 +338,9 @@ void CodeGenerator::generateTestMain(
             builder.CreateCall(teardownFn, {fxAlloca});
 
         llvm::Value* isFail = builder.CreateICmpNE(
-            resultI32, llvm::ConstantInt::get(i32Type, 0), "fxtestfail");
+            resultI32,
+            llvm::ConstantInt::get(i32Type, 0),
+            "fxtestfail");
         llvm::Value* failInc = builder.CreateZExt(isFail, i32Type, "fxfailinc");
         llvm::Value* cur =
             builder.CreateLoad(i32Type, failures, "fxfailures.cur");
@@ -315,15 +356,20 @@ void CodeGenerator::generateTestMain(
         builder.CreateCondBr(isFail, failBB, passBB);
 
         builder.SetInsertPoint(passBB);
-        builder.CreateCall(reportTestFunc,
-                           {testIndex, totalNext, passStatus, testName,
-                            llvm::ConstantInt::get(i32Type, 0)});
+        builder.CreateCall(
+            reportTestFunc,
+            {testIndex,
+             totalNext,
+             passStatus,
+             testName,
+             llvm::ConstantInt::get(i32Type, 0)});
         builder.CreateBr(contBB);
 
         failBB->insertInto(mainFn);
         builder.SetInsertPoint(failBB);
-        builder.CreateCall(reportTestFunc, {testIndex, totalNext, failStatus,
-                                            testName, resultI32});
+        builder.CreateCall(
+            reportTestFunc,
+            {testIndex, totalNext, failStatus, testName, resultI32});
         builder.CreateBr(contBB);
 
         contBB->insertInto(mainFn);
@@ -349,14 +395,18 @@ void CodeGenerator::generateBenchmarkMain(
     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
     llvm::FunctionType* mainType = llvm::FunctionType::get(i32Type, {}, false);
     llvm::Function* mainFn = llvm::Function::Create(
-        mainType, llvm::Function::ExternalLinkage, "main", module.get());
+        mainType,
+        llvm::Function::ExternalLinkage,
+        "main",
+        module.get());
 
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(context, "entry", mainFn);
     builder.SetInsertPoint(entry);
 
     llvm::FunctionCallee nowNsFunc = module->getOrInsertFunction(
-        "__mlang_std_time_now_ns", llvm::FunctionType::get(i64Type, {}, false));
+        "__mlang_std_time_now_ns",
+        llvm::FunctionType::get(i64Type, {}, false));
 
     llvm::AllocaInst* failures =
         builder.CreateAlloca(i32Type, nullptr, "bench_failures");
@@ -402,12 +452,20 @@ void CodeGenerator::generateBenchmarkMain(
     llvm::Value* warmupLabel = make_cstr("warmup(iters)", "bench.warmup.label");
     llvm::Value* warmupFmt =
         make_cstr("[BENCH] %-*s %12d\n", "bench.warmup.fmt");
-    builder.CreateCall(printfFunc, {warmupFmt, benchNameWidthVal, warmupLabel,
-                                    llvm::ConstantInt::get(
-                                        i32Type, benchmarkWarmupIterations)});
-    builder.CreateCall(printfFunc, {headerFmt, benchNameWidthVal,
-                                    make_cstr("name", "bench.hdr.name"),
-                                    nsTotalHdr, nsPerOpHdr, itersHdr});
+    builder.CreateCall(
+        printfFunc,
+        {warmupFmt,
+         benchNameWidthVal,
+         warmupLabel,
+         llvm::ConstantInt::get(i32Type, benchmarkWarmupIterations)});
+    builder.CreateCall(
+        printfFunc,
+        {headerFmt,
+         benchNameWidthVal,
+         make_cstr("name", "bench.hdr.name"),
+         nsTotalHdr,
+         nsPerOpHdr,
+         itersHdr});
 
     for(auto* testFn : tests)
     {
@@ -445,7 +503,8 @@ void CodeGenerator::generateBenchmarkMain(
             builder.SetInsertPoint(condBB);
             llvm::Value* iCur = builder.CreateLoad(i32Type, idx, "bench.i.cur");
             llvm::Value* cond = builder.CreateICmpSLT(
-                iCur, llvm::ConstantInt::get(i32Type, loopCount),
+                iCur,
+                llvm::ConstantInt::get(i32Type, loopCount),
                 "bench.loopcond");
             builder.CreateCondBr(cond, bodyBB, endBB);
 
@@ -456,19 +515,26 @@ void CodeGenerator::generateBenchmarkMain(
                 llvm::Value* rcI32 = rc;
                 if(rcI32->getType() != i32Type &&
                    rcI32->getType()->isIntegerTy())
-                    rcI32 = builder.CreateIntCast(rcI32, i32Type, true,
-                                                  "bench.rc.cast");
+                    rcI32 = builder.CreateIntCast(
+                        rcI32,
+                        i32Type,
+                        true,
+                        "bench.rc.cast");
                 llvm::Value* isFail = builder.CreateICmpNE(
-                    rcI32, llvm::ConstantInt::get(i32Type, 0), "bench.isfail");
+                    rcI32,
+                    llvm::ConstantInt::get(i32Type, 0),
+                    "bench.isfail");
                 llvm::Value* failInc =
                     builder.CreateZExt(isFail, i32Type, "bench.failinc");
                 llvm::Value* cur =
                     builder.CreateLoad(i32Type, localFails, "bench.fail.cur");
-                builder.CreateStore(builder.CreateAdd(cur, failInc),
-                                    localFails);
+                builder
+                    .CreateStore(builder.CreateAdd(cur, failInc), localFails);
             }
             llvm::Value* iNext = builder.CreateAdd(
-                iCur, llvm::ConstantInt::get(i32Type, 1), "bench.i.next");
+                iCur,
+                llvm::ConstantInt::get(i32Type, 1),
+                "bench.i.next");
             builder.CreateStore(iNext, idx);
             builder.CreateBr(condBB);
 
@@ -491,13 +557,19 @@ void CodeGenerator::generateBenchmarkMain(
 
         builder.CreateCall(
             printfFunc,
-            {lineFmt, benchNameWidthVal, testName, elapsedNs, nsPerOp,
+            {lineFmt,
+             benchNameWidthVal,
+             testName,
+             elapsedNs,
+             nsPerOp,
              llvm::ConstantInt::get(i32Type, benchmarkIterations)});
 
         llvm::Value* lf =
             builder.CreateLoad(i32Type, localFails, "bench.localfails");
         llvm::Value* hasFails = builder.CreateICmpNE(
-            lf, llvm::ConstantInt::get(i32Type, 0), "bench.hasfails");
+            lf,
+            llvm::ConstantInt::get(i32Type, 0),
+            "bench.hasfails");
         llvm::BasicBlock* okBB =
             llvm::BasicBlock::Create(context, "bench.ok", mainFn);
         llvm::BasicBlock* failBB =
@@ -507,8 +579,8 @@ void CodeGenerator::generateBenchmarkMain(
         builder.CreateCondBr(hasFails, failBB, okBB);
 
         builder.SetInsertPoint(failBB);
-        builder.CreateCall(printfFunc,
-                           {failFmt, benchNameWidthVal, testName, lf});
+        builder
+            .CreateCall(printfFunc, {failFmt, benchNameWidthVal, testName, lf});
         llvm::Value* totalFailCur =
             builder.CreateLoad(i32Type, failures, "bench.totalfail.cur");
         builder.CreateStore(builder.CreateAdd(totalFailCur, lf), failures);

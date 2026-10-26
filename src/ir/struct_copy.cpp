@@ -3,9 +3,9 @@
 
 using mlang::ir_detail::common::Helpers;
 
-llvm::Value*
-CodeGenerator::resetCopiedStructState(llvm::Value* value,
-                                      const std::string& structName)
+llvm::Value* CodeGenerator::resetCopiedStructState(
+    llvm::Value* value,
+    const std::string& structName)
 {
     if(!value)
         return nullptr;
@@ -35,37 +35,45 @@ CodeGenerator::resetCopiedStructState(llvm::Value* value,
         if(Helpers::isSynthesizedPropertyLockFieldName(fieldName))
         {
             adjusted = builder.CreateInsertValue(
-                adjusted, llvm::Constant::getNullValue(storageType),
-                {layout->storageIndex}, structName + "." + fieldName + ".copy");
+                adjusted,
+                llvm::Constant::getNullValue(storageType),
+                {layout->storageIndex},
+                structName + "." + fieldName + ".copy");
             continue;
         }
 
         std::string nestedStructName;
         if(auto* structRef = dynamic_cast<StructTypeRefNode*>(fieldType))
             nestedStructName = structRef->structName;
-        else if(auto* genStructRef =
-                    dynamic_cast<GenericStructTypeRefNode*>(fieldType))
+        else if(
+            auto* genStructRef =
+                dynamic_cast<GenericStructTypeRefNode*>(fieldType))
             nestedStructName = getOrCreateMonomorphizedStruct(
-                genStructRef->structName, genStructRef->typeArgs);
+                genStructRef->structName,
+                genStructRef->typeArgs);
 
         if(nestedStructName.empty() || !storageType->isStructTy())
             continue;
 
         llvm::Value* nestedValue = builder.CreateExtractValue(
-            adjusted, {layout->storageIndex},
+            adjusted,
+            {layout->storageIndex},
             structName + "." + fieldName + ".copy.extract");
         llvm::Value* nestedAdjusted =
             resetCopiedStructState(nestedValue, nestedStructName);
         adjusted = builder.CreateInsertValue(
-            adjusted, nestedAdjusted, {layout->storageIndex},
+            adjusted,
+            nestedAdjusted,
+            {layout->storageIndex},
             structName + "." + fieldName + ".copy.insert");
     }
 
     return adjusted;
 }
 
-llvm::Value* CodeGenerator::applyStructCopySemantics(llvm::Value* value,
-                                                     TypeNode* semanticType)
+llvm::Value* CodeGenerator::applyStructCopySemantics(
+    llvm::Value* value,
+    TypeNode* semanticType)
 {
     if(!value)
         return nullptr;
@@ -77,8 +85,10 @@ llvm::Value* CodeGenerator::applyStructCopySemantics(llvm::Value* value,
            dynamic_cast<GenericStructTypeRefNode*>(semanticType))
     {
         return resetCopiedStructState(
-            value, getOrCreateMonomorphizedStruct(genStructRef->structName,
-                                                  genStructRef->typeArgs));
+            value,
+            getOrCreateMonomorphizedStruct(
+                genStructRef->structName,
+                genStructRef->typeArgs));
     }
 
     return applyStructCopySemantics(value);
@@ -95,4 +105,3 @@ llvm::Value* CodeGenerator::applyStructCopySemantics(llvm::Value* value)
 
     return resetCopiedStructState(value, structType->getName().str());
 }
-

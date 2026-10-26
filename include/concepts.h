@@ -17,6 +17,7 @@ inline std::string constraintKey(const FunctionDefNode* function)
         key += ";" + bound.first + ":" + bound.second;
     return key;
 }
+
 inline std::string constraintSymbol(const FunctionDefNode* function)
 {
     const std::string key = constraintKey(function);
@@ -30,15 +31,20 @@ inline std::string constraintSymbol(const FunctionDefNode* function)
     }
     return "_constraint_" + std::to_string(hash);
 }
+
 using Terms = std::vector<std::set<std::string>>;
+
 inline bool implies(const Terms& left, const Terms& right)
 {
     for(const auto& term : left)
     {
         bool found = false;
         for(const auto& weaker : right)
-            if(std::includes(term.begin(), term.end(), weaker.begin(),
-                             weaker.end()))
+            if(std::includes(
+                   term.begin(),
+                   term.end(),
+                   weaker.begin(),
+                   weaker.end()))
             {
                 found = true;
                 break;
@@ -48,8 +54,10 @@ inline bool implies(const Terms& left, const Terms& right)
     }
     return true;
 }
-inline bool moreConstrained(const FunctionDefNode* left,
-                            const FunctionDefNode* right)
+
+inline bool moreConstrained(
+    const FunctionDefNode* left,
+    const FunctionDefNode* right)
 {
     if(!left || !right)
         return false;

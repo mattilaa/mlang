@@ -115,8 +115,9 @@ std::string displayTypeName(TypeNode* type)
 
 } // namespace
 
-std::string CodeGenerator::expressionTypeNameForLog(ExpressionNode* expr,
-                                                    int line)
+std::string CodeGenerator::expressionTypeNameForLog(
+    ExpressionNode* expr,
+    int line)
 {
     if(!expr)
         return "unknown";

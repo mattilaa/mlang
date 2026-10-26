@@ -4,7 +4,6 @@
 #include "ast.h"
 #include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Target/TargetMachine.h>
@@ -26,8 +25,11 @@ public:
         MoveOnly
     };
 
-    CodeGenerator(llvm::LLVMContext& ctx, llvm::IRBuilder<>& b,
-                  std::unique_ptr<llvm::Module>& m, bool debug = false)
+    CodeGenerator(
+        llvm::LLVMContext& ctx,
+        llvm::IRBuilder<>& b,
+        std::unique_ptr<llvm::Module>& m,
+        bool debug = false)
         : context(ctx), builder(b), module(m), hasError(false),
           stdioInitialized(false), stdlibInitialized(false),
           pthreadInitialized(false), debugEnabled(debug)
@@ -35,18 +37,22 @@ public:
     }
 
     void generateCode(ProgramNode* program);
+
     bool hadError() const
     {
         return hasError;
     }
+
     /// \brief Enable or disable test mode.
     ///
     /// When enabled, the compiler collects \c #[test] functions and generates
     /// a synthetic \c main() that invokes them (see generateTestMain()).
     ///
     /// \see \ref test_sample.mla — unit test example
-    /// \see \ref mlang_attributes.mla — \c #[test] combined with \c #[derive(Debug)]
-    /// \see \ref testing_mock_example.mla — mock-based testing with \c std::testing
+    /// \see \ref mlang_attributes.mla — \c #[test] combined with \c
+    /// #[derive(Debug)]
+    /// \see \ref testing_mock_example.mla — mock-based testing with \c
+    /// std::testing
     void setTestMode(bool enabled)
     {
         testMode = enabled;
@@ -99,6 +105,7 @@ public:
     {
         sourceFileName = file;
     }
+
     /// Emit DWARF debug info (mlang -g): source lines, functions, local
     /// variables and parameters with their types, for lldb and gdb.
     /// \p optimized marks the compile unit as optimized (-O1 and up).
@@ -155,7 +162,8 @@ public:
     ///   mlang test tests/test_sample.mla --filter "addition"
     /// \endcode
     ///
-    /// \see \ref test_sample.mla — unit test example (good for trying \c --filter)
+    /// \see \ref test_sample.mla — unit test example (good for trying \c
+    /// --filter)
     void setTestFilter(const std::string& filter)
     {
         testFilter = filter;
@@ -174,6 +182,7 @@ private:
     std::map<std::string, llvm::Value*> namedValues;
     std::map<std::string, llvm::Value*> globalNamedValues;
     std::map<std::string, llvm::Type*> structTypes;
+
     struct StructFieldLayout
     {
         unsigned storageIndex = 0;
@@ -186,6 +195,7 @@ private:
         Hidden,
         Protected
     };
+
     struct StructFieldAccessInfo
     {
         FieldEncapsulation encapsulation = FieldEncapsulation::Public;
@@ -196,6 +206,7 @@ private:
         bool isRecursiveProperty = false;
         bool isSynthesizedPropertyStorage = false;
     };
+
     // Store struct member info: struct name -> vector of (member name, member
     // type)
     std::map<std::string, std::vector<std::pair<std::string, TypeNode*>>>
@@ -223,6 +234,7 @@ private:
     // environment. Borrow checks keep captured owners alive for local values.
     std::map<std::string, ClosureNode*> runtimeClosureVariables;
     std::map<std::string, TypeNode*> runtimeClosureReturnTypes;
+
     struct RuntimeClosurePointerBorrowEffect
     {
         std::string pointerVariable;
@@ -231,6 +243,7 @@ private:
         bool isMutable = false;
         bool preserveIncoming = false;
     };
+
     std::map<ClosureNode*, std::vector<RuntimeClosurePointerBorrowEffect>>
         runtimeClosurePointerBorrowEffects;
     // Static signatures associated with callable values and typed callbacks.
@@ -263,17 +276,18 @@ private:
     // name used to transfer captures into its specialization.
     std::map<std::string, std::map<std::string, std::string>>
         closureCaptureAliases;
-    std::map<std::string, std::map<std::string, TypeNode*>>
-        closureCaptureTypes;
+    std::map<std::string, std::map<std::string, TypeNode*>> closureCaptureTypes;
     std::map<std::string, std::set<std::string>> closureConstCaptures;
     std::set<std::string> closureCaptureReferenceAliases;
     // Re-entrancy guard: tracks closures currently being inlined.
     std::set<std::string> activeInlineClosures;
+
     struct InlineClosureReturnState
     {
         llvm::AllocaInst* resultStorage = nullptr;
         llvm::BasicBlock* exitBlock = nullptr;
     };
+
     std::vector<InlineClosureReturnState*> inlineClosureReturnStates;
     std::map<std::string, std::string> pointerBorrowTarget;
     // Exclusive pointer reborrows retain their parent so accesses through an
@@ -282,14 +296,13 @@ private:
     // Borrow owners carried indirectly by aggregate-valued locals.
     std::map<std::string, std::set<std::string>> aggregateBorrowOrigins;
     // Precise borrowed places carried by each aggregate, grouped by root owner.
-    std::map<std::string,
-             std::map<std::string, std::set<std::string>>>
+    std::map<std::string, std::map<std::string, std::set<std::string>>>
         aggregateBorrowPlaces;
     // Per-field paths let pointer extraction preserve the field's own origin
     // when its containing aggregate carries borrows to several places.
-    std::map<std::string,
-             std::map<std::string,
-                      std::map<std::string, std::set<std::string>>>>
+    std::map<
+        std::string,
+        std::map<std::string, std::map<std::string, std::set<std::string>>>>
         aggregateBorrowFieldPlaces;
     // Precise source place for local references. Ownership/lifetime checks
     // still use the root owner; receiver checks can distinguish sibling fields.
@@ -335,18 +348,22 @@ private:
     bool debugEnabled;
     bool checkedNarrowCasts = false;
     bool suppressBorrowReadValidation = false;
-    bool testMode = false;             ///< Compile and run \c #[test] functions.
-    bool benchmarkMode = false;        ///< Generate benchmark harness instead of test harness.
-    int benchmarkIterations = 100000;  ///< Number of timed benchmark iterations.
-    int benchmarkWarmupIterations = 10000; ///< Number of warm-up iterations before timing.
-    bool requireMain = false;          ///< Normal executable builds require \c main.
-    bool includeTests = true;          ///< Whether to compile \c #[test] functions at all.
+    bool testMode = false; ///< Compile and run \c #[test] functions.
+    bool benchmarkMode =
+        false; ///< Generate benchmark harness instead of test harness.
+    int benchmarkIterations = 100000; ///< Number of timed benchmark iterations.
+    int benchmarkWarmupIterations =
+        10000;                ///< Number of warm-up iterations before timing.
+    bool requireMain = false; ///< Normal executable builds require \c main.
+    bool includeTests =
+        true; ///< Whether to compile \c #[test] functions at all.
     int unsafeDepth = 0;
     bool warnPlainColonIf = true;
     bool warnPlainColonWhile = true;
     bool warnResultUnwrap = true;
     bool warnImplicitZeroInit = true;
-    std::string sourceFileName;        ///< Source file path for default suite name derivation.
+    std::string
+        sourceFileName; ///< Source file path for default suite name derivation.
 
     // --- Debug info (mlang -g; src/ir/debug_info.cpp) ----------------------
     bool debugInfoEnabled = false;
@@ -359,13 +376,17 @@ private:
     /// first entry is its DISubprogram. Empty outside functions with debug
     /// info.
     std::vector<llvm::DIScope*> diScopes;
+
     /// Gives a function a DISubprogram for as long as it is generated, and
     /// gives the enclosing function its scopes and debug location back.
     class DebugFunctionScope
     {
     public:
-        DebugFunctionScope(CodeGenerator& gen, llvm::Function* function,
-                           ASTNode* node, const std::string& displayName);
+        DebugFunctionScope(
+            CodeGenerator& gen,
+            llvm::Function* function,
+            ASTNode* node,
+            const std::string& displayName);
         ~DebugFunctionScope();
         DebugFunctionScope(const DebugFunctionScope&) = delete;
         DebugFunctionScope& operator=(const DebugFunctionScope&) = delete;
@@ -375,6 +396,7 @@ private:
         std::vector<llvm::DIScope*> savedScopes;
         llvm::DebugLoc savedLocation;
     };
+
     void debugInfoBegin();
     void debugInfoFinish();
     llvm::DIFile* debugFile(const char* path);
@@ -384,13 +406,18 @@ private:
     void debugPopBlock();
     /// Describe a variable stored in \p storage (an alloca); \p argNo is the
     /// 1-based parameter number, 0 for a local.
-    void debugDeclareVariable(const std::string& name, llvm::Value* storage,
-                              TypeNode* type, ASTNode* at, unsigned argNo = 0);
+    void debugDeclareVariable(
+        const std::string& name,
+        llvm::Value* storage,
+        TypeNode* type,
+        ASTNode* at,
+        unsigned argNo = 0);
     llvm::DIType* debugType(TypeNode* type, llvm::Type* fallback);
     llvm::DIType* debugTypeFromLLVM(llvm::Type* type);
     llvm::DIType* debugStructType(const std::string& name);
     llvm::DIType* debugAggregateType(
-        const std::string& name, llvm::StructType* layout,
+        const std::string& name,
+        llvm::StructType* layout,
         const std::vector<std::pair<std::string, llvm::DIType*>>& fields);
     /// File of the statement being generated (from ASTNode::file), or null.
     /// Diagnostics name it instead of \c sourceFileName, so code from an
@@ -405,6 +432,7 @@ private:
     // Visibility tracking for functions
     // Maps function signature key -> (isPublic, sourceModule)
     std::map<std::string, std::pair<bool, std::string>> functionVisibility;
+
     struct FunctionOverloadInfo
     {
         FunctionDefNode* node;
@@ -415,8 +443,10 @@ private:
         bool isPublic;
         std::string sourceModule;
     };
+
     std::map<std::string, std::vector<FunctionOverloadInfo>> functionOverloads;
     std::vector<FunctionDefNode*> deferredModuleFunctionDefs;
+
     struct ConstexprValue
     {
         enum class Kind
@@ -435,6 +465,7 @@ private:
         std::string typeName;
         TypeNode::TypeKind typeKind = TypeNode::TYPE_I64;
     };
+
     using ConstexprEnv = std::map<std::string, ConstexprValue>;
     ConstexprEnv constexprValues;
     std::map<std::string, ConceptDefNode*> conceptDefinitions;
@@ -451,49 +482,73 @@ private:
     TypeNode* structuralProbeResult = nullptr;
     std::map<ExpressionNode*, TypeNode*> structuralSelectedTypes;
     bool isKnownRequirementType(TypeNode* type);
-    bool evalRequiresExpression(RequiresExpressionNode* expression,
-                                ConstexprValue& out, std::string* error,
-                                ConstexprEnv* env, int depth);
-    bool probeRequirement(ExpressionNode* expression,
-                          ParameterListNode* parameters, ConstexprEnv* env,
-                          TypeNode*& result, bool& noThrow,
-                          TypeNode* requiredType = nullptr);
+    bool evalRequiresExpression(
+        RequiresExpressionNode* expression,
+        ConstexprValue& out,
+        std::string* error,
+        ConstexprEnv* env,
+        int depth);
+    bool probeRequirement(
+        ExpressionNode* expression,
+        ParameterListNode* parameters,
+        ConstexprEnv* env,
+        TypeNode*& result,
+        bool& noThrow,
+        TypeNode* requiredType = nullptr);
     void buildConceptTable(ProgramNode* program);
-    ConceptDefNode* findConcept(const std::string& name,
-                                const std::string& scope = "");
-    bool evalConcept(ConceptApplicationNode* application, ConstexprValue& out,
-                     std::string* error, ConstexprEnv* env, int depth);
+    ConceptDefNode* findConcept(
+        const std::string& name,
+        const std::string& scope = "");
+    bool evalConcept(
+        ConceptApplicationNode* application,
+        ConstexprValue& out,
+        std::string* error,
+        ConstexprEnv* env,
+        int depth);
     bool satisfiesFunctionConstraints(
         FunctionDefNode* function,
         const std::map<std::string, TypeNode*>& bindings,
         std::string* error = nullptr,
         std::vector<std::set<std::string>>* terms = nullptr);
-    bool evalConstexprExpression(ExpressionNode* expr, ConstexprValue& out,
-                                 std::string* errorMessage = nullptr,
-                                 ConstexprEnv* env = nullptr,
-                                 int depth = 0);
-    bool evalConstexprCall(FunctionCallNode* call, ConstexprValue& out,
-                           std::string* errorMessage, ConstexprEnv* env,
-                           int depth);
-    bool evalConstexprStatementList(StatementListNode* body, ConstexprEnv& env,
-                                    ConstexprValue& returnValue,
-                                    bool& didReturn,
-                                    std::string* errorMessage, int depth);
-    bool coerceConstexprValueToKind(ConstexprValue& value,
-                                    TypeNode::TypeKind targetKind,
-                                    std::string* errorMessage,
-                                    const char* context);
+    bool evalConstexprExpression(
+        ExpressionNode* expr,
+        ConstexprValue& out,
+        std::string* errorMessage = nullptr,
+        ConstexprEnv* env = nullptr,
+        int depth = 0);
+    bool evalConstexprCall(
+        FunctionCallNode* call,
+        ConstexprValue& out,
+        std::string* errorMessage,
+        ConstexprEnv* env,
+        int depth);
+    bool evalConstexprStatementList(
+        StatementListNode* body,
+        ConstexprEnv& env,
+        ConstexprValue& returnValue,
+        bool& didReturn,
+        std::string* errorMessage,
+        int depth);
+    bool coerceConstexprValueToKind(
+        ConstexprValue& value,
+        TypeNode::TypeKind targetKind,
+        std::string* errorMessage,
+        const char* context);
     double constexprValueAsDouble(const ConstexprValue& value) const;
     int64_t constexprValueAsInt(const ConstexprValue& value) const;
     std::string canonicalConstexprTypeName(TypeNode* type) const;
-    bool constexprTypeNameFromIdentifier(const std::string& name,
-                                         std::string& out) const;
+    bool constexprTypeNameFromIdentifier(
+        const std::string& name,
+        std::string& out) const;
     bool bindConstexprGenericTypeParams(
-        TypeNode* pattern, TypeNode* concrete,
+        TypeNode* pattern,
+        TypeNode* concrete,
         const std::set<std::string>& typeParams,
         std::map<std::string, std::string>& bindings) const;
     llvm::Constant* buildLLVMConstantFromConstexprValue(
-        const ConstexprValue& value, TypeNode* targetType, int line);
+        const ConstexprValue& value,
+        TypeNode* targetType,
+        int line);
     // Maps struct name -> (isPublic, sourceModule)
     std::map<std::string, std::pair<bool, std::string>> structVisibility;
     // Trait-object lvalues tracked by variable name -> trait name.
@@ -502,6 +557,7 @@ private:
     std::string currentModule;
     std::string currentStructContext;
     ModuleLoader* moduleLoader = nullptr;
+
     struct TypeAliasInfo
     {
         std::vector<std::string> typeParams;
@@ -510,6 +566,7 @@ private:
         int line = 0;
         int col = 0;
     };
+
     std::map<std::string, TypeAliasInfo> typeAliases;
 
     // Stdio function support
@@ -573,6 +630,7 @@ private:
     // Loop control flow support (for break/continue)
     std::vector<llvm::BasicBlock*> loopBreakBlocks;
     std::vector<llvm::BasicBlock*> loopContinueBlocks;
+
     struct LoopExitBorrowState
     {
         std::map<std::string, int> variableScopeDepth;
@@ -580,21 +638,21 @@ private:
         std::map<std::string, std::string> pointerBorrowTarget;
         std::map<std::string, std::string> pointerBorrowParent;
         std::map<std::string, std::set<std::string>> aggregateBorrowOrigins;
-        std::map<std::string,
-                 std::map<std::string, std::set<std::string>>>
+        std::map<std::string, std::map<std::string, std::set<std::string>>>
             aggregateBorrowPlaces;
-        std::map<std::string,
-                 std::map<std::string,
-                          std::map<std::string, std::set<std::string>>>>
+        std::map<
+            std::string,
+            std::map<std::string, std::map<std::string, std::set<std::string>>>>
             aggregateBorrowFieldPlaces;
         std::map<std::string, std::string> pointerBorrowPlace;
         std::map<std::string, std::set<std::string>> activeBorrowers;
         std::map<std::string, std::string> activeMutBorrower;
-        std::map<std::string, std::set<std::string>>
-            runtimeClosureBorrowOwners;
+        std::map<std::string, std::set<std::string>> runtimeClosureBorrowOwners;
     };
+
     std::vector<std::vector<LoopExitBorrowState>> loopBreakBorrowStates;
     std::vector<std::vector<LoopExitBorrowState>> loopContinueBorrowStates;
+
     struct ScopeCleanup
     {
         enum class CallKind
@@ -609,7 +667,9 @@ private:
         llvm::AllocaInst* dropFlag = nullptr;
         CallKind callKind = CallKind::ByValueFunction;
     };
+
     std::vector<std::vector<ScopeCleanup>> cleanupScopes;
+
     struct PointerBorrowScopeEntry
     {
         std::string pointerVar;
@@ -621,12 +681,16 @@ private:
         std::string previousParent;
         std::string shadowAlias;
     };
+
     std::vector<std::vector<PointerBorrowScopeEntry>> pointerBorrowScopes;
-    template <typename T> struct ScopedBindingValue
+
+    template <typename T>
+    struct ScopedBindingValue
     {
         bool existed = false;
         T value{};
     };
+
     struct VariableScopeDepthEntry
     {
         std::string varName;
@@ -640,8 +704,7 @@ private:
         std::string previousStructVariableType;
         bool previousWasConstant = false;
         bool previousWasImmutableReference = false;
-        std::map<std::string, std::set<std::string>>
-            previousActiveBorrowers;
+        std::map<std::string, std::set<std::string>> previousActiveBorrowers;
         std::map<std::string, std::string> previousActiveMutBorrowers;
         std::set<std::string> previousMovedValues;
         ScopedBindingValue<TypeNode*> previousListElementType;
@@ -667,14 +730,14 @@ private:
         std::map<std::string, std::set<std::string>>
             previousAggregateBorrowPlaces;
         bool hadPreviousAggregateBorrowFieldPlaces = false;
-        std::map<std::string,
-                 std::map<std::string, std::set<std::string>>>
+        std::map<std::string, std::map<std::string, std::set<std::string>>>
             previousAggregateBorrowFieldPlaces;
         bool hadPreviousAggregateBorrowPlace = false;
         std::string previousAggregateBorrowPlace;
         bool hadPreviousFunctionItemTarget = false;
         std::set<std::string> previousFunctionItemTargets;
     };
+
     std::vector<std::vector<VariableScopeDepthEntry>> variableScopeDepthScopes;
 
     // === GENERICS SUPPORT ===
@@ -688,7 +751,8 @@ private:
     std::map<std::string, std::string> mangledToGenericName;
     // Map mangled name to concrete type arguments used for monomorphization.
     std::map<std::string, std::vector<TypeNode*>> monomorphizedTypeArgs;
-    // Active generic type bindings while generating a monomorphized method body.
+    // Active generic type bindings while generating a monomorphized method
+    // body.
     std::map<std::string, TypeNode*> activeTypeParamBindings;
     // Runtime generic function templates with a trailing heterogeneous pack.
     std::map<std::string, std::vector<FunctionDefNode*>>
@@ -697,26 +761,31 @@ private:
     std::map<std::string, TypeNode*> activeFunctionTypeBindings;
 
     // Generics helper methods
-    TypeNode* substituteTypeParams(TypeNode* type,
-                                   const std::vector<std::string>& typeParams,
-                                   const std::vector<TypeNode*>& typeArgs);
-    void monomorphizeStruct(const std::string& genericName,
-                            const std::vector<TypeNode*>& typeArgs,
-                            const std::string& mangledName);
-    void monomorphizeImplBlock(ImplBlockNode* impl,
-                               const std::vector<std::string>& typeParams,
-                               const std::vector<TypeNode*>& typeArgs,
-                               const std::string& mangledStructName);
+    TypeNode* substituteTypeParams(
+        TypeNode* type,
+        const std::vector<std::string>& typeParams,
+        const std::vector<TypeNode*>& typeArgs);
+    void monomorphizeStruct(
+        const std::string& genericName,
+        const std::vector<TypeNode*>& typeArgs,
+        const std::string& mangledName);
+    void monomorphizeImplBlock(
+        ImplBlockNode* impl,
+        const std::vector<std::string>& typeParams,
+        const std::vector<TypeNode*>& typeArgs,
+        const std::string& mangledStructName);
     void instantiateGenericFunctionOverloads(
-        FunctionCallNode* call, const std::string& lookupName,
+        FunctionCallNode* call,
+        const std::string& lookupName,
         std::vector<FunctionOverloadInfo>& overloads);
     bool inferGenericFunctionTypeBindings(
         FunctionDefNode* functionTemplate,
         const std::vector<ExpressionNode*>& arguments,
         std::map<std::string, TypeNode*>& bindings);
-    std::string
-    getOrCreateMonomorphizedStruct(const std::string& genericName,
-                                   const std::vector<TypeNode*>& typeArgs);
+    std::string getOrCreateMonomorphizedStruct(
+        const std::string& genericName,
+        const std::vector<TypeNode*>& typeArgs);
+
     /// \brief Generate a synthetic \c main() that runs every collected
     ///        \c #[test] function and reports results.
     ///
@@ -732,17 +801,19 @@ private:
     /// \see \ref testing_mock_example.mla — mock-based testing
     /// \brief A test method declared inside a \c #[fixture] \c impl block.
     ///
-    /// Each fixture-test runs against a fresh, stack-allocated, zero-initialized
-    /// instance of \c implBlock->structName. The method receives a pointer to
-    /// that instance via \c self, mirroring GoogleTest's \c TEST_F semantics.
+    /// Each fixture-test runs against a fresh, stack-allocated,
+    /// zero-initialized instance of \c implBlock->structName. The method
+    /// receives a pointer to that instance via \c self, mirroring GoogleTest's
+    /// \c TEST_F semantics.
     struct FixtureTestEntry
     {
         ImplBlockNode* implBlock;
         StructMethodNode* method;
     };
 
-    void generateTestMain(const std::vector<FunctionDefNode*>& tests,
-                          const std::vector<FixtureTestEntry>& fixtureTests);
+    void generateTestMain(
+        const std::vector<FunctionDefNode*>& tests,
+        const std::vector<FixtureTestEntry>& fixtureTests);
 
     /// \brief Generate a synthetic \c main() that benchmarks every collected
     ///        \c #[test] function.
@@ -756,15 +827,18 @@ private:
     void generateBenchmarkMain(const std::vector<FunctionDefNode*>& tests);
     void buildTypeAliasTable(ProgramNode* program);
     void resolveTypeAliasesInProgram(ProgramNode* program);
-    TypeNode* resolveTypeAliasNode(TypeNode* typeNode,
-                                   const std::set<std::string>& typeParams,
-                                   std::vector<std::string>& aliasStack);
+    TypeNode* resolveTypeAliasNode(
+        TypeNode* typeNode,
+        const std::set<std::string>& typeParams,
+        std::vector<std::string>& aliasStack);
     bool validateTypeArgumentTraitBounds(
         const std::vector<std::string>& typeParams,
         const std::map<std::string, std::string>& traitBounds,
         const std::vector<TypeNode*>& typeArgs,
-        const std::set<std::string>& scopeTypeParams, int line,
-        const std::string& ownerKind, const std::string& ownerName,
+        const std::set<std::string>& scopeTypeParams,
+        int line,
+        const std::string& ownerKind,
+        const std::string& ownerName,
         bool reportFailures = true);
     TypeNode* cloneTypeNode(TypeNode* typeNode);
 
@@ -778,42 +852,53 @@ private:
     bool isMoveOnlyVariable(const std::string& name);
     bool isVariableMoved(const std::string& name) const;
     bool isVariableCurrentlyVisible(const std::string& name) const;
-    bool validateVariableAccessible(const std::string& name, int line,
-                                    int col = 0);
+    bool validateVariableAccessible(
+        const std::string& name,
+        int line,
+        int col = 0);
     void clearMovedVariable(const std::string& name);
     void clearPointerBorrow(const std::string& pointerVar);
     void expireUnusedLocalBorrows(
-        const std::vector<StatementNode*>& statements, size_t statementIndex,
+        const std::vector<StatementNode*>& statements,
+        size_t statementIndex,
         int scopeDepth);
-    void registerPointerBorrow(const std::string& pointerVar,
-                               ExpressionNode* expr, int line,
-                               bool isMutable = false);
+    void registerPointerBorrow(
+        const std::string& pointerVar,
+        ExpressionNode* expr,
+        int line,
+        bool isMutable = false);
     void registerPointerBorrowAlternatives(
         const std::string& pointerVar,
-        const std::vector<ExpressionNode*>& alternatives, int line,
-        bool isMutable = false, bool preserveIncoming = false);
+        const std::vector<ExpressionNode*>& alternatives,
+        int line,
+        bool isMutable = false,
+        bool preserveIncoming = false);
     bool isMutBorrower(const std::string& ptrVar) const;
     int currentScopeDepth() const;
     void recordVariableScopeDepth(const std::string& varName);
     void recordScopedPointerVariable(const std::string& pointerVar);
-    void applyRuntimeClosurePointerBorrowEffects(const std::string& name,
-                                                 ClosureNode* closure,
-                                                 int line);
+    void applyRuntimeClosurePointerBorrowEffects(
+        const std::string& name,
+        ClosureNode* closure,
+        int line);
     void analyzeRuntimeClosurePointerBorrowEffects(
         ClosureNode* closure,
         const std::vector<std::pair<std::string, TypeNode*>>& captures);
     std::string resolveBorrowOwnerFromLValue(ExpressionNode* expr) const;
     std::string resolveBorrowPlaceFromLValue(ExpressionNode* expr) const;
     bool validateBorrowRead(ExpressionNode* expr, int line);
-    bool validateBorrowWriteThroughPointer(ExpressionNode* pointerExpr,
-                                           int line);
-    bool borrowPlacesOverlap(const std::string& left,
-                             const std::string& right) const;
-    bool borrowerPlaceOverlaps(const std::string& borrower,
-                               const std::string& owner,
-                               const std::string& place) const;
-    bool isPointerBorrowAncestor(const std::string& ancestor,
-                                 const std::string& pointer) const;
+    bool validateBorrowWriteThroughPointer(
+        ExpressionNode* pointerExpr,
+        int line);
+    bool borrowPlacesOverlap(const std::string& left, const std::string& right)
+        const;
+    bool borrowerPlaceOverlaps(
+        const std::string& borrower,
+        const std::string& owner,
+        const std::string& place) const;
+    bool isPointerBorrowAncestor(
+        const std::string& ancestor,
+        const std::string& pointer) const;
     std::string getBorrowedOwnerForPointerExpression(
         ExpressionNode* expr) const;
     bool validatePointerDereference(ExpressionNode* pointerExpr, int line);
@@ -825,19 +910,26 @@ private:
     std::optional<int64_t> fixedArrayInitializerSize(ExpressionNode* expr);
     std::optional<int64_t> fixedArrayExpressionKnownLength(
         ExpressionNode* expr);
-    bool validateFixedArrayInitializer(TypeNode* declaredType,
-                                       ExpressionNode* expr, int line);
-    bool convertValueToRuntimeBool(llvm::Value* value, int line,
-                                   const std::string& context,
-                                   llvm::Value*& outBool);
-    bool validateNoEscapingBorrow(ExpressionNode* expr, int line,
-                                  const std::string& action);
+    bool validateFixedArrayInitializer(
+        TypeNode* declaredType,
+        ExpressionNode* expr,
+        int line);
+    bool convertValueToRuntimeBool(
+        llvm::Value* value,
+        int line,
+        const std::string& context,
+        llvm::Value*& outBool);
+    bool validateNoEscapingBorrow(
+        ExpressionNode* expr,
+        int line,
+        const std::string& action);
     bool expressionCarriesLocalBorrow(ExpressionNode* expr) const;
     bool expressionIsPointerParameterBorrow(ExpressionNode* expr) const;
     bool expressionIsKnownSharedBorrow(ExpressionNode* expr) const;
-    void trackAggregateBorrowOrigins(const std::string& variable,
-                                     ExpressionNode* expression,
-                                     const std::string& destinationPath = "");
+    void trackAggregateBorrowOrigins(
+        const std::string& variable,
+        ExpressionNode* expression,
+        const std::string& destinationPath = "");
     bool mergeAggregateBorrowStateAfterUpdate(
         const std::string& variable,
         const std::set<std::string>& previousOrigins,
@@ -846,58 +938,79 @@ private:
             previousExclusivePlaces,
         const std::vector<std::string>& previousExclusiveKeys,
         const std::string& previousExclusiveOwner,
-        const std::string& previousExclusivePlace, int line);
+        const std::string& previousExclusivePlace,
+        int line);
     void clearAggregateBorrowOrigins(const std::string& variable);
-    void consumeMoveFromExpression(ExpressionNode* expr, int line,
-                                   const std::string& context);
+    void consumeMoveFromExpression(
+        ExpressionNode* expr,
+        int line,
+        const std::string& context);
     llvm::StructType* getStructType(const std::string& name);
-    const StructFieldLayout* getStructFieldLayout(const std::string& structName,
-                                                  int fieldIndex) const;
-    const StructFieldAccessInfo*
-    getStructFieldAccessInfo(const std::string& structName,
-                             int fieldIndex) const;
-    bool isStructSameOrDerivedFrom(const std::string& candidateStruct,
-                                   const std::string& baseStruct) const;
-    bool canAccessStructField(const std::string& accessedThroughStruct,
-                              int fieldIndex, int line,
-                              const std::string& fieldName) const;
-    llvm::Value* loadStructFieldValue(const std::string& structTypeName,
-                                     llvm::Value* structPtr, int fieldIndex,
-                                     TypeNode* fieldType,
-                                      const std::string& fieldName);
-    void storeStructFieldValue(const std::string& structTypeName,
-                               llvm::Value* structPtr, int fieldIndex,
-                               TypeNode* fieldType, llvm::Value* value,
-                               const std::string& fieldName, int line);
+    const StructFieldLayout* getStructFieldLayout(
+        const std::string& structName,
+        int fieldIndex) const;
+    const StructFieldAccessInfo* getStructFieldAccessInfo(
+        const std::string& structName,
+        int fieldIndex) const;
+    bool isStructSameOrDerivedFrom(
+        const std::string& candidateStruct,
+        const std::string& baseStruct) const;
+    bool canAccessStructField(
+        const std::string& accessedThroughStruct,
+        int fieldIndex,
+        int line,
+        const std::string& fieldName) const;
+    llvm::Value* loadStructFieldValue(
+        const std::string& structTypeName,
+        llvm::Value* structPtr,
+        int fieldIndex,
+        TypeNode* fieldType,
+        const std::string& fieldName);
+    void storeStructFieldValue(
+        const std::string& structTypeName,
+        llvm::Value* structPtr,
+        int fieldIndex,
+        TypeNode* fieldType,
+        llvm::Value* value,
+        const std::string& fieldName,
+        int line);
     std::string typeMangle(TypeNode* typeNode) const;
     std::string functionSignatureKey(FunctionDefNode* node) const;
     std::string functionSymbolName(FunctionDefNode* node) const;
-    void registerFunctionOverload(FunctionDefNode* node,
-                                  llvm::Function* function);
+    void registerFunctionOverload(
+        FunctionDefNode* node,
+        llvm::Function* function);
     bool isOverloadVisible(const FunctionOverloadInfo& info) const;
-    bool canConvertType(llvm::Type* actualType, llvm::Type* expectedType,
-                        int& cost) const;
+    bool canConvertType(
+        llvm::Type* actualType,
+        llvm::Type* expectedType,
+        int& cost) const;
 
     // Stdio initialization
     void initializeStdioFunctions();
     void initializeStdlibFunctions();
     void initializeFormatFunctions();
     void initializePthreadFunctions();
-    llvm::AllocaInst* createEntryBlockAlloca(llvm::Function* function,
-                                             llvm::Type* type,
-                                             const std::string& name);
-    std::string convertFormatString(const std::string& mlaFormat,
-                                    const std::vector<ExpressionNode*>& args,
-                                    const std::vector<std::pair<std::string, ExpressionNode*>>& namedArgs,
-                                    std::vector<llvm::Value*>& argValues,
-                                    int line);
-    std::string convertFormatString(const std::string& mlaFormat,
-                                    const std::vector<ExpressionNode*>& args,
-                                    std::vector<llvm::Value*>& argValues,
-                                    int line);
-    llvm::Value* buildAlignedString(llvm::Value* value,
-                                    llvm::Value* widthValue, char align,
-                                    int line);
+    llvm::AllocaInst* createEntryBlockAlloca(
+        llvm::Function* function,
+        llvm::Type* type,
+        const std::string& name);
+    std::string convertFormatString(
+        const std::string& mlaFormat,
+        const std::vector<ExpressionNode*>& args,
+        const std::vector<std::pair<std::string, ExpressionNode*>>& namedArgs,
+        std::vector<llvm::Value*>& argValues,
+        int line);
+    std::string convertFormatString(
+        const std::string& mlaFormat,
+        const std::vector<ExpressionNode*>& args,
+        std::vector<llvm::Value*>& argValues,
+        int line);
+    llvm::Value* buildAlignedString(
+        llvm::Value* value,
+        llvm::Value* widthValue,
+        char align,
+        int line);
 
     // Code generation for different node types
     llvm::Function* generateFunctionDeclaration(FunctionDefNode* node);
@@ -913,24 +1026,36 @@ private:
         ClosureNode* closure,
         std::vector<std::pair<std::string, TypeNode*>>& captures,
         TypeNode*& returnType);
-    ClosureNode* contextualizeClosure(ClosureNode* closure,
-                                      FunctionTypeNode* expectedType);
-    bool isClosureReturnTypeCompatible(TypeNode* inferredType,
-                                       TypeNode* expectedType);
-    bool tryGenerateRuntimeClosureValue(const std::string& name,
-                                        ClosureNode* closure, int line,
-                                        FunctionTypeNode* expectedType = nullptr);
-    bool tryCopyRuntimeClosureValue(const std::string& name,
-                                    const std::string& sourceName, int line);
-    void generateCexprDeclaration(CexprDeclNode* node,
-                                  bool emitRuntimeBinding = true);
+    ClosureNode* contextualizeClosure(
+        ClosureNode* closure,
+        FunctionTypeNode* expectedType);
+    bool isClosureReturnTypeCompatible(
+        TypeNode* inferredType,
+        TypeNode* expectedType);
+    bool tryGenerateRuntimeClosureValue(
+        const std::string& name,
+        ClosureNode* closure,
+        int line,
+        FunctionTypeNode* expectedType = nullptr);
+    bool tryCopyRuntimeClosureValue(
+        const std::string& name,
+        const std::string& sourceName,
+        int line);
+    void generateCexprDeclaration(
+        CexprDeclNode* node,
+        bool emitRuntimeBinding = true);
     void generateVarDeclaration(VarDeclNode* node);
-    bool validateBooleanBranchPrediction(BranchPrediction prediction,
-                                         TypeNode* declaredType,
-                                         ExpressionNode* initializer,
-                                         int line, int col);
+    bool validateBooleanBranchPrediction(
+        BranchPrediction prediction,
+        TypeNode* declaredType,
+        ExpressionNode* initializer,
+        int line,
+        int col);
     llvm::Value* applyBooleanBranchPrediction(
-        llvm::Value* value, BranchPrediction prediction, int line, int col);
+        llvm::Value* value,
+        BranchPrediction prediction,
+        int line,
+        int col);
     void generateAssignment(AssignmentNode* node);
     void generateFieldAssignment(FieldAssignmentNode* node);
     void generateDerefAssignment(DerefAssignmentNode* node);
@@ -939,7 +1064,8 @@ private:
     void generateForStatement(ForNode* node);
     void generateWhileStatement(WhileNode* node);
     void mergeLoopExitBorrowStates(
-        const std::vector<LoopExitBorrowState>& states, int loopScopeDepth,
+        const std::vector<LoopExitBorrowState>& states,
+        int loopScopeDepth,
         const std::set<std::string>& loopVariables = {});
     void generatePrintStatement(PrintNode* node);
     llvm::Value* generateFormatExpression(FormatNode* node);
@@ -955,20 +1081,25 @@ private:
     void releaseRuntimeClosureBorrows(const std::string& closureName);
     void emitAllActiveCleanups();
     void emitActiveCleanupsDeeperThan(int scopeDepth);
-    void emitScopeCleanup(const ScopeCleanup& cleanup,
-                          const std::string& suffix);
+    void emitScopeCleanup(
+        const ScopeCleanup& cleanup,
+        const std::string& suffix);
     llvm::AllocaInst* findActiveDropFlag(const std::string& varName) const;
     void setActiveDropFlag(const std::string& varName, bool initialized);
-    ScopeCleanup resolveDropFunctionForStruct(const std::string& structTypeName);
-    void registerStructCleanupIfNeeded(const std::string& varName,
-                                       const std::string& structTypeName);
+    ScopeCleanup resolveDropFunctionForStruct(
+        const std::string& structTypeName);
+    void registerStructCleanupIfNeeded(
+        const std::string& varName,
+        const std::string& structTypeName);
 
-    llvm::Value* generateExpression(ExpressionNode* node,
-                                    TypeNode* expectedType = nullptr);
+    llvm::Value* generateExpression(
+        ExpressionNode* node,
+        TypeNode* expectedType = nullptr);
     llvm::Value* generateMatchExpression(MatchExpressionNode* node);
     llvm::Value* generateShortCircuitLogicalOp(BinaryOpNode* node);
-    llvm::Value* generateTernaryExpression(TernaryNode* node,
-                                           TypeNode* expectedType = nullptr);
+    llvm::Value* generateTernaryExpression(
+        TernaryNode* node,
+        TypeNode* expectedType = nullptr);
     llvm::Value* generateTryExpression(TryExpressionNode* node);
     llvm::Value* generateSizeofExpression(SizeofExpressionNode* node);
     llvm::Value* generateCexprExpression(CexprExpressionNode* node);
@@ -997,8 +1128,9 @@ private:
     llvm::Value* generateFieldAccess(FieldAccessNode* node);
     llvm::Value* generateFunctionCall(FunctionCallNode* node);
     llvm::Value* generateCallableInvocation(CallableInvokeNode* node);
-    llvm::Value* generateVariadicGenericCall(FunctionCallNode* node,
-                                              FunctionDefNode* functionTemplate);
+    llvm::Value* generateVariadicGenericCall(
+        FunctionCallNode* node,
+        FunctionDefNode* functionTemplate);
     llvm::Value* generateThreadSpawn(FunctionCallNode* node);
     llvm::Function* generateClosureFn(
         ClosureNode* node,
@@ -1007,11 +1139,14 @@ private:
         const std::set<std::string>* constCaptures = nullptr,
         TypeNode* returnType = nullptr);
     llvm::Value* generateThreadJoin(FunctionCallNode* node);
-    llvm::Value* buildHandleValue(const std::string& handleTypeName,
-                                  llvm::Value* rawHandle, int line);
-    llvm::Value* extractHandleValue(ExpressionNode* expr,
-                                    const std::string& expectedHandleType,
-                                    int line);
+    llvm::Value* buildHandleValue(
+        const std::string& handleTypeName,
+        llvm::Value* rawHandle,
+        int line);
+    llvm::Value* extractHandleValue(
+        ExpressionNode* expr,
+        const std::string& expectedHandleType,
+        int line);
     llvm::Value* generateMutexCreate(FunctionCallNode* node);
     llvm::Value* generateMutexLock(FunctionCallNode* node);
     llvm::Value* generateMutexUnlock(FunctionCallNode* node);
@@ -1022,78 +1157,106 @@ private:
     llvm::Value* generateAtomicI64Add(FunctionCallNode* node);
     llvm::Value* generateAtomicI64Free(FunctionCallNode* node);
     llvm::Value* generateMethodCall(MethodCallNode* node);
-    llvm::Value* generateMultiarrayGet(MethodCallNode* node,
-                                       MultiArrayTypeNode* multiarrayType);
-    llvm::Value* generateMultiarrayMath(MethodCallNode* node,
-                                        MultiArrayTypeNode* multiarrayType);
+    llvm::Value* generateMultiarrayGet(
+        MethodCallNode* node,
+        MultiArrayTypeNode* multiarrayType);
+    llvm::Value* generateMultiarrayMath(
+        MethodCallNode* node,
+        MultiArrayTypeNode* multiarrayType);
     llvm::Value* generateCastExpression(CastExpressionNode* node);
-    void emitNarrowCastRuntimeCheck(CastExpressionNode* node,
-                                    llvm::Value* valid);
+    void emitNarrowCastRuntimeCheck(
+        CastExpressionNode* node,
+        llvm::Value* valid);
     // A call argument, typed by the declared parameter where that matters
     // (see the definition), and the parameter type the candidate overloads
     // agree on for one argument.
-    llvm::Value* generateArgumentValue(ExpressionNode* arg,
-                                       TypeNode* declaredType);
-    llvm::Value* generateFunctionItemValue(IdentifierNode* identifier,
-                                           FunctionTypeNode* callableType);
+    llvm::Value* generateArgumentValue(
+        ExpressionNode* arg,
+        TypeNode* declaredType);
+    llvm::Value* generateFunctionItemValue(
+        IdentifierNode* identifier,
+        FunctionTypeNode* callableType);
     std::string resolveFunctionItemTarget(
-        IdentifierNode* identifier, FunctionTypeNode* callableType);
+        IdentifierNode* identifier,
+        FunctionTypeNode* callableType);
     std::set<std::string> getFunctionItemTargetsForName(
         const std::string& name) const;
-    bool functionMayWritePointerParameter(FunctionDefNode* function,
-                                          size_t parameterIndex) const;
+    bool functionMayWritePointerParameter(
+        FunctionDefNode* function,
+        size_t parameterIndex) const;
     bool functionCanReadBorrowingAggregateParameter(
-        FunctionDefNode* function, size_t parameterIndex);
+        FunctionDefNode* function,
+        size_t parameterIndex);
     FunctionTypeNode* inferFunctionItemType(IdentifierNode* identifier);
     TypeNode* overloadParameterType(
-        const std::vector<FunctionOverloadInfo>& overloads, size_t argCount,
+        const std::vector<FunctionOverloadInfo>& overloads,
+        size_t argCount,
         size_t index) const;
-    llvm::Value* generateListLiteral(ListLiteralNode* node,
-                                    llvm::Type* declaredElemType = nullptr,
-                                    TypeNode* declaredElemTypeNode = nullptr);
-    llvm::Value* generateArrayFill(ArrayFillNode* node,
-                                   llvm::Type* declaredElemType = nullptr);
-    llvm::Value* generateMapLiteral(MapLiteralNode* node,
-                                    llvm::Type* declaredKeyType = nullptr,
-                                    llvm::Type* declaredValueType = nullptr);
+    llvm::Value* generateListLiteral(
+        ListLiteralNode* node,
+        llvm::Type* declaredElemType = nullptr,
+        TypeNode* declaredElemTypeNode = nullptr);
+    llvm::Value* generateArrayFill(
+        ArrayFillNode* node,
+        llvm::Type* declaredElemType = nullptr);
+    llvm::Value* generateMapLiteral(
+        MapLiteralNode* node,
+        llvm::Type* declaredKeyType = nullptr,
+        llvm::Type* declaredValueType = nullptr);
     llvm::Value* generateIndexExpression(IndexExpressionNode* node);
-    llvm::Value* generateListIndexPointer(IndexExpressionNode* node,
-                                          TypeNode*& elementType);
+    llvm::Value* generateListIndexPointer(
+        IndexExpressionNode* node,
+        TypeNode*& elementType);
     llvm::Value* generateTupleLiteral(TupleLiteralNode* node);
     llvm::Value* generateTupleAccess(TupleAccessNode* node);
     llvm::Value* generateStructLiteral(StructLiteralNode* node);
     llvm::Value* buildDebugString(ExpressionNode* expr, bool pretty, int line);
-    llvm::Value* buildStructDebugString(llvm::Value* structVal,
-                                        const std::string& structName,
-                                        bool pretty, int line);
-    llvm::Value* buildStructJsonString(llvm::Value* structVal,
-                                       const std::string& structName,
-                                       bool pretty, int line,
-                                       int indentLevel = 0);
-    llvm::Value* buildStructSerdeJsonString(llvm::Value* structVal,
-                                            const std::string& structName,
-                                            int line,
-                                            int indentLevel = 0);
+    llvm::Value* buildStructDebugString(
+        llvm::Value* structVal,
+        const std::string& structName,
+        bool pretty,
+        int line);
+    llvm::Value* buildStructJsonString(
+        llvm::Value* structVal,
+        const std::string& structName,
+        bool pretty,
+        int line,
+        int indentLevel = 0);
+    llvm::Value* buildStructSerdeJsonString(
+        llvm::Value* structVal,
+        const std::string& structName,
+        int line,
+        int indentLevel = 0);
     bool isStringExpression(ExpressionNode* expr) const;
     std::string getStructTypeName(ExpressionNode* expr) const;
     std::string getEnumTypeName(ExpressionNode* expr, int line);
     std::string resolveVisibleEnumName(const std::string& enumName) const;
     std::string resolveVisibleStructName(const std::string& structName) const;
-    bool structHasFieldNamed(const std::string& structTypeName,
-                             const std::string& fieldName) const;
+    bool structHasFieldNamed(
+        const std::string& structTypeName,
+        const std::string& fieldName) const;
     std::string expressionTypeNameForLog(ExpressionNode* expr, int line);
-    llvm::Value* buildEnumString(llvm::Value* enumVal,
-                                 const std::string& enumName, int line);
+    llvm::Value* buildEnumString(
+        llvm::Value* enumVal,
+        const std::string& enumName,
+        int line);
     llvm::Value* getLValuePointer(ExpressionNode* expr, int line);
     TypeNode* getLValueType(ExpressionNode* expr, int line);
     TypeNode* getPointerElementType(ExpressionNode* expr, int line);
     llvm::Value* applyStructCopySemantics(llvm::Value* value);
-    llvm::Value* applyStructCopySemantics(llvm::Value* value,
-                                          TypeNode* semanticType);
+    llvm::Value* applyStructCopySemantics(
+        llvm::Value* value,
+        TypeNode* semanticType);
     TypeNode* inferExpressionTypeNode(ExpressionNode* expr, int line);
-    void appendFormatValue(ExpressionNode* expr, llvm::Value* value, bool debug,
-                           bool pretty, bool json, std::string& cFormat,
-                           std::vector<llvm::Value*>& argValues, int line);
+    void appendFormatValue(
+        ExpressionNode* expr,
+        llvm::Value* value,
+        bool debug,
+        bool pretty,
+        bool json,
+        std::string& cFormat,
+        std::vector<llvm::Value*>& argValues,
+        int line);
 
     void generateEnumDefinition(EnumDefNode* node);
     void ensureResultBuiltin(ProgramNode* program);
@@ -1101,58 +1264,78 @@ private:
 
     // Struct method helpers
     void generateStructMethods(StructDefNode* node);
-    llvm::Function* generateMethodDeclaration(const std::string& structName,
-                                              StructMethodNode* method);
-    llvm::Function* generateMethodDefinition(const std::string& structName,
-                                             StructMethodNode* method);
+    llvm::Function* generateMethodDeclaration(
+        const std::string& structName,
+        StructMethodNode* method);
+    llvm::Function* generateMethodDefinition(
+        const std::string& structName,
+        StructMethodNode* method);
     llvm::Type* getTraitObjectType(const std::string& traitName);
     llvm::Type* getTraitVTableType(const std::string& traitName);
-    llvm::GlobalVariable* ensureTraitVTable(const std::string& concreteTypeName,
-                                            const std::string& traitName);
-    llvm::Value* buildTraitObjectValue(ExpressionNode* expr,
-                                       const std::string& traitName, int line,
-                                       bool heapCopy = false);
-    llvm::Value* coerceTraitObjectValue(llvm::Value* value,
-                                        llvm::Type* expectedType, int line);
-    bool generateMutexPropertyMethodBody(const std::string& structName,
-                                         StructMethodNode* method,
-                                         llvm::Function* function);
-    bool generateAtomicPropertyMethodBody(const std::string& structName,
-                                          StructMethodNode* method,
-                                          llvm::Function* function);
-    bool generateJsonSerializerMethodBody(const std::string& structName,
-                                          StructMethodNode* method,
-                                          llvm::Function* function);
-    bool generateJsonTextDeserializerMethodBody(const std::string& structName,
-                                                StructMethodNode* method,
-                                                llvm::Function* function);
-    bool generateJsonValueDeserializerMethodBody(const std::string& structName,
-                                                 StructMethodNode* method,
-                                                 llvm::Function* function);
+    llvm::GlobalVariable* ensureTraitVTable(
+        const std::string& concreteTypeName,
+        const std::string& traitName);
+    llvm::Value* buildTraitObjectValue(
+        ExpressionNode* expr,
+        const std::string& traitName,
+        int line,
+        bool heapCopy = false);
+    llvm::Value* coerceTraitObjectValue(
+        llvm::Value* value,
+        llvm::Type* expectedType,
+        int line);
+    bool generateMutexPropertyMethodBody(
+        const std::string& structName,
+        StructMethodNode* method,
+        llvm::Function* function);
+    bool generateAtomicPropertyMethodBody(
+        const std::string& structName,
+        StructMethodNode* method,
+        llvm::Function* function);
+    bool generateJsonSerializerMethodBody(
+        const std::string& structName,
+        StructMethodNode* method,
+        llvm::Function* function);
+    bool generateJsonTextDeserializerMethodBody(
+        const std::string& structName,
+        StructMethodNode* method,
+        llvm::Function* function);
+    bool generateJsonValueDeserializerMethodBody(
+        const std::string& structName,
+        StructMethodNode* method,
+        llvm::Function* function);
     llvm::Value* getJsonLastErrorString();
-    llvm::Value* buildJsonResultValue(llvm::Function* function, bool isOk,
-                                      llvm::Value* payload,
-                                      int payloadIndexOverride = -1);
-    bool populateStructFromJsonValue(const std::string& structName,
-                                     llvm::Value* jsonValueHandle,
-                                     llvm::Value* outStructAlloca,
-                                     llvm::Function* function,
-                                     llvm::BasicBlock* failBB,
-                                     llvm::AllocaInst* errorSlot);
-    llvm::Value* createInternalMutexHandle(bool recursive,
-                                           const std::string& namePrefix);
-    llvm::Value* ensurePropertyMutexHandle(llvm::Value* handleSlotPtr,
-                                           bool recursive,
-                                           const std::string& namePrefix);
-    void destroyInternalMutexHandle(llvm::Value* rawHandle,
-                                    const std::string& namePrefix);
-    llvm::Value* resetCopiedStructState(llvm::Value* value,
-                                        const std::string& structName);
+    llvm::Value* buildJsonResultValue(
+        llvm::Function* function,
+        bool isOk,
+        llvm::Value* payload,
+        int payloadIndexOverride = -1);
+    bool populateStructFromJsonValue(
+        const std::string& structName,
+        llvm::Value* jsonValueHandle,
+        llvm::Value* outStructAlloca,
+        llvm::Function* function,
+        llvm::BasicBlock* failBB,
+        llvm::AllocaInst* errorSlot);
+    llvm::Value* createInternalMutexHandle(
+        bool recursive,
+        const std::string& namePrefix);
+    llvm::Value* ensurePropertyMutexHandle(
+        llvm::Value* handleSlotPtr,
+        bool recursive,
+        const std::string& namePrefix);
+    void destroyInternalMutexHandle(
+        llvm::Value* rawHandle,
+        const std::string& namePrefix);
+    llvm::Value* resetCopiedStructState(
+        llvm::Value* value,
+        const std::string& structName);
 
     // Track struct method info: struct name -> method name -> (isPublic, method
     // node)
-    std::map<std::string,
-             std::map<std::string, std::pair<bool, StructMethodNode*>>>
+    std::map<
+        std::string,
+        std::map<std::string, std::pair<bool, StructMethodNode*>>>
         structMethods;
     std::map<std::string, TraitDefNode*> traitDefinitions;
     // Track trait impls per concrete struct type name.
@@ -1162,21 +1345,25 @@ private:
     std::map<std::string, llvm::GlobalVariable*> traitVTableGlobals;
 
     // List/Map iteration helpers
-    void generateForListLiteralIteration(ForNode* node,
-                                         ListLiteralNode* listLit);
-    void generateForListVariableIteration(ForNode* node,
-                                          IdentifierNode* listId);
+    void generateForListLiteralIteration(
+        ForNode* node,
+        ListLiteralNode* listLit);
+    void generateForListVariableIteration(
+        ForNode* node,
+        IdentifierNode* listId);
     void generateForEnumIteration(ForNode* node, const std::string& enumName);
     void generateForMapIteration(ForNode* node, MapIteratorNode* mapIter);
 
     // Collection type helpers
     llvm::StructType* getListStructType(llvm::Type* elementType);
-    llvm::StructType* getMapStructType(llvm::Type* keyType,
-                                       llvm::Type* valueType);
+    llvm::StructType* getMapStructType(
+        llvm::Type* keyType,
+        llvm::Type* valueType);
 
     // Field access helper for chained access (a.b.c)
-    std::pair<llvm::Value*, std::string>
-    getStructPtrAndType(ExpressionNode* expr, int line);
+    std::pair<llvm::Value*, std::string> getStructPtrAndType(
+        ExpressionNode* expr,
+        int line);
 
     void reportError(int line, const std::string& message);
     void reportError(int line, int col, const std::string& message);
@@ -1188,23 +1375,27 @@ private:
 class Backend
 {
 public:
-    Backend(std::unique_ptr<llvm::Module>& m,
-            const std::string& archOverride = "",
-            bool unoptimizedCodegen = false);
+    Backend(
+        std::unique_ptr<llvm::Module>& m,
+        const std::string& archOverride = "",
+        bool unoptimizedCodegen = false);
     bool emitObjectFile(const std::string& filename);
     bool emitAssemblyFile(const std::string& filename);
     bool emitLLVMIR(const std::string& filename);
     bool emitBitcode(const std::string& filename);
-    bool compileToExecutable(const std::string& outputFile,
-                             const std::vector<std::string>& linkArgs);
-    bool compileToSharedLibrary(const std::string& outputFile,
-                                const std::vector<std::string>& linkArgs);
+    bool compileToExecutable(
+        const std::string& outputFile,
+        const std::vector<std::string>& linkArgs);
+    bool compileToSharedLibrary(
+        const std::string& outputFile,
+        const std::vector<std::string>& linkArgs);
     bool compileToStaticLibrary(const std::string& outputFile);
     void optimize(const std::string& level);
     /// Generate machine code without optimization (mlang -g -O0), so every
     /// variable lives in its stack slot at each source line, as debuggers
     /// expect; the default level keeps values in registers and moves stores.
     void useUnoptimizedCodegen();
+
     std::string getTargetTriple() const
     {
         return targetTriple;
@@ -1218,12 +1409,14 @@ private:
     bool unoptimizedCodegen;
 
     bool initializeTarget();
-    bool linkExecutable(const std::string& objectFile,
-                        const std::string& outputFile,
-                        const std::vector<std::string>& linkArgs);
-    bool linkSharedLibrary(const std::string& objectFile,
-                           const std::string& outputFile,
-                           const std::vector<std::string>& linkArgs);
+    bool linkExecutable(
+        const std::string& objectFile,
+        const std::string& outputFile,
+        const std::vector<std::string>& linkArgs);
+    bool linkSharedLibrary(
+        const std::string& objectFile,
+        const std::string& outputFile,
+        const std::vector<std::string>& linkArgs);
 };
 
 #endif // IR_H

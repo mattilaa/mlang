@@ -10,10 +10,13 @@ using mlang::ir_detail::common::Helpers;
 // Every expression is checked in a disposable module. Reusing the ordinary
 // expression checker keeps operator, overload, visibility and borrow rules in
 // sync without mutating the caller's locals, overloads, or emitted functions.
-bool CodeGenerator::probeRequirement(ExpressionNode* expression,
-                                     ParameterListNode* parameters,
-                                     ConstexprEnv* env, TypeNode*& result,
-                                     bool& noThrow, TypeNode* requiredType)
+bool CodeGenerator::probeRequirement(
+    ExpressionNode* expression,
+    ParameterListNode* parameters,
+    ConstexprEnv* env,
+    TypeNode*& result,
+    bool& noThrow,
+    TypeNode* requiredType)
 {
     if(structuralProbeDepth >= 64)
         return false;
@@ -105,8 +108,8 @@ bool CodeGenerator::probeRequirement(ExpressionNode* expression,
                 if(!definition->isGeneric() &&
                    !probe.structTypes.count(definition->name))
                 {
-                    probe.structVisibility[definition->name] = {
-                        definition->isPublic, definition->sourceModule};
+                    probe.structVisibility[definition->name] =
+                        {definition->isPublic, definition->sourceModule};
                     probe.generateStructDefinition(definition);
                     probe.generateStructMethods(definition);
                 }
@@ -118,10 +121,11 @@ bool CodeGenerator::probeRequirement(ExpressionNode* expression,
                     if(method && !probe.structMethods[impl->structName].count(
                                      method->name))
                     {
-                        probe.structMethods[impl->structName][method->name] = {
-                            method->isPublic, method};
-                        probe.generateMethodDeclaration(impl->structName,
-                                                        method);
+                        probe.structMethods[impl->structName][method->name] =
+                            {method->isPublic, method};
+                        probe.generateMethodDeclaration(
+                            impl->structName,
+                            method);
                     }
     // Preserve symbols' signatures, never their bodies or module ownership.
     for(auto& function : *module)
@@ -129,15 +133,21 @@ bool CodeGenerator::probeRequirement(ExpressionNode* expression,
         auto* declaration = scratch->getFunction(function.getName());
         if(!declaration)
             declaration = llvm::Function::Create(
-                function.getFunctionType(), llvm::Function::ExternalLinkage,
-                function.getName(), scratch.get());
+                function.getFunctionType(),
+                llvm::Function::ExternalLinkage,
+                function.getName(),
+                scratch.get());
         declaration->setAttributes(function.getAttributes());
     }
     for(auto& global : module->globals())
     {
         auto* declaration = new llvm::GlobalVariable(
-            *scratch, global.getValueType(), global.isConstant(),
-            llvm::GlobalValue::ExternalLinkage, nullptr, global.getName());
+            *scratch,
+            global.getValueType(),
+            global.isConstant(),
+            llvm::GlobalValue::ExternalLinkage,
+            nullptr,
+            global.getName());
         for(const auto& binding : globalNamedValues)
             if(binding.second == &global)
                 probe.globalNamedValues[binding.first] = declaration;
@@ -173,10 +183,11 @@ bool CodeGenerator::probeRequirement(ExpressionNode* expression,
                 for(auto* function : definition->functionList->functions)
                 {
                     auto& overloads = probe.functionOverloads[function->name];
-                    const bool present =
-                        std::any_of(overloads.begin(), overloads.end(),
-                                    [&](const FunctionOverloadInfo& info)
-                                    { return info.node == function; });
+                    const bool present = std::any_of(
+                        overloads.begin(),
+                        overloads.end(),
+                        [&](const FunctionOverloadInfo& info)
+                        { return info.node == function; });
                     if(!present)
                     {
                         auto* declaration =
@@ -260,7 +271,8 @@ bool CodeGenerator::probeRequirement(ExpressionNode* expression,
                             : "") +
                        "__mlang_requires_probe";
             })(),
-        concreteParameters, body);
+        concreteParameters,
+        body);
     function.sourceModule = currentModule;
     function.concreteTypeBindings = bindings;
     probe.structuralProbeFunction = &function;
@@ -289,8 +301,9 @@ bool CodeGenerator::probeRequirement(ExpressionNode* expression,
             }
         }
         if(auto* reference = dynamic_cast<ReferenceTypeNode*>(type))
-            return new ReferenceTypeNode(restoreType(reference->elementType),
-                                         reference->isMutable);
+            return new ReferenceTypeNode(
+                restoreType(reference->elementType),
+                reference->isMutable);
         if(auto* pointer = dynamic_cast<PointerTypeNode*>(type))
             return new PointerTypeNode(restoreType(pointer->elementType));
         return cloneTypeNode(type);
@@ -300,10 +313,12 @@ bool CodeGenerator::probeRequirement(ExpressionNode* expression,
     return !probe.hasError && result;
 }
 
-bool CodeGenerator::evalRequiresExpression(RequiresExpressionNode* expression,
-                                           ConstexprValue& out,
-                                           std::string* error,
-                                           ConstexprEnv* env, int depth)
+bool CodeGenerator::evalRequiresExpression(
+    RequiresExpressionNode* expression,
+    ConstexprValue& out,
+    std::string* error,
+    ConstexprEnv* env,
+    int depth)
 {
     if(depth > 128)
     {
@@ -352,8 +367,12 @@ bool CodeGenerator::evalRequiresExpression(RequiresExpressionNode* expression,
         BoolLiteralNode validParameters(true);
         TypeNode* unused = nullptr;
         bool noThrow = false;
-        satisfied = probeRequirement(&validParameters, expression->parameters,
-                                     &local, unused, noThrow);
+        satisfied = probeRequirement(
+            &validParameters,
+            expression->parameters,
+            &local,
+            unused,
+            noThrow);
     }
     for(auto* requirement : expression->requirements)
     {
@@ -363,16 +382,24 @@ bool CodeGenerator::evalRequiresExpression(RequiresExpressionNode* expression,
         {
             TypeNode* unused = nullptr;
             bool noThrow = false;
-            satisfied =
-                probeRequirement(nullptr, expression->parameters, &local,
-                                 unused, noThrow, requirement->requiredType);
+            satisfied = probeRequirement(
+                nullptr,
+                expression->parameters,
+                &local,
+                unused,
+                noThrow,
+                requirement->requiredType);
         }
         else if(requirement->kind == RequirementNode::Nested)
         {
             ConstexprValue value;
             std::string reason;
-            satisfied = evalConstexprExpression(requirement->expression, value,
-                                                &reason, &local, depth + 1) &&
+            satisfied = evalConstexprExpression(
+                            requirement->expression,
+                            value,
+                            &reason,
+                            &local,
+                            depth + 1) &&
                         (value.kind == ConstexprValue::Kind::Bool ||
                          value.typeKind == TypeNode::TYPE_BOOL) &&
                         value.boolValue;
@@ -381,9 +408,12 @@ bool CodeGenerator::evalRequiresExpression(RequiresExpressionNode* expression,
         {
             TypeNode* result = nullptr;
             bool noThrow = false;
-            satisfied = probeRequirement(requirement->expression,
-                                         expression->parameters, &local, result,
-                                         noThrow);
+            satisfied = probeRequirement(
+                requirement->expression,
+                expression->parameters,
+                &local,
+                result,
+                noThrow);
             if(satisfied && requirement->noThrow)
                 satisfied = noThrow;
             if(satisfied && !requirement->resultConcept.empty())
@@ -392,12 +422,16 @@ bool CodeGenerator::evalRequiresExpression(RequiresExpressionNode* expression,
                 for(auto* argument : requirement->resultArguments)
                     types.push_back(
                         substituteTypeParams(argument, names, arguments));
-                ConceptApplicationNode application(requirement->resultConcept,
-                                                   types);
+                ConceptApplicationNode
+                    application(requirement->resultConcept, types);
                 ConstexprValue value;
                 std::string reason;
-                satisfied = evalConcept(&application, value, &reason, &local,
-                                        depth + 1) &&
+                satisfied = evalConcept(
+                                &application,
+                                value,
+                                &reason,
+                                &local,
+                                depth + 1) &&
                             value.boolValue;
             }
         }

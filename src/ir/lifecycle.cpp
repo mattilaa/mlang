@@ -1,5 +1,5 @@
-#include "ir.h"
 #include "diagnostics.h"
+#include "ir.h"
 #include "llvm_compat.h"
 
 #include <iostream>
@@ -34,8 +34,12 @@ void CodeGenerator::reportWarning(int line, int col, const std::string& message)
     if(structuralRequirementProbe)
         return;
     const std::string file = diagnosticFileName();
-    mlang::diag::print_diagnostic_location(std::cerr, file, line, col,
-                                           "warning");
+    mlang::diag::print_diagnostic_location(
+        std::cerr,
+        file,
+        line,
+        col,
+        "warning");
     std::cerr << mlang::diag::format_warning_message(message) << std::endl;
 }
 
@@ -46,8 +50,7 @@ void CodeGenerator::enterCleanupScope()
     variableScopeDepthScopes.emplace_back();
 }
 
-void CodeGenerator::releaseRuntimeClosureBorrows(
-    const std::string& closureName)
+void CodeGenerator::releaseRuntimeClosureBorrows(const std::string& closureName)
 {
     auto captures = runtimeClosureBorrowOwners.find(closureName);
     if(captures == runtimeClosureBorrowOwners.end())
@@ -105,8 +108,9 @@ void CodeGenerator::exitCleanupScope()
             else
                 ++moved;
         }
-        movedVariables.insert(it->previousMovedValues.begin(),
-                              it->previousMovedValues.end());
+        movedVariables.insert(
+            it->previousMovedValues.begin(),
+            it->previousMovedValues.end());
         if(it->hadPreviousNamedValue)
             namedValues[it->varName] = it->previousNamedValue;
         else
@@ -127,7 +131,8 @@ void CodeGenerator::exitCleanupScope()
             immutableReferenceVariables.insert(it->varName);
         else
             immutableReferenceVariables.erase(it->varName);
-        auto restore = [&](auto& mapping, const auto& previous) {
+        auto restore = [&](auto& mapping, const auto& previous)
+        {
             if(previous.existed)
                 mapping[it->varName] = previous.value;
             else
@@ -142,21 +147,22 @@ void CodeGenerator::exitCleanupScope()
         restore(pointerKnownNull, it->previousPointerKnownNull);
         restore(tupleElementTypes, it->previousTupleElementTypes);
         restore(enumVariableTypes, it->previousEnumVariableType);
-        restore(traitObjectVariableTypes,
-                it->previousTraitObjectVariableType);
+        restore(traitObjectVariableTypes, it->previousTraitObjectVariableType);
         restore(functionTypeVariables, it->previousFunctionTypeVariable);
         restore(closureVariables, it->previousClosureVariable);
-        restore(runtimeClosureVariables,
-                it->previousRuntimeClosureVariable);
-        restore(runtimeClosureReturnTypes,
-                it->previousRuntimeClosureReturnType);
-        restore(runtimeClosureBorrowOwners,
-                it->previousRuntimeClosureBorrowOwners);
+        restore(runtimeClosureVariables, it->previousRuntimeClosureVariable);
+        restore(
+            runtimeClosureReturnTypes,
+            it->previousRuntimeClosureReturnType);
+        restore(
+            runtimeClosureBorrowOwners,
+            it->previousRuntimeClosureBorrowOwners);
         if(it->previousRuntimeClosureBorrowOwners.existed)
             for(const auto& owner :
                 it->previousRuntimeClosureBorrowOwners.value)
                 activeBorrowers[owner].insert(it->varName);
-        auto belongsToVariable = [&](const std::string& place) {
+        auto belongsToVariable = [&](const std::string& place)
+        {
             return place == it->varName ||
                    (place.size() > it->varName.size() &&
                     place.compare(0, it->varName.size(), it->varName) == 0 &&
@@ -179,10 +185,12 @@ void CodeGenerator::exitCleanupScope()
             else
                 ++borrower;
         }
-        activeBorrowers.insert(it->previousActiveBorrowers.begin(),
-                               it->previousActiveBorrowers.end());
-        activeMutBorrower.insert(it->previousActiveMutBorrowers.begin(),
-                                 it->previousActiveMutBorrowers.end());
+        activeBorrowers.insert(
+            it->previousActiveBorrowers.begin(),
+            it->previousActiveBorrowers.end());
+        activeMutBorrower.insert(
+            it->previousActiveMutBorrowers.begin(),
+            it->previousActiveMutBorrowers.end());
         clearAggregateBorrowOrigins(it->varName);
         if(it->hadPreviousAggregateBorrowOrigins)
         {
@@ -198,8 +206,7 @@ void CodeGenerator::exitCleanupScope()
             aggregateBorrowFieldPlaces[it->varName] =
                 it->previousAggregateBorrowFieldPlaces;
         if(it->hadPreviousAggregateBorrowPlace)
-            pointerBorrowPlace[it->varName] =
-                it->previousAggregateBorrowPlace;
+            pointerBorrowPlace[it->varName] = it->previousAggregateBorrowPlace;
         if(it->hadPreviousFunctionItemTarget)
             functionItemVariables[it->varName] =
                 it->previousFunctionItemTargets;
@@ -249,8 +256,8 @@ void CodeGenerator::exitCleanupScope()
                         if(rootBorrow != activeMutBorrower.end() &&
                            rootBorrow->second != it->pointerVar)
                             borrowKey = it->previousPlace.empty()
-                                           ? it->previousOwner
-                                           : it->previousPlace;
+                                            ? it->previousOwner
+                                            : it->previousPlace;
                     }
                     activeMutBorrower[borrowKey] = it->pointerVar;
                 }
@@ -262,7 +269,8 @@ void CodeGenerator::exitCleanupScope()
         }
     }
 
-    if(!builder.GetInsertBlock() || mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
+    if(!builder.GetInsertBlock() ||
+       mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         return;
 
     for(auto it = actions.rbegin(); it != actions.rend(); ++it)
@@ -275,7 +283,8 @@ void CodeGenerator::exitCleanupScope()
 
 void CodeGenerator::emitAllActiveCleanups()
 {
-    if(!builder.GetInsertBlock() || mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
+    if(!builder.GetInsertBlock() ||
+       mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         return;
 
     for(auto scopeIt = cleanupScopes.rbegin(); scopeIt != cleanupScopes.rend();
@@ -293,7 +302,8 @@ void CodeGenerator::emitAllActiveCleanups()
 
 void CodeGenerator::emitActiveCleanupsDeeperThan(int scopeDepth)
 {
-    if(!builder.GetInsertBlock() || mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
+    if(!builder.GetInsertBlock() ||
+       mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         return;
 
     for(int depth = static_cast<int>(cleanupScopes.size()); depth > scopeDepth;
@@ -309,8 +319,9 @@ void CodeGenerator::emitActiveCleanupsDeeperThan(int scopeDepth)
     }
 }
 
-void CodeGenerator::emitScopeCleanup(const ScopeCleanup& cleanup,
-                                     const std::string& suffix)
+void CodeGenerator::emitScopeCleanup(
+    const ScopeCleanup& cleanup,
+    const std::string& suffix)
 {
     if(!cleanup.function || !builder.GetInsertBlock() ||
        mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
@@ -323,7 +334,8 @@ void CodeGenerator::emitScopeCleanup(const ScopeCleanup& cleanup,
     if(!allocaType || !allocaType->isStructTy())
         return;
 
-    auto emitCall = [&]() {
+    auto emitCall = [&]()
+    {
         if(cleanup.callKind == ScopeCleanup::CallKind::ByPointerMethod)
         {
             builder.CreateCall(cleanup.function, {alloca});
@@ -331,7 +343,9 @@ void CodeGenerator::emitScopeCleanup(const ScopeCleanup& cleanup,
         }
 
         llvm::Value* aggregate = builder.CreateLoad(
-            allocaType, alloca, cleanup.varName + ".dropval." + suffix);
+            allocaType,
+            alloca,
+            cleanup.varName + ".dropval." + suffix);
         builder.CreateCall(cleanup.function, {aggregate});
     };
 
@@ -343,17 +357,21 @@ void CodeGenerator::emitScopeCleanup(const ScopeCleanup& cleanup,
 
     llvm::Function* function = builder.GetInsertBlock()->getParent();
     llvm::BasicBlock* runBlock = llvm::BasicBlock::Create(
-        context, cleanup.varName + ".drop." + suffix, function);
+        context,
+        cleanup.varName + ".drop." + suffix,
+        function);
     llvm::BasicBlock* continueBlock = llvm::BasicBlock::Create(
-        context, cleanup.varName + ".drop.cont." + suffix, function);
+        context,
+        cleanup.varName + ".drop.cont." + suffix,
+        function);
     llvm::Value* initialized = builder.CreateLoad(
-        llvm::Type::getInt1Ty(context), cleanup.dropFlag,
+        llvm::Type::getInt1Ty(context),
+        cleanup.dropFlag,
         cleanup.varName + ".initialized");
     builder.CreateCondBr(initialized, runBlock, continueBlock);
 
     builder.SetInsertPoint(runBlock);
-    builder.CreateStore(llvm::ConstantInt::getFalse(context),
-                        cleanup.dropFlag);
+    builder.CreateStore(llvm::ConstantInt::getFalse(context), cleanup.dropFlag);
     emitCall();
     if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         builder.CreateBr(continueBlock);
@@ -371,17 +389,18 @@ llvm::AllocaInst* CodeGenerator::findActiveDropFlag(
     return nullptr;
 }
 
-void CodeGenerator::setActiveDropFlag(const std::string& varName,
-                                     bool initialized)
+void CodeGenerator::setActiveDropFlag(
+    const std::string& varName,
+    bool initialized)
 {
     if(auto* flag = findActiveDropFlag(varName))
-        builder.CreateStore(llvm::ConstantInt::get(
-                                llvm::Type::getInt1Ty(context), initialized),
-                            flag);
+        builder.CreateStore(
+            llvm::ConstantInt::get(llvm::Type::getInt1Ty(context), initialized),
+            flag);
 }
 
-CodeGenerator::ScopeCleanup
-CodeGenerator::resolveDropFunctionForStruct(const std::string& structTypeName)
+CodeGenerator::ScopeCleanup CodeGenerator::resolveDropFunctionForStruct(
+    const std::string& structTypeName)
 {
     ScopeCleanup cleanup;
     cleanup.structTypeName = structTypeName;
@@ -459,7 +478,8 @@ CodeGenerator::resolveDropFunctionForStruct(const std::string& structTypeName)
 }
 
 void CodeGenerator::registerStructCleanupIfNeeded(
-    const std::string& varName, const std::string& structTypeName)
+    const std::string& varName,
+    const std::string& structTypeName)
 {
     if(varName.empty() || structTypeName.empty() || cleanupScopes.empty())
         return;
@@ -476,10 +496,12 @@ void CodeGenerator::registerStructCleanupIfNeeded(
         if(function)
         {
             cleanup.dropFlag = createEntryBlockAlloca(
-                function, llvm::Type::getInt1Ty(context),
+                function,
+                llvm::Type::getInt1Ty(context),
                 varName + ".initialized");
-            builder.CreateStore(llvm::ConstantInt::getTrue(context),
-                                cleanup.dropFlag);
+            builder.CreateStore(
+                llvm::ConstantInt::getTrue(context),
+                cleanup.dropFlag);
         }
         cleanupScopes.back().push_back(std::move(cleanup));
     }

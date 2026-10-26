@@ -4,10 +4,11 @@
 #include <cstring>
 
 #include "plug_ids.h"
-#include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/ivstevents.h"
+#include "pluginterfaces/vst/ivstparameterchanges.h"
 
-namespace mlang_vst3_example {
+namespace mlang_vst3_example
+{
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -39,10 +40,11 @@ tresult PLUGIN_API Plugin::initialize(FUnknown* context)
     return kResultOk;
 }
 
-tresult PLUGIN_API Plugin::setBusArrangements(SpeakerArrangement* inputs,
-                                              int32 numIns,
-                                              SpeakerArrangement* outputs,
-                                              int32 numOuts)
+tresult PLUGIN_API Plugin::setBusArrangements(
+    SpeakerArrangement* inputs,
+    int32 numIns,
+    SpeakerArrangement* outputs,
+    int32 numOuts)
 {
     if(numIns != 0 || numOuts != 1 || outputs == nullptr)
         return kResultFalse;
@@ -50,8 +52,11 @@ tresult PLUGIN_API Plugin::setBusArrangements(SpeakerArrangement* inputs,
     if(outputs[0] != SpeakerArr::kStereo)
         return kResultFalse;
 
-    return SingleComponentEffect::setBusArrangements(inputs, numIns, outputs,
-                                                     numOuts);
+    return SingleComponentEffect::setBusArrangements(
+        inputs,
+        numIns,
+        outputs,
+        numOuts);
 }
 
 tresult PLUGIN_API Plugin::canProcessSampleSize(int32 symbolicSampleSize)
@@ -81,8 +86,8 @@ tresult PLUGIN_API Plugin::setActive(TBool state)
 void Plugin::applyWaveformParam(ParamValue normalizedValue)
 {
     waveformValue_ = normalizedValue;
-    bridge_.setWaveform(normalizedValue >= 0.5 ? Waveform::Square
-                                               : Waveform::Sine);
+    bridge_.setWaveform(
+        normalizedValue >= 0.5 ? Waveform::Square : Waveform::Sine);
 }
 
 void Plugin::handleParameterChanges(IParameterChanges* changes)
@@ -122,15 +127,16 @@ void Plugin::handleEvents(IEventList* events)
 
         switch(event.type)
         {
-            case Event::kNoteOnEvent:
-                bridge_.noteOn(event.noteOn.pitch,
-                               static_cast<float>(event.noteOn.velocity));
-                break;
-            case Event::kNoteOffEvent:
-                bridge_.noteOff();
-                break;
-            default:
-                break;
+        case Event::kNoteOnEvent:
+            bridge_.noteOn(
+                event.noteOn.pitch,
+                static_cast<float>(event.noteOn.velocity));
+            break;
+        case Event::kNoteOffEvent:
+            bridge_.noteOff();
+            break;
+        default:
+            break;
         }
     }
 }
@@ -187,14 +193,17 @@ void Plugin::previewNoteOff()
     bridge_.noteOff();
 }
 
-void Plugin::previewRender(float** channels, int32 numChannels, int32 numSamples)
+void Plugin::previewRender(
+    float** channels,
+    int32 numChannels,
+    int32 numSamples)
 {
-    AudioBusBuffers outBus {};
+    AudioBusBuffers outBus{};
     outBus.numChannels = numChannels;
     outBus.channelBuffers32 = channels;
     outBus.silenceFlags = 0;
 
-    ProcessData data {};
+    ProcessData data{};
     data.processMode = kRealtime;
     data.symbolicSampleSize = kSample32;
     data.numSamples = numSamples;

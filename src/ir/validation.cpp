@@ -7,11 +7,10 @@ bool CodeGenerator::evaluateCompileTimeInt(ExpressionNode* expr, int64_t& out)
     ConstexprValue value;
     if(!evalConstexprExpression(expr, value, nullptr, nullptr, 0))
         return false;
-    out = value.kind == ConstexprValue::Kind::Bool
-              ? (value.boolValue ? 1 : 0)
-              : value.kind == ConstexprValue::Kind::Float
-                    ? static_cast<int64_t>(value.floatValue)
-                    : value.intValue;
+    out = value.kind == ConstexprValue::Kind::Bool ? (value.boolValue ? 1 : 0)
+          : value.kind == ConstexprValue::Kind::Float
+              ? static_cast<int64_t>(value.floatValue)
+              : value.intValue;
     return true;
 }
 
@@ -20,11 +19,9 @@ bool CodeGenerator::evaluateCompileTimeBool(ExpressionNode* expr, bool& out)
     ConstexprValue value;
     if(!evalConstexprExpression(expr, value, nullptr, nullptr, 0))
         return false;
-    out = value.kind == ConstexprValue::Kind::Bool
-              ? value.boolValue
-              : value.kind == ConstexprValue::Kind::Float
-                    ? value.floatValue != 0.0
-                    : value.intValue != 0;
+    out = value.kind == ConstexprValue::Kind::Bool    ? value.boolValue
+          : value.kind == ConstexprValue::Kind::Float ? value.floatValue != 0.0
+                                                      : value.intValue != 0;
     return true;
 }
 
@@ -43,8 +40,8 @@ std::optional<uint64_t> CodeGenerator::fixedArrayByteSize(TypeNode* typeNode)
     return elemBytes * static_cast<uint64_t>(arrayType->capacity);
 }
 
-std::optional<int64_t>
-CodeGenerator::fixedArrayInitializerSize(ExpressionNode* expr)
+std::optional<int64_t> CodeGenerator::fixedArrayInitializerSize(
+    ExpressionNode* expr)
 {
     if(auto* listLit = dynamic_cast<ListLiteralNode*>(expr))
     {
@@ -63,8 +60,8 @@ CodeGenerator::fixedArrayInitializerSize(ExpressionNode* expr)
     return std::nullopt;
 }
 
-std::optional<int64_t>
-CodeGenerator::fixedArrayExpressionKnownLength(ExpressionNode* expr)
+std::optional<int64_t> CodeGenerator::fixedArrayExpressionKnownLength(
+    ExpressionNode* expr)
 {
     if(!expr)
         return 0;
@@ -82,9 +79,10 @@ CodeGenerator::fixedArrayExpressionKnownLength(ExpressionNode* expr)
     return std::nullopt;
 }
 
-bool CodeGenerator::validateFixedArrayInitializer(TypeNode* declaredType,
-                                                  ExpressionNode* expr,
-                                                  int line)
+bool CodeGenerator::validateFixedArrayInitializer(
+    TypeNode* declaredType,
+    ExpressionNode* expr,
+    int line)
 {
     auto* arrayType = dynamic_cast<ArrayTypeNode*>(declaredType);
     if(!arrayType || !expr)
@@ -102,15 +100,15 @@ bool CodeGenerator::validateFixedArrayInitializer(TypeNode* declaredType,
 
     if(*size > arrayType->capacity)
     {
-        reportError(line, "array initializer has " + std::to_string(*size) +
-                              " elements but " + arrayType->toString() +
-                              " capacity is " +
-                              std::to_string(arrayType->capacity));
+        reportError(
+            line,
+            "array initializer has " + std::to_string(*size) +
+                " elements but " + arrayType->toString() + " capacity is " +
+                std::to_string(arrayType->capacity));
         return false;
     }
 
-    auto* nestedArray =
-        dynamic_cast<ArrayTypeNode*>(arrayType->elementType);
+    auto* nestedArray = dynamic_cast<ArrayTypeNode*>(arrayType->elementType);
     auto* listLiteral = dynamic_cast<ListLiteralNode*>(expr);
     if(nestedArray && listLiteral && listLiteral->elements)
     {
@@ -119,13 +117,13 @@ bool CodeGenerator::validateFixedArrayInitializer(TypeNode* declaredType,
             auto* nestedLiteral = dynamic_cast<ListLiteralNode*>(element);
             if(!nestedLiteral)
             {
-                reportError(line,
-                            "multiarray initializer requires nested braces "
-                            "for every dimension");
+                reportError(
+                    line,
+                    "multiarray initializer requires nested braces "
+                    "for every dimension");
                 return false;
             }
-            if(!validateFixedArrayInitializer(nestedArray, nestedLiteral,
-                                              line))
+            if(!validateFixedArrayInitializer(nestedArray, nestedLiteral, line))
                 return false;
         }
     }
@@ -133,9 +131,11 @@ bool CodeGenerator::validateFixedArrayInitializer(TypeNode* declaredType,
     return true;
 }
 
-bool CodeGenerator::convertValueToRuntimeBool(llvm::Value* value, int line,
-                                              const std::string& context,
-                                              llvm::Value*& outBool)
+bool CodeGenerator::convertValueToRuntimeBool(
+    llvm::Value* value,
+    int line,
+    const std::string& context,
+    llvm::Value*& outBool)
 {
     if(!value)
         return false;
@@ -147,14 +147,18 @@ bool CodeGenerator::convertValueToRuntimeBool(llvm::Value* value, int line,
     }
     if(ty->isIntegerTy())
     {
-        outBool = builder.CreateICmpNE(value, llvm::ConstantInt::get(ty, 0),
-                                       context + ".bool");
+        outBool = builder.CreateICmpNE(
+            value,
+            llvm::ConstantInt::get(ty, 0),
+            context + ".bool");
         return true;
     }
     if(ty->isFloatingPointTy())
     {
-        outBool = builder.CreateFCmpONE(value, llvm::ConstantFP::get(ty, 0.0),
-                                        context + ".bool");
+        outBool = builder.CreateFCmpONE(
+            value,
+            llvm::ConstantFP::get(ty, 0.0),
+            context + ".bool");
         return true;
     }
     std::string typeStr;
@@ -166,7 +170,8 @@ bool CodeGenerator::convertValueToRuntimeBool(llvm::Value* value, int line,
     else
         typeStr = "non-boolean";
     reportError(
-        line, context + " condition must be a boolean or numeric type, got '" +
-                  typeStr + "'");
+        line,
+        context + " condition must be a boolean or numeric type, got '" +
+            typeStr + "'");
     return false;
 }

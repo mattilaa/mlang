@@ -6,12 +6,15 @@
 
 using mlang::ir_detail::common::Helpers;
 
-
-void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
-                                      bool debug, bool pretty, bool json,
-                                      std::string& cFormat,
-                                      std::vector<llvm::Value*>& argValues,
-                                      int line)
+void CodeGenerator::appendFormatValue(
+    ExpressionNode* expr,
+    llvm::Value* value,
+    bool debug,
+    bool pretty,
+    bool json,
+    std::string& cFormat,
+    std::vector<llvm::Value*>& argValues,
+    int line)
 {
     auto escapeJsonStringValue = [&](llvm::Value* strVal) -> llvm::Value*
     {
@@ -45,18 +48,23 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
             {
                 reportError(line, "cannot debug-format unnamed struct");
                 cFormat += "%s";
-                argValues.push_back(Helpers::create_global_cstring(builder, "<struct>"));
+                argValues.push_back(
+                    Helpers::create_global_cstring(builder, "<struct>"));
                 return;
             }
             if(!debugStructs.count(structName))
             {
-                reportError(line, "struct '" + structName +
-                                      "' does not derive Debug");
+                reportError(
+                    line,
+                    "struct '" + structName + "' does not derive Debug");
             }
             llvm::Value* dbg =
                 json ? buildStructJsonString(value, structName, pretty, line)
-                     : buildStructDebugString(value, structName,
-                                              debug ? pretty : false, line);
+                     : buildStructDebugString(
+                           value,
+                           structName,
+                           debug ? pretty : false,
+                           line);
             cFormat += "%s";
             argValues.push_back(dbg);
             return;
@@ -91,7 +99,9 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
         {
             cFormat += "%d";
             llvm::Value* intVal = builder.CreateZExt(
-                value, llvm::Type::getInt32Ty(context), "booltoInt");
+                value,
+                llvm::Type::getInt32Ty(context),
+                "booltoInt");
             argValues.push_back(intVal);
         }
     }
@@ -101,14 +111,18 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
         {
             cFormat += "%u";
             llvm::Value* intVal = builder.CreateZExt(
-                value, llvm::Type::getInt32Ty(context), "u8toInt");
+                value,
+                llvm::Type::getInt32Ty(context),
+                "u8toInt");
             argValues.push_back(intVal);
         }
         else
         {
             cFormat += "%d";
             llvm::Value* intVal = builder.CreateSExt(
-                value, llvm::Type::getInt32Ty(context), "i8toInt");
+                value,
+                llvm::Type::getInt32Ty(context),
+                "i8toInt");
             argValues.push_back(intVal);
         }
     }
@@ -118,14 +132,18 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
         {
             cFormat += "%u";
             llvm::Value* intVal = builder.CreateZExt(
-                value, llvm::Type::getInt32Ty(context), "u16toInt");
+                value,
+                llvm::Type::getInt32Ty(context),
+                "u16toInt");
             argValues.push_back(intVal);
         }
         else
         {
             cFormat += "%d";
             llvm::Value* intVal = builder.CreateSExt(
-                value, llvm::Type::getInt32Ty(context), "i16toInt");
+                value,
+                llvm::Type::getInt32Ty(context),
+                "i16toInt");
             argValues.push_back(intVal);
         }
     }
@@ -143,7 +161,9 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
     {
         cFormat += "%f";
         llvm::Value* doubleVal = builder.CreateFPExt(
-            value, llvm::Type::getDoubleTy(context), "floatToDouble");
+            value,
+            llvm::Type::getDoubleTy(context),
+            "floatToDouble");
         argValues.push_back(doubleVal);
     }
     else if(argType->isDoubleTy())
@@ -161,10 +181,13 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
         std::string structName = argType->getStructName().str().empty()
                                      ? "anonymous struct"
                                      : argType->getStructName().str();
-        reportError(line, "cannot print struct type '" + structName +
-                              "' directly; use {:?} with #[derive(Debug)]");
+        reportError(
+            line,
+            "cannot print struct type '" + structName +
+                "' directly; use {:?} with #[derive(Debug)]");
         cFormat += "%s";
-        argValues.push_back(Helpers::create_global_cstring(builder, "<struct>"));
+        argValues.push_back(
+            Helpers::create_global_cstring(builder, "<struct>"));
     }
     else
     {
@@ -187,9 +210,12 @@ void CodeGenerator::generatePrintStatement(PrintNode* node)
 
     // Convert MLA format string to C format string and collect argument values
     std::vector<llvm::Value*> argValues;
-    std::string cFormat =
-        convertFormatString(node->formatString, node->arguments,
-                            node->namedArguments, argValues, node->line);
+    std::string cFormat = convertFormatString(
+        node->formatString,
+        node->arguments,
+        node->namedArguments,
+        argValues,
+        node->line);
 
     // Add newline for println!/eprintln!
     if(node->kind == PrintNode::PRINTLN_STDOUT ||
@@ -242,9 +268,12 @@ llvm::Value* CodeGenerator::generateFormatExpression(FormatNode* node)
     initializeFormatFunctions();
 
     std::vector<llvm::Value*> argValues;
-    std::string cFormat =
-        convertFormatString(node->formatString, node->arguments,
-                            node->namedArguments, argValues, node->line);
+    std::string cFormat = convertFormatString(
+        node->formatString,
+        node->arguments,
+        node->namedArguments,
+        argValues,
+        node->line);
 
 #if LLVM_VERSION_MAJOR >= 21
     llvm::Value* formatStr = builder.CreateGlobalString(cFormat, "formatstr");
@@ -353,11 +382,13 @@ void CodeGenerator::generateAssertEq(AssertEqNode* node)
         llvm::Value* rhsPtr = builder.CreateBitCast(rhs, ptrType, "rhsstr");
         llvm::Value* cmpVal = builder.CreateCall(strcmpFunc, {lhsPtr, rhsPtr});
         cmp = builder.CreateICmpEQ(
-            cmpVal, llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0),
+            cmpVal,
+            llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0),
             "streq");
     }
-    else if(lhs->getType()->isFloatingPointTy() ||
-            rhs->getType()->isFloatingPointTy())
+    else if(
+        lhs->getType()->isFloatingPointTy() ||
+        rhs->getType()->isFloatingPointTy())
     {
         llvm::Value* l = lhs;
         llvm::Value* r = rhs;
@@ -380,8 +411,9 @@ void CodeGenerator::generateAssertEq(AssertEqNode* node)
     }
     else
     {
-        reportError(node->line,
-                    "assert_eq! supports only numeric and string types");
+        reportError(
+            node->line,
+            "assert_eq! supports only numeric and string types");
         return;
     }
 
@@ -454,8 +486,10 @@ void CodeGenerator::generateStaticAssert(StaticAssertNode* node)
     }
 }
 
-llvm::Value* CodeGenerator::buildDebugString(ExpressionNode* expr, bool pretty,
-                                             int line)
+llvm::Value* CodeGenerator::buildDebugString(
+    ExpressionNode* expr,
+    bool pretty,
+    int line)
 {
     llvm::Value* val = generateExpression(expr);
     if(!val)
@@ -502,10 +536,11 @@ llvm::Value* CodeGenerator::buildDebugString(ExpressionNode* expr, bool pretty,
     return buffer;
 }
 
-llvm::Value*
-CodeGenerator::buildStructDebugString(llvm::Value* structVal,
-                                      const std::string& structName,
-                                      bool pretty, int line)
+llvm::Value* CodeGenerator::buildStructDebugString(
+    llvm::Value* structVal,
+    const std::string& structName,
+    bool pretty,
+    int line)
 {
     initializeFormatFunctions();
 
@@ -543,7 +578,9 @@ CodeGenerator::buildStructDebugString(llvm::Value* structVal,
             fmt += memberName + ": ";
 
         llvm::Value* fieldVal = builder.CreateExtractValue(
-            structVal, static_cast<unsigned>(idx), "dbgfield");
+            structVal,
+            static_cast<unsigned>(idx),
+            "dbgfield");
 
         bool handled = false;
         if(auto* structRef = dynamic_cast<StructTypeRefNode*>(memberType))
@@ -551,8 +588,9 @@ CodeGenerator::buildStructDebugString(llvm::Value* structVal,
             std::string fieldStruct = structRef->structName;
             if(!debugStructs.count(fieldStruct))
             {
-                reportError(line, "struct '" + fieldStruct +
-                                      "' does not derive Debug");
+                reportError(
+                    line,
+                    "struct '" + fieldStruct + "' does not derive Debug");
             }
             llvm::Value* fieldStr =
                 buildStructDebugString(fieldVal, fieldStruct, pretty, line);
@@ -569,7 +607,9 @@ CodeGenerator::buildStructDebugString(llvm::Value* structVal,
             {
                 fmt += "%d";
                 llvm::Value* intVal = builder.CreateZExt(
-                    fieldVal, llvm::Type::getInt32Ty(context), "dbgbool");
+                    fieldVal,
+                    llvm::Type::getInt32Ty(context),
+                    "dbgbool");
                 argValues.push_back(intVal);
                 break;
             }
@@ -579,7 +619,9 @@ CodeGenerator::buildStructDebugString(llvm::Value* structVal,
             {
                 fmt += "%d";
                 llvm::Value* intVal = builder.CreateSExt(
-                    fieldVal, llvm::Type::getInt32Ty(context), "dbgint");
+                    fieldVal,
+                    llvm::Type::getInt32Ty(context),
+                    "dbgint");
                 argValues.push_back(intVal);
                 break;
             }
@@ -589,7 +631,9 @@ CodeGenerator::buildStructDebugString(llvm::Value* structVal,
             {
                 fmt += "%u";
                 llvm::Value* intVal = builder.CreateZExt(
-                    fieldVal, llvm::Type::getInt32Ty(context), "dbgu");
+                    fieldVal,
+                    llvm::Type::getInt32Ty(context),
+                    "dbgu");
                 argValues.push_back(intVal);
                 break;
             }
@@ -615,7 +659,9 @@ CodeGenerator::buildStructDebugString(llvm::Value* structVal,
             {
                 fmt += "%f";
                 llvm::Value* doubleVal = builder.CreateFPExt(
-                    fieldVal, llvm::Type::getDoubleTy(context), "dbgfloat");
+                    fieldVal,
+                    llvm::Type::getDoubleTy(context),
+                    "dbgfloat");
                 argValues.push_back(doubleVal);
                 break;
             }
@@ -682,10 +728,12 @@ CodeGenerator::buildStructDebugString(llvm::Value* structVal,
     return buffer;
 }
 
-llvm::Value* CodeGenerator::buildStructJsonString(llvm::Value* structVal,
-                                                  const std::string& structName,
-                                                  bool pretty, int line,
-                                                  int indentLevel)
+llvm::Value* CodeGenerator::buildStructJsonString(
+    llvm::Value* structVal,
+    const std::string& structName,
+    bool pretty,
+    int line,
+    int indentLevel)
 {
     initializeFormatFunctions();
 
@@ -726,7 +774,9 @@ llvm::Value* CodeGenerator::buildStructJsonString(llvm::Value* structVal,
         const std::string& memberName = member.first;
         TypeNode* memberType = member.second;
         llvm::Value* fieldVal = builder.CreateExtractValue(
-            structVal, static_cast<unsigned>(idx), "jsonfield");
+            structVal,
+            static_cast<unsigned>(idx),
+            "jsonfield");
 
         fmt += innerSep + "\"" + memberName + "\": ";
 
@@ -749,11 +799,16 @@ llvm::Value* CodeGenerator::buildStructJsonString(llvm::Value* structVal,
                 std::string fieldStruct = structRef->structName;
                 if(!debugStructs.count(fieldStruct))
                 {
-                    reportError(line, "struct '" + fieldStruct +
-                                          "' does not derive Debug");
+                    reportError(
+                        line,
+                        "struct '" + fieldStruct + "' does not derive Debug");
                 }
                 llvm::Value* fieldStr = buildStructJsonString(
-                    fieldVal, fieldStruct, pretty, line, indentLevel + 1);
+                    fieldVal,
+                    fieldStruct,
+                    pretty,
+                    line,
+                    indentLevel + 1);
                 fmt += "%s";
                 argValues.push_back(fieldStr);
                 handled = true;
@@ -780,7 +835,10 @@ llvm::Value* CodeGenerator::buildStructJsonString(llvm::Value* structVal,
 #endif
             fmt += "%s";
             argValues.push_back(builder.CreateSelect(
-                fieldVal, trueStr, falseStr, "json.field.bool"));
+                fieldVal,
+                trueStr,
+                falseStr,
+                "json.field.bool"));
             break;
         }
         case TypeNode::TYPE_I8:
@@ -808,7 +866,9 @@ llvm::Value* CodeGenerator::buildStructJsonString(llvm::Value* structVal,
         {
             fmt += "%f";
             llvm::Value* doubleVal = builder.CreateFPExt(
-                fieldVal, llvm::Type::getDoubleTy(context), "json.float");
+                fieldVal,
+                llvm::Type::getDoubleTy(context),
+                "json.float");
             argValues.push_back(doubleVal);
             break;
         }
@@ -855,7 +915,9 @@ llvm::Value* CodeGenerator::buildStructJsonString(llvm::Value* structVal,
         builder.CreateCall(snprintfFunc, sizeArgs, "jsondbglen");
     llvm::Value* len64 = builder.CreateSExt(len32, int64Type, "jsondbglen64");
     llvm::Value* size = builder.CreateAdd(
-        len64, llvm::ConstantInt::get(int64Type, 1), "jsondbgsz");
+        len64,
+        llvm::ConstantInt::get(int64Type, 1),
+        "jsondbgsz");
     llvm::Value* buffer = builder.CreateCall(mallocFunc, {size}, "jsondbgbuf");
     std::vector<llvm::Value*> writeArgs = {buffer, size, formatStr};
     writeArgs.insert(writeArgs.end(), argValues.begin(), argValues.end());
@@ -864,7 +926,9 @@ llvm::Value* CodeGenerator::buildStructJsonString(llvm::Value* structVal,
 }
 
 llvm::Value* CodeGenerator::buildStructSerdeJsonString(
-    llvm::Value* structVal, const std::string& structName, int line,
+    llvm::Value* structVal,
+    const std::string& structName,
+    int line,
     int indentLevel)
 {
     initializeFormatFunctions();
@@ -903,8 +967,8 @@ llvm::Value* CodeGenerator::buildStructSerdeJsonString(
 
     for(size_t idx = 0; idx < it->second.size(); ++idx)
     {
-        const auto* access = getStructFieldAccessInfo(structName,
-                                                      static_cast<int>(idx));
+        const auto* access =
+            getStructFieldAccessInfo(structName, static_cast<int>(idx));
         if(access && access->isSynthesizedPropertyStorage)
             continue;
 
@@ -912,7 +976,9 @@ llvm::Value* CodeGenerator::buildStructSerdeJsonString(
         const std::string& memberName = member.first;
         TypeNode* memberType = member.second;
         llvm::Value* fieldVal = builder.CreateExtractValue(
-            structVal, static_cast<unsigned>(idx), "jsonserde.field");
+            structVal,
+            static_cast<unsigned>(idx),
+            "jsonserde.field");
 
         fmt += innerSep + "\"" + memberName + "\": ";
 
@@ -934,12 +1000,16 @@ llvm::Value* CodeGenerator::buildStructSerdeJsonString(
                 std::string fieldStruct = structRef->structName;
                 if(!jsonStructs.count(fieldStruct))
                 {
-                    reportError(line, "struct '" + fieldStruct +
-                                          "' does not derive Json");
+                    reportError(
+                        line,
+                        "struct '" + fieldStruct + "' does not derive Json");
                     return Helpers::create_global_cstring(builder, "{}");
                 }
                 llvm::Value* fieldStr = buildStructSerdeJsonString(
-                    fieldVal, fieldStruct, line, indentLevel + 1);
+                    fieldVal,
+                    fieldStruct,
+                    line,
+                    indentLevel + 1);
                 fmt += "%s";
                 argValues.push_back(fieldStr);
                 handled = true;
@@ -966,7 +1036,10 @@ llvm::Value* CodeGenerator::buildStructSerdeJsonString(
 #endif
             fmt += "%s";
             argValues.push_back(builder.CreateSelect(
-                fieldVal, trueStr, falseStr, "jsonserde.bool"));
+                fieldVal,
+                trueStr,
+                falseStr,
+                "jsonserde.bool"));
             break;
         }
         case TypeNode::TYPE_I8:
@@ -994,7 +1067,8 @@ llvm::Value* CodeGenerator::buildStructSerdeJsonString(
         {
             fmt += "%f";
             llvm::Value* doubleVal = builder.CreateFPExt(
-                fieldVal, llvm::Type::getDoubleTy(context),
+                fieldVal,
+                llvm::Type::getDoubleTy(context),
                 "jsonserde.float");
             argValues.push_back(doubleVal);
             break;
@@ -1008,13 +1082,14 @@ llvm::Value* CodeGenerator::buildStructSerdeJsonString(
             argValues.push_back(escapeJsonStringValue(fieldVal));
             break;
         default:
-            reportError(line, "field '" + memberName + "' of struct '" +
-                                  structName +
-                                  "' has unsupported Json derive type");
+            reportError(
+                line,
+                "field '" + memberName + "' of struct '" + structName +
+                    "' has unsupported Json derive type");
             return Helpers::create_global_cstring(builder, "{}");
         }
 
-append_property_metadata:
+    append_property_metadata:
         if(access && access->isProperty)
         {
             if(!hasPropertyMetadata)
@@ -1027,7 +1102,8 @@ append_property_metadata:
                 propFmt += ",";
             }
 
-            propFmt += "\"" + memberName + "\": {"
+            propFmt += "\"" + memberName +
+                       "\": {"
                        "\"hidden\": %s,"
                        "\"protected\": %s,"
                        "\"atomic\": %s,"
@@ -1046,9 +1122,8 @@ append_property_metadata:
                 builder.CreateGlobalStringPtr("false", "json.meta.false");
 #endif
 
-            auto boolStr = [&](bool flag, const char* name) -> llvm::Value* {
-                return flag ? trueStr : falseStr;
-            };
+            auto boolStr = [&](bool flag, const char* name) -> llvm::Value*
+            { return flag ? trueStr : falseStr; };
 
             propArgs.push_back(boolStr(
                 access->encapsulation == FieldEncapsulation::Hidden,
@@ -1056,8 +1131,7 @@ append_property_metadata:
             propArgs.push_back(boolStr(
                 access->encapsulation == FieldEncapsulation::Protected,
                 "protected"));
-            propArgs.push_back(
-                boolStr(access->isAtomicProperty, "atomic"));
+            propArgs.push_back(boolStr(access->isAtomicProperty, "atomic"));
             propArgs.push_back(boolStr(access->isMutexProperty, "mutex"));
             propArgs.push_back(
                 boolStr(access->isRecursiveProperty, "recursive"));
@@ -1094,9 +1168,12 @@ append_property_metadata:
     sizeArgs.insert(sizeArgs.end(), argValues.begin(), argValues.end());
     llvm::Value* len32 =
         builder.CreateCall(snprintfFunc, sizeArgs, "jsonserde.len");
-    llvm::Value* len64 = builder.CreateSExt(len32, int64Type, "jsonserde.len64");
+    llvm::Value* len64 =
+        builder.CreateSExt(len32, int64Type, "jsonserde.len64");
     llvm::Value* size = builder.CreateAdd(
-        len64, llvm::ConstantInt::get(int64Type, 1), "jsonserde.size");
+        len64,
+        llvm::ConstantInt::get(int64Type, 1),
+        "jsonserde.size");
     llvm::Value* buffer =
         builder.CreateCall(mallocFunc, {size}, "jsonserde.buf");
     std::vector<llvm::Value*> writeArgs = {buffer, size, formatStr};
@@ -1104,4 +1181,3 @@ append_property_metadata:
     builder.CreateCall(snprintfFunc, writeArgs);
     return buffer;
 }
-

@@ -8,28 +8,32 @@ using mlang::ir_detail::common::Helpers;
 #include <limits>
 #include <optional>
 
-
 llvm::Constant* CodeGenerator::buildLLVMConstantFromConstexprValue(
-    const ConstexprValue& value, TypeNode* targetType, int line)
+    const ConstexprValue& value,
+    TypeNode* targetType,
+    int line)
 {
     if(value.kind == ConstexprValue::Kind::OpaqueStruct)
     {
-        reportError(line,
-                    "struct values in cexpr are only supported for "
-                    "generic type dispatch with type_id(T); struct fields "
-                    "and struct constants are not compile-time evaluable yet");
+        reportError(
+            line,
+            "struct values in cexpr are only supported for "
+            "generic type dispatch with type_id(T); struct fields "
+            "and struct constants are not compile-time evaluable yet");
         return nullptr;
     }
     if(value.kind == ConstexprValue::Kind::Type)
     {
-        reportError(line,
-                    "type_id values in cexpr can only be used in "
-                    "compile-time comparisons");
+        reportError(
+            line,
+            "type_id values in cexpr can only be used in "
+            "compile-time comparisons");
         return nullptr;
     }
 
     TypeNode::TypeKind kind =
-        targetType ? Helpers::normalizeInferredKind(targetType->kind) : value.typeKind;
+        targetType ? Helpers::normalizeInferredKind(targetType->kind)
+                   : value.typeKind;
     if(Helpers::isFloatInferKind(kind))
     {
         const double floatValue =
@@ -39,43 +43,48 @@ llvm::Constant* CodeGenerator::buildLLVMConstantFromConstexprValue(
                        ? (value.boolValue ? 1.0 : 0.0)
                        : constexprValueAsDouble(value));
         if(kind == TypeNode::TYPE_FLOAT)
-            return llvm::ConstantFP::get(llvm::Type::getFloatTy(context),
-                                         floatValue);
-        return llvm::ConstantFP::get(llvm::Type::getDoubleTy(context),
-                                     floatValue);
+            return llvm::ConstantFP::get(
+                llvm::Type::getFloatTy(context),
+                floatValue);
+        return llvm::ConstantFP::get(
+            llvm::Type::getDoubleTy(context),
+            floatValue);
     }
     if(kind == TypeNode::TYPE_BOOL)
     {
         const bool boolValue = value.kind == ConstexprValue::Kind::Bool
                                    ? value.boolValue
-                                   : value.kind == ConstexprValue::Kind::Float
-                                         ? value.floatValue != 0.0
+                               : value.kind == ConstexprValue::Kind::Float
+                                   ? value.floatValue != 0.0
                                    : (value.intValue != 0);
-        return llvm::ConstantInt::get(llvm::Type::getInt1Ty(context),
-                                      boolValue ? 1 : 0, false);
+        return llvm::ConstantInt::get(
+            llvm::Type::getInt1Ty(context),
+            boolValue ? 1 : 0,
+            false);
     }
 
     llvm::Type* llvmType = getLLVMType(kind);
     if(!llvmType || !llvmType->isIntegerTy())
     {
-        reportError(line,
-                    "cexpr currently supports only integer, float, and bool "
-                    "values");
+        reportError(
+            line,
+            "cexpr currently supports only integer, float, and bool "
+            "values");
         return nullptr;
     }
-    const int64_t intValue =
-        value.kind == ConstexprValue::Kind::Bool
-            ? (value.boolValue ? 1 : 0)
-            : value.kind == ConstexprValue::Kind::Float
-                  ? static_cast<int64_t>(value.floatValue)
-                  : value.intValue;
+    const int64_t intValue = value.kind == ConstexprValue::Kind::Bool
+                                 ? (value.boolValue ? 1 : 0)
+                             : value.kind == ConstexprValue::Kind::Float
+                                 ? static_cast<int64_t>(value.floatValue)
+                                 : value.intValue;
     return llvm::ConstantInt::get(llvmType, intValue, !isUnsignedType(kind));
 }
 
-bool CodeGenerator::coerceConstexprValueToKind(ConstexprValue& value,
-                                               TypeNode::TypeKind targetKind,
-                                               std::string* errorMessage,
-                                               const char* context)
+bool CodeGenerator::coerceConstexprValueToKind(
+    ConstexprValue& value,
+    TypeNode::TypeKind targetKind,
+    std::string* errorMessage,
+    const char* context)
 {
     targetKind = Helpers::normalizeInferredKind(targetKind);
     if(value.kind == ConstexprValue::Kind::OpaqueStruct)
@@ -94,20 +103,18 @@ bool CodeGenerator::coerceConstexprValueToKind(ConstexprValue& value,
     {
         if(errorMessage)
         {
-            *errorMessage =
-                "type_id values in " + std::string(context) +
-                " can only be used in compile-time comparisons";
+            *errorMessage = "type_id values in " + std::string(context) +
+                            " can only be used in compile-time comparisons";
         }
         return false;
     }
     if(targetKind == TypeNode::TYPE_BOOL)
     {
-        const bool boolValue =
-            value.kind == ConstexprValue::Kind::Bool
-                ? value.boolValue
-                : value.kind == ConstexprValue::Kind::Float
-                      ? value.floatValue != 0.0
-                      : value.intValue != 0;
+        const bool boolValue = value.kind == ConstexprValue::Kind::Bool
+                                   ? value.boolValue
+                               : value.kind == ConstexprValue::Kind::Float
+                                   ? value.floatValue != 0.0
+                                   : value.intValue != 0;
         value.kind = ConstexprValue::Kind::Bool;
         value.boolValue = boolValue;
         value.intValue = boolValue ? 1 : 0;
@@ -131,12 +138,11 @@ bool CodeGenerator::coerceConstexprValueToKind(ConstexprValue& value,
     }
     if(Helpers::isIntegerInferKind(targetKind))
     {
-        const int64_t intValue =
-            value.kind == ConstexprValue::Kind::Bool
-                ? (value.boolValue ? 1 : 0)
-                : value.kind == ConstexprValue::Kind::Float
-                      ? static_cast<int64_t>(value.floatValue)
-                      : value.intValue;
+        const int64_t intValue = value.kind == ConstexprValue::Kind::Bool
+                                     ? (value.boolValue ? 1 : 0)
+                                 : value.kind == ConstexprValue::Kind::Float
+                                     ? static_cast<int64_t>(value.floatValue)
+                                     : value.intValue;
         value.kind = ConstexprValue::Kind::Int;
         value.intValue = intValue;
         value.boolValue = intValue != 0;
@@ -202,8 +208,9 @@ std::string CodeGenerator::canonicalConstexprTypeName(TypeNode* type) const
     return type->toString();
 }
 
-bool CodeGenerator::constexprTypeNameFromIdentifier(const std::string& name,
-                                                    std::string& out) const
+bool CodeGenerator::constexprTypeNameFromIdentifier(
+    const std::string& name,
+    std::string& out) const
 {
     if(conceptKnownTypes.count(name))
     {
@@ -243,7 +250,9 @@ bool CodeGenerator::constexprTypeNameFromIdentifier(const std::string& name,
 }
 
 bool CodeGenerator::bindConstexprGenericTypeParams(
-    TypeNode* pattern, TypeNode* concrete, const std::set<std::string>& typeParams,
+    TypeNode* pattern,
+    TypeNode* concrete,
+    const std::set<std::string>& typeParams,
     std::map<std::string, std::string>& bindings) const
 {
     if(!pattern || !concrete)
@@ -269,39 +278,49 @@ bool CodeGenerator::bindConstexprGenericTypeParams(
         auto* concreteList = dynamic_cast<GenericListTypeNode*>(concrete);
         if(!concreteList)
             return true;
-        return bindConstexprGenericTypeParams(patternList->elementType,
-                                             concreteList->elementType,
-                                             typeParams, bindings);
+        return bindConstexprGenericTypeParams(
+            patternList->elementType,
+            concreteList->elementType,
+            typeParams,
+            bindings);
     }
     if(auto* patternMap = dynamic_cast<MapTypeNode*>(pattern))
     {
         auto* concreteMap = dynamic_cast<MapTypeNode*>(concrete);
         if(!concreteMap)
             return true;
-        return bindConstexprGenericTypeParams(patternMap->keyType,
-                                             concreteMap->keyType, typeParams,
-                                             bindings) &&
-               bindConstexprGenericTypeParams(patternMap->valueType,
-                                             concreteMap->valueType,
-                                             typeParams, bindings);
+        return bindConstexprGenericTypeParams(
+                   patternMap->keyType,
+                   concreteMap->keyType,
+                   typeParams,
+                   bindings) &&
+               bindConstexprGenericTypeParams(
+                   patternMap->valueType,
+                   concreteMap->valueType,
+                   typeParams,
+                   bindings);
     }
     if(auto* patternPtr = dynamic_cast<PointerTypeNode*>(pattern))
     {
         auto* concretePtr = dynamic_cast<PointerTypeNode*>(concrete);
         if(!concretePtr)
             return true;
-        return bindConstexprGenericTypeParams(patternPtr->elementType,
-                                             concretePtr->elementType,
-                                             typeParams, bindings);
+        return bindConstexprGenericTypeParams(
+            patternPtr->elementType,
+            concretePtr->elementType,
+            typeParams,
+            bindings);
     }
     if(auto* patternRef = dynamic_cast<ReferenceTypeNode*>(pattern))
     {
         auto* concreteRef = dynamic_cast<ReferenceTypeNode*>(concrete);
         if(!concreteRef)
             return true;
-        return bindConstexprGenericTypeParams(patternRef->elementType,
-                                             concreteRef->elementType,
-                                             typeParams, bindings);
+        return bindConstexprGenericTypeParams(
+            patternRef->elementType,
+            concreteRef->elementType,
+            typeParams,
+            bindings);
     }
     if(auto* patternGen = dynamic_cast<GenericStructTypeRefNode*>(pattern))
     {
@@ -311,19 +330,23 @@ bool CodeGenerator::bindConstexprGenericTypeParams(
             return true;
         for(size_t i = 0; i < patternGen->typeArgs.size(); ++i)
         {
-            if(!bindConstexprGenericTypeParams(patternGen->typeArgs[i],
-                                              concreteGen->typeArgs[i],
-                                              typeParams, bindings))
+            if(!bindConstexprGenericTypeParams(
+                   patternGen->typeArgs[i],
+                   concreteGen->typeArgs[i],
+                   typeParams,
+                   bindings))
                 return false;
         }
     }
     return true;
 }
 
-bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
-                                      ConstexprValue& out,
-                                      std::string* errorMessage,
-                                      ConstexprEnv* env, int depth)
+bool CodeGenerator::evalConstexprCall(
+    FunctionCallNode* call,
+    ConstexprValue& out,
+    std::string* errorMessage,
+    ConstexprEnv* env,
+    int depth)
 {
     if(!call)
     {
@@ -364,8 +387,8 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
                     auto binding = env->find("__type:" + typeName);
                     if(binding != env->end() &&
                        binding->second.kind == ConstexprValue::Kind::Type)
-                        type = Helpers::type_from_text(
-                            binding->second.typeName);
+                        type =
+                            Helpers::type_from_text(binding->second.typeName);
                 }
                 if(!type)
                     type = Helpers::type_from_text(typeName);
@@ -389,64 +412,66 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
                     return true;
                 case TypeNode::TYPE_I8:
                     out.intValue = operation == "max"
-                        ? std::numeric_limits<int8_t>::max()
-                        : std::numeric_limits<int8_t>::min();
+                                       ? std::numeric_limits<int8_t>::max()
+                                       : std::numeric_limits<int8_t>::min();
                     break;
                 case TypeNode::TYPE_I16:
                     out.intValue = operation == "max"
-                        ? std::numeric_limits<int16_t>::max()
-                        : std::numeric_limits<int16_t>::min();
+                                       ? std::numeric_limits<int16_t>::max()
+                                       : std::numeric_limits<int16_t>::min();
                     break;
                 case TypeNode::TYPE_I32:
                     out.intValue = operation == "max"
-                        ? std::numeric_limits<int32_t>::max()
-                        : std::numeric_limits<int32_t>::min();
+                                       ? std::numeric_limits<int32_t>::max()
+                                       : std::numeric_limits<int32_t>::min();
                     break;
                 case TypeNode::TYPE_I64:
                 case TypeNode::TYPE_INT:
                     out.intValue = operation == "max"
-                        ? std::numeric_limits<int64_t>::max()
-                        : std::numeric_limits<int64_t>::min();
+                                       ? std::numeric_limits<int64_t>::max()
+                                       : std::numeric_limits<int64_t>::min();
                     break;
                 case TypeNode::TYPE_U8:
                     out.intValue = operation == "max"
-                        ? std::numeric_limits<uint8_t>::max()
-                        : 0;
+                                       ? std::numeric_limits<uint8_t>::max()
+                                       : 0;
                     break;
                 case TypeNode::TYPE_U16:
                     out.intValue = operation == "max"
-                        ? std::numeric_limits<uint16_t>::max()
-                        : 0;
+                                       ? std::numeric_limits<uint16_t>::max()
+                                       : 0;
                     break;
                 case TypeNode::TYPE_U32:
                     out.intValue = operation == "max"
-                        ? std::numeric_limits<uint32_t>::max()
-                        : 0;
+                                       ? std::numeric_limits<uint32_t>::max()
+                                       : 0;
                     break;
                 case TypeNode::TYPE_U64:
-                    out.intValue = operation == "max"
-                        ? static_cast<int64_t>(
-                              std::numeric_limits<uint64_t>::max())
-                        : 0;
+                    out.intValue =
+                        operation == "max"
+                            ? static_cast<int64_t>(
+                                  std::numeric_limits<uint64_t>::max())
+                            : 0;
                     break;
                 case TypeNode::TYPE_FLOAT:
                     out.kind = ConstexprValue::Kind::Float;
                     out.floatValue = operation == "max"
-                        ? std::numeric_limits<float>::max()
-                        : std::numeric_limits<float>::min();
+                                         ? std::numeric_limits<float>::max()
+                                         : std::numeric_limits<float>::min();
                     out.intValue = static_cast<int64_t>(out.floatValue);
                     return true;
                 case TypeNode::TYPE_DOUBLE:
                     out.kind = ConstexprValue::Kind::Float;
                     out.floatValue = operation == "max"
-                        ? std::numeric_limits<double>::max()
-                        : std::numeric_limits<double>::min();
+                                         ? std::numeric_limits<double>::max()
+                                         : std::numeric_limits<double>::min();
                     out.intValue = 0;
                     return true;
                 default:
                     if(errorMessage)
-                        *errorMessage = "numeric_limits<T>::" + operation +
-                                        "() supports only primitive numeric types";
+                        *errorMessage =
+                            "numeric_limits<T>::" + operation +
+                            "() supports only primitive numeric types";
                     return false;
                 }
                 out.kind = ConstexprValue::Kind::Int;
@@ -461,15 +486,15 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
         if(call->arguments.size() != 1)
         {
             if(errorMessage)
-                *errorMessage = "__mlang_is_enum_type expects one type argument";
+                *errorMessage =
+                    "__mlang_is_enum_type expects one type argument";
             return false;
         }
         auto* id = dynamic_cast<IdentifierNode*>(call->arguments[0]);
         if(!id)
         {
             if(errorMessage)
-                *errorMessage =
-                    "__mlang_is_enum_type expects a type name";
+                *errorMessage = "__mlang_is_enum_type expects a type name";
             return false;
         }
         std::string typeName;
@@ -502,11 +527,10 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
         }
         TypeNode* argumentType =
             inferExpressionTypeNode(call->arguments.front(), call->line);
-        const bool isMatch = call->name == "is_pointer"
-                                 ? dynamic_cast<PointerTypeNode*>(argumentType) !=
-                                       nullptr
-                                 : dynamic_cast<ArrayTypeNode*>(argumentType) !=
-                                       nullptr;
+        const bool isMatch =
+            call->name == "is_pointer"
+                ? dynamic_cast<PointerTypeNode*>(argumentType) != nullptr
+                : dynamic_cast<ArrayTypeNode*>(argumentType) != nullptr;
         out.kind = ConstexprValue::Kind::Bool;
         out.boolValue = isMatch;
         out.intValue = isMatch ? 1 : 0;
@@ -597,14 +621,18 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
 
     std::string literalSuffix, literalInput;
     const bool literalCall = mlang::literals::decodeOperatorName(
-        call->name, literalSuffix, literalInput);
+        call->name,
+        literalSuffix,
+        literalInput);
     std::string lookupName = call->name;
     if(literalCall && env && lookupName.find("::") == std::string::npos)
     {
         auto scope = env->find("$literal_namespace");
         if(scope != env->end())
             lookupName = mlang::literals::scopedOperatorName(
-                lookupName, scope->second.typeName, [&](const std::string& name)
+                lookupName,
+                scope->second.typeName,
+                [&](const std::string& name)
                 { return functionOverloads.count(name) != 0; });
     }
     auto overloadIt = functionOverloads.find(lookupName);
@@ -621,12 +649,14 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
     }
 
     const bool constrainedSet = std::any_of(
-        overloadIt->second.begin(), overloadIt->second.end(),
+        overloadIt->second.begin(),
+        overloadIt->second.end(),
         [](const FunctionOverloadInfo& item)
         {
             return item.node &&
                    !mlang::concepts::constraintKey(item.node).empty();
         });
+
     struct ConstrainedCandidate
     {
         FunctionDefNode* function;
@@ -634,6 +664,7 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
         FunctionDefNode ranking;
         int cost;
     };
+
     std::vector<ConstrainedCandidate> constrainedCandidates;
     std::string constraintFailure;
     auto evaluateBody = [&](FunctionDefNode* fn, ConstexprEnv& environment)
@@ -642,9 +673,13 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
         bool didReturn = false;
         const std::string callerModule = currentModule;
         currentModule = fn->sourceModule;
-        const bool evaluated =
-            evalConstexprStatementList(fn->body, environment, returnValue,
-                                       didReturn, errorMessage, depth + 1);
+        const bool evaluated = evalConstexprStatementList(
+            fn->body,
+            environment,
+            returnValue,
+            didReturn,
+            errorMessage,
+            depth + 1);
         currentModule = callerModule;
         if(!evaluated)
             return false;
@@ -683,8 +718,8 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
             localEnv["$concept_namespace"] = scope;
         }
         bool argsOk = true;
-        std::set<std::string> typeParamSet(fn->typeParams.begin(),
-                                           fn->typeParams.end());
+        std::set<std::string>
+            typeParamSet(fn->typeParams.begin(), fn->typeParams.end());
         std::map<std::string, std::string> typeBindings;
         std::vector<TypeNode*> concreteArgTypes;
         concreteArgTypes.reserve(call->arguments.size());
@@ -693,8 +728,7 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
             TypeNode* concreteType = nullptr;
             if(env)
             {
-                if(auto* id =
-                       dynamic_cast<IdentifierNode*>(call->arguments[i]))
+                if(auto* id = dynamic_cast<IdentifierNode*>(call->arguments[i]))
                 {
                     auto envIt = env->find(id->name);
                     if(envIt != env->end() &&
@@ -713,7 +747,8 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
                             if(fn->name == "is_pointer" ||
                                fn->name == "is_array")
                                 concreteType = inferExpressionTypeNode(
-                                    call->arguments[i], call->line);
+                                    call->arguments[i],
+                                    call->line);
                             if(!concreteType)
                                 concreteType =
                                     new TypeNode(envIt->second.typeKind);
@@ -727,8 +762,11 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
             concreteArgTypes.push_back(concreteType);
             auto* param = fn->parameters->parameters[i];
             if(!fn->typeParams.empty() && param &&
-               !bindConstexprGenericTypeParams(param->type, concreteType,
-                                               typeParamSet, typeBindings))
+               !bindConstexprGenericTypeParams(
+                   param->type,
+                   concreteType,
+                   typeParamSet,
+                   typeBindings))
             {
                 argsOk = false;
                 break;
@@ -741,9 +779,11 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
             conceptBindings[binding.first] =
                 Helpers::type_from_text(binding.second);
         std::vector<std::set<std::string>> constraintTerms;
-        if(constrainedSet &&
-           !satisfiesFunctionConstraints(fn, conceptBindings,
-                                         &constraintFailure, &constraintTerms))
+        if(constrainedSet && !satisfiesFunctionConstraints(
+                                 fn,
+                                 conceptBindings,
+                                 &constraintFailure,
+                                 &constraintTerms))
             continue;
         for(const auto& binding : typeBindings)
         {
@@ -759,8 +799,12 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
         {
             auto* param = fn->parameters->parameters[i];
             ConstexprValue argValue;
-            if(!evalConstexprExpression(call->arguments[i], argValue,
-                                        errorMessage, env, depth + 1))
+            if(!evalConstexprExpression(
+                   call->arguments[i],
+                   argValue,
+                   errorMessage,
+                   env,
+                   depth + 1))
             {
                 if(errorMessage && errorMessage->empty())
                 {
@@ -784,8 +828,11 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
                 localEnv[param->name] = argValue;
                 continue;
             }
-            if(!coerceConstexprValueToKind(argValue, paramKind, errorMessage,
-                                           "cexpr fn parameters"))
+            if(!coerceConstexprValueToKind(
+                   argValue,
+                   paramKind,
+                   errorMessage,
+                   "cexpr fn parameters"))
                 return false;
 
             localEnv[param->name] = argValue;
@@ -798,14 +845,15 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
             int cost = 0;
             std::vector<TypeNode*> arguments;
             for(const auto& name : fn->typeParams)
-                arguments.push_back(conceptBindings.count(name)
-                                        ? conceptBindings[name]
-                                        : new StructTypeRefNode(name));
+                arguments.push_back(
+                    conceptBindings.count(name) ? conceptBindings[name]
+                                                : new StructTypeRefNode(name));
             for(size_t i = 0; i < concreteArgTypes.size(); ++i)
             {
-                auto* expected =
-                    substituteTypeParams(fn->parameters->parameters[i]->type,
-                                         fn->typeParams, arguments);
+                auto* expected = substituteTypeParams(
+                    fn->parameters->parameters[i]->type,
+                    fn->typeParams,
+                    arguments);
                 if(concreteArgTypes[i] &&
                    canonicalConstexprTypeName(expected) !=
                        canonicalConstexprTypeName(concreteArgTypes[i]))
@@ -834,8 +882,9 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
             bool dominated = false;
             for(const auto& other : constrainedCandidates)
                 if(other.cost == bestCost && &other != &candidate &&
-                   mlang::concepts::moreConstrained(&other.ranking,
-                                                    &candidate.ranking))
+                   mlang::concepts::moreConstrained(
+                       &other.ranking,
+                       &candidate.ranking))
                 {
                     dominated = true;
                     break;
@@ -875,8 +924,12 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
 }
 
 bool CodeGenerator::evalConstexprStatementList(
-    StatementListNode* body, ConstexprEnv& env, ConstexprValue& returnValue,
-    bool& didReturn, std::string* errorMessage, int depth)
+    StatementListNode* body,
+    ConstexprEnv& env,
+    ConstexprValue& returnValue,
+    bool& didReturn,
+    std::string* errorMessage,
+    int depth)
 {
     if(!body)
         return true;
@@ -893,8 +946,12 @@ bool CodeGenerator::evalConstexprStatementList(
                     *errorMessage = "cexpr fn does not support bare return";
                 return false;
             }
-            if(!evalConstexprExpression(ret->expression, returnValue,
-                                        errorMessage, &env, depth + 1))
+            if(!evalConstexprExpression(
+                   ret->expression,
+                   returnValue,
+                   errorMessage,
+                   &env,
+                   depth + 1))
                 return false;
             didReturn = true;
             return true;
@@ -909,13 +966,18 @@ bool CodeGenerator::evalConstexprStatementList(
                 return false;
             }
             ConstexprValue value;
-            if(!evalConstexprExpression(letDecl->expression, value,
-                                        errorMessage, &env, depth + 1))
+            if(!evalConstexprExpression(
+                   letDecl->expression,
+                   value,
+                   errorMessage,
+                   &env,
+                   depth + 1))
                 return false;
-            if(letDecl->type &&
-               !coerceConstexprValueToKind(
-                   value, letDecl->type->kind, errorMessage,
-                   "cexpr fn let declarations"))
+            if(letDecl->type && !coerceConstexprValueToKind(
+                                    value,
+                                    letDecl->type->kind,
+                                    errorMessage,
+                                    "cexpr fn let declarations"))
                 return false;
             env[letDecl->name] = value;
             continue;
@@ -925,20 +987,26 @@ bool CodeGenerator::evalConstexprStatementList(
             ConstexprValue value;
             if(varDecl->initExpr)
             {
-                if(!evalConstexprExpression(varDecl->initExpr, value,
-                                            errorMessage, &env, depth + 1))
+                if(!evalConstexprExpression(
+                       varDecl->initExpr,
+                       value,
+                       errorMessage,
+                       &env,
+                       depth + 1))
                     return false;
-                if(varDecl->type &&
-                   !coerceConstexprValueToKind(
-                       value, varDecl->type->kind, errorMessage,
-                       "cexpr fn var declarations"))
+                if(varDecl->type && !coerceConstexprValueToKind(
+                                        value,
+                                        varDecl->type->kind,
+                                        errorMessage,
+                                        "cexpr fn var declarations"))
                     return false;
             }
             else
             {
                 TypeNode::TypeKind kind =
-                    varDecl->type ? Helpers::normalizeInferredKind(varDecl->type->kind)
-                                  : TypeNode::TYPE_I64;
+                    varDecl->type
+                        ? Helpers::normalizeInferredKind(varDecl->type->kind)
+                        : TypeNode::TYPE_I64;
                 if(kind == TypeNode::TYPE_BOOL)
                 {
                     value.kind = ConstexprValue::Kind::Bool;
@@ -989,8 +1057,12 @@ bool CodeGenerator::evalConstexprStatementList(
                 return false;
             }
             ConstexprValue value;
-            if(!evalConstexprExpression(assign->expression, value, errorMessage,
-                                        &env, depth + 1))
+            if(!evalConstexprExpression(
+                   assign->expression,
+                   value,
+                   errorMessage,
+                   &env,
+                   depth + 1))
                 return false;
             it->second = value;
             continue;
@@ -998,17 +1070,25 @@ bool CodeGenerator::evalConstexprStatementList(
         if(auto* exprStmt = dynamic_cast<ExpressionStatementNode*>(stmt))
         {
             ConstexprValue ignored;
-            if(!evalConstexprExpression(exprStmt->expression, ignored,
-                                        errorMessage, &env, depth + 1))
+            if(!evalConstexprExpression(
+                   exprStmt->expression,
+                   ignored,
+                   errorMessage,
+                   &env,
+                   depth + 1))
                 return false;
             continue;
         }
         if(auto* block = dynamic_cast<BlockStatementNode*>(stmt))
         {
             ConstexprEnv nestedEnv = env;
-            if(!evalConstexprStatementList(block->statements, nestedEnv,
-                                           returnValue, didReturn, errorMessage,
-                                           depth + 1))
+            if(!evalConstexprStatementList(
+                   block->statements,
+                   nestedEnv,
+                   returnValue,
+                   didReturn,
+                   errorMessage,
+                   depth + 1))
                 return false;
             if(didReturn)
                 return true;
@@ -1017,8 +1097,12 @@ bool CodeGenerator::evalConstexprStatementList(
         if(auto* cexprIf = dynamic_cast<CexprIfNode*>(stmt))
         {
             ConstexprValue condValue;
-            if(!evalConstexprExpression(cexprIf->condition, condValue,
-                                        errorMessage, &env, depth + 1))
+            if(!evalConstexprExpression(
+                   cexprIf->condition,
+                   condValue,
+                   errorMessage,
+                   &env,
+                   depth + 1))
                 return false;
             if(condValue.kind == ConstexprValue::Kind::OpaqueStruct ||
                condValue.kind == ConstexprValue::Kind::Type)
@@ -1035,9 +1119,13 @@ bool CodeGenerator::evalConstexprStatementList(
             if(cond)
             {
                 ConstexprEnv nestedEnv = env;
-                if(!evalConstexprStatementList(cexprIf->thenBranch, nestedEnv,
-                                               returnValue, didReturn,
-                                               errorMessage, depth + 1))
+                if(!evalConstexprStatementList(
+                       cexprIf->thenBranch,
+                       nestedEnv,
+                       returnValue,
+                       didReturn,
+                       errorMessage,
+                       depth + 1))
                     return false;
                 if(didReturn)
                     return true;
@@ -1055,8 +1143,12 @@ bool CodeGenerator::evalConstexprStatementList(
                 nestedList.statements.push_back(cexprIf->elseIfBranch);
                 ConstexprEnv nestedEnv = env;
                 bool ok = evalConstexprStatementList(
-                    &nestedList, nestedEnv, returnValue, didReturn,
-                    errorMessage, depth + 1);
+                    &nestedList,
+                    nestedEnv,
+                    returnValue,
+                    didReturn,
+                    errorMessage,
+                    depth + 1);
                 last->elseBranch = savedFinalElse;
                 if(!ok)
                     return false;
@@ -1067,9 +1159,13 @@ bool CodeGenerator::evalConstexprStatementList(
             if(cexprIf->elseBranch)
             {
                 ConstexprEnv nestedEnv = env;
-                if(!evalConstexprStatementList(cexprIf->elseBranch, nestedEnv,
-                                               returnValue, didReturn,
-                                               errorMessage, depth + 1))
+                if(!evalConstexprStatementList(
+                       cexprIf->elseBranch,
+                       nestedEnv,
+                       returnValue,
+                       didReturn,
+                       errorMessage,
+                       depth + 1))
                     return false;
                 if(didReturn)
                     return true;
@@ -1086,8 +1182,12 @@ bool CodeGenerator::evalConstexprStatementList(
                 return false;
             }
             bool cond = false;
-            if(!evalConstexprExpression(ifNode->condition, returnValue,
-                                        errorMessage, &env, depth + 1))
+            if(!evalConstexprExpression(
+                   ifNode->condition,
+                   returnValue,
+                   errorMessage,
+                   &env,
+                   depth + 1))
                 return false;
             cond = returnValue.kind == ConstexprValue::Kind::Bool
                        ? returnValue.boolValue
@@ -1095,9 +1195,13 @@ bool CodeGenerator::evalConstexprStatementList(
             if(cond)
             {
                 ConstexprEnv nestedEnv = env;
-                if(!evalConstexprStatementList(ifNode->thenBranch, nestedEnv,
-                                               returnValue, didReturn,
-                                               errorMessage, depth + 1))
+                if(!evalConstexprStatementList(
+                       ifNode->thenBranch,
+                       nestedEnv,
+                       returnValue,
+                       didReturn,
+                       errorMessage,
+                       depth + 1))
                     return false;
                 if(didReturn)
                     return true;
@@ -1108,9 +1212,13 @@ bool CodeGenerator::evalConstexprStatementList(
                 StatementListNode nestedList;
                 nestedList.statements.push_back(ifNode->elseIfBranch);
                 ConstexprEnv nestedEnv = env;
-                if(!evalConstexprStatementList(&nestedList, nestedEnv,
-                                               returnValue, didReturn,
-                                               errorMessage, depth + 1))
+                if(!evalConstexprStatementList(
+                       &nestedList,
+                       nestedEnv,
+                       returnValue,
+                       didReturn,
+                       errorMessage,
+                       depth + 1))
                     return false;
                 if(didReturn)
                     return true;
@@ -1119,9 +1227,13 @@ bool CodeGenerator::evalConstexprStatementList(
             if(ifNode->elseBranch)
             {
                 ConstexprEnv nestedEnv = env;
-                if(!evalConstexprStatementList(ifNode->elseBranch, nestedEnv,
-                                               returnValue, didReturn,
-                                               errorMessage, depth + 1))
+                if(!evalConstexprStatementList(
+                       ifNode->elseBranch,
+                       nestedEnv,
+                       returnValue,
+                       didReturn,
+                       errorMessage,
+                       depth + 1))
                     return false;
                 if(didReturn)
                     return true;
@@ -1136,10 +1248,12 @@ bool CodeGenerator::evalConstexprStatementList(
     return true;
 }
 
-bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
-                                            ConstexprValue& out,
-                                            std::string* errorMessage,
-                                            ConstexprEnv* env, int depth)
+bool CodeGenerator::evalConstexprExpression(
+    ExpressionNode* expr,
+    ConstexprValue& out,
+    std::string* errorMessage,
+    ConstexprEnv* env,
+    int depth)
 {
     if(!expr)
     {
@@ -1154,8 +1268,12 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         return false;
     }
     if(auto* cexprExpr = dynamic_cast<CexprExpressionNode*>(expr))
-        return evalConstexprExpression(cexprExpr->expression, out, errorMessage,
-                                       env, depth + 1);
+        return evalConstexprExpression(
+            cexprExpr->expression,
+            out,
+            errorMessage,
+            env,
+            depth + 1);
     if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(expr))
     {
         TypeNode* targetType = nullptr;
@@ -1186,7 +1304,8 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                             auto capIt = arrayCapacities.find(id->name);
                             if(capIt != arrayCapacities.end())
                                 targetType = new ArrayTypeNode(
-                                    cloneTypeNode(lit->second), capIt->second);
+                                    cloneTypeNode(lit->second),
+                                    capIt->second);
                             else
                                 targetType = new GenericListTypeNode(
                                     cloneTypeNode(lit->second));
@@ -1230,7 +1349,8 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             }
             if(!targetType)
                 targetType = inferExpressionTypeNode(
-                    sizeofExpr->expressionTarget, sizeofExpr->line);
+                    sizeofExpr->expressionTarget,
+                    sizeofExpr->line);
         }
         if(!targetType)
         {
@@ -1259,11 +1379,19 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         return true;
     }
     if(auto* requirement = dynamic_cast<RequiresExpressionNode*>(expr))
-        return evalRequiresExpression(requirement, out, errorMessage, env,
-                                      depth + 1);
+        return evalRequiresExpression(
+            requirement,
+            out,
+            errorMessage,
+            env,
+            depth + 1);
     if(auto* conceptDefinition = dynamic_cast<ConceptApplicationNode*>(expr))
-        return evalConcept(conceptDefinition, out, errorMessage, env,
-                           depth + 1);
+        return evalConcept(
+            conceptDefinition,
+            out,
+            errorMessage,
+            env,
+            depth + 1);
     if(auto* i = dynamic_cast<IntLiteralNode*>(expr))
     {
         out.kind = ConstexprValue::Kind::Int;
@@ -1368,7 +1496,8 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
     }
     if(auto* structLit = dynamic_cast<StructLiteralNode*>(expr))
     {
-        TypeNode* structType = inferExpressionTypeNode(structLit, structLit->line);
+        TypeNode* structType =
+            inferExpressionTypeNode(structLit, structLit->line);
         std::string typeName = canonicalConstexprTypeName(structType);
         if(typeName.empty())
             typeName = structLit->structName;
@@ -1382,26 +1511,40 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
     }
     if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
     {
-        if(!evalConstexprExpression(castExpr->expression, out, errorMessage,
-                                    env, depth + 1))
+        if(!evalConstexprExpression(
+               castExpr->expression,
+               out,
+               errorMessage,
+               env,
+               depth + 1))
             return false;
         TypeNode::TypeKind targetKind =
             Helpers::normalizeInferredKind(castExpr->targetType);
         if(targetKind == TypeNode::TYPE_BOOL)
         {
-            return coerceConstexprValueToKind(out, targetKind, errorMessage,
-                                              "cexpr casts");
+            return coerceConstexprValueToKind(
+                out,
+                targetKind,
+                errorMessage,
+                "cexpr casts");
         }
-        return coerceConstexprValueToKind(out, targetKind, errorMessage,
-                                          "cexpr casts");
+        return coerceConstexprValueToKind(
+            out,
+            targetKind,
+            errorMessage,
+            "cexpr casts");
     }
     if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
         return evalConstexprCall(call, out, errorMessage, env, depth + 1);
     if(auto* un = dynamic_cast<UnaryOpNode*>(expr))
     {
         ConstexprValue operand;
-        if(!evalConstexprExpression(un->operand, operand, errorMessage, env,
-                                    depth + 1))
+        if(!evalConstexprExpression(
+               un->operand,
+               operand,
+               errorMessage,
+               env,
+               depth + 1))
         {
             if(errorMessage && errorMessage->empty())
                 *errorMessage = "unary operand is not compile-time evaluable";
@@ -1469,8 +1612,12 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
     {
         ConstexprValue lhsValue;
         ConstexprValue rhsValue;
-        if(!evalConstexprExpression(bin->left, lhsValue, errorMessage, env,
-                                    depth + 1))
+        if(!evalConstexprExpression(
+               bin->left,
+               lhsValue,
+               errorMessage,
+               env,
+               depth + 1))
         {
             if(errorMessage && errorMessage->empty())
                 *errorMessage =
@@ -1489,8 +1636,12 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             out.floatValue = out.boolValue ? 1.0 : 0.0;
             return true;
         }
-        if(!evalConstexprExpression(bin->right, rhsValue, errorMessage, env,
-                                    depth + 1))
+        if(!evalConstexprExpression(
+               bin->right,
+               rhsValue,
+               errorMessage,
+               env,
+               depth + 1))
         {
             if(errorMessage && errorMessage->empty())
                 *errorMessage =
@@ -1804,8 +1955,12 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
     if(auto* tern = dynamic_cast<TernaryNode*>(expr))
     {
         ConstexprValue condValue;
-        if(!evalConstexprExpression(tern->condition, condValue, errorMessage,
-                                    env, depth + 1))
+        if(!evalConstexprExpression(
+               tern->condition,
+               condValue,
+               errorMessage,
+               env,
+               depth + 1))
         {
             if(errorMessage && errorMessage->empty())
                 *errorMessage =
@@ -1824,8 +1979,12 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         const bool cond = condValue.kind == ConstexprValue::Kind::Bool
                               ? condValue.boolValue
                               : constexprValueAsDouble(condValue) != 0.0;
-        return evalConstexprExpression(cond ? tern->trueExpr : tern->falseExpr,
-                                       out, errorMessage, env, depth + 1);
+        return evalConstexprExpression(
+            cond ? tern->trueExpr : tern->falseExpr,
+            out,
+            errorMessage,
+            env,
+            depth + 1);
     }
     if(errorMessage)
         *errorMessage = "unsupported expression in cexpr: " + expr->toString();
@@ -1838,13 +1997,18 @@ llvm::Value* CodeGenerator::generateCexprExpression(CexprExpressionNode* node)
         return nullptr;
     ConstexprValue value;
     std::string errorMessage;
-    if(!evalConstexprExpression(node->expression, value, &errorMessage, nullptr,
-                                0))
+    if(!evalConstexprExpression(
+           node->expression,
+           value,
+           &errorMessage,
+           nullptr,
+           0))
     {
-        reportError(node->line,
-                    errorMessage.empty()
-                        ? "cexpr(...) requires a compile-time expression"
-                        : errorMessage);
+        reportError(
+            node->line,
+            errorMessage.empty()
+                ? "cexpr(...) requires a compile-time expression"
+                : errorMessage);
         return nullptr;
     }
     TypeNode* targetType =

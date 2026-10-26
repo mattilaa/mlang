@@ -15,8 +15,9 @@ std::string read_file_binary(const std::string& path)
     std::ifstream f(path, std::ios::binary);
     if(!f)
         return {};
-    return std::string((std::istreambuf_iterator<char>(f)),
-                       std::istreambuf_iterator<char>());
+    return std::string(
+        (std::istreambuf_iterator<char>(f)),
+        std::istreambuf_iterator<char>());
 }
 
 size_t parse_env_workers()
@@ -58,8 +59,8 @@ size_t RuntimeScheduler::normalizeWorkers(size_t requested)
     return std::max<size_t>(2, static_cast<size_t>(hc));
 }
 
-std::vector<LoadedFile>
-RuntimeScheduler::loadFiles(const std::vector<std::string>& paths) const
+std::vector<LoadedFile> RuntimeScheduler::loadFiles(
+    const std::vector<std::string>& paths) const
 {
     std::vector<LoadedFile> out(paths.size());
     if(paths.empty())
@@ -82,15 +83,18 @@ RuntimeScheduler::loadFiles(const std::vector<std::string>& paths) const
 
     for(size_t w = 0; w < workers; ++w)
     {
-        pool.emplace_back([&]() {
-            while(true)
+        pool.emplace_back(
+            [&]()
             {
-                const size_t idx = next.fetch_add(1, std::memory_order_relaxed);
-                if(idx >= out.size())
-                    break;
-                out[idx].content = read_file_binary(out[idx].path);
-            }
-        });
+                while(true)
+                {
+                    const size_t idx =
+                        next.fetch_add(1, std::memory_order_relaxed);
+                    if(idx >= out.size())
+                        break;
+                    out[idx].content = read_file_binary(out[idx].path);
+                }
+            });
     }
 
     for(auto& t : pool)

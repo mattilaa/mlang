@@ -19,7 +19,8 @@ namespace mlang
 // binary's location is unknown.
 inline std::filesystem::path installed_prefix()
 {
-    static const std::filesystem::path prefix = [] {
+    static const std::filesystem::path prefix = []
+    {
         std::filesystem::path exe;
 #ifdef __APPLE__
         uint32_t size = 0;

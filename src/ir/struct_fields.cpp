@@ -45,8 +45,9 @@ std::string CodeGenerator::getEnumTypeName(ExpressionNode* expr, int line)
     return {};
 }
 
-bool CodeGenerator::structHasFieldNamed(const std::string& structTypeName,
-                                        const std::string& fieldName) const
+bool CodeGenerator::structHasFieldNamed(
+    const std::string& structTypeName,
+    const std::string& fieldName) const
 {
     auto it = structMembers.find(structTypeName);
     if(it == structMembers.end())
@@ -59,9 +60,9 @@ bool CodeGenerator::structHasFieldNamed(const std::string& structTypeName,
     return false;
 }
 
-const CodeGenerator::StructFieldLayout*
-CodeGenerator::getStructFieldLayout(const std::string& structName,
-                                    int fieldIndex) const
+const CodeGenerator::StructFieldLayout* CodeGenerator::getStructFieldLayout(
+    const std::string& structName,
+    int fieldIndex) const
 {
     auto it = structFieldLayouts.find(structName);
     if(it == structFieldLayouts.end())
@@ -72,8 +73,9 @@ CodeGenerator::getStructFieldLayout(const std::string& structName,
 }
 
 const CodeGenerator::StructFieldAccessInfo*
-CodeGenerator::getStructFieldAccessInfo(const std::string& structName,
-                                        int fieldIndex) const
+CodeGenerator::getStructFieldAccessInfo(
+    const std::string& structName,
+    int fieldIndex) const
 {
     auto it = structFieldAccessInfo.find(structName);
     if(it == structFieldAccessInfo.end())
@@ -84,7 +86,8 @@ CodeGenerator::getStructFieldAccessInfo(const std::string& structName,
 }
 
 bool CodeGenerator::isStructSameOrDerivedFrom(
-    const std::string& candidateStruct, const std::string& baseStruct) const
+    const std::string& candidateStruct,
+    const std::string& baseStruct) const
 {
     if(candidateStruct.empty() || baseStruct.empty())
         return false;
@@ -106,7 +109,9 @@ bool CodeGenerator::isStructSameOrDerivedFrom(
 }
 
 bool CodeGenerator::canAccessStructField(
-    const std::string& accessedThroughStruct, int fieldIndex, int line,
+    const std::string& accessedThroughStruct,
+    int fieldIndex,
+    int line,
     const std::string& fieldName) const
 {
     const StructFieldAccessInfo* accessInfo =
@@ -123,8 +128,9 @@ bool CodeGenerator::canAccessStructField(
             return true;
         break;
     case FieldEncapsulation::Protected:
-        if(isStructSameOrDerivedFrom(currentStructContext,
-                                     accessInfo->ownerStructName))
+        if(isStructSameOrDerivedFrom(
+               currentStructContext,
+               accessInfo->ownerStructName))
             return true;
         break;
     }
@@ -154,8 +160,11 @@ bool CodeGenerator::canAccessStructField(
 }
 
 llvm::Value* CodeGenerator::loadStructFieldValue(
-    const std::string& structTypeName, llvm::Value* structPtr, int fieldIndex,
-    TypeNode* fieldType, const std::string& fieldName)
+    const std::string& structTypeName,
+    llvm::Value* structPtr,
+    int fieldIndex,
+    TypeNode* fieldType,
+    const std::string& fieldName)
 {
     llvm::StructType* structType = getStructType(structTypeName);
     if(!structType)
@@ -168,27 +177,35 @@ llvm::Value* CodeGenerator::loadStructFieldValue(
 
     llvm::Type* storageType = structType->getElementType(layout->storageIndex);
     llvm::Value* fieldPtr = builder.CreateStructGEP(
-        structType, structPtr, layout->storageIndex, fieldName + "_ptr");
+        structType,
+        structPtr,
+        layout->storageIndex,
+        fieldName + "_ptr");
     llvm::Value* storage = builder.CreateLoad(storageType, fieldPtr, fieldName);
 
     if(!layout->packedBit)
         return storage;
 
     llvm::Value* shifted = builder.CreateLShr(
-        storage, llvm::ConstantInt::get(storageType, layout->bitOffset),
+        storage,
+        llvm::ConstantInt::get(storageType, layout->bitOffset),
         fieldName + ".bit_shift");
     llvm::Value* masked = builder.CreateAnd(
-        shifted, llvm::ConstantInt::get(storageType, 1), fieldName + ".bit");
-    return builder.CreateTrunc(masked, llvm::Type::getInt1Ty(context),
-                               fieldName);
+        shifted,
+        llvm::ConstantInt::get(storageType, 1),
+        fieldName + ".bit");
+    return builder
+        .CreateTrunc(masked, llvm::Type::getInt1Ty(context), fieldName);
 }
 
-void CodeGenerator::storeStructFieldValue(const std::string& structTypeName,
-                                          llvm::Value* structPtr,
-                                          int fieldIndex, TypeNode* fieldType,
-                                          llvm::Value* value,
-                                          const std::string& fieldName,
-                                          int line)
+void CodeGenerator::storeStructFieldValue(
+    const std::string& structTypeName,
+    llvm::Value* structPtr,
+    int fieldIndex,
+    TypeNode* fieldType,
+    llvm::Value* value,
+    const std::string& fieldName,
+    int line)
 {
     llvm::StructType* structType = getStructType(structTypeName);
     if(!structType)
@@ -200,7 +217,10 @@ void CodeGenerator::storeStructFieldValue(const std::string& structTypeName,
         return;
 
     llvm::Value* fieldPtr = builder.CreateStructGEP(
-        structType, structPtr, layout->storageIndex, fieldName + "_ptr");
+        structType,
+        structPtr,
+        layout->storageIndex,
+        fieldName + "_ptr");
     llvm::Type* storageType = structType->getElementType(layout->storageIndex);
 
     if(!layout->packedBit)
@@ -220,12 +240,15 @@ void CodeGenerator::storeStructFieldValue(const std::string& structTypeName,
     }
     zextValue = builder.CreateZExt(value, storageType, fieldName + ".zext");
     llvm::Value* shifted = builder.CreateShl(
-        zextValue, llvm::ConstantInt::get(storageType, layout->bitOffset),
+        zextValue,
+        llvm::ConstantInt::get(storageType, layout->bitOffset),
         fieldName + ".shifted");
     llvm::Value* mask = llvm::ConstantInt::get(
-        storageType, static_cast<uint64_t>(1u) << layout->bitOffset);
-    llvm::Value* cleared = builder.CreateAnd(storage, builder.CreateNot(mask),
-                                             fieldName + ".clear");
+        storageType,
+        static_cast<uint64_t>(1u) << layout->bitOffset);
+    llvm::Value* cleared =
+        builder
+            .CreateAnd(storage, builder.CreateNot(mask), fieldName + ".clear");
     llvm::Value* combined =
         builder.CreateOr(cleared, shifted, fieldName + ".combined");
     builder.CreateStore(combined, fieldPtr);

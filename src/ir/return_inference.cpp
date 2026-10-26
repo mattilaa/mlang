@@ -164,8 +164,11 @@ bool inferExprKindForReturn(
     if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
     {
         TypeNode::TypeKind operandKind = TypeNode::TYPE_VOID;
-        if(!inferExprKindForReturn(unary->operand, localKinds, fnReturnKinds,
-                                   operandKind))
+        if(!inferExprKindForReturn(
+               unary->operand,
+               localKinds,
+               fnReturnKinds,
+               operandKind))
             return false;
         if(unary->op == UnaryOpNode::OP_NOT)
         {
@@ -179,11 +182,17 @@ bool inferExprKindForReturn(
     {
         TypeNode::TypeKind t = TypeNode::TYPE_VOID;
         TypeNode::TypeKind f = TypeNode::TYPE_VOID;
-        if(!inferExprKindForReturn(ternary->trueExpr, localKinds, fnReturnKinds,
-                                   t))
+        if(!inferExprKindForReturn(
+               ternary->trueExpr,
+               localKinds,
+               fnReturnKinds,
+               t))
             return false;
-        if(!inferExprKindForReturn(ternary->falseExpr, localKinds,
-                                   fnReturnKinds, f))
+        if(!inferExprKindForReturn(
+               ternary->falseExpr,
+               localKinds,
+               fnReturnKinds,
+               f))
             return false;
         t = Helpers::normalizeInferredKind(t);
         if(!mergeInferredKinds(t, f))
@@ -312,8 +321,11 @@ void collectReturnKindsFromStmt(
         else if(letDecl->expression)
         {
             TypeNode::TypeKind k = TypeNode::TYPE_VOID;
-            if(inferExprKindForReturn(letDecl->expression, locals,
-                                      fnReturnKinds, k))
+            if(inferExprKindForReturn(
+                   letDecl->expression,
+                   locals,
+                   fnReturnKinds,
+                   k))
                 locals[letDecl->name] = Helpers::normalizeInferredKind(k);
         }
         return;
@@ -328,8 +340,11 @@ void collectReturnKindsFromStmt(
         else if(varDecl->initExpr)
         {
             TypeNode::TypeKind k = TypeNode::TYPE_VOID;
-            if(inferExprKindForReturn(varDecl->initExpr, locals, fnReturnKinds,
-                                      k))
+            if(inferExprKindForReturn(
+                   varDecl->initExpr,
+                   locals,
+                   fnReturnKinds,
+                   k))
                 locals[varDecl->name] = Helpers::normalizeInferredKind(k);
         }
         return;
@@ -337,32 +352,47 @@ void collectReturnKindsFromStmt(
     if(auto* block = dynamic_cast<BlockStatementNode*>(stmt))
     {
         auto blockLocals = locals;
-        collectReturnKindsFromList(block->statements, blockLocals,
-                                   fnReturnKinds, out);
+        collectReturnKindsFromList(
+            block->statements,
+            blockLocals,
+            fnReturnKinds,
+            out);
         return;
     }
     if(auto* ifNode = dynamic_cast<IfNode*>(stmt))
     {
         auto ifScopeLocals = locals;
         if(ifNode->conditionInit)
-            collectReturnKindsFromStmt(ifNode->conditionInit, ifScopeLocals,
-                                       fnReturnKinds, out);
+            collectReturnKindsFromStmt(
+                ifNode->conditionInit,
+                ifScopeLocals,
+                fnReturnKinds,
+                out);
 
         auto thenLocals = ifScopeLocals;
-        collectReturnKindsFromList(ifNode->thenBranch, thenLocals,
-                                   fnReturnKinds, out);
+        collectReturnKindsFromList(
+            ifNode->thenBranch,
+            thenLocals,
+            fnReturnKinds,
+            out);
 
         if(ifNode->elseIfBranch)
         {
             auto elseIfLocals = ifScopeLocals;
-            collectReturnKindsFromStmt(ifNode->elseIfBranch, elseIfLocals,
-                                       fnReturnKinds, out);
+            collectReturnKindsFromStmt(
+                ifNode->elseIfBranch,
+                elseIfLocals,
+                fnReturnKinds,
+                out);
         }
         if(ifNode->elseBranch)
         {
             auto elseLocals = ifScopeLocals;
-            collectReturnKindsFromList(ifNode->elseBranch, elseLocals,
-                                       fnReturnKinds, out);
+            collectReturnKindsFromList(
+                ifNode->elseBranch,
+                elseLocals,
+                fnReturnKinds,
+                out);
         }
         return;
     }
@@ -374,53 +404,77 @@ void collectReturnKindsFromStmt(
             if(takeThen)
             {
                 auto thenLocals = locals;
-                collectReturnKindsFromList(cexprIf->thenBranch, thenLocals,
-                                           fnReturnKinds, out);
+                collectReturnKindsFromList(
+                    cexprIf->thenBranch,
+                    thenLocals,
+                    fnReturnKinds,
+                    out);
             }
             else if(cexprIf->elseIfBranch)
             {
                 auto elseIfLocals = locals;
-                collectReturnKindsFromStmt(cexprIf->elseIfBranch,
-                                           elseIfLocals, fnReturnKinds, out);
+                collectReturnKindsFromStmt(
+                    cexprIf->elseIfBranch,
+                    elseIfLocals,
+                    fnReturnKinds,
+                    out);
             }
             else if(cexprIf->elseBranch)
             {
                 auto elseLocals = locals;
-                collectReturnKindsFromList(cexprIf->elseBranch, elseLocals,
-                                           fnReturnKinds, out);
+                collectReturnKindsFromList(
+                    cexprIf->elseBranch,
+                    elseLocals,
+                    fnReturnKinds,
+                    out);
             }
             return;
         }
 
         auto thenLocals = locals;
-        collectReturnKindsFromList(cexprIf->thenBranch, thenLocals,
-                                   fnReturnKinds, out);
+        collectReturnKindsFromList(
+            cexprIf->thenBranch,
+            thenLocals,
+            fnReturnKinds,
+            out);
         if(cexprIf->elseIfBranch)
         {
             auto elseIfLocals = locals;
-            collectReturnKindsFromStmt(cexprIf->elseIfBranch, elseIfLocals,
-                                       fnReturnKinds, out);
+            collectReturnKindsFromStmt(
+                cexprIf->elseIfBranch,
+                elseIfLocals,
+                fnReturnKinds,
+                out);
         }
         if(cexprIf->elseBranch)
         {
             auto elseLocals = locals;
-            collectReturnKindsFromList(cexprIf->elseBranch, elseLocals,
-                                       fnReturnKinds, out);
+            collectReturnKindsFromList(
+                cexprIf->elseBranch,
+                elseLocals,
+                fnReturnKinds,
+                out);
         }
         return;
     }
     if(auto* whileNode = dynamic_cast<WhileNode*>(stmt))
     {
         auto loopLocals = locals;
-        collectReturnKindsFromList(whileNode->body, loopLocals, fnReturnKinds,
-                                   out);
+        collectReturnKindsFromList(
+            whileNode->body,
+            loopLocals,
+            fnReturnKinds,
+            out);
         return;
     }
     if(auto* forNode = dynamic_cast<ForNode*>(stmt))
     {
         auto loopLocals = locals;
-        collectReturnKindsFromList(forNode->body, loopLocals, fnReturnKinds,
-                                   out);
+        collectReturnKindsFromList(
+            forNode->body,
+            loopLocals,
+            fnReturnKinds,
+            out);
         return;
     }
 }

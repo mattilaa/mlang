@@ -20,8 +20,8 @@ public:
 
     size_t workerCount() const;
 
-    std::vector<LoadedFile>
-    loadFiles(const std::vector<std::string>& paths) const;
+    std::vector<LoadedFile> loadFiles(
+        const std::vector<std::string>& paths) const;
 
 private:
     static size_t normalizeWorkers(size_t requested);

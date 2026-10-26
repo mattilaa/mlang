@@ -2,10 +2,13 @@
 
 #include <functional>
 
-void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
-                                              const std::string& context)
+void CodeGenerator::consumeMoveFromExpression(
+    ExpressionNode* expr,
+    int line,
+    const std::string& context)
 {
-    auto validateMoveFromBorrowedPlace = [&](ExpressionNode* placeExpr) {
+    auto validateMoveFromBorrowedPlace = [&](ExpressionNode* placeExpr)
+    {
         TypeNode* placeType = getLValueType(placeExpr, line);
         if(!placeType)
             placeType = inferExpressionTypeNode(placeExpr, line);
@@ -19,15 +22,18 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
         if(targetPlace.empty())
             targetPlace = owner;
 
-        auto conflictsWith = [&](const std::string& borrower) {
+        auto conflictsWith = [&](const std::string& borrower)
+        {
             auto borrowerOwner = pointerBorrowTarget.find(borrower);
             if(borrowerOwner != pointerBorrowTarget.end() &&
                borrowerOwner->second != owner)
                 return false;
             if(!borrowerPlaceOverlaps(borrower, owner, targetPlace))
                 return false;
-            reportError(line, "cannot move '" + targetPlace +
-                                  "' while borrowed by '" + borrower + "'");
+            reportError(
+                line,
+                "cannot move '" + targetPlace + "' while borrowed by '" +
+                    borrower + "'");
             return true;
         };
 
@@ -42,8 +48,9 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
         return true;
     };
 
-    auto validatePartialMoveFromOwner = [&](const std::string& owner,
-                                            const std::string& place) {
+    auto validatePartialMoveFromOwner =
+        [&](const std::string& owner, const std::string& place)
+    {
         auto ownerType = structVariableTypes.find(owner);
         if(ownerType == structVariableTypes.end())
             return true;
@@ -52,9 +59,11 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
         if(!cleanup.function)
             return true;
 
-        reportError(line, "cannot partially move '" + place +
-                              "' from type '" + ownerType->second +
-                              "' because it has an automatic cleanup method");
+        reportError(
+            line,
+            "cannot partially move '" + place + "' from type '" +
+                ownerType->second +
+                "' because it has an automatic cleanup method");
         return false;
     };
 
@@ -71,8 +80,10 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
 
             if(isVariableMoved(id->name))
             {
-                reportError(line, id->col,
-                            "use of moved value: '" + id->name + "'");
+                reportError(
+                    line,
+                    id->col,
+                    "use of moved value: '" + id->name + "'");
                 return;
             }
 
@@ -100,8 +111,9 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
                     return;
                 // Reading or moving the pointee does not move the reference
                 // used to reach it. Keep exclusive reference bindings usable.
-                consume(unary->operand,
-                        borrowed || unary->op == UnaryOpNode::OP_DEREF);
+                consume(
+                    unary->operand,
+                    borrowed || unary->op == UnaryOpNode::OP_DEREF);
             }
             return;
         }
@@ -152,8 +164,9 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
                        globalNamedValues.end() &&
                    isVariableMoved(field->structName))
                 {
-                    reportError(line, "use of moved value: '" +
-                                          field->structName + "'");
+                    reportError(
+                        line,
+                        "use of moved value: '" + field->structName + "'");
                 }
             }
             return;
@@ -168,8 +181,7 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
                 TypeNode* elementType = getLValueType(e, line);
                 const std::string owner = resolveBorrowOwnerFromLValue(e);
                 const std::string place = resolveBorrowPlaceFromLValue(e);
-                if(elementType && !isCopyType(elementType) &&
-                   !place.empty() &&
+                if(elementType && !isCopyType(elementType) && !place.empty() &&
                    globalNamedValues.find(owner) == globalNamedValues.end())
                 {
                     if(!validatePartialMoveFromOwner(owner, place))
@@ -191,8 +203,7 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
                 TypeNode* elementType = getLValueType(e, line);
                 const std::string owner = resolveBorrowOwnerFromLValue(e);
                 const std::string place = resolveBorrowPlaceFromLValue(e);
-                if(elementType && !isCopyType(elementType) &&
-                   !place.empty() &&
+                if(elementType && !isCopyType(elementType) && !place.empty() &&
                    globalNamedValues.find(owner) == globalNamedValues.end())
                 {
                     if(!validatePartialMoveFromOwner(owner, place))

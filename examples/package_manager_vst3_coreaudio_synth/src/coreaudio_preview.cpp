@@ -13,28 +13,32 @@
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/vsttypes.h"
 
-namespace {
+namespace
+{
 
 using mlang_vst3_example::Plugin;
 using mlang_vst3_example::Waveform;
-using Steinberg::Vst::ProcessSetup;
-using Steinberg::Vst::SpeakerArrangement;
 using Steinberg::Vst::kRealtime;
 using Steinberg::Vst::kSample32;
+using Steinberg::Vst::ProcessSetup;
+using Steinberg::Vst::SpeakerArrangement;
 
 struct PreviewState
 {
-    AudioQueueRef queue {nullptr};
+    AudioQueueRef queue{nullptr};
     Plugin plugin;
-    std::uint64_t framesRendered {0};
-    std::uint64_t totalFrames {0};
-    std::uint32_t sampleRate {48000};
-    std::uint32_t channels {2};
-    std::uint32_t framesPerBuffer {512};
-    bool finished {false};
+    std::uint64_t framesRendered{0};
+    std::uint64_t totalFrames{0};
+    std::uint32_t sampleRate{48000};
+    std::uint32_t channels{2};
+    std::uint32_t framesPerBuffer{512};
+    bool finished{false};
 };
 
-void fillBuffer(AudioQueueRef queue, AudioQueueBufferRef buffer, PreviewState* state)
+void fillBuffer(
+    AudioQueueRef queue,
+    AudioQueueBufferRef buffer,
+    PreviewState* state)
 {
     float* samples = static_cast<float*>(buffer->mAudioData);
     const std::uint32_t frames = state->framesPerBuffer;
@@ -54,21 +58,26 @@ void fillBuffer(AudioQueueRef queue, AudioQueueBufferRef buffer, PreviewState* s
 
     std::vector<float> left(frames, 0.0f);
     std::vector<float> right(frames, 0.0f);
-    std::array<float*, 2> channels {left.data(), right.data()};
+    std::array<float*, 2> channels{left.data(), right.data()};
 
-    state->plugin.previewRender(channels.data(), static_cast<int>(state->channels),
-                                static_cast<int>(toRender));
+    state->plugin.previewRender(
+        channels.data(),
+        static_cast<int>(state->channels),
+        static_cast<int>(toRender));
 
     for(std::uint32_t frame = 0; frame < toRender; ++frame)
         for(std::uint32_t channel = 0; channel < state->channels; ++channel)
-            samples[frame * state->channels + channel] = channels[channel][frame];
+            samples[frame * state->channels + channel] =
+                channels[channel][frame];
 
     if(toRender < frames)
     {
-        const std::size_t tail = static_cast<std::size_t>(frames - toRender) *
-                                 state->channels;
-        std::memset(samples + toRender * state->channels, 0,
-                    tail * sizeof(float));
+        const std::size_t tail =
+            static_cast<std::size_t>(frames - toRender) * state->channels;
+        std::memset(
+            samples + toRender * state->channels,
+            0,
+            tail * sizeof(float));
     }
 
     buffer->mAudioDataByteSize = frames * state->channels * sizeof(float);
@@ -76,7 +85,10 @@ void fillBuffer(AudioQueueRef queue, AudioQueueBufferRef buffer, PreviewState* s
     AudioQueueEnqueueBuffer(queue, buffer, 0, nullptr);
 }
 
-void outputCallback(void* userData, AudioQueueRef queue, AudioQueueBufferRef buffer)
+void outputCallback(
+    void* userData,
+    AudioQueueRef queue,
+    AudioQueueBufferRef buffer)
 {
     auto* state = static_cast<PreviewState*>(userData);
     fillBuffer(queue, buffer, state);
@@ -106,17 +118,20 @@ int main(int argc, char** argv)
     }
 
     SpeakerArrangement outputs[1] = {Steinberg::Vst::SpeakerArr::kStereo};
-    if(state.plugin.setBusArrangements(nullptr, 0, outputs, 1) != Steinberg::kResultOk)
+    if(state.plugin.setBusArrangements(nullptr, 0, outputs, 1) !=
+       Steinberg::kResultOk)
     {
         std::fprintf(stderr, "plugin.setBusArrangements failed\n");
         return 1;
     }
 
-    ProcessSetup setup {};
+    ProcessSetup setup{};
     setup.processMode = kRealtime;
     setup.symbolicSampleSize = kSample32;
-    setup.maxSamplesPerBlock = static_cast<Steinberg::int32>(state.framesPerBuffer);
-    setup.sampleRate = static_cast<Steinberg::Vst::SampleRate>(state.sampleRate);
+    setup.maxSamplesPerBlock =
+        static_cast<Steinberg::int32>(state.framesPerBuffer);
+    setup.sampleRate =
+        static_cast<Steinberg::Vst::SampleRate>(state.sampleRate);
     if(state.plugin.setupProcessing(setup) != Steinberg::kResultOk)
     {
         std::fprintf(stderr, "plugin.setupProcessing failed\n");
@@ -133,22 +148,31 @@ int main(int argc, char** argv)
     state.plugin.previewSetWaveform(waveform);
     state.plugin.previewNoteOn(60, 0.9f);
 
-    AudioStreamBasicDescription format {};
+    AudioStreamBasicDescription format{};
     format.mSampleRate = static_cast<Float64>(state.sampleRate);
     format.mFormatID = kAudioFormatLinearPCM;
-    format.mFormatFlags = kLinearPCMFormatFlagIsFloat |
-                          kAudioFormatFlagIsPacked;
+    format.mFormatFlags =
+        kLinearPCMFormatFlagIsFloat | kAudioFormatFlagIsPacked;
     format.mBytesPerPacket = state.channels * sizeof(float);
     format.mFramesPerPacket = 1;
     format.mBytesPerFrame = state.channels * sizeof(float);
     format.mChannelsPerFrame = state.channels;
     format.mBitsPerChannel = 32;
 
-    OSStatus rc = AudioQueueNewOutput(&format, outputCallback, &state, nullptr,
-                                      nullptr, 0, &state.queue);
+    OSStatus rc = AudioQueueNewOutput(
+        &format,
+        outputCallback,
+        &state,
+        nullptr,
+        nullptr,
+        0,
+        &state.queue);
     if(rc != noErr)
     {
-        std::fprintf(stderr, "AudioQueueNewOutput failed: %d\n", static_cast<int>(rc));
+        std::fprintf(
+            stderr,
+            "AudioQueueNewOutput failed: %d\n",
+            static_cast<int>(rc));
         return 1;
     }
 
@@ -161,21 +185,27 @@ int main(int argc, char** argv)
         rc = AudioQueueAllocateBuffer(state.queue, bufferBytes, &buffer);
         if(rc != noErr)
         {
-            std::fprintf(stderr, "AudioQueueAllocateBuffer failed: %d\n",
-                         static_cast<int>(rc));
+            std::fprintf(
+                stderr,
+                "AudioQueueAllocateBuffer failed: %d\n",
+                static_cast<int>(rc));
             AudioQueueDispose(state.queue, true);
             return 1;
         }
         fillBuffer(state.queue, buffer, &state);
     }
 
-    std::printf("[coreaudio] previewing VST3 plugin as %s wave for 3 seconds\n",
-                waveform == Waveform::Square ? "square" : "sine");
+    std::printf(
+        "[coreaudio] previewing VST3 plugin as %s wave for 3 seconds\n",
+        waveform == Waveform::Square ? "square" : "sine");
 
     rc = AudioQueueStart(state.queue, nullptr);
     if(rc != noErr)
     {
-        std::fprintf(stderr, "AudioQueueStart failed: %d\n", static_cast<int>(rc));
+        std::fprintf(
+            stderr,
+            "AudioQueueStart failed: %d\n",
+            static_cast<int>(rc));
         AudioQueueDispose(state.queue, true);
         return 1;
     }

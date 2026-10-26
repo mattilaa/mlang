@@ -73,8 +73,8 @@ size_t WorkspaceGraph::documentCount() const
     return documents_.size();
 }
 
-std::vector<std::string>
-WorkspaceGraph::findProviderUris(std::string_view moduleName) const
+std::vector<std::string> WorkspaceGraph::findProviderUris(
+    std::string_view moduleName) const
 {
     std::vector<std::string> out;
     auto it = moduleProviders_.find(std::string(moduleName));
@@ -88,8 +88,8 @@ WorkspaceGraph::findProviderUris(std::string_view moduleName) const
     return out;
 }
 
-std::vector<std::string>
-WorkspaceGraph::directDependencyModules(std::string_view uri) const
+std::vector<std::string> WorkspaceGraph::directDependencyModules(
+    std::string_view uri) const
 {
     std::vector<std::string> out;
     auto it = documents_.find(std::string(uri));
@@ -107,7 +107,8 @@ WorkspaceGraph::directDependencyModules(std::string_view uri) const
     return out;
 }
 
-std::vector<std::string> WorkspaceGraph::directDependentUris(std::string_view uri) const
+std::vector<std::string> WorkspaceGraph::directDependentUris(
+    std::string_view uri) const
 {
     std::vector<std::string> out;
     auto it = documents_.find(std::string(uri));
@@ -132,8 +133,8 @@ std::vector<std::string> WorkspaceGraph::directDependentUris(std::string_view ur
     return out;
 }
 
-std::vector<std::string>
-WorkspaceGraph::transitiveDependencyModules(std::string_view uri) const
+std::vector<std::string> WorkspaceGraph::transitiveDependencyModules(
+    std::string_view uri) const
 {
     std::vector<std::string> out;
     auto rootIt = documents_.find(std::string(uri));
@@ -145,7 +146,8 @@ WorkspaceGraph::transitiveDependencyModules(std::string_view uri) const
 
     for(const auto& imp : rootIt->second.imports)
     {
-        if(!imp.moduleName.empty() && visitedModules.insert(imp.moduleName).second)
+        if(!imp.moduleName.empty() &&
+           visitedModules.insert(imp.moduleName).second)
             queue.push_back(imp.moduleName);
     }
 

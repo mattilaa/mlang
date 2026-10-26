@@ -7,7 +7,8 @@ extern "C" void mlang_vst3_note_on__i32_f32(int midiNote, float velocity);
 extern "C" void mlang_vst3_note_off__void(void);
 extern "C" float mlang_vst3_next_sample__void(void);
 
-namespace mlang_vst3_example {
+namespace mlang_vst3_example
+{
 
 void OscillatorBridge::reset()
 {

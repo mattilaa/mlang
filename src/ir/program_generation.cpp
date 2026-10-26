@@ -10,9 +10,9 @@
 #include <unordered_map>
 #include <unordered_set>
 
-using mlang::ir_detail::ast_analysis::contains_update_expression;
 using mlang::ir_detail::module_target_triple_string;
 using mlang::ir_detail::normalize_target_arch_name;
+using mlang::ir_detail::ast_analysis::contains_update_expression;
 using mlang::ir_detail::common::Helpers;
 using mlang::ir_detail::return_inference::infer_function_return_type;
 
@@ -37,10 +37,11 @@ void CodeGenerator::generateCode(ProgramNode* program)
             normalize_target_arch_name(moduleAsm->requiredArch);
         if(requiredArch.empty())
         {
-            reportError(moduleAsm->line,
-                        "unsupported module asm target arch '" +
-                            moduleAsm->requiredArch +
-                            "'; expected x86, x64, or aarch64");
+            reportError(
+                moduleAsm->line,
+                "unsupported module asm target arch '" +
+                    moduleAsm->requiredArch +
+                    "'; expected x86, x64, or aarch64");
             continue;
         }
 
@@ -52,12 +53,13 @@ void CodeGenerator::generateCode(ProgramNode* program)
             normalize_target_arch_name(triple.getArchName().str());
         if(actualArch != requiredArch)
         {
-            reportError(moduleAsm->line,
-                        "module asm target arch '" + requiredArch +
-                            "' does not match compilation target arch '" +
-                            (actualArch.empty() ? triple.getArchName().str()
-                                                : actualArch) +
-                            "'");
+            reportError(
+                moduleAsm->line,
+                "module asm target arch '" + requiredArch +
+                    "' does not match compilation target arch '" +
+                    (actualArch.empty() ? triple.getArchName().str()
+                                        : actualArch) +
+                    "'");
             continue;
         }
 
@@ -148,7 +150,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 fnReturnKinds[fn->name] =
                     Helpers::normalizeInferredKind(fn->returnType->kind);
             }
-            else if(it->second != Helpers::normalizeInferredKind(fn->returnType->kind))
+            else if(
+                it->second !=
+                Helpers::normalizeInferredKind(fn->returnType->kind))
             {
                 // Ambiguous overload returns for name-only inference; drop
                 // entry.
@@ -175,8 +179,11 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
                 TypeNode::TypeKind inferredKind = TypeNode::TYPE_VOID;
                 std::string reason;
-                if(!infer_function_return_type(fn, fnReturnKinds, inferredKind,
-                                               reason))
+                if(!infer_function_return_type(
+                       fn,
+                       fnReturnKinds,
+                       inferredKind,
+                       reason))
                     continue;
 
                 fn->returnType = new TypeNode(inferredKind);
@@ -187,17 +194,20 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
         for(auto* fn : program->functionList->functions)
         {
-            if(!fn || fn->isExtern || fn->returnType ||
-               !fn->typeParams.empty())
+            if(!fn || fn->isExtern || fn->returnType || !fn->typeParams.empty())
                 continue;
             TypeNode::TypeKind inferredKind = TypeNode::TYPE_VOID;
             std::string reason;
-            if(!infer_function_return_type(fn, fnReturnKinds, inferredKind,
-                                           reason))
+            if(!infer_function_return_type(
+                   fn,
+                   fnReturnKinds,
+                   inferredKind,
+                   reason))
             {
-                reportError(fn->line,
-                            "cannot infer return type for function '" +
-                                fn->name + "': " + reason);
+                reportError(
+                    fn->line,
+                    "cannot infer return type for function '" + fn->name +
+                        "': " + reason);
                 fn->returnType = new TypeNode(TypeNode::TYPE_VOID);
             }
             else
@@ -209,8 +219,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
     if(testMode && mainDef)
     {
-        reportError(mainDef->line,
-                    "main is not allowed in test mode; use #[test] functions");
+        reportError(
+            mainDef->line,
+            "main is not allowed in test mode; use #[test] functions");
     }
     else if(requireMain && !mainDef)
     {
@@ -218,8 +229,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
             "missing entry point: executable builds require 'fn main() -> i32'";
         if(firstUserFunction)
         {
-            msg += "; found function '" + firstUserFunction->name +
-                   "' instead";
+            msg += "; found function '" + firstUserFunction->name + "' instead";
             if(firstUserFunction->name != "main")
                 msg += " (did you mean 'main'?)";
         }
@@ -273,8 +283,10 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 if(!(elemKind == TypeNode::TYPE_STR8 ||
                      elemKind == TypeNode::TYPE_STRING))
                 {
-                    reportError(mainDef->line, "invalid signature for 'main': "
-                                               "argv must be list<str8>");
+                    reportError(
+                        mainDef->line,
+                        "invalid signature for 'main': "
+                        "argv must be list<str8>");
                 }
                 else
                 {
@@ -288,16 +300,32 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
         else
         {
-            reportError(mainDef->line,
-                        "invalid signature for 'main': expected no args, "
-                        "list<str8>, or (i32, list<str8>)");
+            reportError(
+                mainDef->line,
+                "invalid signature for 'main': expected no args, "
+                "list<str8>, or (i32, list<str8>)");
         }
     }
 
     // Reserved type keywords and type/name conflicts.
-    const std::unordered_set<std::string> reservedTypeNames = {
-        "void", "bool", "f32", "f64", "str8", "str16", "list", "map", "tuple",
-        "i8",   "i16",  "i32", "i64", "u8",   "u16",   "u32",  "u64"};
+    const std::unordered_set<std::string> reservedTypeNames =
+        {"void",
+         "bool",
+         "f32",
+         "f64",
+         "str8",
+         "str16",
+         "list",
+         "map",
+         "tuple",
+         "i8",
+         "i16",
+         "i32",
+         "i64",
+         "u8",
+         "u16",
+         "u32",
+         "u64"};
 
     std::map<std::string, std::pair<std::string, int>> typeDefs;
     if(!program->typeAliases.empty())
@@ -312,18 +340,21 @@ void CodeGenerator::generateCode(ProgramNode* program)
             seenAliasNames.insert(aliasDef->name);
             if(reservedTypeNames.count(aliasDef->name))
             {
-                reportError(aliasDef->line, aliasDef->col,
-                            "type name '" + aliasDef->name +
-                                "' is a reserved keyword");
+                reportError(
+                    aliasDef->line,
+                    aliasDef->col,
+                    "type name '" + aliasDef->name + "' is a reserved keyword");
             }
             auto it = typeDefs.find(aliasDef->name);
             if(it != typeDefs.end())
             {
-                reportError(aliasDef->line, aliasDef->col,
-                            "type name '" + aliasDef->name +
-                                "' conflicts with earlier " + it->second.first +
-                                " defined at line " +
-                                std::to_string(it->second.second));
+                reportError(
+                    aliasDef->line,
+                    aliasDef->col,
+                    "type name '" + aliasDef->name +
+                        "' conflicts with earlier " + it->second.first +
+                        " defined at line " +
+                        std::to_string(it->second.second));
             }
             else
             {
@@ -339,17 +370,18 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 continue;
             if(reservedTypeNames.count(st->name))
             {
-                reportError(st->line, "type name '" + st->name +
-                                          "' is a reserved keyword");
+                reportError(
+                    st->line,
+                    "type name '" + st->name + "' is a reserved keyword");
             }
             auto it = typeDefs.find(st->name);
             if(it != typeDefs.end())
             {
-                reportError(st->line, "type name '" + st->name +
-                                          "' conflicts with earlier " +
-                                          it->second.first +
-                                          " defined at line " +
-                                          std::to_string(it->second.second));
+                reportError(
+                    st->line,
+                    "type name '" + st->name + "' conflicts with earlier " +
+                        it->second.first + " defined at line " +
+                        std::to_string(it->second.second));
             }
             else
             {
@@ -364,19 +396,20 @@ void CodeGenerator::generateCode(ProgramNode* program)
                         continue;
                     if(reservedTypeNames.count(nestedEnum->name))
                     {
-                        reportError(nestedEnum->line,
-                                    "type name '" + nestedEnum->name +
-                                        "' is a reserved keyword");
+                        reportError(
+                            nestedEnum->line,
+                            "type name '" + nestedEnum->name +
+                                "' is a reserved keyword");
                     }
                     auto eit = typeDefs.find(nestedEnum->name);
                     if(eit != typeDefs.end())
                     {
-                        reportError(nestedEnum->line,
-                                    "type name '" + nestedEnum->name +
-                                        "' conflicts with earlier " +
-                                        eit->second.first +
-                                        " defined at line " +
-                                        std::to_string(eit->second.second));
+                        reportError(
+                            nestedEnum->line,
+                            "type name '" + nestedEnum->name +
+                                "' conflicts with earlier " +
+                                eit->second.first + " defined at line " +
+                                std::to_string(eit->second.second));
                     }
                     else
                     {
@@ -405,17 +438,18 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 continue;
             if(reservedTypeNames.count(en->name))
             {
-                reportError(en->line, "type name '" + en->name +
-                                          "' is a reserved keyword");
+                reportError(
+                    en->line,
+                    "type name '" + en->name + "' is a reserved keyword");
             }
             auto it = typeDefs.find(en->name);
             if(it != typeDefs.end())
             {
-                reportError(en->line, "type name '" + en->name +
-                                          "' conflicts with earlier " +
-                                          it->second.first +
-                                          " defined at line " +
-                                          std::to_string(it->second.second));
+                reportError(
+                    en->line,
+                    "type name '" + en->name + "' conflicts with earlier " +
+                        it->second.first + " defined at line " +
+                        std::to_string(it->second.second));
             }
             else
             {
@@ -433,9 +467,10 @@ void CodeGenerator::generateCode(ProgramNode* program)
             auto it = typeDefs.find(fn->name);
             if(it != typeDefs.end())
             {
-                reportError(fn->line, "function name '" + fn->name +
-                                          "' conflicts with type '" +
-                                          it->first + "'");
+                reportError(
+                    fn->line,
+                    "function name '" + fn->name + "' conflicts with type '" +
+                        it->first + "'");
             }
         }
     }
@@ -483,7 +518,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
         traitDefinitions[traitDef->name] = traitDef;
     }
 
-    auto typeNodesEquivalent = [&](TypeNode* lhs, TypeNode* rhs,
+    auto typeNodesEquivalent = [&](TypeNode* lhs,
+                                   TypeNode* rhs,
                                    const std::vector<std::string>& typeParams,
                                    const std::string& selfTypeName) -> bool
     {
@@ -521,9 +557,10 @@ void CodeGenerator::generateCode(ProgramNode* program)
         auto traitIt = traitDefinitions.find(impl->traitName);
         if(traitIt == traitDefinitions.end() || !traitIt->second)
         {
-            reportError(impl->line, "unknown trait '" + impl->traitName +
-                                        "' in impl for '" + impl->structName +
-                                        "'");
+            reportError(
+                impl->line,
+                "unknown trait '" + impl->traitName + "' in impl for '" +
+                    impl->structName + "'");
             return;
         }
 
@@ -583,8 +620,11 @@ void CodeGenerator::generateCode(ProgramNode* program)
                         }
                     }
                     auto* defaulted = new StructMethodNode(
-                        traitMethod->returnType, traitMethod->name, newParams,
-                        traitMethod->body, traitMethod->isPublic,
+                        traitMethod->returnType,
+                        traitMethod->name,
+                        newParams,
+                        traitMethod->body,
+                        traitMethod->isPublic,
                         traitMethod->isStatic);
                     // The defaulted method should resolve under the trait's
                     // module (same module-context rules as a normal trait
@@ -595,10 +635,11 @@ void CodeGenerator::generateCode(ProgramNode* program)
                     continue;
                 }
 
-                reportError(impl->line,
-                            "trait '" + impl->traitName + "' for struct '" +
-                                impl->structName + "' requires method '" +
-                                traitMethod->name + "'");
+                reportError(
+                    impl->line,
+                    "trait '" + impl->traitName + "' for struct '" +
+                        impl->structName + "' requires method '" +
+                        traitMethod->name + "'");
                 continue;
             }
 
@@ -609,8 +650,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
                     "method '" + impl->structName + "::" + implMethod->name +
                         "' does not match trait '" + impl->traitName +
                         "': expected " +
-                        std::string(traitMethod->isStatic ? "static"
-                                                          : "instance") +
+                        std::string(
+                            traitMethod->isStatic ? "static" : "instance") +
                         " method");
                 continue;
             }
@@ -643,29 +684,32 @@ void CodeGenerator::generateCode(ProgramNode* program)
                     continue;
                 if(expectedParam->name != actualParam->name)
                 {
-                    reportError(implMethod->line,
-                                "method '" + impl->structName +
-                                    "::" + implMethod->name +
-                                    "' does not match trait '" +
-                                    impl->traitName + "': parameter " +
-                                    std::to_string(i + 1) + " must be named '" +
-                                    expectedParam->name + "'");
+                    reportError(
+                        implMethod->line,
+                        "method '" + impl->structName +
+                            "::" + implMethod->name +
+                            "' does not match trait '" + impl->traitName +
+                            "': parameter " + std::to_string(i + 1) +
+                            " must be named '" + expectedParam->name + "'");
                     mismatch = true;
                     break;
                 }
-                if(!typeNodesEquivalent(expectedParam->type, actualParam->type,
-                                        impl->typeParams, impl->structName))
+                if(!typeNodesEquivalent(
+                       expectedParam->type,
+                       actualParam->type,
+                       impl->typeParams,
+                       impl->structName))
                 {
-                    reportError(implMethod->line,
-                                "method '" + impl->structName +
-                                    "::" + implMethod->name +
-                                    "' does not match trait '" +
-                                    impl->traitName + "': parameter '" +
-                                    actualParam->name + "' has type '" +
-                                    Helpers::type_name_for_error(actualParam->type) +
-                                    "', expected '" +
-                                    Helpers::type_name_for_error(expectedParam->type) +
-                                    "'");
+                    reportError(
+                        implMethod->line,
+                        "method '" + impl->structName + "::" +
+                            implMethod->name + "' does not match trait '" +
+                            impl->traitName + "': parameter '" +
+                            actualParam->name + "' has type '" +
+                            Helpers::type_name_for_error(actualParam->type) +
+                            "', expected '" +
+                            Helpers::type_name_for_error(expectedParam->type) +
+                            "'");
                     mismatch = true;
                     break;
                 }
@@ -673,9 +717,11 @@ void CodeGenerator::generateCode(ProgramNode* program)
             if(mismatch)
                 continue;
 
-            if(!typeNodesEquivalent(traitMethod->returnType,
-                                    implMethod->returnType, impl->typeParams,
-                                    impl->structName))
+            if(!typeNodesEquivalent(
+                   traitMethod->returnType,
+                   implMethod->returnType,
+                   impl->typeParams,
+                   impl->structName))
             {
                 reportError(
                     implMethod->line,
@@ -684,7 +730,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
                         "': return type '" +
                         Helpers::type_name_for_error(implMethod->returnType) +
                         "' does not match expected '" +
-                        Helpers::type_name_for_error(traitMethod->returnType) + "'");
+                        Helpers::type_name_for_error(traitMethod->returnType) +
+                        "'");
             }
         }
 
@@ -700,12 +747,13 @@ void CodeGenerator::generateCode(ProgramNode* program)
                     continue;
                 if(concreteImpls.find(superTrait) == concreteImpls.end())
                 {
-                    reportError(impl->line, "trait '" + impl->traitName +
-                                                "' for struct '" +
-                                                impl->structName +
-                                                "' requires struct to also "
-                                                "implement super-trait '" +
-                                                superTrait + "'");
+                    reportError(
+                        impl->line,
+                        "trait '" + impl->traitName + "' for struct '" +
+                            impl->structName +
+                            "' requires struct to also "
+                            "implement super-trait '" +
+                            superTrait + "'");
                 }
             }
         }
@@ -870,7 +918,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 continue;
             if(!funcDef->typePackParam.empty())
             {
-                variadicGenericFunctionTemplates[funcDef->name].push_back(funcDef);
+                variadicGenericFunctionTemplates[funcDef->name].push_back(
+                    funcDef);
                 continue;
             }
             if(!funcDef->typeParams.empty())
@@ -928,8 +977,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
     // even when a caller or wrapper appears before the function it invokes.
     for(size_t pass = 0; pass <= functionOverloads.size(); ++pass)
     {
-        const auto previousParameterSummaries =
-            functionPointerReturnParameters;
+        const auto previousParameterSummaries = functionPointerReturnParameters;
         const auto previousCompleteSummaries =
             functionPointerReturnSummaryComplete;
         const auto previousPointerSlotMutationSummaries =
@@ -993,8 +1041,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 continue;
             if(!impl->traitName.empty())
             {
-                reportError(impl->line,
-                            "#[fixture] is only valid on inherent impl blocks");
+                reportError(
+                    impl->line,
+                    "#[fixture] is only valid on inherent impl blocks");
                 continue;
             }
             for(auto* method : impl->methods)
@@ -1003,9 +1052,10 @@ void CodeGenerator::generateCode(ProgramNode* program)
                     continue;
                 if(method->isStatic)
                 {
-                    reportError(method->line,
-                                "fixture #[test] methods must take 'self: "
-                                "&mut Self' (got static method)");
+                    reportError(
+                        method->line,
+                        "fixture #[test] methods must take 'self: "
+                        "&mut Self' (got static method)");
                     continue;
                 }
                 bool selfOnly = true;
@@ -1019,9 +1069,10 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 }
                 if(!selfOnly)
                 {
-                    reportError(method->line,
-                                "fixture #[test] methods must take only "
-                                "'self: &mut Self' as parameter");
+                    reportError(
+                        method->line,
+                        "fixture #[test] methods must take only "
+                        "'self: &mut Self' as parameter");
                     continue;
                 }
                 if(method->returnType &&
@@ -1029,9 +1080,10 @@ void CodeGenerator::generateCode(ProgramNode* program)
                      method->returnType->kind == TypeNode::TYPE_INT ||
                      method->returnType->kind == TypeNode::TYPE_I32))
                 {
-                    reportError(method->line,
-                                "fixture #[test] methods must return void or "
-                                "i32");
+                    reportError(
+                        method->line,
+                        "fixture #[test] methods must return void or "
+                        "i32");
                     continue;
                 }
                 fixtureTests.push_back({impl, method});
@@ -1047,8 +1099,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 continue;
             if(!testFn->parameters->parameters.empty())
             {
-                reportError(testFn->line,
-                            "test functions must have no parameters");
+                reportError(
+                    testFn->line,
+                    "test functions must have no parameters");
                 continue;
             }
             if(testFn->returnType &&
@@ -1056,8 +1109,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
                  testFn->returnType->kind == TypeNode::TYPE_INT ||
                  testFn->returnType->kind == TypeNode::TYPE_I32))
             {
-                reportError(testFn->line,
-                            "test functions must return void or i32");
+                reportError(
+                    testFn->line,
+                    "test functions must return void or i32");
                 continue;
             }
         }
@@ -1081,14 +1135,18 @@ void CodeGenerator::generateCode(ProgramNode* program)
         llvm::Type* i8PtrType = llvm::PointerType::get(i8Type, 0);
         llvm::Type* argvPtrType = llvm::PointerType::get(i8PtrType, 0);
         llvm::Type* ptrType = llvm::PointerType::get(
-            getLLVMTypeFromNode(mainArgsListType->elementType), 0);
+            getLLVMTypeFromNode(mainArgsListType->elementType),
+            0);
 #endif
 
         std::vector<llvm::Type*> wrapperParams = {i32Type, argvPtrType};
         llvm::FunctionType* wrapperType =
             llvm::FunctionType::get(i32Type, wrapperParams, false);
         llvm::Function* wrapper = llvm::Function::Create(
-            wrapperType, llvm::Function::ExternalLinkage, "main", module.get());
+            wrapperType,
+            llvm::Function::ExternalLinkage,
+            "main",
+            module.get());
 
         auto argIt = wrapper->arg_begin();
         llvm::Value* argcArg = &*argIt++;
@@ -1125,8 +1183,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
             userMain = module->getFunction("__mlang_user_main");
         if(!userMain)
         {
-            reportError(mainDef->line,
-                        "failed to generate main wrapper: missing user main");
+            reportError(
+                mainDef->line,
+                "failed to generate main wrapper: missing user main");
             builder.CreateRet(llvm::ConstantInt::get(i32Type, 1));
         }
         else

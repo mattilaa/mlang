@@ -144,9 +144,11 @@ std::string recovery_suffix_for(std::string_view text)
 namespace mlang
 {
 
-bool IncrementalCompiler::openDocument(const std::string& uri,
-                                       const std::string& path,
-                                       const std::string& text, int version)
+bool IncrementalCompiler::openDocument(
+    const std::string& uri,
+    const std::string& path,
+    const std::string& text,
+    int version)
 {
     IncrementalDocument doc;
     doc.uri = uri;
@@ -157,9 +159,10 @@ bool IncrementalCompiler::openDocument(const std::string& uri,
     return parseDocument(uri) != nullptr;
 }
 
-bool IncrementalCompiler::setDocumentText(const std::string& uri,
-                                          const std::string& text,
-                                          int version)
+bool IncrementalCompiler::setDocumentText(
+    const std::string& uri,
+    const std::string& text,
+    int version)
 {
     auto it = documents_.find(uri);
     if(it == documents_.end())
@@ -172,7 +175,8 @@ bool IncrementalCompiler::setDocumentText(const std::string& uri,
 }
 
 bool IncrementalCompiler::applyChanges(
-    const std::string& uri, const std::vector<IncrementalTextChange>& changes,
+    const std::string& uri,
+    const std::vector<IncrementalTextChange>& changes,
     int version)
 {
     auto it = documents_.find(uri);
@@ -204,8 +208,8 @@ IncrementalDocument* IncrementalCompiler::getDocument(const std::string& uri)
     return &it->second;
 }
 
-const IncrementalDocument*
-IncrementalCompiler::getDocument(const std::string& uri) const
+const IncrementalDocument* IncrementalCompiler::getDocument(
+    const std::string& uri) const
 {
     auto it = documents_.find(uri);
     if(it == documents_.end())
@@ -262,8 +266,9 @@ ProgramNode* IncrementalCompiler::parseDocument(const std::string& uri)
     return nullptr;
 }
 
-bool IncrementalCompiler::applyChangeToText(std::string& text,
-                                            const IncrementalTextChange& change)
+bool IncrementalCompiler::applyChangeToText(
+    std::string& text,
+    const IncrementalTextChange& change)
 {
     if(change.isFullDocumentReplace())
     {
@@ -281,9 +286,9 @@ bool IncrementalCompiler::applyChangeToText(std::string& text,
     return true;
 }
 
-std::optional<size_t>
-IncrementalCompiler::lspPositionToOffset(std::string_view text,
-                                         const Position& position)
+std::optional<size_t> IncrementalCompiler::lspPositionToOffset(
+    std::string_view text,
+    const Position& position)
 {
     if(position.line < 0 || position.character < 0)
         return std::nullopt;

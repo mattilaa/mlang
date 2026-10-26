@@ -42,8 +42,11 @@
  * version = "0.1.0"
  *
  * [dependencies]
- * miniaudio = { url = "https://github.com/mackron/miniaudio/archive/refs/heads/master.tar.gz", archive = "tar.gz", strip_components = "1", build = "none" }
- * vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", submodules = true, build = "none" }
+ * miniaudio = { url =
+ * "https://github.com/mackron/miniaudio/archive/refs/heads/master.tar.gz",
+ * archive = "tar.gz", strip_components = "1", build = "none" } vst3sdk = { git
+ * = "https://github.com/steinbergmedia/vst3sdk.git", submodules = true, build =
+ * "none" }
  *
  * [[task]]
  * name = "compile-c-bridge"
@@ -151,7 +154,8 @@
  *   [
  *     'sh',
  *     '-c',
- *     'for tool in cc c++ ar python3; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done',
+ *     'for tool in cc c++ ar python3; do if ! command -v $tool >/dev/null 2>&1;
+ * then echo Missing required tool in PATH: $tool; exit 1; fi; done',
  *   ],
  * ]
  * \endcode
@@ -161,7 +165,8 @@
  * [[task]]
  * name = "fix-source-perms"
  * commands = [
- *   [ "tar", "-xzf", "{{build_dir}}/archive.tar.gz", "-C", "{{build_dir}}/src" ],
+ *   [ "tar", "-xzf", "{{build_dir}}/archive.tar.gz", "-C", "{{build_dir}}/src"
+ * ],
  * ]
  * chmod = "644"
  * chmod_paths = [
@@ -210,19 +215,23 @@
  * name = "busybox-fetch"
  * commands = [
  *   [ "mkdir", "-p", "{{build_dir}}" ],
- *   [ "sh", "-c", "[ -x {{build_dir}}/busybox-armv8l ] || curl -L --fail https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv8l -o {{build_dir}}/busybox-armv8l" ],
- *   [ "chmod", "+x", "{{build_dir}}/busybox-armv8l" ],
+ *   [ "sh", "-c", "[ -x {{build_dir}}/busybox-armv8l ] || curl -L --fail
+ * https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv8l
+ * -o {{build_dir}}/busybox-armv8l" ], [ "chmod", "+x",
+ * "{{build_dir}}/busybox-armv8l" ],
  * ]
  *
  * [[task]]
  * name = "gnu-userspace-fetch"
  * commands = [
- *   [ "sh", "-c", "if [ \"{{option.userspace}}\" != \"gnu\" ]; then exit 0; fi" ],
- *   [ "mkdir", "-p", "{{build_dir}}" ],
- *   [ "sh", "-c", "[ -f {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz ] || curl -L --fail https://cdimage.ubuntu.com/ubuntu-base/releases/noble/release/ubuntu-base-24.04.3-base-arm64.tar.gz -o {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz" ],
- *   [ "rm", "-rf", "{{build_dir}}/gnu-rootfs" ],
- *   [ "mkdir", "-p", "{{build_dir}}/gnu-rootfs" ],
- *   [ "tar", "-xzf", "{{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz", "-C", "{{build_dir}}/gnu-rootfs" ],
+ *   [ "sh", "-c", "if [ \"{{option.userspace}}\" != \"gnu\" ]; then exit 0; fi"
+ * ], [ "mkdir", "-p", "{{build_dir}}" ], [ "sh", "-c", "[ -f
+ * {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz ] || curl -L --fail
+ * https://cdimage.ubuntu.com/ubuntu-base/releases/noble/release/ubuntu-base-24.04.3-base-arm64.tar.gz
+ * -o {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz" ], [ "rm", "-rf",
+ * "{{build_dir}}/gnu-rootfs" ], [ "mkdir", "-p", "{{build_dir}}/gnu-rootfs" ],
+ *   [ "tar", "-xzf", "{{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz",
+ * "-C", "{{build_dir}}/gnu-rootfs" ],
  * ]
  *
  * [[task]]
@@ -230,13 +239,20 @@
  * depends_on = ["busybox-fetch", "gnu-userspace-fetch"]
  * shell = [
  *   "rm -rf {{build_dir}}/initramfs {{build_dir}}/initramfs.cpio.gz",
- *   "if [ '{{option.userspace}}' = 'gnu' ]; then cp -a {{build_dir}}/gnu-rootfs/. {{build_dir}}/initramfs/; CONSOLE_CMD='/bin/cttyhack /bin/bash --login'; else mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/usr/bin; CONSOLE_CMD='/bin/cttyhack /bin/sh'; fi",
- *   "mkdir -p {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp",
- *   "cp {{build_dir}}/busybox-armv8l {{build_dir}}/initramfs/bin/busybox",
- *   "# Use BusyBox as the real PID 1 init process and precreate applet links on the host.",
- *   "cd {{build_dir}}/initramfs/bin && for applet in init cttyhack sh mount mkdir uname ls cat echo dmesg ps; do ln -sf busybox $applet; done",
- *   "ln -sf bin/busybox {{build_dir}}/initramfs/init",
- *   "cat > {{build_dir}}/initramfs/etc/inittab <<EOF",
+ *   "if [ '{{option.userspace}}' = 'gnu' ]; then cp -a
+ * {{build_dir}}/gnu-rootfs/. {{build_dir}}/initramfs/;
+ * CONSOLE_CMD='/bin/cttyhack /bin/bash --login'; else mkdir -p
+ * {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/usr/bin;
+ * CONSOLE_CMD='/bin/cttyhack /bin/sh'; fi", "mkdir -p
+ * {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc
+ * {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys
+ * {{build_dir}}/initramfs/tmp", "cp {{build_dir}}/busybox-armv8l
+ * {{build_dir}}/initramfs/bin/busybox",
+ *   "# Use BusyBox as the real PID 1 init process and precreate applet links on
+ * the host.", "cd {{build_dir}}/initramfs/bin && for applet in init cttyhack sh
+ * mount mkdir uname ls cat echo dmesg ps; do ln -sf busybox $applet; done", "ln
+ * -sf bin/busybox {{build_dir}}/initramfs/init", "cat >
+ * {{build_dir}}/initramfs/etc/inittab <<EOF",
  *   "::sysinit:/bin/mount -t proc proc /proc",
  *   "::sysinit:/bin/mount -t sysfs sysfs /sys",
  *   "::sysinit:/bin/mount -t devtmpfs devtmpfs /dev",
@@ -245,7 +261,8 @@
  *   "::ctrlaltdel:/bin/umount -a -r",
  *   "::shutdown:/bin/umount -a -r",
  *   "EOF",
- *   "cd {{build_dir}}/initramfs && find . -print | cpio -o -H newc | gzip -9 > ../initramfs.cpio.gz",
+ *   "cd {{build_dir}}/initramfs && find . -print | cpio -o -H newc | gzip -9 >
+ * ../initramfs.cpio.gz",
  * ]
  * \endcode
  *

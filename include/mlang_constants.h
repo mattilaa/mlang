@@ -2,7 +2,8 @@
 
 #include <array>
 
-namespace mlang::constants {
+namespace mlang::constants
+{
 
 struct AttributeTokenSpec
 {
@@ -12,9 +13,23 @@ struct AttributeTokenSpec
 };
 
 constexpr std::array<const char*, 17> kLspKeywords = {
-    "fn",    "let",    "struct",   "enum",     "if",       "else",
-    "match", "return", "result",   "option",   "generic",  "concept",
-    "where", "req",    "requires", "typename", "noexcept",
+    "fn",
+    "let",
+    "struct",
+    "enum",
+    "if",
+    "else",
+    "match",
+    "return",
+    "result",
+    "option",
+    "generic",
+    "concept",
+    "where",
+    "req",
+    "requires",
+    "typename",
+    "noexcept",
 };
 
 constexpr std::array<const char*, 0> kRuntimeBuiltinTypes = {};
@@ -47,11 +62,11 @@ constexpr std::array<const char*, 4> kAttributeKeywords = {
 };
 
 constexpr std::array<AttributeTokenSpec, 5> kAttributeTokenSpecs = {
-    AttributeTokenSpec{kAttrDeriveDebug,  2, 6},  // derive
-    AttributeTokenSpec{kAttrTest,         2, 4},   // test
-    AttributeTokenSpec{kAttrInline,       2, 6},   // inline
-    AttributeTokenSpec{kAttrInlineAlways, 2, 13},  // inline(always)
-    AttributeTokenSpec{kAttrInlineNever,  2, 12},  // inline(never)
+    AttributeTokenSpec{kAttrDeriveDebug, 2, 6},   // derive
+    AttributeTokenSpec{kAttrTest, 2, 4},          // test
+    AttributeTokenSpec{kAttrInline, 2, 6},        // inline
+    AttributeTokenSpec{kAttrInlineAlways, 2, 13}, // inline(always)
+    AttributeTokenSpec{kAttrInlineNever, 2, 12},  // inline(never)
 };
 
 } // namespace mlang::constants

@@ -88,8 +88,9 @@ protected:
 
     // Compile the MLA source file
     // Returns true if compilation succeeded
-    bool compile(bool expectSuccess = true,
-                 const std::string& options = std::string())
+    bool compile(
+        bool expectSuccess = true,
+        const std::string& options = std::string())
     {
         std::string cmd = compilerPath + " -o " + outputExe + " " + sourceFile;
         if(!options.empty())
@@ -105,8 +106,9 @@ protected:
         return result != 0;
     }
 
-    std::string compileCapture(int& exitCode,
-                               const std::string& options = std::string())
+    std::string compileCapture(
+        int& exitCode,
+        const std::string& options = std::string())
     {
         std::string cmd = compilerPath + " -o " + outputExe + " " + sourceFile;
         if(!options.empty())
@@ -263,7 +265,8 @@ TEST_F(MLATest, MainReturnsValue)
 
 TEST_F(MLATest, CompoundAssignmentOperators)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         fn main() -> i32 {
             var i: i32 = 3;
             i += 1;
@@ -287,35 +290,41 @@ TEST_F(MLATest, CompoundAssignmentOperators)
             i >>= 2;
             return i == 4 ? 0 : 10;
         }
-    )"), 0);
+    )"),
+        0);
 }
 
 TEST_F(MLATest, BitShiftsAcrossIntegerWidths)
 {
-    for(const std::string type : {"i8", "i16", "i32", "i64",
-                                  "u8", "u16", "u32", "u64"})
+    for(const std::string type :
+        {"i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64"})
     {
         SCOPED_TRACE(type);
-        EXPECT_EQ(compileAndRunExitCode(
-            "fn main() -> i32 {"
-            "    let value: " + type + " = 12;"
-            "    if (value << 2) != 48 { return 1; }"
-            "    if (value >> 2) != 3 { return 2; }"
-            "    if (value << 0) != value { return 3; }"
-            "    if (value >> 0) != value { return 4; }"
-            "    if (value << 1) != 24 { return 5; }"
-            "    if (value << 3) != 96 { return 6; }"
-            "    if (value >> 1) != 6 { return 7; }"
-            "    if (value >> 3) != 1 { return 8; }"
-            "    if (value >> 4) != 0 { return 9; }"
-            "    return 0;"
-            "}"), 0);
+        EXPECT_EQ(
+            compileAndRunExitCode(
+                "fn main() -> i32 {"
+                "    let value: " +
+                type +
+                " = 12;"
+                "    if (value << 2) != 48 { return 1; }"
+                "    if (value >> 2) != 3 { return 2; }"
+                "    if (value << 0) != value { return 3; }"
+                "    if (value >> 0) != value { return 4; }"
+                "    if (value << 1) != 24 { return 5; }"
+                "    if (value << 3) != 96 { return 6; }"
+                "    if (value >> 1) != 6 { return 7; }"
+                "    if (value >> 3) != 1 { return 8; }"
+                "    if (value >> 4) != 0 { return 9; }"
+                "    return 0;"
+                "}"),
+            0);
     }
 }
 
 TEST_F(MLATest, BitShiftRightSignedAndUnsigned)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         fn main() -> i32 {
             let signed32: i32 = -8;
             let signed64: i64 = -8;
@@ -336,7 +345,8 @@ TEST_F(MLATest, BitShiftRightSignedAndUnsigned)
             if (1u16 << 15u16) != 0x8000u16 { return 12; }
             return 0;
         }
-    )"), 0);
+    )"),
+        0);
 }
 
 TEST_F(MLATest, BitShiftsWithRuntimeCountsAndCompoundAssignments)
@@ -379,23 +389,26 @@ TEST_F(MLATest, BitShiftsWithRuntimeCountsAndCompoundAssignments)
 
 TEST_F(MLATest, BitShiftsRejectFloatingPointOperands)
 {
-    for(const std::string expression : {"1.0 << 2", "1 >> 2.0",
-                                         "1.0 >> 2", "1 << 2.0"})
+    for(const std::string expression :
+        {"1.0 << 2", "1 >> 2.0", "1.0 >> 2", "1 << 2.0"})
     {
         SCOPED_TRACE(expression);
-        writeSource("fn main() -> i32 { let value = " + expression +
-                    "; return 0; }");
+        writeSource(
+            "fn main() -> i32 { let value = " + expression + "; return 0; }");
         int rc = 0;
         const std::string out = compileCapture(rc);
         EXPECT_NE(rc, 0);
-        EXPECT_NE(out.find("bitwise operations require integer operands"),
-                  std::string::npos) << out;
+        EXPECT_NE(
+            out.find("bitwise operations require integer operands"),
+            std::string::npos)
+            << out;
     }
 }
 
 TEST_F(MLATest, BitwiseAndAssignmentOnMutableTargets)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         struct Flags { var value: u32; };
         fn main() -> i32 {
             var flags = Flags { value: 15u32 };
@@ -406,7 +419,8 @@ TEST_F(MLATest, BitwiseAndAssignmentOnMutableTargets)
             narrow &= 3u8;
             return flags.value == 6u32 && values[0] == 5 && narrow == 3u8 ? 0 : 1;
         }
-    )"), 0);
+    )"),
+        0);
 }
 
 TEST_F(MLATest, BitwiseAndAssignmentRejectsImmutableTarget)
@@ -440,7 +454,8 @@ TEST_F(MLATest, UserDefinedLiteralDemo)
 
 TEST_F(MLATest, UserDefinedLiteralDispatchesByLiteralCategory)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         fn operator""_kind(value: u64) -> i32 { return 1; }
         fn operator "" _kind(value: f64) -> i32 { return 2; }
         fn operator ""_kind(value: str8) -> i32 { return 3; }
@@ -454,12 +469,13 @@ TEST_F(MLATest, UserDefinedLiteralDispatchesByLiteralCategory)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, UserDefinedLiteralIntegerBasesAndFullUnsignedRange)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         fn operator "" _value(value: u64) -> u64 { return value; }
         fn main() -> i32 {
             if 42_value != 0x2A_value { return 1; }
@@ -472,12 +488,13 @@ TEST_F(MLATest, UserDefinedLiteralIntegerBasesAndFullUnsignedRange)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, UserDefinedLiteralFloatingFormsAndPrecedence)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         fn operator "" _scaled(value: f64) -> f64 { return value * 2.0 + 1.0; }
         fn operator "" _raw(value: f64) -> f64 { return value; }
         fn main() -> i32 {
@@ -493,12 +510,13 @@ TEST_F(MLATest, UserDefinedLiteralFloatingFormsAndPrecedence)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, UserDefinedLiteralStringsDecodeEscapes)
 {
-    EXPECT_EQ(compileAndRun(R"(
+    EXPECT_EQ(
+        compileAndRun(R"(
         fn operator "" _text(value: str8) -> str8 { return value; }
         fn main() -> i32 {
             println!("{}", "hello\n\"world\"\t\x21"_text);
@@ -506,12 +524,13 @@ TEST_F(MLATest, UserDefinedLiteralStringsDecodeEscapes)
             return 0;
         }
     )"),
-              "hello\n\"world\"\t!\n\n");
+        "hello\n\"world\"\t!\n\n");
 }
 
 TEST_F(MLATest, UserDefinedLiteralBuiltinResultsAndExistingSuffixes)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         fn operator "" _small(value: u64) -> u8 { return u8(value); }
         fn operator "" _positive(value: f64) -> bool { return value > 0.0; }
         fn operator "" _single(value: f64) -> f32 { return f32(value); }
@@ -526,12 +545,13 @@ TEST_F(MLATest, UserDefinedLiteralBuiltinResultsAndExistingSuffixes)
             return typed == 3 && hex == 255u8 && binary == 3u8 ? 0 : 4;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, UserDefinedLiteralNumericConstexpr)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         cexpr fn operator "" _twice(value: u64) -> u64 { return value * 2u64; }
         cexpr fn operator "" _half(value: f64) -> f64 { return value / 2.0; }
         cexpr count: u64 = 3_twice;
@@ -541,12 +561,13 @@ TEST_F(MLATest, UserDefinedLiteralNumericConstexpr)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, UserDefinedLiteralConstexprPreservesUnsignedSemantics)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         cexpr fn operator "" _shift(value: u64) -> u64 { return value >> 1u64; }
         cexpr fn operator "" _divide(value: u64) -> u64 { return value / 2u64; }
         cexpr fn operator "" _increment(value: u64) -> u64 { return value + 1u64; }
@@ -563,12 +584,13 @@ TEST_F(MLATest, UserDefinedLiteralConstexprPreservesUnsignedSemantics)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, UserDefinedLiteralLooksUpEnclosingNamespaces)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         fn operator "" _fallback(value: u64) -> u64 { return value + 10u64; }
         namespace first {
             cexpr fn operator "" _unit(value: u64) -> u64 { return value * 10u64; }
@@ -589,7 +611,7 @@ TEST_F(MLATest, UserDefinedLiteralLooksUpEnclosingNamespaces)
             return first::fallback() == 11u64 ? 0 : 3;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, UserDefinedLiteralRejectsMissingCategory)
@@ -601,9 +623,11 @@ TEST_F(MLATest, UserDefinedLiteralRejectsMissingCategory)
     int rc = 0;
     const std::string out = compileCapture(rc);
     EXPECT_EQ(rc, 1);
-    EXPECT_NE(out.find("no user-defined literal operator for suffix "
-                       "'_float_only' with input type 'u64'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "no user-defined literal operator for suffix "
+            "'_float_only' with input type 'u64'"),
+        std::string::npos)
         << out;
 }
 
@@ -656,12 +680,13 @@ TEST_F(MLATest, UserDefinedLiteralRejectsInvalidSuffixName)
 TEST_F(MLATest, UserDefinedLiteralRejectsOutOfRangeNumbers)
 {
     for(const std::string literal :
-        {"18446744073709551616_value", "0x10000000000000000_value",
+        {"18446744073709551616_value",
+         "0x10000000000000000_value",
          "1e9999_value"})
     {
         SCOPED_TRACE(literal);
-        writeSource("fn main() -> i32 { let value = " + literal +
-                    "; return 0; }");
+        writeSource(
+            "fn main() -> i32 { let value = " + literal + "; return 0; }");
         int rc = 0;
         const std::string out = compileCapture(rc);
         EXPECT_EQ(rc, 1);
@@ -765,7 +790,8 @@ TEST_F(MLATest, ConceptsDemo)
 
 TEST_F(MLATest, ConceptsBooleanQueriesAndAliases)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept Integral<T> = type_id(T) == i32 || type_id(T) == i64;
         concept Same<T, U> = type_id(T) == type_id(U);
         alias Number = i32;
@@ -779,12 +805,13 @@ TEST_F(MLATest, ConceptsBooleanQueriesAndAliases)
             return global_ok && value ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, ConceptsRequiresClauseFiltersBeforeBodyInstantiation)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept Whole<T> = type_id(T) == i32;
         generic<T> requires Whole<T>
         fn choose(value: T) -> i32 { return value + 1; }
@@ -798,12 +825,13 @@ TEST_F(MLATest, ConceptsRequiresClauseFiltersBeforeBodyInstantiation)
             return choose(marker) == 7 ? 0 : 2;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, ConceptsLosingViableOverloadDoesNotInstantiateBody)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept Whole<T> = type_id(T) == i32;
         generic<T>
         fn choose(value: T) -> i32 { return value.missing; }
@@ -814,12 +842,13 @@ TEST_F(MLATest, ConceptsLosingViableOverloadDoesNotInstantiateBody)
             return choose(value) == 42 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, ConceptsConjunctionAndDisjunctionSubsumption)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept Whole<T> = type_id(T) == i32 || type_id(T) == i64;
         concept Floating<T> = type_id(T) == f64;
         concept Numeric<T> = Whole<T> || Floating<T>;
@@ -836,7 +865,7 @@ TEST_F(MLATest, ConceptsConjunctionAndDisjunctionSubsumption)
             return rank(small) == 3 && rank(wide) == 2 && rank(1.0) == 1 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, ConceptsIncomparableOverloadsAreAmbiguous)
@@ -858,7 +887,8 @@ TEST_F(MLATest, ConceptsIncomparableOverloadsAreAmbiguous)
 
 TEST_F(MLATest, ConceptsGenericStructBounds)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept Whole<T> = type_id(T) == i32;
         struct Box<T: Whole> { var value: T; };
         fn main() -> i32 {
@@ -866,7 +896,7 @@ TEST_F(MLATest, ConceptsGenericStructBounds)
             return box.value == 42 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, ConceptsRejectUnsatisfiedStructBound)
@@ -924,7 +954,8 @@ TEST_F(MLATest, ConceptsDetectRecursion)
 
 TEST_F(MLATest, ConceptsBooleanShortCircuit)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept Safe<T> = true || (1 / 0 == 0);
         concept Never<T> = false && (1 / 0 == 0);
         fn main() -> i32 {
@@ -933,12 +964,13 @@ TEST_F(MLATest, ConceptsBooleanShortCircuit)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, ConceptsMultiParameterRequires)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept Same<T, U> = type_id(T) == type_id(U);
         generic<T, U> requires Same<T, U>
         fn match_pair(first: T, second: U) -> i32 { return 42; }
@@ -948,12 +980,13 @@ TEST_F(MLATest, ConceptsMultiParameterRequires)
             return match_pair(first, second) == 42 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, ConceptsConstexprConstrainedOverloadSelection)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept Whole<T> = type_id(T) == i32;
         generic<T>
         cexpr fn category(value: T) -> i32 { return 1; }
@@ -965,7 +998,7 @@ TEST_F(MLATest, ConceptsConstexprConstrainedOverloadSelection)
             return first == 2 && second == 1 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, ConceptsPublicImportAndPrivateImplementation)
@@ -1011,7 +1044,8 @@ TEST_F(MLATest, ConceptsPrivateImportCannotBeQueried)
 
 TEST_F(MLATest, ConceptsNamespaceLookup)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         namespace rules {
             concept Whole<T> = type_id(T) == i32;
             concept Same<T, U> = type_id(T) == type_id(U);
@@ -1024,7 +1058,7 @@ TEST_F(MLATest, ConceptsNamespaceLookup)
             return rules::accept(value) == 42 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, ConceptsRejectWrongTypeArityAndUnknownTypes)
@@ -1032,9 +1066,10 @@ TEST_F(MLATest, ConceptsRejectWrongTypeArityAndUnknownTypes)
     for(const std::string query : {"Same<i32>", "Same<i32, MissingType>"})
     {
         SCOPED_TRACE(query);
-        writeSource("concept Same<T, U> = type_id(T) == type_id(U); fn main() "
-                    "-> i32 { static_assert!(" +
-                    query + "); return 0; }");
+        writeSource(
+            "concept Same<T, U> = type_id(T) == type_id(U); fn main() "
+            "-> i32 { static_assert!(" +
+            query + "); return 0; }");
         int rc = 0;
         const std::string out = compileCapture(rc);
         EXPECT_EQ(rc, 1);
@@ -1065,8 +1100,10 @@ TEST_F(MLATest, ConceptsQualifiedModuleAndAliases)
             pub concept Whole<T> = Internal<T>;
         )";
     }
-    for(const std::string imports : {"", "use module_concepts as rules;",
-                                     "use module_concepts::Whole as Accepted;"})
+    for(const std::string imports :
+        {"",
+         "use module_concepts as rules;",
+         "use module_concepts::Whole as Accepted;"})
     {
         SCOPED_TRACE(imports);
         const std::string query =
@@ -1074,9 +1111,9 @@ TEST_F(MLATest, ConceptsQualifiedModuleAndAliases)
             : imports.find(" as rules") != std::string::npos
                 ? "rules::Whole<i32>"
                 : "Accepted<i32>";
-        writeSource("mod module_concepts; " + imports +
-                    " fn main() -> i32 { static_assert!(" + query +
-                    "); return 0; }");
+        writeSource(
+            "mod module_concepts; " + imports +
+            " fn main() -> i32 { static_assert!(" + query + "); return 0; }");
         ASSERT_TRUE(compile());
         EXPECT_EQ(runExitCode(), 0);
     }
@@ -1115,7 +1152,8 @@ TEST_F(MLATest, ConceptsVariadicFunctionChecksFixedTypeConstraints)
 
 TEST_F(MLATest, ConceptsQualifiedStandardReferenceTypes)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         mod std::concepts;
         fn main() -> i32 {
             static_assert!(std::concepts::same_as<&mut &mut i32, &mut &mut i32>);
@@ -1123,12 +1161,13 @@ TEST_F(MLATest, ConceptsQualifiedStandardReferenceTypes)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, ConceptsQueriesInGenericConstexprBranches)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         mod std::concepts;
         use std::concepts::*;
         generic<T>
@@ -1143,12 +1182,13 @@ TEST_F(MLATest, ConceptsQueriesInGenericConstexprBranches)
             return evaluate(number) == 42 && evaluate(marker) == 7 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresBuiltinExpressions)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept Addable<T> = req(a: T, b: T) { a + b; a == b; };
         concept CppParameters<T> = req(T a, T b) { a * b; };
         struct Marker { var value: i32; };
@@ -1161,12 +1201,13 @@ TEST_F(MLATest, StructuralRequiresBuiltinExpressions)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresMembersAndMethods)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept HasValue<T> = req(value: T) { value.value; value.read(); };
         struct Good {
             var value: i32;
@@ -1180,12 +1221,13 @@ TEST_F(MLATest, StructuralRequiresMembersAndMethods)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresCompoundResultConstraints)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         mod std::concepts;
         use std::concepts::*;
         concept AddsToSelf<T> = req(a: T, b: T) {
@@ -1201,12 +1243,13 @@ TEST_F(MLATest, StructuralRequiresCompoundResultConstraints)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresTypeAndNestedRequirements)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         mod std::concepts;
         use std::concepts::*;
         alias Number = i32;
@@ -1225,12 +1268,13 @@ TEST_F(MLATest, StructuralRequiresTypeAndNestedRequirements)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresFiltersOverloadsAndOrdersRefinement)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept HasValue<T> = req(value: T) { value.value; };
         concept HasBoth<T> = HasValue<T> && req(value: T) { value.other; };
         generic<T> fn select(value: T) -> i32 { return 0; }
@@ -1244,12 +1288,13 @@ TEST_F(MLATest, StructuralRequiresFiltersOverloadsAndOrdersRefinement)
             return select(1i32) == 0 && select(a) == 1 && select(b) == 2 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresDoesNotEvaluateOrEmitCode)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         var calls: i32 = 0;
         fn touch(value: i32) -> i32 { calls = calls + 1; return value; }
         extern fn never_linked(value: i32) -> i32;
@@ -1261,12 +1306,13 @@ TEST_F(MLATest, StructuralRequiresDoesNotEvaluateOrEmitCode)
             return calls;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresRejectsMissingCallsAndWrongArguments)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         struct Item { var value: i32; };
         fn consume(value: Item) -> i32 { return value.value; }
         concept Accepts<T> = req(value: T) { consume(value); };
@@ -1278,23 +1324,25 @@ TEST_F(MLATest, StructuralRequiresRejectsMissingCallsAndWrongArguments)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresDoesNotInstantiateCalledBodies)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         generic<T> fn declared(value: T) -> i32 { return value.nonexistent; }
         generic<T> cexpr fn compile_time(value: T) -> i32 { return value.nonexistent; }
         concept Declared<T> = req(value: T) { declared(value); compile_time(value); };
         fn main() -> i32 { static_assert!(Declared<i32>); return 0; }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresReferenceMutability)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept SharedIncrement<T> = req(value: &T) { &mut value; };
         concept MutableIncrement<T> = req(value: &mut T) { &mut value; };
         fn main() -> i32 {
@@ -1303,12 +1351,13 @@ TEST_F(MLATest, StructuralRequiresReferenceMutability)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresNoexcept)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         fn callable(value: i32) -> i32 { return value; }
         concept SafeAdd<T> = req(value: T) { { value + value } noexcept; };
         concept SafeCall<T> = req(value: T) { { callable(value) } noexcept; };
@@ -1318,12 +1367,13 @@ TEST_F(MLATest, StructuralRequiresNoexcept)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresGlobalAndConstexprQueries)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept Addable<T> = req(value: T) { value + value; };
         cexpr global_ok: bool = Addable<i32>;
         generic<T> cexpr fn category(value: T) -> i32 { return 0; }
@@ -1336,12 +1386,13 @@ TEST_F(MLATest, StructuralRequiresGlobalAndConstexprQueries)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresShortCircuitAndNestedExpressions)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept NestedParameter<T> = req(value: T) { requires req { value + value; }; };
         concept Nested<T> = req {
             requires req(value: T) { value + value; };
@@ -1357,22 +1408,24 @@ TEST_F(MLATest, StructuralRequiresShortCircuitAndNestedExpressions)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresQualifiedCompoundConcept)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         mod std::concepts;
         concept SameResult<T> = req(value: T) { { value + value } -> std::concepts::same_as<T>; };
         fn main() -> i32 { static_assert!(SameResult<u32>); return 0; }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresIndexesAndDereferences)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept Indexed<T> = req(value: T) { value[0]; };
         concept Dereference<T> = req(value: T) { *value; };
         fn main() -> i32 {
@@ -1383,12 +1436,13 @@ TEST_F(MLATest, StructuralRequiresIndexesAndDereferences)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresLexicalLocalsAndNoScopeLeak)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept NoCallerLocal<T> = req { caller_only; };
         fn main() -> i32 {
             var caller_only: i32 = 5;
@@ -1400,12 +1454,13 @@ TEST_F(MLATest, StructuralRequiresLexicalLocalsAndNoScopeLeak)
             return caller_only == 5 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresInvalidParametersAndRuntimeNestedCondition)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept VoidParameter<T> = req(value: void) { requires true; };
         concept Duplicate<T> = req(value: T, value: T) { requires true; };
         concept Runtime<T> = req(value: T) { requires value == 0; };
@@ -1416,7 +1471,7 @@ TEST_F(MLATest, StructuralRequiresInvalidParametersAndRuntimeNestedCondition)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresNamespaceAndImportedPrivateHelper)
@@ -1448,7 +1503,8 @@ TEST_F(MLATest, StructuralRequiresNamespaceAndImportedPrivateHelper)
 
 TEST_F(MLATest, StructuralRequiresGlobalStructAndFunctionContext)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         struct Item { var value: i32; };
         fn read(value: Item) -> i32 { return value.value; }
         impl Item { pub fn get(self: &Self) -> i32 { return self.value; } }
@@ -1456,12 +1512,13 @@ TEST_F(MLATest, StructuralRequiresGlobalStructAndFunctionContext)
         cexpr global_ok: bool = Readable<Item>;
         fn main() -> i32 { static_assert!(global_ok); return 0; }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresDirectClauseAndGenericResult)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         mod std::concepts;
         use std::concepts::*;
         struct Box<T> { var value: T; };
@@ -1477,19 +1534,20 @@ TEST_F(MLATest, StructuralRequiresDirectClauseAndGenericResult)
             return twice(21i32) == 42 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresNamespacedTypes)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         namespace local {
             struct Item { var value: i32; };
             concept HasItem<T> = req(value: Item) { typename Item; value.value; };
         }
         fn main() -> i32 { static_assert!(local::HasItem<i32>); return 0; }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, StructuralRequiresDemo)
@@ -1511,7 +1569,8 @@ TEST_F(MLATest, StructuralRequiresDemo)
 
 TEST_F(MLATest, StructuralRequiresArrayAndFunctionTypes)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept Indexed<T> = req(value: T) { value[0]; };
         concept Callable<T> = req(value: T) { value(1i32); };
         alias Callback = fn(i32) -> i32;
@@ -1524,12 +1583,13 @@ TEST_F(MLATest, StructuralRequiresArrayAndFunctionTypes)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, WhereConstraintNamedPredicatesAndFallback)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         mod std::concepts;
         use std::concepts::*;
         generic<T> where arithmetic<T> && same_as<T, i32>
@@ -1541,12 +1601,13 @@ TEST_F(MLATest, WhereConstraintNamedPredicatesAndFallback)
             return twice(21i32) == 42 && category(1i32) == 1 && category(1.5) == 0 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, WhereConstraintInlineStructuralExpression)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         generic<T> fn read(value: T) -> i32 { return 7; }
         generic<T> where req(value: T) { value.value; }
         fn read(value: T) -> i32 { return value.value; }
@@ -1556,12 +1617,13 @@ TEST_F(MLATest, WhereConstraintInlineStructuralExpression)
             return read(item) == 42 && read(1i32) == 7 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, WhereConstraintNestedPredicatesAndStructuralChecks)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         mod std::concepts;
         use std::concepts::*;
         concept WholeAddable<T> = req(value: T) {
@@ -1576,7 +1638,7 @@ TEST_F(MLATest, WhereConstraintNestedPredicatesAndStructuralChecks)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, WhereConstraintLegacyAndNewSyntaxHaveSameIdentity)
@@ -1590,8 +1652,9 @@ TEST_F(MLATest, WhereConstraintLegacyAndNewSyntaxHaveSameIdentity)
     int rc = 0;
     const std::string out = compileCapture(rc);
     EXPECT_EQ(rc, 1);
-    EXPECT_NE(out.find("duplicate constrained function overload"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("duplicate constrained function overload"),
+        std::string::npos)
         << out;
 }
 
@@ -1604,8 +1667,9 @@ TEST_F(MLATest, WhereConstraintRejectsNonBooleanPredicates)
     int rc = 0;
     const std::string out = compileCapture(rc);
     EXPECT_EQ(rc, 1);
-    EXPECT_NE(out.find("constraint clause must evaluate to bool"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("constraint clause must evaluate to bool"),
+        std::string::npos)
         << out;
 }
 
@@ -1632,7 +1696,8 @@ TEST_F(MLATest, WhereConstraintExamples)
 
 TEST_F(MLATest, ReqCanonicalAndLegacyCompatibility)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         concept Modern<T> = req(value: T) { value + value; where type_id(T) == i32; };
         concept Legacy<T> = requires(value: T) { value + value; requires type_id(T) == i32; };
         generic<T> where req(value: T) { value + value; }
@@ -1645,7 +1710,7 @@ TEST_F(MLATest, ReqCanonicalAndLegacyCompatibility)
             return modern(21i32) == 42 && legacy(21i32) == 42 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, ReqDoesNotIntroduceBooleanConstraintClauses)
@@ -1712,9 +1777,11 @@ fn main() -> i32 {
 )");
     ASSERT_TRUE(compile(true, "-Og"));
     std::string output = runStderr();
-    EXPECT_NE(output.find("narrow_cast panic at " + sourceFile +
-                          ":2: value cannot be represented as u32"),
-              std::string::npos);
+    EXPECT_NE(
+        output.find(
+            "narrow_cast panic at " + sourceFile +
+            ":2: value cannot be represented as u32"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, I8MaxValue)
@@ -1962,8 +2029,9 @@ TEST_F(MLATest, StringConcatenationRejectsMismatchedStringKinds)
     int exitCode = 0;
     std::string out = compileCapture(exitCode);
     EXPECT_NE(exitCode, 0);
-    EXPECT_NE(out.find("string concatenation requires matching operand types"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("string concatenation requires matching operand types"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, ColonInsteadOfSemicolonSuggestsSemicolon)
@@ -2088,10 +2156,12 @@ TEST_F(MLATest, ListInitializerWithBracesSuggestsBrackets)
     int exitCode = 0;
     std::string out = compileCapture(exitCode);
     EXPECT_NE(exitCode, 0);
-    EXPECT_NE(out.find("list initializer for type 'list<i32>' uses braces"),
-              std::string::npos);
-    EXPECT_NE(out.find("use '[' and ']' instead of '{' and '}'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("list initializer for type 'list<i32>' uses braces"),
+        std::string::npos);
+    EXPECT_NE(
+        out.find("use '[' and ']' instead of '{' and '}'"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, FixedArrayAllowsBraceInitializerWithinCapacity)
@@ -2314,8 +2384,9 @@ TEST_F(MLATest, MultiarrayInverseRejectsSingularMatrixAtRuntime)
     writeSource(code);
     ASSERT_TRUE(compile());
     EXPECT_NE(runExitCode(), 0);
-    EXPECT_NE(runStderr().find("requires a non-singular matrix"),
-              std::string::npos);
+    EXPECT_NE(
+        runStderr().find("requires a non-singular matrix"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, MultiarrayEigenOperationsRejectNonSymmetricMatrixAtRuntime)
@@ -2331,8 +2402,9 @@ TEST_F(MLATest, MultiarrayEigenOperationsRejectNonSymmetricMatrixAtRuntime)
     writeSource(code);
     ASSERT_TRUE(compile());
     EXPECT_NE(runExitCode(), 0);
-    EXPECT_NE(runStderr().find("requires a real symmetric matrix"),
-              std::string::npos);
+    EXPECT_NE(
+        runStderr().find("requires a real symmetric matrix"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, MutableMultiarrayMatrixAssignOperations)
@@ -2420,8 +2492,9 @@ TEST_F(MLATest, ImmutableMultiarrayRejectsIndexedAssignment)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("indexed assignment requires mutmultiarray"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("indexed assignment requires mutmultiarray"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, ImmutableListRejectsIndexedAssignment)
@@ -2470,8 +2543,9 @@ TEST_F(MLATest, LetMutableMultiarrayRejectsMutation)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("because it is immutable; use var or &mut"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("because it is immutable; use var or &mut"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, MutableMultiarrayWriteChecksDynamicIndex)
@@ -2840,8 +2914,9 @@ TEST_F(MLATest, StructArrayFieldRejectsTooManyListElements)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("array initializer for field 'items' has 4 elements"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("array initializer for field 'items' has 4 elements"),
+        std::string::npos);
     EXPECT_NE(out.find("array<i32, 3> capacity is 3"), std::string::npos);
 }
 
@@ -3081,8 +3156,9 @@ TEST_F(MLATest, StructArrayFieldRejectsTooLargeFillCount)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("array initializer for field 'items' has 4 elements"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("array initializer for field 'items' has 4 elements"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, FixedArrayRejectsConstantOutOfBoundsIndexAtCompileTime)
@@ -3241,8 +3317,9 @@ TEST_F(MLATest, FixedArrayRejectsKnownEmptyFirstAtCompileTime)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("first() requires a non-empty array"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("first() requires a non-empty array"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, ListFirstKeepsRuntimeGuardForEmptyList)
@@ -3366,9 +3443,11 @@ TEST_F(MLATest, MapExtendRejectsMismatchedKeyValueTypes)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("map.extend() argument key/value types do not match "
-                       "destination map"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find(
+            "map.extend() argument key/value types do not match "
+            "destination map"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, MapIndexMissingKeyAbortsInsteadOfDefaultValue)
@@ -3836,10 +3915,11 @@ TEST_F(MLATest, AtomicOperationsCarryNaturalAlignment)
     EXPECT_EQ(runExitCode(), 0);
 
     const fs::path irFile = fs::path(testDir) / "atomic_align.ll";
-    ASSERT_EQ(system((compilerPath + " -O0 -emit-llvm -o " + irFile.string() +
-                      " " + sourceFile)
-                         .c_str()),
-              0);
+    ASSERT_EQ(
+        system((compilerPath + " -O0 -emit-llvm -o " + irFile.string() + " " +
+                sourceFile)
+                   .c_str()),
+        0);
     std::ifstream input(irFile);
     ASSERT_TRUE(input.is_open());
     std::string line;
@@ -3902,10 +3982,11 @@ TEST_F(MLATest, LoopLocalsHaveBoundedStackAtO0)
     EXPECT_EQ(WEXITSTATUS(status), 0);
 
     const fs::path irFile = fs::path(testDir) / "stack_locals.ll";
-    ASSERT_EQ(system((compilerPath + " -O0 -emit-llvm -o " + irFile.string() +
-                      " " + sourceFile)
-                         .c_str()),
-              0);
+    ASSERT_EQ(
+        system((compilerPath + " -O0 -emit-llvm -o " + irFile.string() + " " +
+                sourceFile)
+                   .c_str()),
+        0);
     std::ifstream input(irFile);
     std::string line, block;
     int allocations = 0;
@@ -4315,8 +4396,9 @@ TEST_F(MLATest, TraitObjectRejectsMutatingMethodOnImmutableReceiver)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot call mutating method on immutable value"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot call mutating method on immutable value"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, TraitObjectFieldRejectsMutatingMethodOnImmutableReceiver)
@@ -4343,8 +4425,9 @@ TEST_F(MLATest, TraitObjectFieldRejectsMutatingMethodOnImmutableReceiver)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot call mutating method on immutable value"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot call mutating method on immutable value"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, TraitObjectSharedMethodWorksOnImmutableReceiver)
@@ -4435,8 +4518,9 @@ TEST_F(MLATest, TraitObjectSharedMethodRejectsLiveMutableBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot call method on 'item' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot call method on 'item' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -4543,9 +4627,10 @@ TEST_F(MLATest, TraitObjectFieldSharedMethodRejectsLiveMutableBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_TRUE(out.find("while borrowed") != std::string::npos ||
-                out.find("use of moved value") != std::string::npos ||
-                out.find("cannot borrow moved value") != std::string::npos)
+    EXPECT_TRUE(
+        out.find("while borrowed") != std::string::npos ||
+        out.find("use of moved value") != std::string::npos ||
+        out.find("cannot borrow moved value") != std::string::npos)
         << out;
 }
 
@@ -4698,8 +4783,9 @@ TEST_F(MLATest, FieldAssignmentRejectsOverlappingLiveBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'pair' while borrowed by 'held'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'pair' while borrowed by 'held'"),
+        std::string::npos)
         << out;
 }
 
@@ -4737,8 +4823,9 @@ TEST_F(MLATest, OwnershipRejectsOverlappingMutableFieldBorrows)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow 'pair' as mutable more than once"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot borrow 'pair' as mutable more than once"),
+        std::string::npos)
         << out;
 }
 
@@ -4773,8 +4860,9 @@ TEST_F(MLATest, OwnershipRejectsOverlappingMutableListElementBorrows)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow 'values' as mutable more than once"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot borrow 'values' as mutable more than once"),
+        std::string::npos)
         << out;
 }
 
@@ -4794,8 +4882,9 @@ TEST_F(MLATest, DynamicIndexBorrowOverlapsEveryListElement)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow 'values' as mutable more than once"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot borrow 'values' as mutable more than once"),
+        std::string::npos)
         << out;
 }
 
@@ -4826,8 +4915,9 @@ TEST_F(MLATest, IndexedAssignmentRejectsOverlappingLiveElementBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot mutate indexed element of 'values'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot mutate indexed element of 'values'"),
+        std::string::npos)
         << out;
 }
 
@@ -4853,8 +4943,9 @@ TEST_F(MLATest, JoinedElementBorrowProtectsSecondListOwner)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot mutate indexed element of 'second'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot mutate indexed element of 'second'"),
+        std::string::npos)
         << out;
 }
 
@@ -4916,8 +5007,9 @@ TEST_F(MLATest, TernaryJoinedFieldBorrowRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -4954,8 +5046,7 @@ TEST_F(MLATest, StructListBorrowRejectsAssignmentToBorrowedField)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'cells'"),
-              std::string::npos)
+    EXPECT_NE(out.find("cannot assign to field of 'cells'"), std::string::npos)
         << out;
 }
 
@@ -4990,8 +5081,9 @@ TEST_F(MLATest, OwnershipRejectsOverlappingMutableTupleElementBorrows)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow 'pair' as mutable more than once"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot borrow 'pair' as mutable more than once"),
+        std::string::npos)
         << out;
 }
 
@@ -5022,8 +5114,9 @@ TEST_F(MLATest, TupleAssignmentRejectsOverlappingLiveElementBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to tuple element of 'pair'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to tuple element of 'pair'"),
+        std::string::npos)
         << out;
 }
 
@@ -5041,8 +5134,9 @@ TEST_F(MLATest, ListGrowthRejectsLiveElementBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot mutate container 'values' while borrowed by 'first'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot mutate container 'values' while borrowed by 'first'"),
+        std::string::npos)
         << out;
 }
 
@@ -5060,8 +5154,9 @@ TEST_F(MLATest, ListGrowthRejectsLiveSharedElementBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot mutate container 'values' while borrowed by 'first'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot mutate container 'values' while borrowed by 'first'"),
+        std::string::npos)
         << out;
 }
 
@@ -5117,8 +5212,9 @@ TEST_F(MLATest, ReadFromBorrowedListElementRejected)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot read overlapping part of 'values'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot read overlapping part of 'values'"),
+        std::string::npos)
         << out;
 }
 
@@ -5136,8 +5232,9 @@ TEST_F(MLATest, WholeValueReadRejectedWhileMutablyBorrowed)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot read overlapping part of 'scalar'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot read overlapping part of 'scalar'"),
+        std::string::npos)
         << out;
 }
 
@@ -5168,8 +5265,9 @@ TEST_F(MLATest, ReadFromBorrowedStructFieldRejected)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot read overlapping part of 'pair'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot read overlapping part of 'pair'"),
+        std::string::npos)
         << out;
 }
 
@@ -5247,8 +5345,10 @@ TEST_F(MLATest, SecondaryMutableFieldBorrowBlocksMethodOnThatField)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot call method on 'holder' while borrowed by 'held_item'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot call method on 'holder' while borrowed by 'held_item'"),
+        std::string::npos)
         << out;
 }
 
@@ -5367,8 +5467,9 @@ TEST_F(MLATest, LegacyBuiltinTypeAliasesAreRejected)
         int rc = 0;
         std::string out = compileCapture(rc);
         EXPECT_NE(rc, 0) << typeName;
-        EXPECT_NE(out.find(std::string("unknown struct type: ") + typeName),
-                  std::string::npos)
+        EXPECT_NE(
+            out.find(std::string("unknown struct type: ") + typeName),
+            std::string::npos)
             << out;
     }
 }
@@ -5447,8 +5548,9 @@ TEST_F(MLATest, TypedVarStructWithoutInitializerIsZeroInitialized)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_EQ(rc, 0);
-    EXPECT_NE(out.find("implicit zero-initialization for typed var 'stamp'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("implicit zero-initialization for typed var 'stamp'"),
+        std::string::npos);
     EXPECT_EQ(runExitCode(), 0);
 }
 
@@ -5541,8 +5643,9 @@ TEST_F(MLATest, TypedVarScalarImplicitZeroInitWarns)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_EQ(rc, 0);
-    EXPECT_NE(out.find("implicit zero-initialization for typed var 'value'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("implicit zero-initialization for typed var 'value'"),
+        std::string::npos);
     EXPECT_EQ(runExitCode(), 0);
 }
 
@@ -5667,8 +5770,9 @@ TEST_F(MLATest, TernaryTypeMismatch)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("ternary branches must return the same type"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("ternary branches must return the same type"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, ListOfTuplesUsesDeclaredFieldTypes)
@@ -5695,7 +5799,8 @@ TEST_F(MLATest, ListOfTuplesUsesDeclaredFieldTypes)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// Generic range conversion must materialize maps from tuple and projected pairs.
+// Generic range conversion must materialize maps from tuple and projected
+// pairs.
 TEST_F(MLATest, RangesMaterializeBuiltinMapsFromGenericPairs)
 {
     std::string code = R"(
@@ -5932,10 +6037,12 @@ TEST_F(MLATest, ReturnInferenceMixedReturnFormsReportsError)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot infer return type for function 'bad'"),
-              std::string::npos);
-    EXPECT_NE(out.find("function mixes 'return;' and 'return value;'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot infer return type for function 'bad'"),
+        std::string::npos);
+    EXPECT_NE(
+        out.find("function mixes 'return;' and 'return value;'"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, ReturnInferenceIncompatibleTypesReportsError)
@@ -5956,8 +6063,9 @@ TEST_F(MLATest, ReturnInferenceIncompatibleTypesReportsError)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot infer return type for function 'bad'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot infer return type for function 'bad'"),
+        std::string::npos);
     EXPECT_NE(out.find("incompatible return types"), std::string::npos);
 }
 
@@ -6027,8 +6135,9 @@ TEST_F(MLATest, IndexExpressionWithPostfixUpdateReportsError)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("index expression does not allow pre/post ++/--"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("index expression does not allow pre/post ++/--"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, SpaceshipStructWithoutCompareTraitReportsError)
@@ -6553,7 +6662,8 @@ TEST_F(MLATest, OwnershipShadowedCleanupVariablesDropTheirOwnValues)
     EXPECT_EQ(compileAndRun(code), "free 2\nfree 1\n");
 }
 
-// Reassignment drops the old value immediately and the replacement at scope exit.
+// Reassignment drops the old value immediately and the replacement at scope
+// exit.
 TEST_F(MLATest, OwnershipReassignmentDropsReplacedCleanupValue)
 {
     std::string code = R"(
@@ -6617,7 +6727,8 @@ TEST_F(MLATest, OwnershipInnerShadowMoveDoesNotMoveOuterVariable)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// A borrow of an outer binding must not prohibit mutation of a same-named shadow.
+// A borrow of an outer binding must not prohibit mutation of a same-named
+// shadow.
 TEST_F(MLATest, OwnershipBorrowOfOuterDoesNotBlockShadowMutation)
 {
     std::string code = R"(
@@ -6661,7 +6772,8 @@ TEST_F(MLATest, OwnershipOuterBorrowRestoredAfterOwnerShadowScope)
         << out;
 }
 
-// A borrow created by an inner shadow must not remain attached to the outer value.
+// A borrow created by an inner shadow must not remain attached to the outer
+// value.
 TEST_F(MLATest, OwnershipInnerShadowBorrowDoesNotLeakToOuter)
 {
     std::string code = R"(
@@ -6681,7 +6793,8 @@ TEST_F(MLATest, OwnershipInnerShadowBorrowDoesNotLeakToOuter)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// Container element type metadata must return to the outer binding after shadowing.
+// Container element type metadata must return to the outer binding after
+// shadowing.
 TEST_F(MLATest, OwnershipListElementTypeRestoresAfterShadowScope)
 {
     std::string code = R"(
@@ -6696,7 +6809,8 @@ TEST_F(MLATest, OwnershipListElementTypeRestoresAfterShadowScope)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// A mutable local shadow must not inherit an immutable-reference parameter's restriction.
+// A mutable local shadow must not inherit an immutable-reference parameter's
+// restriction.
 TEST_F(MLATest, OwnershipMutableShadowOfImmutableReferenceCanBeMutated)
 {
     std::string code = R"(
@@ -6718,7 +6832,8 @@ TEST_F(MLATest, OwnershipMutableShadowOfImmutableReferenceCanBeMutated)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// Shadowing an immutable reference must restore its restriction after scope exit.
+// Shadowing an immutable reference must restore its restriction after scope
+// exit.
 TEST_F(MLATest, OwnershipImmutableReferenceRestrictionRestoredAfterShadow)
 {
     std::string code = R"(
@@ -6742,8 +6857,9 @@ TEST_F(MLATest, OwnershipImmutableReferenceRestrictionRestoredAfterShadow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot mutate through immutable reference 'pair'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot mutate through immutable reference 'pair'"),
+        std::string::npos)
         << out;
 }
 
@@ -6766,8 +6882,9 @@ TEST_F(MLATest, OwnershipPointerShadowKeepsOuterMutableBorrowLive)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'owner' directly while mutably borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'owner' directly while mutably borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -6790,12 +6907,14 @@ TEST_F(MLATest, OwnershipPointerShadowKeepsOuterSharedBorrowLive)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'owner' while borrowed by 'pointer"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'owner' while borrowed by 'pointer"),
+        std::string::npos)
         << out;
 }
 
-// A hidden mutable pointer's exclusive borrow must be restored after its shadow exits.
+// A hidden mutable pointer's exclusive borrow must be restored after its shadow
+// exits.
 TEST_F(MLATest, OwnershipPointerShadowRestoresOuterMutableBorrow)
 {
     std::string code = R"(
@@ -6814,8 +6933,9 @@ TEST_F(MLATest, OwnershipPointerShadowRestoresOuterMutableBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'owner' directly while mutably borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'owner' directly while mutably borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -6843,8 +6963,9 @@ TEST_F(MLATest, OwnershipNestedPointerShadowRestoresIntermediateBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'middle' directly while mutably borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'middle' directly while mutably borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -6871,12 +6992,14 @@ TEST_F(MLATest, OwnershipNestedPointerShadowRestoresOutermostBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'outer' directly while mutably borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'outer' directly while mutably borrowed"),
+        std::string::npos)
         << out;
 }
 
-// Dropping a same-named closure shadow must not release the outer capture borrow.
+// Dropping a same-named closure shadow must not release the outer capture
+// borrow.
 TEST_F(MLATest, RuntimeClosureShadowDoesNotReleaseOuterCaptureBorrow)
 {
     std::string code = R"(
@@ -6894,11 +7017,11 @@ TEST_F(MLATest, RuntimeClosureShadowDoesNotReleaseOuterCaptureBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'read'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'read'"), std::string::npos) << out;
 }
 
-// A shadowed closure's capture metadata must not keep the outer borrow past last use.
+// A shadowed closure's capture metadata must not keep the outer borrow past
+// last use.
 TEST_F(MLATest, RuntimeClosureShadowRestoresOuterLastUse)
 {
     std::string code = R"(
@@ -7154,8 +7277,10 @@ TEST_F(MLATest, ExclusiveReborrowCallRejectsAliasedSecondArgument)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow 'value' as mutable more than once"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot borrow 'value' as mutable more than once"),
+        std::string::npos)
+        << out;
 }
 
 // Verifies that a shared pointer cannot mutate the place it borrows.
@@ -7173,8 +7298,10 @@ TEST_F(MLATest, SharedBorrowCannotWriteThroughItsPointer)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow 'shared'"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot write through shared borrow 'shared'"),
+        std::string::npos)
+        << out;
 }
 
 // A temporary shared borrow must not be made writable by immediate dereference.
@@ -7191,8 +7318,8 @@ TEST_F(MLATest, SharedBorrowCannotWriteThroughTemporaryPointer)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A function returning a shared argument must not hide a write from
@@ -7215,8 +7342,8 @@ TEST_F(MLATest, SharedBorrowReturnedFromFunctionCannotBeWrittenThrough)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A function returning a global shared borrow must not allow direct mutation.
@@ -7238,12 +7365,14 @@ TEST_F(MLATest, GlobalSharedBorrowReturnedFromFunctionCannotBeWrittenThrough)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A local alias must not erase a shared borrow created inside a function.
-TEST_F(MLATest, GlobalSharedBorrowAliasReturnedFromFunctionCannotBeWrittenThrough)
+TEST_F(
+    MLATest,
+    GlobalSharedBorrowAliasReturnedFromFunctionCannotBeWrittenThrough)
 {
     std::string code = R"(
         var global_value: i32 = 4;
@@ -7262,12 +7391,14 @@ TEST_F(MLATest, GlobalSharedBorrowAliasReturnedFromFunctionCannotBeWrittenThroug
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // Returning a pointer field from a local aggregate preserves shared access.
-TEST_F(MLATest, GlobalSharedBorrowFieldReturnedFromFunctionCannotBeWrittenThrough)
+TEST_F(
+    MLATest,
+    GlobalSharedBorrowFieldReturnedFromFunctionCannotBeWrittenThrough)
 {
     std::string code = R"(
         struct PointerBox { var value: ptr<i32>; };
@@ -7287,12 +7418,14 @@ TEST_F(MLATest, GlobalSharedBorrowFieldReturnedFromFunctionCannotBeWrittenThroug
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A shared pointer field returned through a function remains read-only locally.
-TEST_F(MLATest, StoredGlobalSharedBorrowFieldReturnedFromFunctionCannotBeWrittenThrough)
+TEST_F(
+    MLATest,
+    StoredGlobalSharedBorrowFieldReturnedFromFunctionCannotBeWrittenThrough)
 {
     std::string code = R"(
         struct PointerBox { var value: ptr<i32>; };
@@ -7313,12 +7446,14 @@ TEST_F(MLATest, StoredGlobalSharedBorrowFieldReturnedFromFunctionCannotBeWritten
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A shared borrow returned through a local alias stays read-only when stored.
-TEST_F(MLATest, StoredGlobalSharedBorrowAliasReturnedFromFunctionCannotBeWrittenThrough)
+TEST_F(
+    MLATest,
+    StoredGlobalSharedBorrowAliasReturnedFromFunctionCannotBeWrittenThrough)
 {
     std::string code = R"(
         var global_value: i32 = 4;
@@ -7338,12 +7473,14 @@ TEST_F(MLATest, StoredGlobalSharedBorrowAliasReturnedFromFunctionCannotBeWritten
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A returned global shared borrow remains read-only after storing it locally.
-TEST_F(MLATest, StoredGlobalSharedBorrowReturnedFromFunctionCannotBeWrittenThrough)
+TEST_F(
+    MLATest,
+    StoredGlobalSharedBorrowReturnedFromFunctionCannotBeWrittenThrough)
 {
     std::string code = R"(
         var global_value: i32 = 4;
@@ -7362,8 +7499,8 @@ TEST_F(MLATest, StoredGlobalSharedBorrowReturnedFromFunctionCannotBeWrittenThrou
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A function returning an exclusive global borrow remains writable.
@@ -7431,8 +7568,10 @@ TEST_F(MLATest, StoredGlobalExclusiveBorrowAliasBlocksSecondBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow 'global_value' as mutable more than once"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot borrow 'global_value' as mutable more than once"),
+        std::string::npos)
+        << out;
 }
 
 // Returning an exclusive argument remains writable through the call result.
@@ -7475,8 +7614,8 @@ TEST_F(MLATest, SharedBorrowReturnedThroughCallableCannotBeWrittenThrough)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A returned pointer must retain shared provenance from a list element
@@ -7499,8 +7638,8 @@ TEST_F(MLATest, SharedBorrowFromListCannotBeWrittenThroughReturnedPointer)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A closure returning a captured shared pointer must not hide a direct write.
@@ -7519,8 +7658,8 @@ TEST_F(MLATest, SharedBorrowReturnedFromClosureCannotBeWrittenThrough)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A closure forwarding its pointer argument must preserve shared provenance.
@@ -7540,8 +7679,8 @@ TEST_F(MLATest, SharedBorrowForwardedThroughClosureCannotBeWrittenThrough)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A nested dereference must retain the shared borrow restriction on its place.
@@ -7562,8 +7701,8 @@ TEST_F(MLATest, SharedBorrowCannotWriteThroughNestedPointer)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A mutable borrow of a pointer slot cannot upgrade its stored shared pointer.
@@ -7585,8 +7724,8 @@ TEST_F(MLATest, MutableSlotCannotUpgradeStoredSharedPointer)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // Keeps a stored shared pointer read-only through an indirect slot after its
@@ -7608,11 +7747,12 @@ TEST_F(MLATest, MutableSlotCannotUpgradeStoredSharedPointerAfterLastDirectUse)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
-// Releases a pointer's deferred borrow when the last borrowed slot leaves scope.
+// Releases a pointer's deferred borrow when the last borrowed slot leaves
+// scope.
 TEST_F(MLATest, DeferredPointerBorrowEndsWithBorrowedSlotScope)
 {
     std::string code = R"(
@@ -7656,11 +7796,12 @@ TEST_F(MLATest, DeferredPointerBorrowWaitsForEverySlot)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
-// Preserves shared-borrow restrictions when pointer origins merge at an if-join.
+// Preserves shared-borrow restrictions when pointer origins merge at an
+// if-join.
 TEST_F(MLATest, MergedSharedPointerCannotBeReplacedThroughBorrowedSlot)
 {
     std::string code = R"(
@@ -7683,8 +7824,8 @@ TEST_F(MLATest, MergedSharedPointerCannotBeReplacedThroughBorrowedSlot)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // Verifies that a shared borrow remains read-only when stored in an aggregate.
@@ -7704,8 +7845,8 @@ TEST_F(MLATest, SharedBorrowCannotWriteThroughAggregatePointerField)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // Verifies that a mutating pointer parameter cannot receive a shared borrow.
@@ -7728,11 +7869,14 @@ TEST_F(MLATest, SharedBorrowCannotPassToMutatingPointerParameter)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot pass shared borrow 'shared' to mutating"),
+        std::string::npos)
+        << out;
 }
 
-// Verifies that an opaque pointer parameter cannot retain a shared local borrow.
+// Verifies that an opaque pointer parameter cannot retain a shared local
+// borrow.
 TEST_F(MLATest, SharedBorrowCannotPassToOpaquePointerParameter)
 {
     std::string code = R"(
@@ -7749,8 +7893,10 @@ TEST_F(MLATest, SharedBorrowCannotPassToOpaquePointerParameter)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot pass a borrow of local storage"),
+        std::string::npos)
+        << out;
 }
 
 // Opaque calls must reject a joined exclusive pointer with a local origin.
@@ -7777,8 +7923,9 @@ TEST_F(MLATest, JoinedExclusivePointerWithLocalOriginCannotReachOpaqueParameter)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot pass a borrow of local storage"),
+        std::string::npos)
         << out;
 }
 
@@ -7808,8 +7955,9 @@ TEST_F(MLATest, JoinedReborrowWithLocalOriginCannotReachOpaqueParameter)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot pass a borrow of local storage"),
+        std::string::npos)
         << out;
 }
 
@@ -7842,8 +7990,9 @@ TEST_F(MLATest, JoinedReborrowOriginSurvivesPointerShadowCleanup)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot pass a borrow of local storage"),
+        std::string::npos)
         << out;
 }
 
@@ -7872,8 +8021,9 @@ TEST_F(MLATest, ChildReborrowOfJoinedPointerCannotEscapeLocalOrigin)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot pass a borrow of local storage"),
+        std::string::npos)
         << out;
 }
 
@@ -7903,8 +8053,9 @@ TEST_F(MLATest, NestedReborrowOfJoinedPointerCannotEscapeLocalOrigin)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot pass a borrow of local storage"),
+        std::string::npos)
         << out;
 }
 
@@ -7930,8 +8081,9 @@ TEST_F(MLATest, TernaryReborrowOfLocalParentCannotEscapeToOpaqueCall)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot pass a borrow of local storage"),
+        std::string::npos)
         << out;
 }
 
@@ -7959,8 +8111,9 @@ TEST_F(MLATest, LoopJoinedPointerReborrowCannotEscapeLocalOrigin)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot pass a borrow of local storage"),
+        std::string::npos)
         << out;
 }
 
@@ -7984,8 +8137,10 @@ TEST_F(MLATest, SharedBorrowInTernaryCannotPassToMutatingPointerParameter)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("to mutating pointer parameter 'pointer'"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("to mutating pointer parameter 'pointer'"),
+        std::string::npos)
+        << out;
 }
 
 // A joined pointer with any shared origin cannot reach a mutating parameter.
@@ -8010,8 +8165,9 @@ TEST_F(MLATest, MixedSharedAndExclusivePointerCannotPassToMutatingParameter)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("to mutating pointer parameter 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("to mutating pointer parameter 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -8034,8 +8190,10 @@ TEST_F(MLATest, SharedBorrowExtractedFromListCannotReachWriter)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("to mutating pointer parameter 'pointer'"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("to mutating pointer parameter 'pointer'"),
+        std::string::npos)
+        << out;
 }
 
 // A shared pointer extracted from a list remains read-only when dereferenced.
@@ -8054,8 +8212,8 @@ TEST_F(MLATest, SharedBorrowExtractedFromListCannotBeWrittenThrough)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A shared pointer indexed directly from a list must also remain read-only.
@@ -8073,8 +8231,8 @@ TEST_F(MLATest, SharedBorrowIndexedFromListCannotBeWrittenThrough)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // A shared pointer accessed directly from a tuple field must remain read-only.
@@ -8092,8 +8250,8 @@ TEST_F(MLATest, SharedBorrowTupleFieldCannotBeWrittenThrough)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
+        << out;
 }
 
 // Verifies an exclusive borrow live on one branch remains active after merge.
@@ -8199,8 +8357,7 @@ TEST_F(MLATest, TernaryMixedSharedAndExclusiveBorrowCannotWriteThrough)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot write through shared borrow"),
-              std::string::npos)
+    EXPECT_NE(out.find("cannot write through shared borrow"), std::string::npos)
         << out;
 }
 
@@ -8289,8 +8446,10 @@ TEST_F(MLATest, SharedBorrowCannotReachMutatingPointerThroughHelper)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot pass shared borrow 'shared' to mutating"),
+        std::string::npos)
+        << out;
 }
 
 // Verifies that pointer writes hidden inside a local closure count as effects.
@@ -8315,8 +8474,10 @@ TEST_F(MLATest, SharedBorrowCannotReachMutatingPointerThroughCapturedClosure)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot pass shared borrow 'shared' to mutating"),
+        std::string::npos)
+        << out;
 }
 
 // Verifies that method calls propagate pointer mutation effects to callers.
@@ -8347,8 +8508,10 @@ TEST_F(MLATest, SharedBorrowCannotReachMutatingPointerThroughMethod)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot pass shared borrow 'shared' to mutating"),
+        std::string::npos)
+        << out;
 }
 
 // Verifies that opaque callable parameters cannot mutate a shared borrow.
@@ -8376,11 +8539,14 @@ TEST_F(MLATest, SharedBorrowCannotReachMutatingPointerThroughCallable)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot pass shared borrow 'shared' to mutating"),
+        std::string::npos)
+        << out;
 }
 
-// Verifies that invoking a runtime callable with a local borrow requires unsafe.
+// Verifies that invoking a runtime callable with a local borrow requires
+// unsafe.
 TEST_F(MLATest, CallablePointerArgumentRequiresUnsafeForLocalBorrow)
 {
     std::string code = R"(
@@ -8397,8 +8563,10 @@ TEST_F(MLATest, CallablePointerArgumentRequiresUnsafeForLocalBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("outside unsafe because the callable may retain it"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("outside unsafe because the callable may retain it"),
+        std::string::npos)
+        << out;
 }
 
 // Verifies callback parameters cannot retain borrows of the callee's locals.
@@ -8418,8 +8586,10 @@ TEST_F(MLATest, CallableParameterCannotRetainCalleeLocalBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("outside unsafe because the callable may retain it"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("outside unsafe because the callable may retain it"),
+        std::string::npos)
+        << out;
 }
 
 // A named function stored as a callable local is not treated as opaque when
@@ -8469,8 +8639,10 @@ TEST_F(MLATest, NamedFunctionItemCallbackCannotMutateSharedBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating pointer"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot pass shared borrow 'shared' to mutating pointer"),
+        std::string::npos)
+        << out;
 }
 
 // Verifies a match expression cannot hide a local borrow from a callable
@@ -8494,8 +8666,10 @@ TEST_F(MLATest, CallablePointerArgumentDetectsBorrowInsideMatchExpression)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("outside unsafe because the callable may retain it"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("outside unsafe because the callable may retain it"),
+        std::string::npos)
+        << out;
 }
 
 // Verifies that unsafe callable invocation accepts an exclusive local borrow.
@@ -8533,8 +8707,10 @@ TEST_F(MLATest, NestedClosureLocalCallableRequiresUnsafeForLocalBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("outside unsafe because the callable may retain it"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("outside unsafe because the callable may retain it"),
+        std::string::npos)
+        << out;
 }
 
 // Verifies a generic callback cannot forward a local borrow to an opaque
@@ -8559,8 +8735,10 @@ TEST_F(MLATest, GenericCallbackCannotForwardLocalBorrowToExternFunction)
     int rc = 0;
     std::string out = compileCapture(rc, "-c");
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot pass a borrow of local storage"),
+        std::string::npos)
+        << out;
 }
 
 // Verifies unsafe explicitly permits forwarding a local borrow to an opaque
@@ -8639,8 +8817,7 @@ TEST_F(MLATest, ExclusiveReborrowPreventsAccessThroughParent)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'child'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'child'"), std::string::npos) << out;
 }
 
 // Verifies that the parent borrow remains active after its child expires.
@@ -8660,8 +8837,8 @@ TEST_F(MLATest, ExclusiveReborrowRestoresParentBorrowAfterChildLastUse)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while mutably borrowed by 'parent'"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("while mutably borrowed by 'parent'"), std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, OwnershipBorrowEndsWhenPointerGoesOutOfScope)
@@ -8990,8 +9167,9 @@ TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocal)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot return pointer that borrows local value"),
+        std::string::npos);
 }
 
 // A closure call must not return a pointer borrowed from its captured local.
@@ -9036,8 +9214,9 @@ TEST_F(MLATest, OwnershipCannotReturnLocalPointerThroughForwardingFunction)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot return pointer that borrows local value"),
+        std::string::npos)
         << out;
 }
 
@@ -9086,7 +9265,8 @@ TEST_F(MLATest, OwnershipCannotReturnPointerFromClosureCapturedAggregate)
     EXPECT_NE(out.find("cannot return"), std::string::npos) << out;
 }
 
-// A closure-returned field pointer must borrow its owner through the local alias.
+// A closure-returned field pointer must borrow its owner through the local
+// alias.
 TEST_F(MLATest, OwnershipClosureReturnedPointerKeepsAggregateBorrowLive)
 {
     std::string code = R"(
@@ -9126,7 +9306,8 @@ TEST_F(MLATest, OwnershipClosureReturnedPointerBorrowEndsAfterLastUse)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// An opaque callback parameter cannot return an untracked pointer past its call.
+// An opaque callback parameter cannot return an untracked pointer past its
+// call.
 TEST_F(MLATest, OwnershipCannotReturnPointerFromCallableParameter)
 {
     std::string code = R"(
@@ -9188,8 +9369,9 @@ TEST_F(MLATest, OwnershipCannotReturnPointerFromBorrowingAggregateMethod)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot return pointer that borrows local value"),
+        std::string::npos)
         << out;
 }
 
@@ -9285,7 +9467,8 @@ TEST_F(MLATest, OwnershipMethodReturnedArgumentBorrowEndsAfterLastUse)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// A method call must not hide a local pointer when its enclosing function returns.
+// A method call must not hide a local pointer when its enclosing function
+// returns.
 TEST_F(MLATest, OwnershipCannotReturnLocalPointerThroughMethodArgument)
 {
     std::string code = R"(
@@ -9309,8 +9492,9 @@ TEST_F(MLATest, OwnershipCannotReturnLocalPointerThroughMethodArgument)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot return pointer that borrows local value"),
+        std::string::npos)
         << out;
 }
 
@@ -9398,11 +9582,13 @@ TEST_F(MLATest, ClosureBorrowBlocksMutationUntilLastUse)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'count' while borrowed by 'bump'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot assign to 'count' while borrowed by 'bump'"),
+        std::string::npos);
 }
 
-// A closure's pointer reassignment must transfer the resulting borrow to the pointer.
+// A closure's pointer reassignment must transfer the resulting borrow to the
+// pointer.
 TEST_F(MLATest, ClosurePointerReassignmentPreservesBorrowAfterCall)
 {
     std::string code = R"(
@@ -9421,9 +9607,11 @@ TEST_F(MLATest, ClosurePointerReassignmentPreservesBorrowAfterCall)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'value' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -9491,9 +9679,11 @@ TEST_F(MLATest, ClosurePointerReassignmentPreservesUnchangedBranchBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'original' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'original' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -9524,9 +9714,11 @@ TEST_F(MLATest, ClosurePointerReassignmentKeepsOriginOnEarlyReturn)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'alternate' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'alternate' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -9557,9 +9749,11 @@ TEST_F(MLATest, ClosurePointerReassignmentKeepsOriginBeforeBreak)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'alternate' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'alternate' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -9591,9 +9785,11 @@ TEST_F(MLATest, ClosurePointerReassignmentKeepsOriginBeforeContinue)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'alternate' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'alternate' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -9624,9 +9820,11 @@ TEST_F(MLATest, ClosurePointerReassignmentMergesBranches)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'value' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -9664,9 +9862,11 @@ TEST_F(MLATest, ClosurePointerReassignmentMergesSequentialBranches)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'first' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'first' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -9708,9 +9908,11 @@ TEST_F(MLATest, ClosurePointerReassignmentKeepsOriginOnThrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'alternate' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'alternate' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -9734,12 +9936,13 @@ TEST_F(MLATest, CopiedClosurePointerReassignmentKeepsBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'value' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
-
 
 TEST_F(MLATest, ClosureBorrowCannotEscapeThroughFunctionArgument)
 {
@@ -9917,8 +10120,7 @@ TEST_F(MLATest, RuntimeClosureRespectsExistingSharedBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow 'value' as mutable"),
-              std::string::npos);
+    EXPECT_NE(out.find("cannot borrow 'value' as mutable"), std::string::npos);
 }
 
 TEST_F(MLATest, RuntimeClosureRespectsExistingMutableBorrow)
@@ -9936,8 +10138,9 @@ TEST_F(MLATest, RuntimeClosureRespectsExistingMutableBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow 'value' as immutable"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot borrow 'value' as immutable"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, RuntimeClosureRequiresExplicitMutableReferenceArgument)
@@ -10082,8 +10285,10 @@ TEST_F(MLATest, NestedMutableReferenceDoesNotAcceptSingleBorrow)
     int rc = 0;
     const std::string out = compileCapture(rc);
     EXPECT_EQ(rc, 1);
-    EXPECT_NE(out.find("no matching overload for function 'set'"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("no matching overload for function 'set'"),
+        std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, NestedMutableReferenceDemoMutatesIntegerAndStruct)
@@ -10129,7 +10334,8 @@ TEST_F(MLATest, NestedMutableReferenceLocalsAndForwarding)
 
 TEST_F(MLATest, NestedMutableReferenceGenericFunction)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         generic<T>
         fn replace_value(reference: &mut &mut T, value: T) -> void {
             *reference = value;
@@ -10147,12 +10353,13 @@ TEST_F(MLATest, NestedMutableReferenceGenericFunction)
             return counter.value == 42 ? 0 : 2;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, NestedReferencesAllowReadingSharedLayers)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         fn read_shared_inner(reference: &mut &i32) -> i32 { return *reference; }
         fn read_shared_outer(reference: & &mut i32) -> i32 { return *reference; }
         fn main() -> i32 {
@@ -10165,7 +10372,7 @@ TEST_F(MLATest, NestedReferencesAllowReadingSharedLayers)
             return 0;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, NestedMutableReferenceRejectsSharedInnerReference)
@@ -10182,8 +10389,9 @@ TEST_F(MLATest, NestedMutableReferenceRejectsSharedInnerReference)
     int rc = 0;
     const std::string out = compileCapture(rc);
     EXPECT_EQ(rc, 1);
-    EXPECT_NE(out.find("cannot write through shared reference"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot write through shared reference"),
+        std::string::npos)
         << out;
 }
 
@@ -10196,8 +10404,9 @@ TEST_F(MLATest, NestedMutableReferenceRejectsSharedOuterReference)
     int rc = 0;
     const std::string out = compileCapture(rc);
     EXPECT_EQ(rc, 1);
-    EXPECT_NE(out.find("cannot write through shared reference"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot write through shared reference"),
+        std::string::npos)
         << out;
 }
 
@@ -10249,22 +10458,25 @@ TEST_F(MLATest, NestedMutableReferenceRejectsRebindingParameterToLocal)
     int rc = 0;
     const std::string out = compileCapture(rc);
     EXPECT_EQ(rc, 1);
-    EXPECT_NE(out.find("rebinding a nested reference parameter"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("rebinding a nested reference parameter"),
+        std::string::npos)
         << out;
 }
 
 TEST_F(MLATest, ReferenceBindingRejectsMissingOrMismatchedInitializer)
 {
     for(const std::string declaration :
-        {"var reference: &mut i32;", "var reference: &mut i32 = 42;",
+        {"var reference: &mut i32;",
+         "var reference: &mut i32 = 42;",
          "var reference: &mut i32 = &value;",
          "var reference: &mut i64 = &mut value;",
          "static var reference: &mut i32 = &mut value;"})
     {
         SCOPED_TRACE(declaration);
-        writeSource("fn main() -> i32 { var value: i32 = 1; " + declaration +
-                    " return 0; }");
+        writeSource(
+            "fn main() -> i32 { var value: i32 = 1; " + declaration +
+            " return 0; }");
         int rc = 0;
         const std::string out = compileCapture(rc);
         EXPECT_EQ(rc, 1);
@@ -10288,8 +10500,9 @@ TEST_F(MLATest, NestedMutableReferenceRejectsReplacingBorrowedSlot)
     int rc = 0;
     const std::string out = compileCapture(rc);
     EXPECT_EQ(rc, 1);
-    EXPECT_NE(out.find("replacing a reference through a borrowed slot"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("replacing a reference through a borrowed slot"),
+        std::string::npos)
         << out;
 }
 
@@ -10348,7 +10561,8 @@ TEST_F(MLATest, StoredReferenceSlotCannotEscapeThroughRawPointerParameter)
 
 TEST_F(MLATest, SharedReferenceReturnsKeepValueABI)
 {
-    EXPECT_EQ(compileAndRunExitCode(R"(
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
         fn identity(value: &i32) -> &i32 { return value; }
         fn main() -> i32 {
             let value: i32 = 42;
@@ -10356,7 +10570,7 @@ TEST_F(MLATest, SharedReferenceReturnsKeepValueABI)
             return result == 42 ? 0 : 1;
         }
     )"),
-              0);
+        0);
 }
 
 TEST_F(MLATest, NestedPointerDemoReplacesInnerPointer)
@@ -10428,8 +10642,9 @@ TEST_F(MLATest, FunctionRejectsFieldMutationThroughImmutableReference)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot mutate through immutable reference"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot mutate through immutable reference"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, RuntimeClosureRejectsFieldMutationThroughImmutableReference)
@@ -10449,8 +10664,9 @@ TEST_F(MLATest, RuntimeClosureRejectsFieldMutationThroughImmutableReference)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot mutate through immutable reference"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot mutate through immutable reference"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, ImmutableMethodReceiverRejectsFieldMutation)
@@ -10470,8 +10686,9 @@ TEST_F(MLATest, ImmutableMethodReceiverRejectsFieldMutation)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot mutate through immutable reference"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot mutate through immutable reference"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, ImmutableMethodReceiverRejectsContainerMutation)
@@ -10491,8 +10708,9 @@ TEST_F(MLATest, ImmutableMethodReceiverRejectsContainerMutation)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot mutate through immutable reference"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot mutate through immutable reference"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, ImmutableMethodReceiverRejectsNestedMutableMethodCall)
@@ -10516,9 +10734,11 @@ TEST_F(MLATest, ImmutableMethodReceiverRejectsNestedMutableMethodCall)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot call mutating method through immutable "
-                       "reference"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find(
+            "cannot call mutating method through immutable "
+            "reference"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, MutableMethodReceiverCanMutateVariable)
@@ -10774,9 +10994,11 @@ TEST_F(MLATest, RuntimeClosureCannotBeAssignedPastCaptureScope)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign closure 'captures_local' to longer-lived "
-                       "'selected'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find(
+            "cannot assign closure 'captures_local' to longer-lived "
+            "'selected'"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, FunctionTypedClosureRunsAcrossFunctionBoundaries)
@@ -10859,7 +11081,8 @@ TEST_F(MLATest, NamedFunctionCanBeReturnedAsCallableValue)
     EXPECT_EQ(compileAndRunExitCode(code), 64);
 }
 
-// The declared callable return type selects the matching named-function overload.
+// The declared callable return type selects the matching named-function
+// overload.
 TEST_F(MLATest, ReturnTypeSelectsNamedFunctionOverload)
 {
     std::string code = R"(
@@ -11423,9 +11646,11 @@ TEST_F(MLATest, FunctionTypedClosureRejectsBorrowedCaptureEscape)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return closure 'read' because it borrows local "
-                       "variable 'local'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find(
+            "cannot return closure 'read' because it borrows local "
+            "variable 'local'"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, BorrowedClosureCanPassToProvenNoEscapeParameter)
@@ -11478,12 +11703,14 @@ TEST_F(MLATest, CallableParameterCannotReturnUnknownBorrowedPointer)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("pointer returned by callable parameter 'callback'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("pointer returned by callable parameter 'callback'"),
+        std::string::npos)
         << out;
 }
 
-// A callback remains non-escaping when invoked only inside conditional branches.
+// A callback remains non-escaping when invoked only inside conditional
+// branches.
 TEST_F(MLATest, BorrowedClosureCanPassToNoEscapeParameterWithBranches)
 {
     std::string code = R"(
@@ -11503,7 +11730,8 @@ TEST_F(MLATest, BorrowedClosureCanPassToNoEscapeParameterWithBranches)
     EXPECT_EQ(compileAndRunExitCode(code), 17);
 }
 
-// A synchronous loop that invokes its callback does not let that callback escape.
+// A synchronous loop that invokes its callback does not let that callback
+// escape.
 TEST_F(MLATest, BorrowedClosureCanPassToNoEscapeParameterWithLoop)
 {
     std::string code = R"(
@@ -11588,8 +11816,10 @@ TEST_F(MLATest, PrintCallbackWrapperPropagatesPointerBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot pass shared borrow 'shared' to mutating"),
+        std::string::npos)
+        << out;
 }
 
 // Pointer-borrow effects still flow through a callback invoked conditionally.
@@ -11618,8 +11848,10 @@ TEST_F(MLATest, ConditionalCallbackWrapperPropagatesPointerBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass shared borrow 'shared' to mutating"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot pass shared borrow 'shared' to mutating"),
+        std::string::npos)
+        << out;
 }
 
 // A no-escape wrapper must propagate the callback's pointer borrow effects.
@@ -11645,9 +11877,11 @@ TEST_F(MLATest, CallbackWrapperPropagatesClosurePointerBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'value' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -11673,9 +11907,11 @@ TEST_F(MLATest, CallbackWrapperPropagatesInlineClosurePointerBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'value' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -11769,8 +12005,9 @@ TEST_F(MLATest, MutableCallableAssignmentRejectsShorterLivedCapture)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign closure borrowing local 'offset'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot assign closure borrowing local 'offset'"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, OwnershipCanReturnPointerBorrowingGlobal)
@@ -11922,7 +12159,9 @@ TEST_F(MLATest, OwnershipCanBorrowDisjointFieldsInSingleCall)
     EXPECT_EQ(compileAndRunExitCode(code), 5);
 }
 
-TEST_F(MLATest, OwnershipCanCallWithDisjointFieldWhileAnotherFieldIsMutablyBorrowed)
+TEST_F(
+    MLATest,
+    OwnershipCanCallWithDisjointFieldWhileAnotherFieldIsMutablyBorrowed)
 {
     std::string code = R"(
         struct Pair {
@@ -12014,8 +12253,7 @@ TEST_F(MLATest, OwnershipRejectsUseAfterMovingStructField)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("use of moved value: 'holder.items'"),
-              std::string::npos)
+    EXPECT_NE(out.find("use of moved value: 'holder.items'"), std::string::npos)
         << out;
 }
 
@@ -12043,8 +12281,9 @@ TEST_F(MLATest, OwnershipRejectsPartialMoveFromTypeWithDropMethod)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot partially move 'holder.items'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot partially move 'holder.items'"),
+        std::string::npos)
         << out;
 }
 
@@ -12069,8 +12308,9 @@ TEST_F(MLATest, OwnershipRejectsPartialMoveFromTypeWithCleanupFunction)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot partially move 'holder.items'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot partially move 'holder.items'"),
+        std::string::npos)
         << out;
 }
 
@@ -12092,8 +12332,9 @@ TEST_F(MLATest, OwnershipRejectsClosureCaptureOfPartiallyMovedAggregate)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot capture moved value: 'holder.items'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot capture moved value: 'holder.items'"),
+        std::string::npos)
         << out;
 }
 
@@ -12115,8 +12356,9 @@ TEST_F(MLATest, OwnershipRejectsBorrowOfPartiallyMovedField)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow moved value: 'holder.items'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot borrow moved value: 'holder.items'"),
+        std::string::npos)
         << out;
 }
 
@@ -12158,8 +12400,9 @@ TEST_F(MLATest, OwnershipRejectsWholeAggregateBorrowAfterPartialMove)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow moved value: 'holder.items'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot borrow moved value: 'holder.items'"),
+        std::string::npos)
         << out;
 }
 
@@ -12181,8 +12424,9 @@ TEST_F(MLATest, OwnershipRejectsPassingBorrowOfPartiallyMovedField)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow moved value: 'holder.items'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot borrow moved value: 'holder.items'"),
+        std::string::npos)
         << out;
 }
 
@@ -12210,12 +12454,14 @@ TEST_F(MLATest, OwnershipRejectsMethodBorrowOfPartiallyMovedField)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow moved value: 'holder.items'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot borrow moved value: 'holder.items'"),
+        std::string::npos)
         << out;
 }
 
-// A partial move leaves disjoint fields usable and permits field reinitialization.
+// A partial move leaves disjoint fields usable and permits field
+// reinitialization.
 TEST_F(MLATest, OwnershipPartialStructMoveAllowsSiblingAndReinitialization)
 {
     std::string code = R"(
@@ -12259,8 +12505,7 @@ TEST_F(MLATest, OwnershipPartialMoveOnOneBranchRemainsUnavailable)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("use of moved value: 'holder.items'"),
-              std::string::npos)
+    EXPECT_NE(out.find("use of moved value: 'holder.items'"), std::string::npos)
         << out;
 }
 
@@ -12309,8 +12554,7 @@ TEST_F(MLATest, OwnershipRejectsWholeAggregateReadAfterPartialMove)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("use of moved value: 'holder.items'"),
-              std::string::npos)
+    EXPECT_NE(out.find("use of moved value: 'holder.items'"), std::string::npos)
         << out;
 }
 
@@ -12347,8 +12591,7 @@ TEST_F(MLATest, OwnershipRejectsUseAfterMovingListElement)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("use of moved value: 'items[0]'"),
-              std::string::npos)
+    EXPECT_NE(out.find("use of moved value: 'items[0]'"), std::string::npos)
         << out;
 }
 
@@ -12386,8 +12629,7 @@ TEST_F(MLATest, OwnershipDynamicIndexMoveInvalidatesPossibleElements)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("use of moved value: 'items[*]'"),
-              std::string::npos)
+    EXPECT_NE(out.find("use of moved value: 'items[*]'"), std::string::npos)
         << out;
 }
 
@@ -12419,8 +12661,9 @@ TEST_F(MLATest, OwnershipRejectsMethodCallOnPartiallyMovedNestedReceiver)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("use of moved value: 'outer.inner.items'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("use of moved value: 'outer.inner.items'"),
+        std::string::npos)
         << out;
 }
 
@@ -12799,8 +13042,9 @@ TEST_F(MLATest, OwnershipCannotMixBorrowAndMoveSameCall)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot move 'p' while borrowed in call"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot move 'p' while borrowed in call"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, OwnershipCannotMixMoveAndBorrowSameCall)
@@ -12823,8 +13067,9 @@ TEST_F(MLATest, OwnershipCannotMixMoveAndBorrowSameCall)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot move 'p' while borrowed in call"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot move 'p' while borrowed in call"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, OwnershipCannotMoveMethodReceiverAndPassAsArg)
@@ -12849,8 +13094,9 @@ TEST_F(MLATest, OwnershipCannotMoveMethodReceiverAndPassAsArg)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot move 'p' while borrowed in call"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot move 'p' while borrowed in call"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, OwnershipCannotMixBorrowPointerVarAndMoveSameCall)
@@ -12874,8 +13120,9 @@ TEST_F(MLATest, OwnershipCannotMixBorrowPointerVarAndMoveSameCall)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot move 'p' while borrowed in call"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot move 'p' while borrowed in call"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, OwnershipCannotBorrowPointerVarAndAddressSameOwnerInCall)
@@ -13048,8 +13295,9 @@ TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocalField)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cannot return pointer that borrows local value"),
+        std::string::npos);
 }
 
 // Returning a pointer-valued ternary must reject any branch borrowing a local.
@@ -13070,8 +13318,9 @@ TEST_F(MLATest, OwnershipCannotReturnTernaryPointerBorrowingLocal)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot return pointer that borrows local value"),
+        std::string::npos)
         << out;
 }
 
@@ -13099,8 +13348,9 @@ TEST_F(MLATest, OwnershipCannotReturnBranchMergedPointerBorrowingLocal)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot return pointer that borrows local value"),
+        std::string::npos)
         << out;
 }
 
@@ -13126,8 +13376,9 @@ TEST_F(MLATest, OwnershipCannotReturnMatchPointerBorrowingLocal)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot return pointer that borrows local value"),
+        std::string::npos)
         << out;
 }
 
@@ -13193,7 +13444,8 @@ TEST_F(MLATest, OwnershipFunctionReturnedPointerDropsOverwrittenOrigin)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// A definite reassignment to a global pointer must discard a local borrow origin.
+// A definite reassignment to a global pointer must discard a local borrow
+// origin.
 TEST_F(MLATest, OwnershipFunctionReturnedPointerDropsOverwrittenLocalBorrow)
 {
     std::string code = R"(
@@ -13430,8 +13682,9 @@ TEST_F(MLATest, OwnershipFunctionReturnedPointerMergesBranchOrigins)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'first' while borrowed by 'selected'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'first' while borrowed by 'selected'"),
+        std::string::npos)
         << out;
 }
 
@@ -13534,8 +13787,9 @@ TEST_F(MLATest, OwnershipFunctionReturnedPointerRestoresShadowedAlias)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'first' while borrowed by 'selected'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'first' while borrowed by 'selected'"),
+        std::string::npos)
         << out;
 }
 
@@ -13559,8 +13813,9 @@ TEST_F(MLATest, OwnershipCannotReturnBorrowFromByValueAggregateParameter)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass aggregate 'box' containing a borrow"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot pass aggregate 'box' containing a borrow"),
+        std::string::npos)
         << out;
 }
 
@@ -13593,8 +13848,9 @@ TEST_F(MLATest, OwnershipTryCatchReturnedPointerKeepsBorrowLive)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'owner' while borrowed by 'forwarded'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'owner' while borrowed by 'forwarded'"),
+        std::string::npos)
         << out;
 }
 
@@ -13619,8 +13875,9 @@ TEST_F(MLATest, OwnershipAggregateForwardedPointerKeepsBorrowLive)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'owner' while borrowed by 'forwarded'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'owner' while borrowed by 'forwarded'"),
+        std::string::npos)
         << out;
 }
 
@@ -13688,8 +13945,9 @@ TEST_F(MLATest, OwnershipAggregateReassignmentReplacesPointerFieldOrigin)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'second' while borrowed by 'forwarded'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'second' while borrowed by 'forwarded'"),
+        std::string::npos)
         << out;
 }
 
@@ -13713,8 +13971,9 @@ TEST_F(MLATest, OwnershipListForwardedPointerParameterKeepsBorrowLive)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'second' while borrowed by 'forwarded'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'second' while borrowed by 'forwarded'"),
+        std::string::npos)
         << out;
 }
 
@@ -13776,8 +14035,9 @@ TEST_F(MLATest, OwnershipListForwardedPointerDynamicIndexKeepsAllOrigins)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'first' while borrowed by 'forwarded'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'first' while borrowed by 'forwarded'"),
+        std::string::npos)
         << out;
 }
 
@@ -13823,8 +14083,9 @@ TEST_F(MLATest, OwnershipListForwardedPointerMutationKeepsNewOrigin)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'second' while borrowed by 'forwarded'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'second' while borrowed by 'forwarded'"),
+        std::string::npos)
         << out;
 }
 
@@ -13849,8 +14110,11 @@ TEST_F(MLATest, OwnershipListForwardedPointerElementAssignmentKeepsNewOrigin)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'second' directly while mutably borrowed by 'forwarded'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'second' directly while mutably borrowed by "
+            "'forwarded'"),
+        std::string::npos)
         << out;
 }
 
@@ -14098,7 +14362,8 @@ TEST_F(MLATest, OwnershipIndirectPointerAssignmentKeepsConditionalLocalBorrow)
         << out;
 }
 
-// An indirect write through a conditional slot must update every possible target.
+// An indirect write through a conditional slot must update every possible
+// target.
 TEST_F(MLATest, OwnershipIndirectPointerAssignmentTracksConditionalSlotTargets)
 {
     std::string code = R"(
@@ -14157,7 +14422,8 @@ TEST_F(MLATest, OwnershipHelperSlotOverwriteDropsLocalBorrowOrigin)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// A helper that may write a local pointer into a slot must preserve that origin.
+// A helper that may write a local pointer into a slot must preserve that
+// origin.
 TEST_F(MLATest, OwnershipHelperConditionalSlotWriteKeepsLocalBorrowOrigin)
 {
     std::string code = R"(
@@ -14193,7 +14459,8 @@ TEST_F(MLATest, OwnershipHelperConditionalSlotWriteKeepsLocalBorrowOrigin)
         << out;
 }
 
-// Pointer-slot mutation summaries must propagate through unconditional wrappers.
+// Pointer-slot mutation summaries must propagate through unconditional
+// wrappers.
 TEST_F(MLATest, OwnershipNestedHelperSlotOverwriteDropsLocalBorrowOrigin)
 {
     std::string code = R"(
@@ -14225,7 +14492,8 @@ TEST_F(MLATest, OwnershipNestedHelperSlotOverwriteDropsLocalBorrowOrigin)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// Conditional slot mutations must propagate through helper wrappers as may-writes.
+// Conditional slot mutations must propagate through helper wrappers as
+// may-writes.
 TEST_F(MLATest, OwnershipNestedHelperConditionalSlotWriteKeepsLocalBorrowOrigin)
 {
     std::string code = R"(
@@ -14296,7 +14564,8 @@ TEST_F(MLATest, OwnershipMethodSlotOverwriteDropsLocalBorrowOrigin)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// A direct field-receiver method overwrite must drop a stale local pointer origin.
+// A direct field-receiver method overwrite must drop a stale local pointer
+// origin.
 TEST_F(MLATest, OwnershipFieldReceiverMethodOverwriteDropsLocalBorrowOrigin)
 {
     std::string code = R"(
@@ -14332,7 +14601,9 @@ TEST_F(MLATest, OwnershipFieldReceiverMethodOverwriteDropsLocalBorrowOrigin)
 }
 
 // An inferred aggregate field receiver must resolve its definite slot write.
-TEST_F(MLATest, OwnershipInferredFieldReceiverMethodOverwriteDropsLocalBorrowOrigin)
+TEST_F(
+    MLATest,
+    OwnershipInferredFieldReceiverMethodOverwriteDropsLocalBorrowOrigin)
 {
     std::string code = R"(
         struct Replacer { var value: i32; };
@@ -14367,7 +14638,9 @@ TEST_F(MLATest, OwnershipInferredFieldReceiverMethodOverwriteDropsLocalBorrowOri
 }
 
 // An alias of an inferred struct must retain its field receiver type.
-TEST_F(MLATest, OwnershipAliasedInferredFieldReceiverDropsOverwrittenBorrowOrigin)
+TEST_F(
+    MLATest,
+    OwnershipAliasedInferredFieldReceiverDropsOverwrittenBorrowOrigin)
 {
     std::string code = R"(
         struct Replacer { var value: i32; };
@@ -14524,7 +14797,8 @@ TEST_F(MLATest, OwnershipMethodConditionalSlotAliasKeepsBorrowOrigins)
     EXPECT_NE(out.find("borrowed by 'selected'"), std::string::npos) << out;
 }
 
-// A wrapper function must propagate conditional pointer-slot writes from a method.
+// A wrapper function must propagate conditional pointer-slot writes from a
+// method.
 TEST_F(MLATest, OwnershipMethodPointerSlotEffectPropagatesThroughFunction)
 {
     std::string code = R"(
@@ -14790,7 +15064,8 @@ TEST_F(MLATest, OwnershipConditionalMethodCallKeepsPossibleBorrowOrigin)
     EXPECT_NE(out.find("borrowed by 'selected'"), std::string::npos) << out;
 }
 
-// Function summaries must kill a caller-slot alias when its local copy is reassigned.
+// Function summaries must kill a caller-slot alias when its local copy is
+// reassigned.
 TEST_F(MLATest, OwnershipHelperSlotAliasReassignmentKeepsUnchangedBorrow)
 {
     std::string code = R"(
@@ -15094,7 +15369,8 @@ TEST_F(MLATest, OwnershipUnusedPointerReassignmentClosurePreservesPrecision)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// A closure writing through a pointer slot stored in a field must retain origins.
+// A closure writing through a pointer slot stored in a field must retain
+// origins.
 TEST_F(MLATest, OwnershipClosureFieldPointerSlotWriteKeepsNewOrigin)
 {
     std::string code = R"(
@@ -15256,8 +15532,11 @@ TEST_F(MLATest, OwnershipAggregateArgumentReturnedPointerKeepsBorrowLive)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass aggregate 'pointers' containing a borrow of a local value because the callee may retain it"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot pass aggregate 'pointers' containing a borrow of a local "
+            "value because the callee may retain it"),
+        std::string::npos)
         << out;
 }
 
@@ -15298,8 +15577,9 @@ TEST_F(MLATest, BorrowingListArgumentRejectsMutatingCallee)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass aggregate 'pointers' containing a borrow"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot pass aggregate 'pointers' containing a borrow"),
+        std::string::npos)
         << out;
 }
 
@@ -15340,8 +15620,9 @@ TEST_F(MLATest, BorrowingMapArgumentRejectsElementMutation)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass aggregate 'values' containing a borrow"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot pass aggregate 'values' containing a borrow"),
+        std::string::npos)
         << out;
 }
 
@@ -15364,8 +15645,9 @@ TEST_F(MLATest, BorrowingMapArgumentRejectsPointerEscape)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass aggregate 'values' containing a borrow"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot pass aggregate 'values' containing a borrow"),
+        std::string::npos)
         << out;
 }
 
@@ -15394,7 +15676,8 @@ TEST_F(MLATest, OwnershipNestedFunctionReturnedPointerKeepsBorrowLive)
     EXPECT_NE(out.find("while borrowed"), std::string::npos) << out;
 }
 
-// Generic pointer-forwarding specializations must preserve caller borrow origins.
+// Generic pointer-forwarding specializations must preserve caller borrow
+// origins.
 TEST_F(MLATest, OwnershipGenericFunctionReturnedPointerKeepsBorrowLive)
 {
     std::string code = R"(
@@ -15577,9 +15860,12 @@ TEST_F(MLATest, OwnershipMutableCallableTargetSetRejectsSharedMutation)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass a shared borrow to mutating callable "
-                      "pointer parameter"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find(
+            "cannot pass a shared borrow to mutating callable "
+            "pointer parameter"),
+        std::string::npos)
+        << out;
 }
 
 // A mutable callable assigned in a loop loses its single-target summary after
@@ -15604,8 +15890,8 @@ TEST_F(MLATest, OwnershipMutableCallableLoopInvalidatesTargetSummary)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("opaque callable pointer parameter"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("opaque callable pointer parameter"), std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, OwnershipCannotStorePointerParameterBorrowGlobally)
@@ -15701,8 +15987,9 @@ TEST_F(MLATest, JoinedSharedPointerKeepsLocalOwnerBorrowActive)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'local_value' while borrowed by 'selected'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to 'local_value' while borrowed by 'selected'"),
+        std::string::npos)
         << out;
 }
 
@@ -15728,13 +16015,17 @@ TEST_F(MLATest, JoinedExclusivePointerKeepsLocalOwnerBorrowActive)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'local_value' directly while mutably borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'local_value' directly while mutably borrowed"),
+        std::string::npos)
         << out;
 }
 
 // A joined exclusive pointer must retain local origins when it escapes.
-TEST_F(MLATest, OwnershipCannotStoreJoinedExclusivePointerWithLocalOriginGlobally)
+TEST_F(
+    MLATest,
+    OwnershipCannotStoreJoinedExclusivePointerWithLocalOriginGlobally)
 {
     std::string code = R"(
         var saved: ptr<i32>;
@@ -15756,10 +16047,9 @@ TEST_F(MLATest, OwnershipCannotStoreJoinedExclusivePointerWithLocalOriginGloball
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_TRUE(out.find("cannot store in global/static") !=
-                    std::string::npos ||
-                out.find("cannot alias mutable borrow") !=
-                    std::string::npos)
+    EXPECT_TRUE(
+        out.find("cannot store in global/static") != std::string::npos ||
+        out.find("cannot alias mutable borrow") != std::string::npos)
         << out;
 }
 
@@ -15782,8 +16072,9 @@ TEST_F(MLATest, OwnershipCannotReturnPointerLoadedThroughBorrowedPointer)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot return pointer that borrows local value"),
+        std::string::npos)
         << out;
 }
 
@@ -15832,8 +16123,9 @@ TEST_F(MLATest, OwnershipCannotReturnMatchAggregateContainingBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return aggregate containing a pointer"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot return aggregate containing a pointer"),
+        std::string::npos)
         << out;
 }
 
@@ -15858,8 +16150,9 @@ TEST_F(MLATest, OwnershipCannotReturnLocalAggregateAliasContainingBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return aggregate containing a pointer"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot return aggregate containing a pointer"),
+        std::string::npos)
         << out;
 }
 
@@ -15880,8 +16173,7 @@ TEST_F(MLATest, AggregateBorrowKeepsOwnerBorrowedUntilLastUse)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos) << out;
 }
 
 TEST_F(MLATest, MethodReturnedAggregateKeepsBorrowOriginAlive)
@@ -15906,8 +16198,7 @@ TEST_F(MLATest, MethodReturnedAggregateKeepsBorrowOriginAlive)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'copied'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'copied'"), std::string::npos) << out;
 }
 
 TEST_F(MLATest, MethodReturnedAggregateFieldKeepsBorrowOriginAlive)
@@ -15969,8 +16260,7 @@ TEST_F(MLATest, AggregateBorrowStillRejectsMutationOfBorrowedOwnerField)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos) << out;
 }
 
 TEST_F(MLATest, AggregateBorrowPlaceRestoresAfterShadowedScope)
@@ -16039,8 +16329,7 @@ TEST_F(MLATest, AggregateBorrowsMultipleFieldsStillRejectOverlap)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'refs'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'refs'"), std::string::npos) << out;
 }
 
 TEST_F(MLATest, ExtractedPointerRetainsItsAggregateFieldBorrowPath)
@@ -16090,8 +16379,7 @@ TEST_F(MLATest, ExtractedPointerStillProtectsItsBorrowedAggregateField)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'first'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'first'"), std::string::npos) << out;
 }
 
 TEST_F(MLATest, AggregateBorrowPlaceSetsMergeAcrossBranches)
@@ -16121,8 +16409,7 @@ TEST_F(MLATest, AggregateBorrowPlaceSetsMergeAcrossBranches)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'refs'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'refs'"), std::string::npos) << out;
 }
 
 TEST_F(MLATest, AggregateFieldAssignmentTracksBorrowOrigin)
@@ -16144,11 +16431,11 @@ TEST_F(MLATest, AggregateFieldAssignmentTracksBorrowOrigin)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'outer'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'outer'"), std::string::npos) << out;
 }
 
-// Replacing one pointer field releases its previous borrow of that field's owner.
+// Replacing one pointer field releases its previous borrow of that field's
+// owner.
 TEST_F(MLATest, AggregateFieldReplacementReleasesOldBorrow)
 {
     std::string code = R"(
@@ -16193,8 +16480,9 @@ TEST_F(MLATest, AggregateFieldReplacementKeepsSiblingBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'pair' while borrowed by 'refs'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'pair' while borrowed by 'refs'"),
+        std::string::npos)
         << out;
 }
 
@@ -16325,8 +16613,7 @@ TEST_F(MLATest, AggregateFieldMovePreservesBorrowOrigin)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'outer'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'outer'"), std::string::npos) << out;
 }
 
 TEST_F(MLATest, ListPushTracksBorrowOrigin)
@@ -16364,8 +16651,9 @@ TEST_F(MLATest, ListPushRejectsSharedBorrowWhileOwnerIsMutablyBorrowed)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while mutably borrowed by 'exclusive'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("while mutably borrowed by 'exclusive'"),
+        std::string::npos)
         << out;
 }
 
@@ -16384,8 +16672,8 @@ TEST_F(MLATest, ListPushRejectsStoringMutableBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("use of moved value: 'exclusive'"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("use of moved value: 'exclusive'"), std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, ListRetainsExclusiveBorrowUntilItsLastUse)
@@ -16405,8 +16693,8 @@ TEST_F(MLATest, ListRetainsExclusiveBorrowUntilItsLastUse)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("mutably borrowed by 'pointers'"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("mutably borrowed by 'pointers'"), std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, ListPushTracksInlineExclusiveBorrow)
@@ -16425,8 +16713,10 @@ TEST_F(MLATest, ListPushTracksInlineExclusiveBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while mutably borrowed by 'pointers'"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("while mutably borrowed by 'pointers'"),
+        std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, StructRetainsExclusiveBorrowUntilItsLastUse)
@@ -16447,8 +16737,8 @@ TEST_F(MLATest, StructRetainsExclusiveBorrowUntilItsLastUse)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while mutably borrowed by 'boxed'"),
-              std::string::npos) << out;
+    EXPECT_NE(out.find("while mutably borrowed by 'boxed'"), std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, ListCanRetainDisjointExclusiveBorrows)
@@ -16481,8 +16771,10 @@ TEST_F(MLATest, ListCannotRetainOverlappingExclusiveBorrows)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot retain overlapping mutable borrows of 'value'"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot retain overlapping mutable borrows of 'value'"),
+        std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, ListTreatsDynamicExclusiveBorrowIndexesAsOverlapping)
@@ -16502,8 +16794,10 @@ TEST_F(MLATest, ListTreatsDynamicExclusiveBorrowIndexesAsOverlapping)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot retain overlapping mutable borrows"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot retain overlapping mutable borrows"),
+        std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, ListCanRetainDisjointBorrowsOfOneStruct)
@@ -16618,8 +16912,10 @@ TEST_F(MLATest, StructRejectsOverlappingExclusiveFieldBorrows)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot borrow 'pair' as mutable more than once"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("cannot borrow 'pair' as mutable more than once"),
+        std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, ListCannotOutliveItsExclusiveBorrow)
@@ -16638,9 +16934,12 @@ TEST_F(MLATest, ListCannotOutliveItsExclusiveBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot store mutable borrow of 'value' in "
-                       "longer-lived aggregate 'pointers'"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find(
+            "cannot store mutable borrow of 'value' in "
+            "longer-lived aggregate 'pointers'"),
+        std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, ListCannotCopyOutExclusiveBorrow)
@@ -16658,9 +16957,12 @@ TEST_F(MLATest, ListCannotCopyOutExclusiveBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot extract a mutable borrow from aggregate "
-                       "'pointers'"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find(
+            "cannot extract a mutable borrow from aggregate "
+            "'pointers'"),
+        std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, ListCannotPopExclusiveBorrowOut)
@@ -16678,9 +16980,12 @@ TEST_F(MLATest, ListCannotPopExclusiveBorrowOut)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot extract a mutable borrow from aggregate "
-                       "'pointers'"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find(
+            "cannot extract a mutable borrow from aggregate "
+            "'pointers'"),
+        std::string::npos)
+        << out;
 }
 
 // A shared borrow returned by pop() remains live through the extracted pointer.
@@ -16722,9 +17027,12 @@ TEST_F(MLATest, CannotPassExclusiveBorrowOutOfAggregateToFunction)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass a mutable borrow out of aggregate "
-                       "'pointers'"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find(
+            "cannot pass a mutable borrow out of aggregate "
+            "'pointers'"),
+        std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, CannotPassAggregateContainingExclusiveBorrowToFunction)
@@ -16748,9 +17056,12 @@ TEST_F(MLATest, CannotPassAggregateContainingExclusiveBorrowToFunction)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass aggregate 'box' containing a borrow of a "
-                       "local value"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find(
+            "cannot pass aggregate 'box' containing a borrow of a "
+            "local value"),
+        std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, CannotPassTemporaryAggregateContainingExclusiveBorrow)
@@ -16772,9 +17083,12 @@ TEST_F(MLATest, CannotPassTemporaryAggregateContainingExclusiveBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass aggregate containing a borrow of a local "
-                       "value"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find(
+            "cannot pass aggregate containing a borrow of a local "
+            "value"),
+        std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, CannotPassAggregateContainingSharedBorrowToFunction)
@@ -16797,9 +17111,12 @@ TEST_F(MLATest, CannotPassAggregateContainingSharedBorrowToFunction)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass aggregate 'box' containing a borrow of a "
-                       "local value"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find(
+            "cannot pass aggregate 'box' containing a borrow of a "
+            "local value"),
+        std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, CannotPassTemporaryAggregateContainingSharedBorrow)
@@ -16821,9 +17138,12 @@ TEST_F(MLATest, CannotPassTemporaryAggregateContainingSharedBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass aggregate containing a borrow of a local "
-                       "value"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find(
+            "cannot pass aggregate containing a borrow of a local "
+            "value"),
+        std::string::npos)
+        << out;
 }
 
 // A visible function may read a shared borrow from an aggregate synchronously.
@@ -16848,7 +17168,8 @@ TEST_F(MLATest, SharedBorrowingAggregateCanPassToReadOnlyFunction)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// A read-only callee may dereference a shared pointer nested in an aggregate field.
+// A read-only callee may dereference a shared pointer nested in an aggregate
+// field.
 TEST_F(MLATest, SharedBorrowingAggregateCanReadNestedPointerField)
 {
     std::string code = R"(
@@ -16874,7 +17195,8 @@ TEST_F(MLATest, SharedBorrowingAggregateCanReadNestedPointerField)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-// A callee that writes through an aggregate pointer field cannot accept its shared borrow.
+// A callee that writes through an aggregate pointer field cannot accept its
+// shared borrow.
 TEST_F(MLATest, SharedBorrowingAggregateRejectsMutatingFunction)
 {
     std::string code = R"(
@@ -16893,9 +17215,12 @@ TEST_F(MLATest, SharedBorrowingAggregateRejectsMutatingFunction)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass aggregate 'box' containing a borrow of a "
-                       "local value"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find(
+            "cannot pass aggregate 'box' containing a borrow of a "
+            "local value"),
+        std::string::npos)
+        << out;
 }
 
 // A nested pointer write must not pass the read-only aggregate-call proof.
@@ -16919,9 +17244,11 @@ TEST_F(MLATest, SharedBorrowingAggregateRejectsNestedPointerMutation)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass aggregate 'box' containing a borrow of a "
-                       "local value"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot pass aggregate 'box' containing a borrow of a "
+            "local value"),
+        std::string::npos)
         << out;
 }
 
@@ -16945,9 +17272,12 @@ TEST_F(MLATest, CannotHideSharedBorrowingAggregateInCopyCallArgument)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass aggregate containing a borrow of a local "
-                       "value"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find(
+            "cannot pass aggregate containing a borrow of a local "
+            "value"),
+        std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, AggregateBorrowOfGlobalCanPassToFunction)
@@ -16983,8 +17313,10 @@ TEST_F(MLATest, CannotCopyAggregateContainingExclusiveBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("std::copy cannot duplicate a mutable borrow"),
-              std::string::npos) << out;
+    EXPECT_NE(
+        out.find("std::copy cannot duplicate a mutable borrow"),
+        std::string::npos)
+        << out;
 }
 
 TEST_F(MLATest, ExclusiveBorrowInListExpiresAfterContainerLastUse)
@@ -17242,8 +17574,7 @@ TEST_F(MLATest, MapCopyPreservesPointerBorrowOrigin)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'copied'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'copied'"), std::string::npos) << out;
 }
 
 // A map literal holding an exclusive pointer must prevent owner mutation.
@@ -17262,8 +17593,9 @@ TEST_F(MLATest, MapPointerValueRetainsExclusiveBorrow)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while mutably borrowed by 'pointers'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("while mutably borrowed by 'pointers'"),
+        std::string::npos)
         << out;
 }
 
@@ -17419,7 +17751,8 @@ TEST_F(MLATest, RuntimeClosureBranchMergeRetainsAllCaptureBorrows)
         << out;
 }
 
-// Branch-merged closure captures release every owner after the closure's last use.
+// Branch-merged closure captures release every owner after the closure's last
+// use.
 TEST_F(MLATest, RuntimeClosureBranchMergeReleasesAllCaptureBorrows)
 {
     std::string code = R"(
@@ -17591,8 +17924,7 @@ TEST_F(MLATest, AggregateBorrowOriginsMergeAcrossIfBranches)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos) << out;
 }
 
 TEST_F(MLATest, AggregateBorrowOriginSurvivesTernaryAlias)
@@ -17617,8 +17949,9 @@ TEST_F(MLATest, AggregateBorrowOriginSurvivesTernaryAlias)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot return aggregate containing a pointer"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot return aggregate containing a pointer"),
+        std::string::npos)
         << out;
 }
 
@@ -17643,8 +17976,7 @@ TEST_F(MLATest, AggregateBorrowOriginsRestoreAfterShadowedScope)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos) << out;
 }
 
 TEST_F(MLATest, AggregateBorrowOriginsMergeAcrossWhileLoop)
@@ -17669,8 +18001,7 @@ TEST_F(MLATest, AggregateBorrowOriginsMergeAcrossWhileLoop)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos) << out;
 }
 
 // A pointer reassigned inside a possibly executed loop must retain the new
@@ -17696,9 +18027,11 @@ TEST_F(MLATest, PointerBorrowOriginsMergeAcrossWhileLoop)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'value' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -17766,8 +18099,9 @@ TEST_F(MLATest, LoopBreakJoinedFieldBorrowRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'value' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'value' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -17810,12 +18144,14 @@ TEST_F(MLATest, RangeLoopJoinedFieldBorrowRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'value' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'value' while borrowed"),
+        std::string::npos)
         << out;
 }
 
-// A list-iteration exit must preserve precise paths for mutable pointer borrows.
+// A list-iteration exit must preserve precise paths for mutable pointer
+// borrows.
 TEST_F(MLATest, ListLoopJoinedFieldBorrowPreservesDisjointAccess)
 {
     std::string code = R"(
@@ -17835,7 +18171,8 @@ TEST_F(MLATest, ListLoopJoinedFieldBorrowPreservesDisjointAccess)
     EXPECT_EQ(compileAndRunExitCode(code), 4);
 }
 
-// A child reborrow of a joined pointer must preserve owner-specific field paths.
+// A child reborrow of a joined pointer must preserve owner-specific field
+// paths.
 TEST_F(MLATest, JoinedFieldReborrowPreservesDisjointAccess)
 {
     std::string code = R"(
@@ -17858,7 +18195,8 @@ TEST_F(MLATest, JoinedFieldReborrowPreservesDisjointAccess)
     EXPECT_EQ(compileAndRunExitCode(code), 4);
 }
 
-// A child reborrow of a joined pointer must block every possible borrowed field.
+// A child reborrow of a joined pointer must block every possible borrowed
+// field.
 TEST_F(MLATest, JoinedFieldReborrowRejectsOverlappingAccess)
 {
     std::string code = R"(
@@ -17882,8 +18220,9 @@ TEST_F(MLATest, JoinedFieldReborrowRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -17911,8 +18250,9 @@ TEST_F(MLATest, JoinedSharedFieldReborrowRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -17963,8 +18303,7 @@ TEST_F(MLATest, JoinedSharedFieldReborrowBlocksParentWrite)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'child'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'child'"), std::string::npos) << out;
 }
 
 // A nested shared reborrow must retain every owner of a joined shared pointer.
@@ -17991,8 +18330,9 @@ TEST_F(MLATest, NestedSharedJoinedBorrowRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18044,8 +18384,9 @@ TEST_F(MLATest, NestedSharedJoinedBorrowCannotEscapeLocalOrigin)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot pass a borrow of local storage"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot pass a borrow of local storage"),
+        std::string::npos)
         << out;
 }
 
@@ -18086,8 +18427,9 @@ TEST_F(MLATest, NestedTernarySharedJoinedBorrowRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18136,8 +18478,9 @@ TEST_F(MLATest, NestedLoopSharedJoinedBorrowRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18186,8 +18529,9 @@ TEST_F(MLATest, NestedLoopBreakSharedBorrowRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18255,8 +18599,9 @@ TEST_F(MLATest, NestedRangeBreakSharedBorrowRejectsIncomingOwnerOverlap)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'first' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'first' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18282,8 +18627,9 @@ TEST_F(MLATest, NestedRangeBreakSharedBorrowRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18330,8 +18676,9 @@ TEST_F(MLATest, NestedMatchSharedBorrowRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18422,8 +18769,9 @@ TEST_F(MLATest, NestedRangeContinueSharedBorrowRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18472,8 +18820,9 @@ TEST_F(MLATest, NestedListContinueSharedBorrowRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18501,8 +18850,9 @@ TEST_F(MLATest, AliasOfJoinedSharedPointerRejectsOverlappingAccess)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18552,8 +18902,9 @@ TEST_F(MLATest, AliasOfSameOwnerJoinedSharedPointerRejectsEitherField)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'value' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'value' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18605,8 +18956,9 @@ TEST_F(MLATest, AggregateFieldOfJoinedSharedPointerRejectsOverlap)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18660,8 +19012,9 @@ TEST_F(MLATest, AggregateFieldOfSameOwnerJoinedPointerRejectsEitherField)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'value' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'value' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18718,8 +19071,9 @@ TEST_F(MLATest, NestedAggregateFieldOfJoinedSharedPointerRejectsOverlap)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18777,8 +19131,9 @@ TEST_F(MLATest, ListElementOfJoinedSharedPointerRejectsOverlap)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18832,8 +19187,9 @@ TEST_F(MLATest, MapValueOfJoinedSharedPointerRejectsOverlap)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18886,8 +19242,9 @@ TEST_F(MLATest, TupleElementOfJoinedSharedPointerRejectsOverlap)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18941,8 +19298,9 @@ TEST_F(MLATest, FixedArrayElementOfJoinedSharedPointerRejectsOverlap)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to field of 'second' while borrowed"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find("cannot assign to field of 'second' while borrowed"),
+        std::string::npos)
         << out;
 }
 
@@ -18995,9 +19353,11 @@ TEST_F(MLATest, PointerBorrowOriginsMergeAcrossDifferentIfOwners)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'value' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -19025,9 +19385,11 @@ TEST_F(MLATest, PointerBorrowOriginsProtectSecondIfOwnerAfterJoin)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'other' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'other' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -19052,9 +19414,11 @@ TEST_F(MLATest, PointerBorrowOriginsMergeAcrossWhileBreak)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'value' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -19101,9 +19465,11 @@ TEST_F(MLATest, PointerBorrowOriginsMergeAcrossConditionalBreak)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'value' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -19133,9 +19499,11 @@ TEST_F(MLATest, PointerBorrowOriginsMergeAcrossRangeLoopBreak)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'value' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -19166,9 +19534,11 @@ TEST_F(MLATest, PointerBorrowOriginsMergeAcrossListLoopBreak)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'value' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -19193,9 +19563,11 @@ TEST_F(MLATest, PointerBorrowOriginsMergeAcrossWhileContinue)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'value' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -19220,9 +19592,11 @@ TEST_F(MLATest, PointerBorrowOriginsMergeAcrossRangeLoopContinue)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cannot assign to 'value' directly while mutably "
-                      "borrowed by 'pointer'"),
-              std::string::npos)
+    EXPECT_NE(
+        out.find(
+            "cannot assign to 'value' directly while mutably "
+            "borrowed by 'pointer'"),
+        std::string::npos)
         << out;
 }
 
@@ -19246,8 +19620,7 @@ TEST_F(MLATest, AggregateBorrowOriginsMergeAcrossRangeFor)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos) << out;
 }
 
 TEST_F(MLATest, AggregateBorrowOriginsTrackMatchResult)
@@ -19272,8 +19645,7 @@ TEST_F(MLATest, AggregateBorrowOriginsTrackMatchResult)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos)
-        << out;
+    EXPECT_NE(out.find("while borrowed by 'boxed'"), std::string::npos) << out;
 }
 
 TEST_F(MLATest, OwnershipCannotStorePointerBorrowingLocalFieldInGlobalPointer)
@@ -19409,8 +19781,9 @@ TEST_F(MLATest, EnumImplicitValueOverflowFails)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("implicit value overflows backing type 'u8'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("implicit value overflows backing type 'u8'"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, EnumCanReferenceCompatibleOtherEnumValue)
@@ -19477,10 +19850,12 @@ TEST_F(MLATest, EnumReferenceValueMustFitTargetBackingType)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("enum types/values are not compatible"),
-              std::string::npos);
-    EXPECT_NE(out.find("cannot fit in enum 'Small' backing type 'u8'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("enum types/values are not compatible"),
+        std::string::npos);
+    EXPECT_NE(
+        out.find("cannot fit in enum 'Small' backing type 'u8'"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, EnumReferenceSignedToUnsignedIncompatibilityHasClearError)
@@ -19502,8 +19877,9 @@ TEST_F(MLATest, EnumReferenceSignedToUnsignedIncompatibilityHasClearError)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("enum types/values are not compatible"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("enum types/values are not compatible"),
+        std::string::npos);
     EXPECT_NE(out.find("Signed::Neg"), std::string::npos);
     EXPECT_NE(out.find("backing type 'u8'"), std::string::npos);
 }
@@ -19560,8 +19936,9 @@ TEST_F(MLATest, EnumForLoopIteratesInDeclarationOrder)
             return 0;
         }
     )";
-    EXPECT_EQ(compileAndRun(code),
-              "0:Status::Idle\n1:Status::Busy\n2:Status::Done\n");
+    EXPECT_EQ(
+        compileAndRun(code),
+        "0:Status::Idle\n1:Status::Busy\n2:Status::Done\n");
 }
 
 TEST_F(MLATest, EnumBackingValidExampleCompilesAndRuns)
@@ -19591,8 +19968,9 @@ TEST_F(MLATest, EnumBackingImplicitOverflowExampleFails)
     int rc = 0;
     std::string out = compilePathCapture(src, rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("implicit value overflows backing type 'u8'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("implicit value overflows backing type 'u8'"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, EnumPrintExampleCompilesAndRuns)
@@ -19602,13 +19980,15 @@ TEST_F(MLATest, EnumPrintExampleCompilesAndRuns)
     int rc = 0;
     std::string out = compilePathCapture(src, rc);
     EXPECT_EQ(rc, 0) << out;
-    EXPECT_EQ(run(), "literal: Status::Invalid\n"
-                     "variable: Status::Success\n"
-                     "iterate:\n"
-                     "  [0] Status::Invalid\n"
-                     "  [1] Status::Busy\n"
-                     "  [2] Status::Success\n"
-                     "unknown: <Status:unknown>\n");
+    EXPECT_EQ(
+        run(),
+        "literal: Status::Invalid\n"
+        "variable: Status::Success\n"
+        "iterate:\n"
+        "  [0] Status::Invalid\n"
+        "  [1] Status::Busy\n"
+        "  [2] Status::Success\n"
+        "unknown: <Status:unknown>\n");
 }
 
 // ============================================================================
@@ -19860,8 +20240,9 @@ TEST_F(MLATest, CexprDeclarationRejectsRuntimeInitializer)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("runtime variable is not available in cexpr: 'x'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("runtime variable is not available in cexpr: 'x'"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, CexprIfSelectsCompileTimeBranch)
@@ -20032,9 +20413,11 @@ TEST_F(MLATest, CexprStructValueReportsUnsupportedValueEvaluation)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("struct values in cexpr are only supported for generic "
-                       "type dispatch"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find(
+            "struct values in cexpr are only supported for generic "
+            "type dispatch"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, CexprIfRejectsRuntimeCondition)
@@ -20105,8 +20488,9 @@ TEST_F(MLATest, CexprRejectsNonCexprFunctionCall)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("cexpr call requires a matching 'cexpr fn' overload"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("cexpr call requires a matching 'cexpr fn' overload"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, CexprReportsRuntimeVariableName)
@@ -20122,8 +20506,9 @@ TEST_F(MLATest, CexprReportsRuntimeVariableName)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("runtime variable is not available in cexpr: 'x'"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("runtime variable is not available in cexpr: 'x'"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, CexprReportsUnsupportedExpressionKind)
@@ -20155,8 +20540,9 @@ TEST_F(MLATest, RawPointerDereferenceOutsideUnsafeFails)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("dereferencing raw pointer requires an unsafe block"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("dereferencing raw pointer requires an unsafe block"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, RawPointerDereferenceInsideUnsafeCompiles)
@@ -20352,9 +20738,11 @@ TEST_F(MLATest, FreeObjsRejectsObjectWithoutReleaseMethod)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("argument 2 to free_objs must be an object with a "
-                       "zero-argument release() method"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find(
+            "argument 2 to free_objs must be an object with a "
+            "zero-argument release() method"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, FreeObjsRejectsEmptyPack)
@@ -20368,8 +20756,9 @@ TEST_F(MLATest, FreeObjsRejectsEmptyPack)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("free_objs expects at least one releasable object"),
-              std::string::npos);
+    EXPECT_NE(
+        out.find("free_objs expects at least one releasable object"),
+        std::string::npos);
 }
 
 TEST_F(MLATest, SwitchCasesCanReturnFromFunction)
@@ -20481,13 +20870,14 @@ TEST_F(MLATest, DiagnosticsInImportedModuleNameModuleFile)
                   "    return x;\n"
                   "}\n";
     }
-    writeSource("mod helper;\n"
-                "use helper::helper_value;\n"
-                "fn main() -> i32 {\n"
-                "    let y: i32 = helper_value();\n"
-                "    if y > 5 { }\n"
-                "    return y - 1;\n"
-                "}\n");
+    writeSource(
+        "mod helper;\n"
+        "use helper::helper_value;\n"
+        "fn main() -> i32 {\n"
+        "    let y: i32 = helper_value();\n"
+        "    if y > 5 { }\n"
+        "    return y - 1;\n"
+        "}\n");
     int rc = 0;
     std::string out = compileCapture(rc);
     ASSERT_EQ(rc, 0) << out;
@@ -20549,20 +20939,24 @@ TEST_F(MLATest, DebugInfoDescribesFunctionsLinesAndVariables)
     EXPECT_NE(ir.find("!DISubprogram(name: \"scale\""), std::string::npos);
     EXPECT_NE(ir.find("!DISubprogram(name: \"main\""), std::string::npos);
     // Parameters with their numbers, locals, the loop variable.
-    EXPECT_NE(ir.find("!DILocalVariable(name: \"value\", arg: 1"),
-              std::string::npos);
-    EXPECT_NE(ir.find("!DILocalVariable(name: \"factor\", arg: 2"),
-              std::string::npos);
+    EXPECT_NE(
+        ir.find("!DILocalVariable(name: \"value\", arg: 1"),
+        std::string::npos);
+    EXPECT_NE(
+        ir.find("!DILocalVariable(name: \"factor\", arg: 2"),
+        std::string::npos);
     EXPECT_NE(ir.find("!DILocalVariable(name: \"result\""), std::string::npos);
     EXPECT_NE(ir.find("!DILocalVariable(name: \"sum\""), std::string::npos);
     EXPECT_NE(ir.find("!DILocalVariable(name: \"i\""), std::string::npos);
     EXPECT_NE(ir.find("!DILocalVariable(name: \"inner\""), std::string::npos);
     // Struct type with its fields.
     EXPECT_NE(ir.find("name: \"Point\""), std::string::npos);
-    EXPECT_NE(ir.find("!DIDerivedType(tag: DW_TAG_member, name: \"x\""),
-              std::string::npos);
-    EXPECT_NE(ir.find("!DIDerivedType(tag: DW_TAG_member, name: \"y\""),
-              std::string::npos);
+    EXPECT_NE(
+        ir.find("!DIDerivedType(tag: DW_TAG_member, name: \"x\""),
+        std::string::npos);
+    EXPECT_NE(
+        ir.find("!DIDerivedType(tag: DW_TAG_member, name: \"y\""),
+        std::string::npos);
     // Statements at their first token: `let` (after an empty rule in the
     // grammar), `return`, and the first statement of a nested block.
     EXPECT_NE(ir.find("!DILocation(line: 3, column: 5"), std::string::npos);
@@ -20596,28 +20990,39 @@ TEST_F(MLATest, DebugInfoDescribesComplexContainerAndFieldTypes)
     // The emitted types must remain usable after module verification.
     EXPECT_NE(ir.find("!DICompileUnit("), std::string::npos) << ir;
     for(const char* name :
-        {"Point", "Shape", "Box_Point", "Tagged", "list<Point>",
-         "array<i32, 3>", "map<str8, Point>", "tuple<u32, str8>", "str16"})
-        EXPECT_NE(ir.find(std::string("name: \"") + name + "\""),
-                  std::string::npos)
+        {"Point",
+         "Shape",
+         "Box_Point",
+         "Tagged",
+         "list<Point>",
+         "array<i32, 3>",
+         "map<str8, Point>",
+         "tuple<u32, str8>",
+         "str16"})
+        EXPECT_NE(
+            ir.find(std::string("name: \"") + name + "\""),
+            std::string::npos)
             << name << "\n"
             << ir;
     for(const char* name : {"len", "data", "keys", "values", "_0", "_1"})
-        EXPECT_NE(ir.find(std::string("DW_TAG_member, name: \"") + name + "\""),
-                  std::string::npos)
+        EXPECT_NE(
+            ir.find(std::string("DW_TAG_member, name: \"") + name + "\""),
+            std::string::npos)
             << name;
     // A u8 enum must retain its unsigned 8-bit backing type, rather than
     // acquiring the default signed i32 representation during type emission.
     const auto enumAt = ir.find("DW_TAG_enumeration_type, name: \"Color\"");
     ASSERT_NE(enumAt, std::string::npos) << ir;
     EXPECT_NE(ir.substr(enumAt, 200).find("size: 8"), std::string::npos);
-    EXPECT_NE(ir.find("name: \"u8\", size: 8, encoding: DW_ATE_unsigned"),
-              std::string::npos);
+    EXPECT_NE(
+        ir.find("name: \"u8\", size: 8, encoding: DW_ATE_unsigned"),
+        std::string::npos);
     EXPECT_NE(ir.find("DIFlagBitField"), std::string::npos);
     // Inferred map literals must carry their named struct element type too.
     EXPECT_EQ(ir.find("name: \"map<str8, struct>\""), std::string::npos);
-    EXPECT_NE(ir.find("!DILocalVariable(name: \"inferred_mapping\""),
-              std::string::npos);
+    EXPECT_NE(
+        ir.find("!DILocalVariable(name: \"inferred_mapping\""),
+        std::string::npos);
 }
 
 TEST_F(MLATest, DebugInfoProgramRunsTheSame)
@@ -20636,11 +21041,12 @@ TEST_F(MLATest, DebugInfoNamesImportedModuleFile)
                   "    return doubled;\n"
                   "}\n";
     }
-    writeSource("mod helper;\n"
-                "use helper::helper_value;\n"
-                "fn main() -> i32 {\n"
-                "    return helper_value(0);\n"
-                "}\n");
+    writeSource(
+        "mod helper;\n"
+        "use helper::helper_value;\n"
+        "fn main() -> i32 {\n"
+        "    return helper_value(0);\n"
+        "}\n");
     const fs::path irFile = fs::path(testDir) / "module_debug_info.ll";
     std::string cmd = compilerPath + " -O0 -g -emit-llvm -o " +
                       irFile.string() + " " + sourceFile + " 2>&1";
@@ -20648,8 +21054,9 @@ TEST_F(MLATest, DebugInfoNamesImportedModuleFile)
     const std::string ir = readTextFile(irFile);
     EXPECT_NE(ir.find("!DIFile(filename: \"helper.mla\""), std::string::npos)
         << ir;
-    EXPECT_NE(ir.find("!DISubprogram(name: \"helper_value\""),
-              std::string::npos);
+    EXPECT_NE(
+        ir.find("!DISubprogram(name: \"helper_value\""),
+        std::string::npos);
     EXPECT_NE(ir.find("!DILocalVariable(name: \"doubled\""), std::string::npos);
 }
 

@@ -180,8 +180,9 @@ typedef yy_buffer_state* YY_BUFFER_STATE;
 extern YY_BUFFER_STATE mlang_scan_bytes(const char* bytes, size_t len);
 extern void mlang_delete_buffer(YY_BUFFER_STATE buffer);
 
-ModuleLoader::ModuleLoader(const std::string& basePath,
-                           const std::vector<std::string>& extraPaths)
+ModuleLoader::ModuleLoader(
+    const std::string& basePath,
+    const std::vector<std::string>& extraPaths)
     : basePath(basePath)
 {
     searchPaths.clear();
@@ -231,8 +232,9 @@ ProgramNode* ModuleLoader::parseFile(const std::string& filePath)
                   << std::endl;
         return nullptr;
     }
-    const std::string rawText((std::istreambuf_iterator<char>(file)),
-                              std::istreambuf_iterator<char>());
+    const std::string rawText(
+        (std::istreambuf_iterator<char>(file)),
+        std::istreambuf_iterator<char>());
     const std::string filteredText =
         mlang::preprocess_conditional_regions(rawText, targetArchOverride);
 
@@ -270,8 +272,9 @@ ProgramNode* ModuleLoader::parseFile(const std::string& filePath)
     return parsedProgram;
 }
 
-bool ModuleLoader::loadModule(const std::string& moduleName,
-                              std::string& errorMsg)
+bool ModuleLoader::loadModule(
+    const std::string& moduleName,
+    std::string& errorMsg)
 {
     // Check if already loaded
     if(modules.find(moduleName) != modules.end() && modules[moduleName].loaded)
@@ -389,8 +392,8 @@ ProgramNode* ModuleLoader::getModule(const std::string& moduleName)
     return nullptr;
 }
 
-std::vector<FunctionDefNode*>
-ModuleLoader::getModuleFunctions(const std::string& moduleName)
+std::vector<FunctionDefNode*> ModuleLoader::getModuleFunctions(
+    const std::string& moduleName)
 {
     std::vector<FunctionDefNode*> functions;
     ProgramNode* module = getModule(moduleName);
@@ -403,8 +406,9 @@ ModuleLoader::getModuleFunctions(const std::string& moduleName)
     return functions;
 }
 
-FunctionDefNode* ModuleLoader::getFunction(const std::string& moduleName,
-                                           const std::string& funcName)
+FunctionDefNode* ModuleLoader::getFunction(
+    const std::string& moduleName,
+    const std::string& funcName)
 {
     ProgramNode* module = getModule(moduleName);
 
@@ -422,8 +426,8 @@ FunctionDefNode* ModuleLoader::getFunction(const std::string& moduleName,
     return nullptr;
 }
 
-std::vector<StructDefNode*>
-ModuleLoader::getModuleStructs(const std::string& moduleName)
+std::vector<StructDefNode*> ModuleLoader::getModuleStructs(
+    const std::string& moduleName)
 {
     std::vector<StructDefNode*> structs;
     ProgramNode* module = getModule(moduleName);
@@ -436,8 +440,9 @@ ModuleLoader::getModuleStructs(const std::string& moduleName)
     return structs;
 }
 
-bool ModuleLoader::processModDeclarations(ProgramNode* program,
-                                          std::string& errorMsg)
+bool ModuleLoader::processModDeclarations(
+    ProgramNode* program,
+    std::string& errorMsg)
 {
     for(auto* modDecl : program->modules)
     {
@@ -451,9 +456,10 @@ bool ModuleLoader::processModDeclarations(ProgramNode* program,
     return true;
 }
 
-bool ModuleLoader::processUseDeclarations(ProgramNode* program,
-                                          std::string& errorMsg,
-                                          const std::string& currentModuleName)
+bool ModuleLoader::processUseDeclarations(
+    ProgramNode* program,
+    std::string& errorMsg,
+    const std::string& currentModuleName)
 {
     std::unordered_map<std::string, std::string> moduleAliases;
     auto resolveModuleAlias = [&](const std::string& rawModule) -> std::string
@@ -524,7 +530,8 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                 const std::string name =
                     useDecl->aliasName + "::" + definition->name;
                 const bool exists = std::any_of(
-                    program->conceptDefs.begin(), program->conceptDefs.end(),
+                    program->conceptDefs.begin(),
+                    program->conceptDefs.end(),
                     [&](ConceptDefNode* item)
                     { return item && item->name == name; });
                 if(exists)
@@ -574,8 +581,10 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
         // each AST node once when several use declarations name the module.
         for(auto* moduleAsm : module->moduleAsms)
         {
-            if(std::find(program->moduleAsms.begin(), program->moduleAsms.end(),
-                         moduleAsm) == program->moduleAsms.end())
+            if(std::find(
+                   program->moduleAsms.begin(),
+                   program->moduleAsms.end(),
+                   moduleAsm) == program->moduleAsms.end())
             {
                 program->moduleAsms.push_back(moduleAsm);
             }
@@ -617,7 +626,9 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                             existing->isPublic) &&
                            (func->sourceModule.empty() || func->isPublic) &&
                            mlang::literals::decodeOperatorName(
-                               func->name, literalSuffix, literalInput))
+                               func->name,
+                               literalSuffix,
+                               literalInput))
                         {
                             errorMsg =
                                 "ambiguous literal operator for suffix '" +
@@ -777,9 +788,10 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
         for(auto* conceptDefinition : module->conceptDefs)
         {
             if(conceptDefinition &&
-               std::find(program->conceptDefs.begin(),
-                         program->conceptDefs.end(),
-                         conceptDefinition) == program->conceptDefs.end())
+               std::find(
+                   program->conceptDefs.begin(),
+                   program->conceptDefs.end(),
+                   conceptDefinition) == program->conceptDefs.end())
                 program->conceptDefs.push_back(conceptDefinition);
         }
         // Import traits so trait names can be referenced in impl blocks.
@@ -829,8 +841,9 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             {
                 if(!hasPublicFunction)
                 {
-                    if(!is_same_module_family(currentModuleName,
-                                              resolvedModuleName))
+                    if(!is_same_module_family(
+                           currentModuleName,
+                           resolvedModuleName))
                     {
                         errorMsg = "function '" + useDecl->itemName +
                                    "' is private in module '" +
@@ -851,8 +864,9 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                         // Check if the struct is public
                         if(!structDef->isPublic)
                         {
-                            if(!is_same_module_family(currentModuleName,
-                                                      resolvedModuleName))
+                            if(!is_same_module_family(
+                                   currentModuleName,
+                                   resolvedModuleName))
                             {
                                 errorMsg = "struct '" + useDecl->itemName +
                                            "' is private in module '" +
@@ -888,8 +902,9 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                     {
                         if(!enumDef->isPublic)
                         {
-                            if(!is_same_module_family(currentModuleName,
-                                                      resolvedModuleName))
+                            if(!is_same_module_family(
+                                   currentModuleName,
+                                   resolvedModuleName))
                             {
                                 errorMsg = "enum '" + useDecl->itemName +
                                            "' is private in module '" +
@@ -968,7 +983,8 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                         std::string sigKey = function_signature_key(aliasFn);
                         bool alreadyAdded = false;
                         for(size_t i = 0;
-                            i < program->functionList->functions.size(); ++i)
+                            i < program->functionList->functions.size();
+                            ++i)
                         {
                             auto* existing =
                                 program->functionList->functions[i];

@@ -16,35 +16,39 @@ using mlang::ir_detail::ast_analysis::collect_used_idents;
 using mlang::ir_detail::common::Helpers;
 
 bool CodeGenerator::functionMayWritePointerParameter(
-    FunctionDefNode* function, size_t parameterIndex) const
+    FunctionDefNode* function,
+    size_t parameterIndex) const
 {
     if(!function || !function->parameters ||
        parameterIndex >= function->parameters->parameters.size())
         return true;
-    ParameterNode* parameter =
-        function->parameters->parameters[parameterIndex];
+    ParameterNode* parameter = function->parameters->parameters[parameterIndex];
     if(!parameter || !dynamic_cast<PointerTypeNode*>(parameter->type) ||
        !function->body)
         return true;
 
     std::set<std::string> aliases{parameter->name};
-    auto usesAlias = [&](ASTNode* expression) {
+    auto usesAlias = [&](ASTNode* expression)
+    {
         std::set<std::string> identifiers;
         collect_used_idents(expression, identifiers);
-        return std::any_of(identifiers.begin(), identifiers.end(),
-                           [&](const std::string& identifier) {
-                               return aliases.count(identifier) != 0;
-                           });
+        return std::any_of(
+            identifiers.begin(),
+            identifiers.end(),
+            [&](const std::string& identifier)
+            { return aliases.count(identifier) != 0; });
     };
     std::function<void(StatementListNode*)> collectAliases;
     std::function<void(StatementNode*)> collectAliasesFromStatement;
-    collectAliases = [&](StatementListNode* statements) {
+    collectAliases = [&](StatementListNode* statements)
+    {
         if(!statements)
             return;
         for(auto* statement : statements->statements)
             collectAliasesFromStatement(statement);
     };
-    collectAliasesFromStatement = [&](StatementNode* statement) {
+    collectAliasesFromStatement = [&](StatementNode* statement)
+    {
         if(!statement)
             return;
         if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
@@ -95,7 +99,8 @@ bool CodeGenerator::functionMayWritePointerParameter(
 
     std::function<bool(StatementListNode*)> scansStatements;
     std::function<bool(StatementNode*)> scansStatement;
-    auto expressionMayWrite = [&](ASTNode* expression) {
+    auto expressionMayWrite = [&](ASTNode* expression)
+    {
         if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
             for(auto* argument : call->arguments)
                 if(usesAlias(argument))
@@ -124,7 +129,8 @@ bool CodeGenerator::functionMayWritePointerParameter(
             return scansStatements(closure->body);
         return false;
     };
-    scansStatements = [&](StatementListNode* statements) {
+    scansStatements = [&](StatementListNode* statements)
+    {
         if(!statements)
             return false;
         for(auto* statement : statements->statements)
@@ -132,17 +138,17 @@ bool CodeGenerator::functionMayWritePointerParameter(
                 return true;
         return false;
     };
-    scansStatement = [&](StatementNode* statement) {
+    scansStatement = [&](StatementNode* statement)
+    {
         if(!statement)
             return false;
         if(auto* assignment = dynamic_cast<DerefAssignmentNode*>(statement))
             return usesAlias(assignment->pointerExpr);
         if(auto* assignment = dynamic_cast<FieldAssignmentNode*>(statement))
-            return assignment->target ? usesAlias(assignment->target)
-                                      : aliases.count(assignment->structName) !=
-                                            0;
-        if(auto* expression =
-               dynamic_cast<ExpressionStatementNode*>(statement))
+            return assignment->target
+                       ? usesAlias(assignment->target)
+                       : aliases.count(assignment->structName) != 0;
+        if(auto* expression = dynamic_cast<ExpressionStatementNode*>(statement))
             return expressionMayWrite(expression->expression);
         if(auto* returned = dynamic_cast<ReturnNode*>(statement))
             return expressionMayWrite(returned->expression);
@@ -189,7 +195,8 @@ bool CodeGenerator::functionMayWritePointerParameter(
 }
 
 bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
-    FunctionDefNode* function, size_t parameterIndex)
+    FunctionDefNode* function,
+    size_t parameterIndex)
 {
     if(!function || !function->parameters || !function->body ||
        parameterIndex >= function->parameters->parameters.size() ||
@@ -206,78 +213,80 @@ bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
     const std::string parameterName = parameter->name;
     std::set<std::string> borrowedPointerAliases;
     std::map<std::string, PointerTypeNode*> borrowedPointerAliasTypes;
-    auto usesParameter = [&](ASTNode* expression) {
+    auto usesParameter = [&](ASTNode* expression)
+    {
         std::set<std::string> identifiers;
         collect_used_idents(expression, identifiers);
         if(identifiers.count(parameterName) != 0)
             return true;
-        return std::any_of(identifiers.begin(), identifiers.end(),
-                           [&](const std::string& identifier) {
-                               return borrowedPointerAliases.count(
-                                          identifier) != 0;
-                           });
+        return std::any_of(
+            identifiers.begin(),
+            identifiers.end(),
+            [&](const std::string& identifier)
+            { return borrowedPointerAliases.count(identifier) != 0; });
     };
     std::function<bool(ExpressionNode*)> isParameterFieldPath =
-        [&](ExpressionNode* expression) {
-            if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
-                return identifier->name == parameterName;
-            if(auto* field = dynamic_cast<FieldAccessNode*>(expression))
-                return field->object
-                           ? isParameterFieldPath(field->object)
-                           : field->structName == parameterName;
-            if(auto* index = dynamic_cast<IndexExpressionNode*>(expression))
-                return isParameterFieldPath(index->base);
-            return false;
-        };
+        [&](ExpressionNode* expression)
+    {
+        if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
+            return identifier->name == parameterName;
+        if(auto* field = dynamic_cast<FieldAccessNode*>(expression))
+            return field->object ? isParameterFieldPath(field->object)
+                                 : field->structName == parameterName;
+        if(auto* index = dynamic_cast<IndexExpressionNode*>(expression))
+            return isParameterFieldPath(index->base);
+        return false;
+    };
     std::function<TypeNode*(ExpressionNode*)> parameterFieldType =
-        [&](ExpressionNode* expression) -> TypeNode* {
-            if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
-                return identifier->name == parameterName ? parameter->type
-                                                          : nullptr;
-            if(auto* index = dynamic_cast<IndexExpressionNode*>(expression))
-            {
-                TypeNode* baseType = parameterFieldType(index->base);
-                if(auto* listType =
-                       dynamic_cast<GenericListTypeNode*>(baseType))
-                    return listType->elementType;
-                if(auto* mapType = dynamic_cast<MapTypeNode*>(baseType))
-                    return mapType->valueType;
-                return nullptr;
-            }
-            auto* field = dynamic_cast<FieldAccessNode*>(expression);
-            if(!field)
-                return nullptr;
-            TypeNode* baseType = field->object
-                                     ? parameterFieldType(field->object)
-                                     : (field->structName == parameterName
-                                            ? parameter->type
-                                            : nullptr);
-            std::string structName;
-            if(auto* structure = dynamic_cast<StructTypeRefNode*>(baseType))
-                structName = structure->structName;
-            else if(auto* generic =
-                        dynamic_cast<GenericStructTypeRefNode*>(baseType))
-                structName = generic->getMangledName();
-            if(structName.empty())
-                return nullptr;
-            auto members = structMembers.find(structName);
-            if(members == structMembers.end())
-                return nullptr;
-            auto member = std::find_if(
-                members->second.begin(), members->second.end(),
-                [&](const auto& candidate) {
-                    return candidate.first == field->fieldName;
-                });
-            return member == members->second.end() ? nullptr : member->second;
-        };
-    auto isBorrowedPointerSource = [&](ExpressionNode* expression) {
+        [&](ExpressionNode* expression) -> TypeNode*
+    {
+        if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
+            return identifier->name == parameterName ? parameter->type
+                                                     : nullptr;
+        if(auto* index = dynamic_cast<IndexExpressionNode*>(expression))
+        {
+            TypeNode* baseType = parameterFieldType(index->base);
+            if(auto* listType = dynamic_cast<GenericListTypeNode*>(baseType))
+                return listType->elementType;
+            if(auto* mapType = dynamic_cast<MapTypeNode*>(baseType))
+                return mapType->valueType;
+            return nullptr;
+        }
+        auto* field = dynamic_cast<FieldAccessNode*>(expression);
+        if(!field)
+            return nullptr;
+        TypeNode* baseType = field->object ? parameterFieldType(field->object)
+                                           : (field->structName == parameterName
+                                                  ? parameter->type
+                                                  : nullptr);
+        std::string structName;
+        if(auto* structure = dynamic_cast<StructTypeRefNode*>(baseType))
+            structName = structure->structName;
+        else if(
+            auto* generic = dynamic_cast<GenericStructTypeRefNode*>(baseType))
+            structName = generic->getMangledName();
+        if(structName.empty())
+            return nullptr;
+        auto members = structMembers.find(structName);
+        if(members == structMembers.end())
+            return nullptr;
+        auto member = std::find_if(
+            members->second.begin(),
+            members->second.end(),
+            [&](const auto& candidate)
+            { return candidate.first == field->fieldName; });
+        return member == members->second.end() ? nullptr : member->second;
+    };
+    auto isBorrowedPointerSource = [&](ExpressionNode* expression)
+    {
         if(auto* fieldType = parameterFieldType(expression))
             return dynamic_cast<PointerTypeNode*>(fieldType) != nullptr;
         if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
             return borrowedPointerAliasTypes.count(identifier->name) != 0;
         return false;
     };
-    auto isScalarType = [](TypeNode* type) {
+    auto isScalarType = [](TypeNode* type)
+    {
         if(!type)
             return false;
         switch(type->kind)
@@ -301,7 +310,8 @@ bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
         }
     };
     std::function<bool(ExpressionNode*)> expressionIsSafe;
-    expressionIsSafe = [&](ExpressionNode* expression) {
+    expressionIsSafe = [&](ExpressionNode* expression)
+    {
         if(!expression || !usesParameter(expression))
             return true;
         if(auto* unary = dynamic_cast<UnaryOpNode*>(expression))
@@ -313,10 +323,9 @@ bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
             if(auto* fieldType = parameterFieldType(unary->operand))
                 if(auto* pointer = dynamic_cast<PointerTypeNode*>(fieldType))
                     resultType = pointer->elementType;
-            if(auto* identifier =
-                   dynamic_cast<IdentifierNode*>(unary->operand))
-                if(auto alias = borrowedPointerAliasTypes.find(
-                       identifier->name);
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(unary->operand))
+                if(auto alias =
+                       borrowedPointerAliasTypes.find(identifier->name);
                    alias != borrowedPointerAliasTypes.end())
                     resultType = alias->second->elementType;
             return resultType && isScalarType(resultType);
@@ -345,7 +354,8 @@ bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
 
     std::function<bool(StatementNode*)> statementIsSafe;
     std::function<bool(StatementListNode*)> statementsAreSafe;
-    statementsAreSafe = [&](StatementListNode* statements) {
+    statementsAreSafe = [&](StatementListNode* statements)
+    {
         if(!statements)
             return true;
         const auto outerAliases = borrowedPointerAliases;
@@ -361,20 +371,19 @@ bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
         borrowedPointerAliasTypes = outerAliasTypes;
         return true;
     };
-    statementIsSafe = [&](StatementNode* statement) {
+    statementIsSafe = [&](StatementNode* statement)
+    {
         if(!statement)
             return true;
         if(auto* returned = dynamic_cast<ReturnNode*>(statement))
             return expressionIsSafe(returned->expression);
-        if(auto* expression =
-               dynamic_cast<ExpressionStatementNode*>(statement))
+        if(auto* expression = dynamic_cast<ExpressionStatementNode*>(statement))
             return expressionIsSafe(expression->expression);
         if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
         {
-            auto* source = dynamic_cast<IdentifierNode*>(
-                declaration->expression);
-            TypeNode* sourceType = parameterFieldType(
-                declaration->expression);
+            auto* source =
+                dynamic_cast<IdentifierNode*>(declaration->expression);
+            TypeNode* sourceType = parameterFieldType(declaration->expression);
             if(source)
                 if(auto alias = borrowedPointerAliasTypes.find(source->name);
                    alias != borrowedPointerAliasTypes.end())
@@ -384,8 +393,7 @@ bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
                 isParameterFieldPath(declaration->expression);
             if(aliasesBorrowedPointer)
             {
-                auto* pointerType =
-                    dynamic_cast<PointerTypeNode*>(sourceType);
+                auto* pointerType = dynamic_cast<PointerTypeNode*>(sourceType);
                 if(pointerType)
                 {
                     if(declaration->name == parameterName ||
@@ -462,9 +470,9 @@ bool CodeGenerator::functionCanReadBorrowingAggregateParameter(
     return statementsAreSafe(function->body);
 }
 
-llvm::Value*
-CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
-                                           FunctionDefNode* functionTemplate)
+llvm::Value* CodeGenerator::generateVariadicGenericCall(
+    FunctionCallNode* node,
+    FunctionDefNode* functionTemplate)
 {
     if(!functionTemplate || !functionTemplate->parameters)
         return nullptr;
@@ -478,9 +486,10 @@ CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
             if(packParameter ||
                parameter != functionTemplate->parameters->parameters.back())
             {
-                reportError(node->line,
-                            "a variadic generic function must have exactly one "
-                            "trailing parameter pack");
+                reportError(
+                    node->line,
+                    "a variadic generic function must have exactly one "
+                    "trailing parameter pack");
                 return nullptr;
             }
             packParameter = parameter;
@@ -492,9 +501,10 @@ CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
     }
     if(!packParameter || node->arguments.size() < fixedParameters.size())
     {
-        reportError(node->line,
-                    "invalid argument count for variadic generic function '" +
-                        node->name + "'");
+        reportError(
+            node->line,
+            "invalid argument count for variadic generic function '" +
+                node->name + "'");
         return nullptr;
     }
     if(functionTemplate->typeParams.empty() ||
@@ -508,9 +518,11 @@ CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
     auto* packType = dynamic_cast<StructTypeRefNode*>(packParameter->type);
     if(!packType || packType->structName != functionTemplate->typePackParam)
     {
-        reportError(node->line, "parameter pack '" + packParameter->name +
-                                    "' must use type pack '" +
-                                    functionTemplate->typePackParam + "'");
+        reportError(
+            node->line,
+            "parameter pack '" + packParameter->name +
+                "' must use type pack '" + functionTemplate->typePackParam +
+                "'");
         return nullptr;
     }
 
@@ -541,8 +553,9 @@ CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
         if(auto* patternList = dynamic_cast<GenericListTypeNode*>(pattern))
         {
             auto* concreteList = dynamic_cast<GenericListTypeNode*>(concrete);
-            return concreteList && bindType(patternList->elementType,
-                                            concreteList->elementType);
+            return concreteList && bindType(
+                                       patternList->elementType,
+                                       concreteList->elementType);
         }
         if(auto* patternPtr = dynamic_cast<PointerTypeNode*>(pattern))
         {
@@ -560,8 +573,8 @@ CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
                 if(patternGeneric->structName == concreteGeneric->structName)
                     concreteArgs = &concreteGeneric->typeArgs;
             }
-            else if(auto* concreteName =
-                        dynamic_cast<StructTypeRefNode*>(concrete))
+            else if(
+                auto* concreteName = dynamic_cast<StructTypeRefNode*>(concrete))
             {
                 auto genericName =
                     mangledToGenericName.find(concreteName->structName);
@@ -597,9 +610,10 @@ CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
                                       : unary->op == UnaryOpNode::OP_ADDR);
             if(!correctBorrow)
             {
-                reportError(node->line, "parameter '" +
-                                            fixedParameters[i]->name +
-                                            "' requires an explicit reference");
+                reportError(
+                    node->line,
+                    "parameter '" + fixedParameters[i]->name +
+                        "' requires an explicit reference");
                 return nullptr;
             }
             concrete = inferExpressionTypeNode(unary->operand, node->line);
@@ -610,8 +624,9 @@ CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
         }
         if(!bindType(pattern, concrete))
         {
-            reportError(node->line, "cannot infer generic arguments for '" +
-                                        node->name + "'");
+            reportError(
+                node->line,
+                "cannot infer generic arguments for '" + node->name + "'");
             return nullptr;
         }
     }
@@ -625,9 +640,10 @@ CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
         auto found = bindings.find(typeParam);
         if(found == bindings.end())
         {
-            reportError(node->line, "could not infer type parameter '" +
-                                        typeParam + "' for '" + node->name +
-                                        "'");
+            reportError(
+                node->line,
+                "could not infer type parameter '" + typeParam + "' for '" +
+                    node->name + "'");
             return nullptr;
         }
         fixedTypeNames.push_back(typeParam);
@@ -639,9 +655,10 @@ CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
         std::string failure;
         if(!satisfiesFunctionConstraints(functionTemplate, bindings, &failure))
         {
-            reportError(node->line,
-                        "constraints not satisfied for variadic function '" +
-                            node->name + "': " + failure);
+            reportError(
+                node->line,
+                "constraints not satisfied for variadic function '" +
+                    node->name + "': " + failure);
             return nullptr;
         }
     }
@@ -653,8 +670,10 @@ CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
             inferExpressionTypeNode(node->arguments[i], node->line);
         if(!type)
         {
-            reportError(node->line, "cannot infer parameter-pack argument " +
-                                        std::to_string(i + 1));
+            reportError(
+                node->line,
+                "cannot infer parameter-pack argument " +
+                    std::to_string(i + 1));
             return nullptr;
         }
         packTypes.push_back(type);
@@ -672,8 +691,10 @@ CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
         for(auto* parameter : fixedParameters)
         {
             parameters->parameters.push_back(new ParameterNode(
-                substituteTypeParams(parameter->type, fixedTypeNames,
-                                     fixedTypeArgs),
+                substituteTypeParams(
+                    parameter->type,
+                    fixedTypeNames,
+                    fixedTypeArgs),
                 parameter->name));
         }
 
@@ -687,10 +708,15 @@ CodeGenerator::generateVariadicGenericCall(FunctionCallNode* node,
         }
 
         auto* specialized = new FunctionDefNode(
-            substituteTypeParams(functionTemplate->returnType, fixedTypeNames,
-                                 fixedTypeArgs),
-            specializedName, parameters, functionTemplate->body,
-            functionTemplate->isPublic, false);
+            substituteTypeParams(
+                functionTemplate->returnType,
+                fixedTypeNames,
+                fixedTypeArgs),
+            specializedName,
+            parameters,
+            functionTemplate->body,
+            functionTemplate->isPublic,
+            false);
         specialized->line = functionTemplate->line;
         specialized->sourceModule = functionTemplate->sourceModule;
         specialized->isInline = true;
@@ -717,8 +743,9 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
        functionTemplate->parameters->parameters.size() != arguments.size())
         return false;
 
-    std::set<std::string> typeParamNames(functionTemplate->typeParams.begin(),
-                                         functionTemplate->typeParams.end());
+    std::set<std::string> typeParamNames(
+        functionTemplate->typeParams.begin(),
+        functionTemplate->typeParams.end());
     std::function<bool(TypeNode*, TypeNode*)> bindType =
         [&](TypeNode* pattern, TypeNode* concrete) -> bool
     {
@@ -730,11 +757,9 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                 concrete = concreteRef->elementType;
             return bindType(patternRef->elementType, concrete);
         }
-        if(auto* patternFunction =
-               dynamic_cast<FunctionTypeNode*>(pattern))
+        if(auto* patternFunction = dynamic_cast<FunctionTypeNode*>(pattern))
         {
-            auto* concreteFunction =
-                dynamic_cast<FunctionTypeNode*>(concrete);
+            auto* concreteFunction = dynamic_cast<FunctionTypeNode*>(concrete);
             const size_t patternCount =
                 patternFunction->parameterTypes
                     ? patternFunction->parameterTypes->types.size()
@@ -746,11 +771,13 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
             if(!concreteFunction || patternCount != concreteCount)
                 return false;
             for(size_t i = 0; i < patternCount; ++i)
-                if(!bindType(patternFunction->parameterTypes->types[i],
-                             concreteFunction->parameterTypes->types[i]))
+                if(!bindType(
+                       patternFunction->parameterTypes->types[i],
+                       concreteFunction->parameterTypes->types[i]))
                     return false;
-            return bindType(patternFunction->returnType,
-                            concreteFunction->returnType);
+            return bindType(
+                patternFunction->returnType,
+                concreteFunction->returnType);
         }
         if(auto* patternName = dynamic_cast<StructTypeRefNode*>(pattern))
         {
@@ -771,22 +798,25 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                    patternMulti->capacity == concreteMulti->capacity &&
                    patternMulti->elementsMutable ==
                        concreteMulti->elementsMutable &&
-                   bindType(patternMulti->elementType,
-                            concreteMulti->elementType);
+                   bindType(
+                       patternMulti->elementType,
+                       concreteMulti->elementType);
         }
         if(auto* patternArray = dynamic_cast<ArrayTypeNode*>(pattern))
         {
             auto* concreteArray = dynamic_cast<ArrayTypeNode*>(concrete);
             return concreteArray &&
                    patternArray->capacity == concreteArray->capacity &&
-                   bindType(patternArray->elementType,
-                            concreteArray->elementType);
+                   bindType(
+                       patternArray->elementType,
+                       concreteArray->elementType);
         }
         if(auto* patternList = dynamic_cast<GenericListTypeNode*>(pattern))
         {
             auto* concreteList = dynamic_cast<GenericListTypeNode*>(concrete);
-            return concreteList && bindType(patternList->elementType,
-                                            concreteList->elementType);
+            return concreteList && bindType(
+                                       patternList->elementType,
+                                       concreteList->elementType);
         }
         if(auto* patternMap = dynamic_cast<MapTypeNode*>(pattern))
         {
@@ -804,8 +834,9 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                    concreteTuple->elementTypes->types.size())
                 return false;
             for(size_t i = 0; i < patternTuple->elementTypes->types.size(); ++i)
-                if(!bindType(patternTuple->elementTypes->types[i],
-                             concreteTuple->elementTypes->types[i]))
+                if(!bindType(
+                       patternTuple->elementTypes->types[i],
+                       concreteTuple->elementTypes->types[i]))
                     return false;
             return true;
         }
@@ -825,8 +856,8 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                 if(patternGeneric->structName == concreteGeneric->structName)
                     concreteArgs = &concreteGeneric->typeArgs;
             }
-            else if(auto* concreteName =
-                        dynamic_cast<StructTypeRefNode*>(concrete))
+            else if(
+                auto* concreteName = dynamic_cast<StructTypeRefNode*>(concrete))
             {
                 auto genericName =
                     mangledToGenericName.find(concreteName->structName);
@@ -873,7 +904,8 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
             if(auto* identifier = dynamic_cast<IdentifierNode*>(expr))
             {
                 for(auto scope = localScopes.rbegin();
-                    scope != localScopes.rend(); ++scope)
+                    scope != localScopes.rend();
+                    ++scope)
                 {
                     auto local = scope->find(identifier->name);
                     if(local != scope->end())
@@ -891,8 +923,7 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                     objectType = inferClosureExpr(field->object);
                 else
                 {
-                    auto parameter =
-                        parametersByName.find(field->structName);
+                    auto parameter = parametersByName.find(field->structName);
                     if(parameter != parametersByName.end())
                         objectType = cloneTypeNode(parameter->second);
                     else
@@ -912,10 +943,12 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                     if(structName.empty())
                         structName = structRef->structName;
                 }
-                else if(auto* genericStruct =
-                            dynamic_cast<GenericStructTypeRefNode*>(objectType))
+                else if(
+                    auto* genericStruct =
+                        dynamic_cast<GenericStructTypeRefNode*>(objectType))
                     structName = getOrCreateMonomorphizedStruct(
-                        genericStruct->structName, genericStruct->typeArgs);
+                        genericStruct->structName,
+                        genericStruct->typeArgs);
                 auto members = structMembers.find(structName);
                 if(members != structMembers.end())
                     for(const auto& member : members->second)
@@ -957,9 +990,8 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                 for(auto* element : list->elements->elements)
                 {
                     TypeNode* current = inferClosureExpr(element);
-                    if(!current ||
-                       (elementType &&
-                        typeMangle(elementType) != typeMangle(current)))
+                    if(!current || (elementType && typeMangle(elementType) !=
+                                                       typeMangle(current)))
                         return nullptr;
                     if(!elementType)
                         elementType = current;
@@ -976,8 +1008,7 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
             if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
             {
                 TypeNode* baseType = inferClosureExpr(index->base);
-                if(auto* list =
-                       dynamic_cast<GenericListTypeNode*>(baseType))
+                if(auto* list = dynamic_cast<GenericListTypeNode*>(baseType))
                     return cloneTypeNode(list->elementType);
                 if(auto* map = dynamic_cast<MapTypeNode*>(baseType))
                     return cloneTypeNode(map->valueType);
@@ -1008,8 +1039,8 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                         bool argumentsMatch = true;
                         for(size_t i = 0; i < call->arguments.size(); ++i)
                         {
-                            TypeNode* actual = inferClosureExpr(
-                                call->arguments[i]);
+                            TypeNode* actual =
+                                inferClosureExpr(call->arguments[i]);
                             TypeNode* expected =
                                 candidate->parameters->parameters[i]->type;
                             if(!actual || !expected ||
@@ -1044,8 +1075,9 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                                         return false;
                                     actual = actualReference->elementType;
                                 }
-                                return bindCallType(reference->elementType,
-                                                    actual);
+                                return bindCallType(
+                                    reference->elementType,
+                                    actual);
                             }
                             if(auto* name =
                                    dynamic_cast<StructTypeRefNode*>(pattern))
@@ -1056,8 +1088,8 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                                         name->structName,
                                         cloneTypeNode(actual));
                                     return inserted.second ||
-                                        typeMangle(inserted.first->second) ==
-                                            typeMangle(actual);
+                                           typeMangle(inserted.first->second) ==
+                                               typeMangle(actual);
                                 }
                             }
                             if(auto* patternMulti =
@@ -1066,12 +1098,13 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                                 auto* actualMulti =
                                     dynamic_cast<MultiArrayTypeNode*>(actual);
                                 return actualMulti &&
-                                    patternMulti->capacity ==
-                                        actualMulti->capacity &&
-                                    patternMulti->elementsMutable ==
-                                        actualMulti->elementsMutable &&
-                                    bindCallType(patternMulti->elementType,
-                                                 actualMulti->elementType);
+                                       patternMulti->capacity ==
+                                           actualMulti->capacity &&
+                                       patternMulti->elementsMutable ==
+                                           actualMulti->elementsMutable &&
+                                       bindCallType(
+                                           patternMulti->elementType,
+                                           actualMulti->elementType);
                             }
                             if(auto* patternArray =
                                    dynamic_cast<ArrayTypeNode*>(pattern))
@@ -1079,42 +1112,49 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                                 auto* actualArray =
                                     dynamic_cast<ArrayTypeNode*>(actual);
                                 return actualArray &&
-                                    patternArray->capacity ==
-                                        actualArray->capacity &&
-                                    bindCallType(patternArray->elementType,
-                                                 actualArray->elementType);
+                                       patternArray->capacity ==
+                                           actualArray->capacity &&
+                                       bindCallType(
+                                           patternArray->elementType,
+                                           actualArray->elementType);
                             }
                             if(auto* patternList =
                                    dynamic_cast<GenericListTypeNode*>(pattern))
                             {
                                 auto* actualList =
                                     dynamic_cast<GenericListTypeNode*>(actual);
-                                return actualList && bindCallType(
-                                    patternList->elementType,
-                                    actualList->elementType);
+                                return actualList &&
+                                       bindCallType(
+                                           patternList->elementType,
+                                           actualList->elementType);
                             }
                             if(auto* patternMap =
                                    dynamic_cast<MapTypeNode*>(pattern))
                             {
                                 auto* actualMap =
                                     dynamic_cast<MapTypeNode*>(actual);
-                                return actualMap && bindCallType(
-                                    patternMap->keyType, actualMap->keyType) &&
-                                    bindCallType(patternMap->valueType,
-                                                 actualMap->valueType);
+                                return actualMap &&
+                                       bindCallType(
+                                           patternMap->keyType,
+                                           actualMap->keyType) &&
+                                       bindCallType(
+                                           patternMap->valueType,
+                                           actualMap->valueType);
                             }
                             if(auto* patternTuple =
                                    dynamic_cast<TupleTypeNode*>(pattern))
                             {
                                 auto* actualTuple =
                                     dynamic_cast<TupleTypeNode*>(actual);
-                                if(!actualTuple || !patternTuple->elementTypes ||
+                                if(!actualTuple ||
+                                   !patternTuple->elementTypes ||
                                    !actualTuple->elementTypes ||
                                    patternTuple->elementTypes->types.size() !=
                                        actualTuple->elementTypes->types.size())
                                     return false;
                                 for(size_t n = 0;
-                                    n < patternTuple->elementTypes->types.size();
+                                    n <
+                                    patternTuple->elementTypes->types.size();
                                     ++n)
                                     if(!bindCallType(
                                            patternTuple->elementTypes->types[n],
@@ -1127,9 +1167,10 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                             {
                                 auto* actualPointer =
                                     dynamic_cast<PointerTypeNode*>(actual);
-                                return actualPointer && bindCallType(
-                                    patternPointer->elementType,
-                                    actualPointer->elementType);
+                                return actualPointer &&
+                                       bindCallType(
+                                           patternPointer->elementType,
+                                           actualPointer->elementType);
                             }
                             if(auto* patternFunction =
                                    dynamic_cast<FunctionTypeNode*>(pattern))
@@ -1138,14 +1179,14 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                                     dynamic_cast<FunctionTypeNode*>(actual);
                                 const size_t patternCount =
                                     patternFunction->parameterTypes
-                                        ? patternFunction->parameterTypes
-                                              ->types.size()
+                                        ? patternFunction->parameterTypes->types
+                                              .size()
                                         : 0;
                                 const size_t actualCount =
                                     actualFunction &&
                                             actualFunction->parameterTypes
-                                        ? actualFunction->parameterTypes
-                                              ->types.size()
+                                        ? actualFunction->parameterTypes->types
+                                              .size()
                                         : 0;
                                 if(!actualFunction ||
                                    patternCount != actualCount)
@@ -1175,9 +1216,10 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                                        actualGeneric->structName)
                                         actualArgs = &actualGeneric->typeArgs;
                                 }
-                                else if(auto* actualStruct =
-                                            dynamic_cast<StructTypeRefNode*>(
-                                                actual))
+                                else if(
+                                    auto* actualStruct =
+                                        dynamic_cast<StructTypeRefNode*>(
+                                            actual))
                                 {
                                     auto genericName =
                                         mangledToGenericName.find(
@@ -1196,7 +1238,8 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                                        actualArgs->size())
                                     return false;
                                 for(size_t n = 0;
-                                    n < patternGeneric->typeArgs.size(); ++n)
+                                    n < patternGeneric->typeArgs.size();
+                                    ++n)
                                     if(!bindCallType(
                                            patternGeneric->typeArgs[n],
                                            (*actualArgs)[n]))
@@ -1210,10 +1253,10 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                         {
                             TypeNode* actual =
                                 inferClosureExpr(call->arguments[i]);
-                            if(!actual || !bindCallType(
-                                              candidate->parameters
-                                                  ->parameters[i]->type,
-                                              actual))
+                            if(!actual ||
+                               !bindCallType(
+                                   candidate->parameters->parameters[i]->type,
+                                   actual))
                             {
                                 matched = false;
                                 break;
@@ -1234,7 +1277,8 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                         if(matched)
                             resultType = substituteTypeParams(
                                 candidate->returnType,
-                                candidate->typeParams, typeArgs);
+                                candidate->typeParams,
+                                typeArgs);
                     }
 
                     if(resultType)
@@ -1251,9 +1295,10 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                     inferClosureExpr(invoke->callable));
                 if(!callableType)
                     return nullptr;
-                const size_t parameterCount = callableType->parameterTypes
-                    ? callableType->parameterTypes->types.size()
-                    : 0;
+                const size_t parameterCount =
+                    callableType->parameterTypes
+                        ? callableType->parameterTypes->types.size()
+                        : 0;
                 if(parameterCount != invoke->arguments.size())
                     return nullptr;
                 return cloneTypeNode(callableType->returnType);
@@ -1273,11 +1318,12 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                     if(receiverStructName.empty())
                         receiverStructName = structRef->structName;
                 }
-                else if(auto* genericStruct =
-                            dynamic_cast<GenericStructTypeRefNode*>(
-                                receiverType))
+                else if(
+                    auto* genericStruct =
+                        dynamic_cast<GenericStructTypeRefNode*>(receiverType))
                     receiverStructName = getOrCreateMonomorphizedStruct(
-                        genericStruct->structName, genericStruct->typeArgs);
+                        genericStruct->structName,
+                        genericStruct->typeArgs);
 
                 auto methods = structMethods.find(receiverStructName);
                 if(methods != structMethods.end())
@@ -1327,9 +1373,8 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                     if(!arm || !arm->expression)
                         return nullptr;
                     TypeNode* armType = inferClosureExpr(arm->expression);
-                    if(!armType ||
-                       (resultType && typeMangle(resultType) !=
-                                          typeMangle(armType)))
+                    if(!armType || (resultType && typeMangle(resultType) !=
+                                                      typeMangle(armType)))
                         return nullptr;
                     if(!resultType)
                         resultType = armType;
@@ -1395,9 +1440,9 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
             }
             if(auto* variable = dynamic_cast<VarDeclNode*>(statement))
             {
-                TypeNode* localType = variable->type
-                                          ? cloneTypeNode(variable->type)
-                                          : inferClosureExpr(variable->initExpr);
+                TypeNode* localType =
+                    variable->type ? cloneTypeNode(variable->type)
+                                   : inferClosureExpr(variable->initExpr);
                 if(localType)
                     localScopes.back()[variable->name] = localType;
                 return;
@@ -1497,8 +1542,9 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                                       : borrow->op == UnaryOpNode::OP_ADDR);
             if(correctBorrow)
             {
-                concrete = inferExpressionTypeNode(borrow->operand,
-                                                   functionTemplate->line);
+                concrete = inferExpressionTypeNode(
+                    borrow->operand,
+                    functionTemplate->line);
             }
             else if(reference->isMutable)
             {
@@ -1506,8 +1552,9 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
             }
             else
             {
-                concrete = inferExpressionTypeNode(arguments[i],
-                                                   functionTemplate->line);
+                concrete = inferExpressionTypeNode(
+                    arguments[i],
+                    functionTemplate->line);
             }
         }
         // A named inline closure is not a normal local value: it lives in
@@ -1535,12 +1582,12 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                     {
                         auto closure = closureVariables.find(identifier->name);
                         if(closure != closureVariables.end())
-                            concrete = inferClosureCallableType(
-                                closure->second);
+                            concrete =
+                                inferClosureCallableType(closure->second);
                     }
                 }
-                else if(auto* closure =
-                            dynamic_cast<ClosureNode*>(arguments[i]))
+                else if(
+                    auto* closure = dynamic_cast<ClosureNode*>(arguments[i]))
                     concrete = inferClosureCallableType(closure);
             }
             if(!concrete)
@@ -1553,19 +1600,19 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                         closureVariables.count(identifier->name) != 0;
                 if(isBoundClosure &&
                    !dynamic_cast<FunctionTypeNode*>(parameterType))
-                    concrete = new PointerTypeNode(
-                        new TypeNode(TypeNode::TYPE_VOID));
+                    concrete =
+                        new PointerTypeNode(new TypeNode(TypeNode::TYPE_VOID));
                 else if(!isBoundClosure)
                     concrete = inferExpressionTypeNode(
-                        arguments[i], functionTemplate->line);
+                        arguments[i],
+                        functionTemplate->line);
             }
         }
         if(!concrete)
         {
             bool isClosureArgument =
                 dynamic_cast<ClosureNode*>(arguments[i]) != nullptr;
-            if(auto* identifier =
-                   dynamic_cast<IdentifierNode*>(arguments[i]))
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(arguments[i]))
                 isClosureArgument =
                     closureVariables.count(identifier->name) != 0;
             if(isClosureArgument &&
@@ -1591,14 +1638,16 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                    bindings.count(named->structName) == 0;
         if(auto* generic = dynamic_cast<GenericStructTypeRefNode*>(type))
         {
-            if(std::find(functionTemplate->typeParams.begin(),
-                         functionTemplate->typeParams.end(),
-                         generic->structName) !=
-               functionTemplate->typeParams.end() &&
+            if(std::find(
+                   functionTemplate->typeParams.begin(),
+                   functionTemplate->typeParams.end(),
+                   generic->structName) != functionTemplate->typeParams.end() &&
                bindings.count(generic->structName) == 0)
                 return true;
-            return std::any_of(generic->typeArgs.begin(), generic->typeArgs.end(),
-                               hasUnboundTypeParameter);
+            return std::any_of(
+                generic->typeArgs.begin(),
+                generic->typeArgs.end(),
+                hasUnboundTypeParameter);
         }
         if(auto* list = dynamic_cast<GenericListTypeNode*>(type))
             return hasUnboundTypeParameter(list->elementType);
@@ -1611,9 +1660,10 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                    hasUnboundTypeParameter(map->valueType);
         if(auto* tuple = dynamic_cast<TupleTypeNode*>(type))
             return !tuple->elementTypes ||
-                   std::any_of(tuple->elementTypes->types.begin(),
-                               tuple->elementTypes->types.end(),
-                               hasUnboundTypeParameter);
+                   std::any_of(
+                       tuple->elementTypes->types.begin(),
+                       tuple->elementTypes->types.end(),
+                       hasUnboundTypeParameter);
         if(auto* pointer = dynamic_cast<PointerTypeNode*>(type))
             return hasUnboundTypeParameter(pointer->elementType);
         if(auto* reference = dynamic_cast<ReferenceTypeNode*>(type))
@@ -1621,9 +1671,10 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         if(auto* function = dynamic_cast<FunctionTypeNode*>(type))
         {
             if(function->parameterTypes &&
-               std::any_of(function->parameterTypes->types.begin(),
-                           function->parameterTypes->types.end(),
-                           hasUnboundTypeParameter))
+               std::any_of(
+                   function->parameterTypes->types.begin(),
+                   function->parameterTypes->types.end(),
+                   hasUnboundTypeParameter))
                 return true;
             return hasUnboundTypeParameter(function->returnType);
         }
@@ -1652,13 +1703,15 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         for(const auto& name : functionTemplate->typeParams)
         {
             auto found = bindings.find(name);
-            typeArgs.push_back(found == bindings.end()
-                                   ? static_cast<TypeNode*>(
-                                         new StructTypeRefNode(name))
-                                   : cloneTypeNode(found->second));
+            typeArgs.push_back(
+                found == bindings.end()
+                    ? static_cast<TypeNode*>(new StructTypeRefNode(name))
+                    : cloneTypeNode(found->second));
         }
         auto* context = dynamic_cast<FunctionTypeNode*>(substituteTypeParams(
-            pattern, functionTemplate->typeParams, typeArgs));
+            pattern,
+            functionTemplate->typeParams,
+            typeArgs));
         if(!context || !context->parameterTypes)
             return false;
 
@@ -1670,8 +1723,7 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         {
             ParameterNode* parameter =
                 closure->parameters->parameters[parameterIndex];
-            TypeNode* expected =
-                context->parameterTypes->types[parameterIndex];
+            TypeNode* expected = context->parameterTypes->types[parameterIndex];
             if(!parameter->type)
             {
                 if(hasUnboundTypeParameter(expected))
@@ -1683,8 +1735,8 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
                 parameter->type = cloneTypeNode(expected);
             }
         }
-        TypeNode* concrete = canInfer ? inferClosureCallableType(closure)
-                                      : nullptr;
+        TypeNode* concrete =
+            canInfer ? inferClosureCallableType(closure) : nullptr;
         for(const auto& saved : savedParameterTypes)
             saved.first->type = saved.second;
         if(!concrete || !bindType(pattern, concrete))
@@ -1720,7 +1772,8 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
             for(auto* parameter : overload.node->parameters->parameters)
                 parameters->addType(cloneTypeNode(parameter->type));
             auto* actualFunction = new FunctionTypeNode(
-                parameters, cloneTypeNode(overload.node->returnType));
+                parameters,
+                cloneTypeNode(overload.node->returnType));
             auto savedBindings = bindings;
             if(bindType(expectedFunction, actualFunction))
             {
@@ -1799,10 +1852,11 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         if(!closure)
             continue;
         if(closure->parameters &&
-           std::any_of(closure->parameters->parameters.begin(),
-                       closure->parameters->parameters.end(),
-                       [](ParameterNode* parameter)
-                       { return !parameter || !parameter->type; }))
+           std::any_of(
+               closure->parameters->parameters.begin(),
+               closure->parameters->parameters.end(),
+               [](ParameterNode* parameter)
+               { return !parameter || !parameter->type; }))
             continue; // Its result was already inferred from callback context.
         TypeNode* closureResult = inferClosureResult(closure);
         if(closureResult)
@@ -1813,21 +1867,25 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
             if(mapReturn && tupleResult && tupleResult->elementTypes &&
                tupleResult->elementTypes->types.size() == 2)
             {
-                bindType(mapReturn->keyType,
-                         tupleResult->elementTypes->types[0]);
-                bindType(mapReturn->valueType,
-                         tupleResult->elementTypes->types[1]);
+                bindType(
+                    mapReturn->keyType,
+                    tupleResult->elementTypes->types[0]);
+                bindType(
+                    mapReturn->valueType,
+                    tupleResult->elementTypes->types[1]);
             }
             else
-                bindUnboundReturnType(functionTemplate->returnType,
-                                      closureResult);
+                bindUnboundReturnType(
+                    functionTemplate->returnType,
+                    closureResult);
         }
     }
     return true;
 }
 
 void CodeGenerator::instantiateGenericFunctionOverloads(
-    FunctionCallNode* call, const std::string& lookupName,
+    FunctionCallNode* call,
+    const std::string& lookupName,
     std::vector<FunctionOverloadInfo>& overloads)
 {
     if(!call)
@@ -1853,8 +1911,10 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
     for(FunctionDefNode* functionTemplate : templates)
     {
         std::map<std::string, TypeNode*> bindings;
-        if(!inferGenericFunctionTypeBindings(functionTemplate, call->arguments,
-                                             bindings))
+        if(!inferGenericFunctionTypeBindings(
+               functionTemplate,
+               call->arguments,
+               bindings))
             continue;
 
         std::vector<TypeNode*> typeArgs;
@@ -1871,25 +1931,34 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
             typeArgs.push_back(found->second);
         }
         std::vector<std::set<std::string>> constraintTerms;
-        if(!complete ||
-           !satisfiesFunctionConstraints(functionTemplate, bindings, nullptr,
-                                         &constraintTerms))
+        if(!complete || !satisfiesFunctionConstraints(
+                            functionTemplate,
+                            bindings,
+                            nullptr,
+                            &constraintTerms))
             continue;
 
         auto* specializedParameters = new ParameterListNode();
         for(auto* parameter : functionTemplate->parameters->parameters)
         {
             specializedParameters->parameters.push_back(new ParameterNode(
-                substituteTypeParams(parameter->type,
-                                     functionTemplate->typeParams, typeArgs),
+                substituteTypeParams(
+                    parameter->type,
+                    functionTemplate->typeParams,
+                    typeArgs),
                 parameter->name));
         }
 
         auto* specialized = new FunctionDefNode(
-            substituteTypeParams(functionTemplate->returnType,
-                                 functionTemplate->typeParams, typeArgs),
-            functionTemplate->name, specializedParameters,
-            functionTemplate->body, functionTemplate->isPublic, false);
+            substituteTypeParams(
+                functionTemplate->returnType,
+                functionTemplate->typeParams,
+                typeArgs),
+            functionTemplate->name,
+            specializedParameters,
+            functionTemplate->body,
+            functionTemplate->isPublic,
+            false);
         specialized->genericOrigin = functionTemplate;
         specialized->constraintTerms = std::move(constraintTerms);
         specialized->line = functionTemplate->line;
@@ -1983,13 +2052,14 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
                 cloneTypeNode(binding.second);
 
         const std::string signatureKey = functionSignatureKey(specialized);
-        const bool alreadySpecialized =
-            std::any_of(overloads.begin(), overloads.end(),
-                        [&](const FunctionOverloadInfo& overload)
-                        {
-                            return overload.function &&
-                                   overload.signatureKey == signatureKey;
-                        });
+        const bool alreadySpecialized = std::any_of(
+            overloads.begin(),
+            overloads.end(),
+            [&](const FunctionOverloadInfo& overload)
+            {
+                return overload.function &&
+                       overload.signatureKey == signatureKey;
+            });
         if(alreadySpecialized)
             continue;
 
@@ -2000,26 +2070,25 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
     }
 }
 
-llvm::Value* CodeGenerator::generateCallableInvocation(
-    CallableInvokeNode* node)
+llvm::Value* CodeGenerator::generateCallableInvocation(CallableInvokeNode* node)
 {
     TypeNode* callableSemantic = getLValueType(node->callable, node->line);
     auto* callableType = dynamic_cast<FunctionTypeNode*>(callableSemantic);
     if(!callableType)
     {
-        reportError(node->line,
-                    "expression is not a callable function value");
+        reportError(node->line, "expression is not a callable function value");
         return nullptr;
     }
-    const size_t expectedCount = callableType->parameterTypes
-                                     ? callableType->parameterTypes->types.size()
-                                     : 0;
+    const size_t expectedCount =
+        callableType->parameterTypes
+            ? callableType->parameterTypes->types.size()
+            : 0;
     if(node->arguments.size() != expectedCount)
     {
-        reportError(node->line, "callable expects " +
-                                    std::to_string(expectedCount) +
-                                    " argument(s), got " +
-                                    std::to_string(node->arguments.size()));
+        reportError(
+            node->line,
+            "callable expects " + std::to_string(expectedCount) +
+                " argument(s), got " + std::to_string(node->arguments.size()));
         return nullptr;
     }
     if(callableType->parameterTypes)
@@ -2032,7 +2101,8 @@ llvm::Value* CodeGenerator::generateCallableInvocation(
                     reportError(
                         node->line,
                         "cannot pass a shared borrow to opaque callable "
-                        "pointer parameter " + std::to_string(i + 1));
+                        "pointer parameter " +
+                            std::to_string(i + 1));
                     return nullptr;
                 }
                 const auto* callableIdentifier =
@@ -2043,8 +2113,7 @@ llvm::Value* CodeGenerator::generateCallableInvocation(
                 if(unsafeDepth == 0 &&
                    expressionCarriesLocalBorrow(node->arguments[i]) &&
                    !(isCheckedCallableParameter &&
-                     expressionIsPointerParameterBorrow(
-                         node->arguments[i])))
+                     expressionIsPointerParameterBorrow(node->arguments[i])))
                 {
                     reportError(
                         node->line,
@@ -2057,23 +2126,24 @@ llvm::Value* CodeGenerator::generateCallableInvocation(
                 }
             }
 
-    llvm::Value* callableValue = generateExpression(node->callable,
-                                                    callableType);
+    llvm::Value* callableValue =
+        generateExpression(node->callable, callableType);
     if(!callableValue)
         return nullptr;
     auto* closureStruct =
         llvm::dyn_cast<llvm::StructType>(callableValue->getType());
     if(!closureStruct || closureStruct->getNumElements() != 2)
     {
-        reportError(node->line,
-                    "callable value has an unsupported runtime representation");
+        reportError(
+            node->line,
+            "callable value has an unsupported runtime representation");
         return nullptr;
     }
 
-    llvm::Value* code = builder.CreateExtractValue(callableValue, 0,
-                                                   "callable.code");
-    llvm::Value* environment = builder.CreateExtractValue(
-        callableValue, 1, "callable.environment");
+    llvm::Value* code =
+        builder.CreateExtractValue(callableValue, 0, "callable.code");
+    llvm::Value* environment =
+        builder.CreateExtractValue(callableValue, 1, "callable.environment");
 #if LLVM_VERSION_MAJOR >= 15
     llvm::Type* erasedPointerType = llvm::PointerType::get(context, 0);
 #else
@@ -2088,30 +2158,38 @@ llvm::Value* CodeGenerator::generateCallableInvocation(
         {
             TypeNode* parameter = callableType->parameterTypes->types[i];
             llvm::Type* parameterType = parameterLLVMType(parameter);
-            llvm::Value* argument = generateArgumentValue(
-                node->arguments[i], parameter);
+            llvm::Value* argument =
+                generateArgumentValue(node->arguments[i], parameter);
             if(!parameterType || !argument)
             {
-                reportError(node->line,
-                            "callable parameter types must be known and "
-                            "arguments must be valid");
+                reportError(
+                    node->line,
+                    "callable parameter types must be known and "
+                    "arguments must be valid");
                 return nullptr;
             }
             if(argument->getType() != parameterType)
             {
                 if(argument->getType()->isIntegerTy() &&
                    parameterType->isIntegerTy())
-                    argument = builder.CreateIntCast(argument, parameterType,
-                                                      true, "callable.arg.cast");
-                else if(argument->getType()->isFloatingPointTy() &&
-                        parameterType->isFloatingPointTy())
-                    argument = builder.CreateFPCast(argument, parameterType,
-                                                     "callable.arg.cast");
+                    argument = builder.CreateIntCast(
+                        argument,
+                        parameterType,
+                        true,
+                        "callable.arg.cast");
+                else if(
+                    argument->getType()->isFloatingPointTy() &&
+                    parameterType->isFloatingPointTy())
+                    argument = builder.CreateFPCast(
+                        argument,
+                        parameterType,
+                        "callable.arg.cast");
                 else
                 {
-                    reportError(node->line,
-                                "callable argument type does not match its "
-                                "parameter");
+                    reportError(
+                        node->line,
+                        "callable argument type does not match its "
+                        "parameter");
                     return nullptr;
                 }
             }
@@ -2125,14 +2203,19 @@ llvm::Value* CodeGenerator::generateCallableInvocation(
         reportError(node->line, "callable return type is not known");
         return nullptr;
     }
-    llvm::FunctionType* signature = llvm::FunctionType::get(
-        returnType, signatureParameters, false);
+    llvm::FunctionType* signature =
+        llvm::FunctionType::get(returnType, signatureParameters, false);
 #if LLVM_VERSION_MAJOR < 15
-    code = builder.CreateBitCast(code, signature->getPointerTo(),
-                                 "callable.indirect");
+    code = builder.CreateBitCast(
+        code,
+        signature->getPointerTo(),
+        "callable.indirect");
 #endif
-    return builder.CreateCall(signature, code, callArguments,
-                              returnType->isVoidTy() ? "" : "callable.call");
+    return builder.CreateCall(
+        signature,
+        code,
+        callArguments,
+        returnType->isVoidTy() ? "" : "callable.call");
 }
 
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
@@ -2141,131 +2224,119 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(node->name != "std::copy")
     {
         std::function<bool(ExpressionNode*)> containsLocalBorrow =
-            [&](ExpressionNode* expression) {
-                if(!expression)
-                    return false;
-                if(auto* identifier =
-                       dynamic_cast<IdentifierNode*>(expression))
-                {
-                    if(isMutBorrower(identifier->name))
-                        return true;
-                    auto pointer = pointerBorrowTarget.find(identifier->name);
-                    if(pointer != pointerBorrowTarget.end() &&
-                       variableScopeDepth.count(pointer->second))
-                        return true;
-                    auto origins =
-                        aggregateBorrowOrigins.find(identifier->name);
-                    if(origins != aggregateBorrowOrigins.end())
-                        for(const auto& owner : origins->second)
-                            if(variableScopeDepth.count(owner))
-                                return true;
-                    return false;
-                }
-                if(auto* unary = dynamic_cast<UnaryOpNode*>(expression))
-                {
-                    if(unary->op == UnaryOpNode::OP_ADDR ||
-                       unary->op == UnaryOpNode::OP_ADDR_MUT)
-                    {
-                        const auto owner =
-                            resolveBorrowOwnerFromLValue(unary->operand);
+            [&](ExpressionNode* expression)
+        {
+            if(!expression)
+                return false;
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
+            {
+                if(isMutBorrower(identifier->name))
+                    return true;
+                auto pointer = pointerBorrowTarget.find(identifier->name);
+                if(pointer != pointerBorrowTarget.end() &&
+                   variableScopeDepth.count(pointer->second))
+                    return true;
+                auto origins = aggregateBorrowOrigins.find(identifier->name);
+                if(origins != aggregateBorrowOrigins.end())
+                    for(const auto& owner : origins->second)
                         if(variableScopeDepth.count(owner))
                             return true;
-                    }
-                    return containsLocalBorrow(unary->operand);
-                }
-                if(auto* structure =
-                       dynamic_cast<StructLiteralNode*>(expression))
-                {
-                    for(const auto& field : structure->fields)
-                        if(containsLocalBorrow(field.second))
-                            return true;
-                }
-                else if(auto* tuple =
-                            dynamic_cast<TupleLiteralNode*>(expression))
-                {
-                    if(tuple->elements)
-                        for(auto* element : tuple->elements->elements)
-                            if(containsLocalBorrow(element))
-                                return true;
-                }
-                else if(auto* list =
-                            dynamic_cast<ListLiteralNode*>(expression))
-                {
-                    if(list->elements)
-                        for(auto* element : list->elements->elements)
-                            if(containsLocalBorrow(element))
-                                return true;
-                }
-                else if(auto* map =
-                            dynamic_cast<MapLiteralNode*>(expression))
-                {
-                    if(map->entries)
-                        for(auto* entry : map->entries->entries)
-                            if(containsLocalBorrow(entry->key) ||
-                               containsLocalBorrow(entry->value))
-                                return true;
-                }
-                else if(auto* ternary =
-                            dynamic_cast<TernaryNode*>(expression))
-                    return containsLocalBorrow(ternary->trueExpr) ||
-                           containsLocalBorrow(ternary->falseExpr);
-                else if(auto* match =
-                            dynamic_cast<MatchExpressionNode*>(expression))
-                {
-                    for(auto* arm : match->arms)
-                        if(arm && containsLocalBorrow(arm->expression))
-                            return true;
-                }
-                else if(auto* binary =
-                            dynamic_cast<BinaryOpNode*>(expression))
-                    return containsLocalBorrow(binary->left) ||
-                           containsLocalBorrow(binary->right);
-                else if(auto* array =
-                            dynamic_cast<ArrayFillNode*>(expression))
-                    return containsLocalBorrow(array->value);
-                else if(auto* field =
-                            dynamic_cast<FieldAccessNode*>(expression))
-                    return containsLocalBorrow(field->object);
-                else if(auto* index =
-                            dynamic_cast<IndexExpressionNode*>(expression))
-                    return containsLocalBorrow(index->base);
-                else if(auto* tuple =
-                            dynamic_cast<TupleAccessNode*>(expression))
-                    return containsLocalBorrow(tuple->tuple);
-                else if(auto* attempt =
-                            dynamic_cast<TryExpressionNode*>(expression))
-                    return containsLocalBorrow(attempt->expression);
-                else if(auto* cast =
-                            dynamic_cast<CastExpressionNode*>(expression))
-                    return containsLocalBorrow(cast->expression);
-                else if(auto* call =
-                            dynamic_cast<FunctionCallNode*>(expression))
-                {
-                    for(auto* argument : call->arguments)
-                        if(containsLocalBorrow(argument))
-                            return true;
-                }
-                else if(auto* invoke =
-                            dynamic_cast<CallableInvokeNode*>(expression))
-                {
-                    if(containsLocalBorrow(invoke->callable))
-                        return true;
-                    for(auto* argument : invoke->arguments)
-                        if(containsLocalBorrow(argument))
-                            return true;
-                }
-                else if(auto* method =
-                            dynamic_cast<MethodCallNode*>(expression))
-                {
-                    if(containsLocalBorrow(method->object))
-                        return true;
-                    for(auto* argument : method->arguments)
-                        if(containsLocalBorrow(argument))
-                            return true;
-                }
                 return false;
-            };
-        auto isAggregateType = [](TypeNode* type) {
+            }
+            if(auto* unary = dynamic_cast<UnaryOpNode*>(expression))
+            {
+                if(unary->op == UnaryOpNode::OP_ADDR ||
+                   unary->op == UnaryOpNode::OP_ADDR_MUT)
+                {
+                    const auto owner =
+                        resolveBorrowOwnerFromLValue(unary->operand);
+                    if(variableScopeDepth.count(owner))
+                        return true;
+                }
+                return containsLocalBorrow(unary->operand);
+            }
+            if(auto* structure = dynamic_cast<StructLiteralNode*>(expression))
+            {
+                for(const auto& field : structure->fields)
+                    if(containsLocalBorrow(field.second))
+                        return true;
+            }
+            else if(auto* tuple = dynamic_cast<TupleLiteralNode*>(expression))
+            {
+                if(tuple->elements)
+                    for(auto* element : tuple->elements->elements)
+                        if(containsLocalBorrow(element))
+                            return true;
+            }
+            else if(auto* list = dynamic_cast<ListLiteralNode*>(expression))
+            {
+                if(list->elements)
+                    for(auto* element : list->elements->elements)
+                        if(containsLocalBorrow(element))
+                            return true;
+            }
+            else if(auto* map = dynamic_cast<MapLiteralNode*>(expression))
+            {
+                if(map->entries)
+                    for(auto* entry : map->entries->entries)
+                        if(containsLocalBorrow(entry->key) ||
+                           containsLocalBorrow(entry->value))
+                            return true;
+            }
+            else if(auto* ternary = dynamic_cast<TernaryNode*>(expression))
+                return containsLocalBorrow(ternary->trueExpr) ||
+                       containsLocalBorrow(ternary->falseExpr);
+            else if(
+                auto* match = dynamic_cast<MatchExpressionNode*>(expression))
+            {
+                for(auto* arm : match->arms)
+                    if(arm && containsLocalBorrow(arm->expression))
+                        return true;
+            }
+            else if(auto* binary = dynamic_cast<BinaryOpNode*>(expression))
+                return containsLocalBorrow(binary->left) ||
+                       containsLocalBorrow(binary->right);
+            else if(auto* array = dynamic_cast<ArrayFillNode*>(expression))
+                return containsLocalBorrow(array->value);
+            else if(auto* field = dynamic_cast<FieldAccessNode*>(expression))
+                return containsLocalBorrow(field->object);
+            else if(
+                auto* index = dynamic_cast<IndexExpressionNode*>(expression))
+                return containsLocalBorrow(index->base);
+            else if(auto* tuple = dynamic_cast<TupleAccessNode*>(expression))
+                return containsLocalBorrow(tuple->tuple);
+            else if(
+                auto* attempt = dynamic_cast<TryExpressionNode*>(expression))
+                return containsLocalBorrow(attempt->expression);
+            else if(auto* cast = dynamic_cast<CastExpressionNode*>(expression))
+                return containsLocalBorrow(cast->expression);
+            else if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
+            {
+                for(auto* argument : call->arguments)
+                    if(containsLocalBorrow(argument))
+                        return true;
+            }
+            else if(
+                auto* invoke = dynamic_cast<CallableInvokeNode*>(expression))
+            {
+                if(containsLocalBorrow(invoke->callable))
+                    return true;
+                for(auto* argument : invoke->arguments)
+                    if(containsLocalBorrow(argument))
+                        return true;
+            }
+            else if(auto* method = dynamic_cast<MethodCallNode*>(expression))
+            {
+                if(containsLocalBorrow(method->object))
+                    return true;
+                for(auto* argument : method->arguments)
+                    if(containsLocalBorrow(argument))
+                        return true;
+            }
+            return false;
+        };
+        auto isAggregateType = [](TypeNode* type)
+        {
             if(!type)
                 return false;
             switch(type->kind)
@@ -2280,7 +2351,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
         };
         std::function<bool(ExpressionNode*)> containsExclusiveBorrow;
-        containsExclusiveBorrow = [&](ExpressionNode* expression) {
+        containsExclusiveBorrow = [&](ExpressionNode* expression)
+        {
             if(!expression)
                 return false;
             if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
@@ -2305,9 +2377,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             if(auto* map = dynamic_cast<MapLiteralNode*>(expression))
                 if(map->entries)
                     for(auto* entry : map->entries->entries)
-                        if(entry &&
-                           (containsExclusiveBorrow(entry->key) ||
-                            containsExclusiveBorrow(entry->value)))
+                        if(entry && (containsExclusiveBorrow(entry->key) ||
+                                     containsExclusiveBorrow(entry->value)))
                             return true;
             if(auto* ternary = dynamic_cast<TernaryNode*>(expression))
                 return containsExclusiveBorrow(ternary->trueExpr) ||
@@ -2333,13 +2404,12 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         return true;
             return false;
         };
-        for(size_t argumentIndex = 0;
-            argumentIndex < node->arguments.size(); ++argumentIndex)
+        for(size_t argumentIndex = 0; argumentIndex < node->arguments.size();
+            ++argumentIndex)
         {
             auto* argument = node->arguments[argumentIndex];
             if(containsLocalBorrow(argument) &&
-               isAggregateType(
-                   inferExpressionTypeNode(argument, node->line)))
+               isAggregateType(inferExpressionTypeNode(argument, node->line)))
             {
                 const std::string aggregate =
                     resolveBorrowOwnerFromLValue(argument);
@@ -2362,28 +2432,28 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                            argumentIndex >=
                                candidate->parameters->parameters.size())
                             continue;
-                        auto* parameter = candidate->parameters->parameters[
-                            argumentIndex];
+                        auto* parameter =
+                            candidate->parameters->parameters[argumentIndex];
                         if(!parameter || !parameter->type ||
                            typeMangle(parameter->type) !=
                                typeMangle(argumentType))
                             continue;
                         hasMatchingVisibleOverload = true;
                         if(!functionCanReadBorrowingAggregateParameter(
-                               candidate, argumentIndex))
+                               candidate,
+                               argumentIndex))
                             everyMatchingOverloadIsSafe = false;
                     }
                 }
-                if(hasMatchingVisibleOverload &&
-                   everyMatchingOverloadIsSafe)
+                if(hasMatchingVisibleOverload && everyMatchingOverloadIsSafe)
                     continue;
-                reportError(node->line,
-                            "cannot pass aggregate" +
-                                (aggregate.empty()
-                                     ? std::string()
-                                     : " '" + aggregate + "'") +
-                                " containing a borrow of a local value "
-                                "because the callee may retain it");
+                reportError(
+                    node->line,
+                    "cannot pass aggregate" +
+                        (aggregate.empty() ? std::string()
+                                           : " '" + aggregate + "'") +
+                        " containing a borrow of a local value "
+                        "because the callee may retain it");
                 return nullptr;
             }
             const std::string aggregate =
@@ -2421,7 +2491,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             {
                                 std::map<std::string, TypeNode*> bindings;
                                 if(!inferGenericFunctionTypeBindings(
-                                       candidate, node->arguments, bindings))
+                                       candidate,
+                                       node->arguments,
+                                       bindings))
                                     continue;
                                 std::vector<TypeNode*> typeArguments;
                                 bool complete = true;
@@ -2438,7 +2510,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                 if(!complete)
                                     continue;
                                 candidateType = substituteTypeParams(
-                                    candidateType, candidate->typeParams,
+                                    candidateType,
+                                    candidate->typeParams,
                                     typeArguments);
                             }
                             auto* outer =
@@ -2473,14 +2546,13 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(auto overloads = functionOverloads.find(node->name);
        overloads != functionOverloads.end())
     {
-        for(size_t argumentIndex = 0;
-            argumentIndex < node->arguments.size(); ++argumentIndex)
+        for(size_t argumentIndex = 0; argumentIndex < node->arguments.size();
+            ++argumentIndex)
         {
             auto* identifier =
                 dynamic_cast<IdentifierNode*>(node->arguments[argumentIndex]);
-            auto closure = identifier
-                               ? closureVariables.find(identifier->name)
-                               : closureVariables.end();
+            auto closure = identifier ? closureVariables.find(identifier->name)
+                                      : closureVariables.end();
             if(closure == closureVariables.end() || !closure->second)
                 continue;
 
@@ -2498,22 +2570,25 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                        candidate.node->parameters->parameters[argumentIndex]
                            ->type))
                     callableCandidate = true;
-                else if(auto* named = dynamic_cast<StructTypeRefNode*>(
-                            candidate.node->parameters
-                                ->parameters[argumentIndex]->type))
-                    callableCandidate =
-                        std::find(candidate.node->typeParams.begin(),
-                                  candidate.node->typeParams.end(),
-                                  named->structName) !=
-                        candidate.node->typeParams.end();
+                else if(
+                    auto* named = dynamic_cast<StructTypeRefNode*>(
+                        candidate.node->parameters->parameters[argumentIndex]
+                            ->type))
+                    callableCandidate = std::find(
+                                            candidate.node->typeParams.begin(),
+                                            candidate.node->typeParams.end(),
+                                            named->structName) !=
+                                        candidate.node->typeParams.end();
             }
             if(callableCandidate)
                 continue;
 
             std::vector<std::pair<std::string, TypeNode*>> captures;
             TypeNode* closureReturnType = nullptr;
-            if(getRuntimeClosureCaptures(closure->second, captures,
-                                         closureReturnType))
+            if(getRuntimeClosureCaptures(
+                   closure->second,
+                   captures,
+                   closureReturnType))
                 for(const auto& capture : captures)
                     if(variableScopeDepth.count(capture.first))
                     {
@@ -2525,9 +2600,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                 capture.first + "'");
                         return nullptr;
                     }
-            reportError(node->line,
-                        "closure '" + identifier->name +
-                            "' can only be passed to a callable parameter");
+            reportError(
+                node->line,
+                "closure '" + identifier->name +
+                    "' can only be passed to a callable parameter");
             return nullptr;
         }
     }
@@ -2547,19 +2623,20 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             resolveBorrowOwnerFromLValue(sourceExpr);
         if((!sourceOwner.empty() && isMutBorrower(sourceOwner)) ||
            (dynamic_cast<IdentifierNode*>(sourceExpr) &&
-            isMutBorrower(
-                static_cast<IdentifierNode*>(sourceExpr)->name)))
+            isMutBorrower(static_cast<IdentifierNode*>(sourceExpr)->name)))
         {
-            reportError(node->line,
-                        "std::copy cannot duplicate a mutable borrow or an "
-                        "aggregate that contains one");
+            reportError(
+                node->line,
+                "std::copy cannot duplicate a mutable borrow or an "
+                "aggregate that contains one");
             return nullptr;
         }
         TypeNode* sourceType = inferExpressionTypeNode(sourceExpr, node->line);
         if(!sourceType)
         {
-            reportError(node->line,
-                        "cannot determine the type passed to std::copy");
+            reportError(
+                node->line,
+                "cannot determine the type passed to std::copy");
             return nullptr;
         }
 
@@ -2567,9 +2644,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         {
             if(!listType->elementType || !isCopyType(listType->elementType))
             {
-                reportError(node->line,
-                            "std::copy cannot copy a list with move-only or "
-                            "unresolved elements");
+                reportError(
+                    node->line,
+                    "std::copy cannot copy a list with move-only or "
+                    "unresolved elements");
                 return nullptr;
             }
 
@@ -2589,18 +2667,22 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                              .getFixedValue();
             llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
             llvm::Value* byteCount = builder.CreateMul(
-                length, llvm::ConstantInt::get(i64Type, elementSize),
+                length,
+                llvm::ConstantInt::get(i64Type, elementSize),
                 "copy.list.bytes");
             llvm::Function* function = builder.GetInsertBlock()->getParent();
             llvm::BasicBlock* emptyBlock =
                 llvm::BasicBlock::Create(context, "copy.list.empty", function);
             llvm::BasicBlock* allocateBlock = llvm::BasicBlock::Create(
-                context, "copy.list.allocate", function);
+                context,
+                "copy.list.allocate",
+                function);
             llvm::BasicBlock* mergeBlock =
                 llvm::BasicBlock::Create(context, "copy.list.merge", function);
-            llvm::Value* isEmpty =
-                builder.CreateICmpEQ(length, llvm::ConstantInt::get(i64Type, 0),
-                                     "copy.list.is.empty");
+            llvm::Value* isEmpty = builder.CreateICmpEQ(
+                length,
+                llvm::ConstantInt::get(i64Type, 0),
+                "copy.list.is.empty");
             builder.CreateCondBr(isEmpty, emptyBlock, allocateBlock);
 
             builder.SetInsertPoint(emptyBlock);
@@ -2614,18 +2696,28 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             llvm::Type* ptrType = destination->getType();
             if(sourceData->getType() != ptrType &&
                sourceData->getType()->isPointerTy())
-                sourceData = builder.CreateBitCast(sourceData, ptrType,
-                                                   "copy.list.source.cast");
+                sourceData = builder.CreateBitCast(
+                    sourceData,
+                    ptrType,
+                    "copy.list.source.cast");
             llvm::FunctionType* memcpyType = llvm::FunctionType::get(
-                ptrType, {ptrType, ptrType, i64Type}, false);
+                ptrType,
+                {ptrType, ptrType, i64Type},
+                false);
             llvm::FunctionCallee memcpyFn =
                 module->getOrInsertFunction("memcpy", memcpyType);
             builder.CreateCall(memcpyFn, {destination, sourceData, byteCount});
             llvm::Value* copiedList = llvm::UndefValue::get(listLlvmType);
-            copiedList = builder.CreateInsertValue(copiedList, length, {0},
-                                                   "copy.list.result.length");
-            copiedList = builder.CreateInsertValue(copiedList, destination, {1},
-                                                   "copy.list.result.data");
+            copiedList = builder.CreateInsertValue(
+                copiedList,
+                length,
+                {0},
+                "copy.list.result.length");
+            copiedList = builder.CreateInsertValue(
+                copiedList,
+                destination,
+                {1},
+                "copy.list.result.data");
             builder.CreateBr(mergeBlock);
 
             builder.SetInsertPoint(mergeBlock);
@@ -2638,9 +2730,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
         if(!isCopyType(sourceType))
         {
-            reportError(node->line,
-                        "std::copy requires a Copy type; this value is "
-                        "move-only");
+            reportError(
+                node->line,
+                "std::copy requires a Copy type; this value is "
+                "move-only");
             return nullptr;
         }
 
@@ -2661,8 +2754,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             {
                 if(!node->arguments.empty())
                 {
-                    reportError(node->line, "numeric_limits<T>::" + operation +
-                                                "() does not take arguments");
+                    reportError(
+                        node->line,
+                        "numeric_limits<T>::" + operation +
+                            "() does not take arguments");
                     return nullptr;
                 }
 
@@ -2683,24 +2778,27 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     numericType = Helpers::type_from_text(typeName);
                 if(!numericType)
                 {
-                    reportError(node->line,
-                                "numeric_limits<T>::" + operation +
-                                    "() requires a primitive numeric type");
+                    reportError(
+                        node->line,
+                        "numeric_limits<T>::" + operation +
+                            "() requires a primitive numeric type");
                     return nullptr;
                 }
 
                 if(numericType->kind == TypeNode::TYPE_BOOL)
                 {
                     return llvm::ConstantInt::get(
-                        llvm::Type::getInt1Ty(context), operation == "max");
+                        llvm::Type::getInt1Ty(context),
+                        operation == "max");
                 }
 
                 llvm::Type* llvmType = getLLVMTypeFromNode(numericType);
                 if(!llvmType)
                 {
-                    reportError(node->line,
-                                "numeric_limits<T>::" + operation +
-                                    "() supports only primitive numeric types");
+                    reportError(
+                        node->line,
+                        "numeric_limits<T>::" + operation +
+                            "() supports only primitive numeric types");
                     return nullptr;
                 }
 
@@ -2737,9 +2835,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     return llvm::ConstantFP::get(llvmType, value);
                 }
 
-                reportError(node->line,
-                            "numeric_limits<T>::" + operation +
-                                "() supports only primitive numeric types");
+                reportError(
+                    node->line,
+                    "numeric_limits<T>::" + operation +
+                        "() supports only primitive numeric types");
                 return nullptr;
             }
         }
@@ -2756,8 +2855,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     {
         if(node->arguments.size() != 1)
         {
-            reportError(node->line,
-                        "is_constructible<T> expects exactly one value");
+            reportError(
+                node->line,
+                "is_constructible<T> expects exactly one value");
             return nullptr;
         }
         std::string targetName = node->name.substr(
@@ -2786,8 +2886,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 }
             }
         }
-        return llvm::ConstantInt::get(llvm::Type::getInt1Ty(context),
-                                      constructible ? 1 : 0);
+        return llvm::ConstantInt::get(
+            llvm::Type::getInt1Ty(context),
+            constructible ? 1 : 0);
     }
 
     auto validateTemporaryBorrowArguments =
@@ -2806,9 +2907,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             wholeOwnersInCall.insert(implicitWholeOwner);
             exclusiveWholeOwnersInCall.insert(implicitWholeOwner);
         }
-        auto describeBorrowPath =
-            [&](ExpressionNode* expr, std::string& ownerOut,
-                std::string& pathOut, bool& isWholeOwnerOut) -> bool
+        auto describeBorrowPath = [&](ExpressionNode* expr,
+                                      std::string& ownerOut,
+                                      std::string& pathOut,
+                                      bool& isWholeOwnerOut) -> bool
         {
             ownerOut = resolveBorrowOwnerFromLValue(expr);
             if(ownerOut.empty())
@@ -2937,7 +3039,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         for(size_t argIndex = 0; argIndex < args.size(); ++argIndex)
         {
             auto* arg = args[argIndex];
-            const bool sharedReference = sharedReferenceParameters &&
+            const bool sharedReference =
+                sharedReferenceParameters &&
                 argIndex < sharedReferenceParameters->size() &&
                 (*sharedReferenceParameters)[argIndex];
             collectMovedOwners(arg, false);
@@ -2950,18 +3053,18 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 if(isWholeOwner)
                 {
                     const bool overlaps = wholeOwnersInCall.count(owner) ||
-                        (subpathsInCall.count(owner) &&
-                         !subpathsInCall[owner].empty());
+                                          (subpathsInCall.count(owner) &&
+                                           !subpathsInCall[owner].empty());
                     const bool overlapsExclusive =
                         exclusiveWholeOwnersInCall.count(owner) ||
                         (exclusiveSubpathsInCall.count(owner) &&
                          !exclusiveSubpathsInCall[owner].empty());
                     if(overlaps && (isExclusive || overlapsExclusive))
                     {
-                        reportError(node->line,
-                                    "cannot borrow overlapping parts of '" +
-                                        owner + "' in call to '" + calleeName +
-                                        "'");
+                        reportError(
+                            node->line,
+                            "cannot borrow overlapping parts of '" + owner +
+                                "' in call to '" + calleeName + "'");
                         return false;
                     }
                     wholeOwnersInCall.insert(owner);
@@ -2971,12 +3074,12 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 }
 
                 if(wholeOwnersInCall.count(owner) &&
-                   (isExclusive ||
-                    exclusiveWholeOwnersInCall.count(owner)))
+                   (isExclusive || exclusiveWholeOwnersInCall.count(owner)))
                 {
-                    reportError(node->line,
-                                "cannot borrow overlapping parts of '" + owner +
-                                    "' in call to '" + calleeName + "'");
+                    reportError(
+                        node->line,
+                        "cannot borrow overlapping parts of '" + owner +
+                            "' in call to '" + calleeName + "'");
                     return false;
                 }
                 auto& paths = subpathsInCall[owner];
@@ -3000,10 +3103,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         }
                 if(overlaps && (isExclusive || overlapsExclusive))
                 {
-                    reportError(node->line,
-                                "cannot borrow '" + owner + "." + path +
-                                    "' multiple times in call to '" +
-                                    calleeName + "'");
+                    reportError(
+                        node->line,
+                        "cannot borrow '" + owner + "." + path +
+                            "' multiple times in call to '" + calleeName + "'");
                     return false;
                 }
                 paths.insert(path);
@@ -3040,8 +3143,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                 path.erase(0, 1);
                         }
                     }
-                    if(!registerBorrowInCall(pit->second, path, path.empty(),
-                                             true))
+                    if(!registerBorrowInCall(
+                           pit->second,
+                           path,
+                           path.empty(),
+                           true))
                         return false;
                     continue;
                 }
@@ -3091,32 +3197,34 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 }
             }
             auto activeIt = activeBorrowers.find(owner);
-            auto overlapsActiveBorrower = [&](const std::string& borrower) {
+            auto overlapsActiveBorrower = [&](const std::string& borrower)
+            {
                 auto ownerIt = pointerBorrowTarget.find(borrower);
                 if(ownerIt != pointerBorrowTarget.end() &&
                    ownerIt->second != owner)
                     return false;
                 std::string requestedPlace = owner;
                 if(!isWholeOwner && !path.empty())
-                    requestedPlace += path.front() == '[' ? path
-                                                          : "." + path;
-                return borrowerPlaceOverlaps(borrower, owner,
-                                             requestedPlace);
+                    requestedPlace += path.front() == '[' ? path : "." + path;
+                return borrowerPlaceOverlaps(borrower, owner, requestedPlace);
             };
-            auto hasOverlappingSharedBorrow = [&]() {
+            auto hasOverlappingSharedBorrow = [&]()
+            {
                 if(activeIt == activeBorrowers.end())
                     return false;
-                return std::any_of(activeIt->second.begin(),
-                                   activeIt->second.end(),
-                                   overlapsActiveBorrower);
+                return std::any_of(
+                    activeIt->second.begin(),
+                    activeIt->second.end(),
+                    overlapsActiveBorrower);
             };
             std::string overlappingMutableBorrower;
             for(const auto& activeMutable : activeMutBorrower)
             {
                 const bool isReborrowAncestor =
                     activeMutable.second == exclusiveReborrowParent ||
-                    isPointerBorrowAncestor(activeMutable.second,
-                                            exclusiveReborrowParent);
+                    isPointerBorrowAncestor(
+                        activeMutable.second,
+                        exclusiveReborrowParent);
                 if(isReborrowAncestor)
                     continue;
                 if(overlapsActiveBorrower(activeMutable.second))
@@ -3137,9 +3245,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 }
                 if(!overlappingMutableBorrower.empty())
                 {
-                    reportError(node->line,
-                                "cannot borrow '" + owner +
-                                    "' as mutable more than once at a time");
+                    reportError(
+                        node->line,
+                        "cannot borrow '" + owner +
+                            "' as mutable more than once at a time");
                     return false;
                 }
             }
@@ -3164,15 +3273,19 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             by = borrower;
                             break;
                         }
-                    reportError(node->line,
-                                "cannot borrow '" + owner +
-                                    "' while already borrowed by '" + by + "'");
+                    reportError(
+                        node->line,
+                        "cannot borrow '" + owner +
+                            "' while already borrowed by '" + by + "'");
                     return false;
                 }
             }
 
-            if(!registerBorrowInCall(owner, path, isWholeOwner,
-                                     !sharedReference))
+            if(!registerBorrowInCall(
+                   owner,
+                   path,
+                   isWholeOwner,
+                   !sharedReference))
                 return false;
         }
 
@@ -3181,9 +3294,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             if(wholeOwnersInCall.count(movedOwner) ||
                subpathsInCall.find(movedOwner) != subpathsInCall.end())
             {
-                reportError(node->line, "cannot move '" + movedOwner +
-                                            "' while borrowed in call to '" +
-                                            calleeName + "'");
+                reportError(
+                    node->line,
+                    "cannot move '" + movedOwner +
+                        "' while borrowed in call to '" + calleeName + "'");
                 return false;
             }
         }
@@ -3215,9 +3329,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             if(globalNamedValues.find(idArg->name) == globalNamedValues.end() &&
                isVariableMoved(idArg->name))
             {
-                reportError(node->line, idArg->col,
-                            "double free or use-after-free of value: '" +
-                                idArg->name + "'");
+                reportError(
+                    node->line,
+                    idArg->col,
+                    "double free or use-after-free of value: '" + idArg->name +
+                        "'");
                 return false;
             }
         }
@@ -3243,8 +3359,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     {
         if(node->arguments.empty())
         {
-            reportError(node->line,
-                        "free_objs expects at least one releasable object");
+            reportError(
+                node->line,
+                "free_objs expects at least one releasable object");
             return nullptr;
         }
 
@@ -3257,10 +3374,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             lastCall = generateMethodCall(&releaseCall);
             if(!lastCall)
             {
-                reportError(node->line,
-                            "argument " + std::to_string(i + 1) +
-                                " to free_objs must be an object with a "
-                                "zero-argument release() method");
+                reportError(
+                    node->line,
+                    "argument " + std::to_string(i + 1) +
+                        " to free_objs must be an object with a "
+                        "zero-argument release() method");
                 return nullptr;
             }
         }
@@ -3306,8 +3424,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     {
         if(node->arguments.size() != 1)
         {
-            reportError(node->line,
-                        "String::with_capacity expects one argument");
+            reportError(
+                node->line,
+                "String::with_capacity expects one argument");
             return nullptr;
         }
         initializeStdlibFunctions();
@@ -3318,8 +3437,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             return nullptr;
         if(!cap->getType()->isIntegerTy())
         {
-            reportError(node->line,
-                        "String::with_capacity expects an integer capacity");
+            reportError(
+                node->line,
+                "String::with_capacity expects an integer capacity");
             return nullptr;
         }
         if(cap->getType()->getIntegerBitWidth() < 64)
@@ -3327,7 +3447,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         else if(cap->getType()->getIntegerBitWidth() > 64)
             cap = builder.CreateTrunc(cap, int64Type, "cap_trunc");
         llvm::Value* size = builder.CreateAdd(
-            cap, llvm::ConstantInt::get(int64Type, 1), "string_cap_plus_one");
+            cap,
+            llvm::ConstantInt::get(int64Type, 1),
+            "string_cap_plus_one");
         llvm::Value* ptr =
             builder.CreateCall(mallocFunc, {size}, "string_with_capacity");
         builder.CreateStore(llvm::ConstantInt::get(int8Type, 0), ptr);
@@ -3347,8 +3469,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         llvm::Value* ptr = generateExpression(argExpr);
         if(!ptr)
             return nullptr;
-        consumeMoveFromExpression(argExpr, node->line,
-                                  "passing argument to String::free");
+        consumeMoveFromExpression(
+            argExpr,
+            node->line,
+            "passing argument to String::free");
         markFreeLikeConsumed(argExpr);
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* ptrType = llvm::PointerType::get(context, 0);
@@ -3384,8 +3508,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 #endif
         llvm::FunctionType* cloneFnType =
             llvm::FunctionType::get(ptrType, {ptrType}, false);
-        llvm::FunctionCallee cloneFn = module->getOrInsertFunction(
-            "__mlang_std_strbuf_clone", cloneFnType);
+        llvm::FunctionCallee cloneFn =
+            module
+                ->getOrInsertFunction("__mlang_std_strbuf_clone", cloneFnType);
         return builder.CreateCall(cloneFn, {arg}, "string_from");
     }
 
@@ -3434,16 +3559,17 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(closureSignature != functionTypeVariables.end())
     {
         FunctionTypeNode* closureType = closureSignature->second;
-        const size_t expectedCount = closureType->parameterTypes
-                                         ? closureType->parameterTypes->types.size()
-                                         : 0;
+        const size_t expectedCount =
+            closureType->parameterTypes
+                ? closureType->parameterTypes->types.size()
+                : 0;
         if(node->arguments.size() != expectedCount)
         {
-            reportError(node->line, "runtime closure '" + node->name +
-                                        "' expects " +
-                                        std::to_string(expectedCount) +
-                                        " argument(s), got " +
-                                        std::to_string(node->arguments.size()));
+            reportError(
+                node->line,
+                "runtime closure '" + node->name + "' expects " +
+                    std::to_string(expectedCount) + " argument(s), got " +
+                    std::to_string(node->arguments.size()));
             return nullptr;
         }
         std::vector<bool> sharedReferenceParameters(expectedCount, false);
@@ -3453,7 +3579,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                        closureType->parameterTypes->types[i]))
                     sharedReferenceParameters[i] = !reference->isMutable;
         if(!validateTemporaryBorrowArguments(
-               node->arguments, node->name, "",
+               node->arguments,
+               node->name,
+               "",
                &sharedReferenceParameters))
             return nullptr;
         std::vector<FunctionDefNode*> knownTargets;
@@ -3483,11 +3611,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                        !overload.node->typeParams.empty())
                         continue;
                     auto* parameters = new TypeListNode();
-                    for(auto* parameter :
-                        overload.node->parameters->parameters)
+                    for(auto* parameter : overload.node->parameters->parameters)
                         parameters->addType(cloneTypeNode(parameter->type));
                     auto* candidateType = new FunctionTypeNode(
-                        parameters, cloneTypeNode(overload.node->returnType));
+                        parameters,
+                        cloneTypeNode(overload.node->returnType));
                     if(typeMangle(candidateType) != expectedSignature)
                         continue;
                     if(target)
@@ -3510,8 +3638,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 if(dynamic_cast<PointerTypeNode*>(
                        closureType->parameterTypes->types[i]))
                 {
-                    if(hasKnownCallableTargetSet &&
-                       allCallableTargetsResolved)
+                    if(hasKnownCallableTargetSet && allCallableTargetsResolved)
                     {
                         bool mutatesPointer = false;
                         bool allTargetsHaveBodies = true;
@@ -3545,16 +3672,21 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                    TypeNode::TYPE_PTR)
                             {
                                 resultCanCarryBorrow = std::any_of(
-                                    knownTargets.begin(), knownTargets.end(),
-                                    [&](FunctionDefNode* target) {
+                                    knownTargets.begin(),
+                                    knownTargets.end(),
+                                    [&](FunctionDefNode* target)
+                                    {
                                         auto record = std::find_if(
                                             functionOverloads.begin(),
                                             functionOverloads.end(),
-                                            [&](const auto& namedOverloads) {
+                                            [&](const auto& namedOverloads)
+                                            {
                                                 return std::any_of(
-                                                    namedOverloads.second.begin(),
+                                                    namedOverloads.second
+                                                        .begin(),
                                                     namedOverloads.second.end(),
-                                                    [&](const auto& overload) {
+                                                    [&](const auto& overload)
+                                                    {
                                                         return overload.node ==
                                                                target;
                                                     });
@@ -3565,7 +3697,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                             record->second)
                                             if(overload.node == target)
                                                 return !functionPointerReturnSummaryComplete
-                                                            .count(overload.symbolName);
+                                                            .count(
+                                                                overload
+                                                                    .symbolName);
                                         return true;
                                     });
                             }
@@ -3610,7 +3744,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         reportError(
                             node->line,
                             "cannot pass a shared borrow to opaque callable "
-                            "pointer parameter " + std::to_string(i + 1));
+                            "pointer parameter " +
+                                std::to_string(i + 1));
                         return nullptr;
                     }
                     if(unsafeDepth == 0 &&
@@ -3635,17 +3770,22 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                            : llvm::dyn_cast<llvm::AllocaInst>(valueIt->second);
         if(!alloca)
         {
-            reportError(node->line,
-                        "runtime closure value '" + node->name +
-                            "' is not available in this scope");
+            reportError(
+                node->line,
+                "runtime closure value '" + node->name +
+                    "' is not available in this scope");
             return nullptr;
         }
         llvm::Value* closureValue = builder.CreateLoad(
-            alloca->getAllocatedType(), alloca, node->name + ".closure.value");
-        llvm::Value* code = builder.CreateExtractValue(
-            closureValue, 0, node->name + ".code");
+            alloca->getAllocatedType(),
+            alloca,
+            node->name + ".closure.value");
+        llvm::Value* code =
+            builder.CreateExtractValue(closureValue, 0, node->name + ".code");
         llvm::Value* environment = builder.CreateExtractValue(
-            closureValue, 1, node->name + ".environment");
+            closureValue,
+            1,
+            node->name + ".environment");
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* erasedPointerType = llvm::PointerType::get(context, 0);
 #else
@@ -3656,34 +3796,33 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         std::vector<llvm::Value*> callArguments = {environment};
         if(closureType->parameterTypes)
         {
-            for(size_t i = 0; i < closureType->parameterTypes->types.size(); ++i)
+            for(size_t i = 0; i < closureType->parameterTypes->types.size();
+                ++i)
             {
                 TypeNode* parameter = closureType->parameterTypes->types[i];
                 llvm::Type* parameterType = parameterLLVMType(parameter);
-                auto* reference =
-                    dynamic_cast<ReferenceTypeNode*>(parameter);
-                auto* borrow =
-                    dynamic_cast<UnaryOpNode*>(node->arguments[i]);
+                auto* reference = dynamic_cast<ReferenceTypeNode*>(parameter);
+                auto* borrow = dynamic_cast<UnaryOpNode*>(node->arguments[i]);
                 if(reference && reference->isMutable &&
                    (!borrow || borrow->op != UnaryOpNode::OP_ADDR_MUT))
                 {
-                    reportError(node->line,
-                                "runtime closure parameter " +
-                                    std::to_string(i + 1) +
-                                    " expects &mut argument");
+                    reportError(
+                        node->line,
+                        "runtime closure parameter " + std::to_string(i + 1) +
+                            " expects &mut argument");
                     return nullptr;
                 }
                 ExpressionNode* argumentExpression = node->arguments[i];
                 if(reference && !reference->isMutable && borrow &&
                    borrow->op == UnaryOpNode::OP_ADDR)
                     argumentExpression = borrow->operand;
-                llvm::Value* argument =
-                    generateExpression(argumentExpression);
+                llvm::Value* argument = generateExpression(argumentExpression);
                 if(!parameterType || !argument)
                 {
-                    reportError(node->line,
-                                "runtime closure parameter types must be "
-                                "known and arguments must be valid");
+                    reportError(
+                        node->line,
+                        "runtime closure parameter types must be "
+                        "known and arguments must be valid");
                     return nullptr;
                 }
                 if(argument->getType() != parameterType)
@@ -3691,17 +3830,23 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     if(argument->getType()->isIntegerTy() &&
                        parameterType->isIntegerTy())
                         argument = builder.CreateIntCast(
-                            argument, parameterType, true,
+                            argument,
+                            parameterType,
+                            true,
                             "closure.arg.cast");
-                    else if(argument->getType()->isFloatingPointTy() &&
-                            parameterType->isFloatingPointTy())
+                    else if(
+                        argument->getType()->isFloatingPointTy() &&
+                        parameterType->isFloatingPointTy())
                         argument = builder.CreateFPCast(
-                            argument, parameterType, "closure.arg.cast");
+                            argument,
+                            parameterType,
+                            "closure.arg.cast");
                     else
                     {
-                        reportError(node->line,
-                                    "runtime closure argument type does not "
-                                    "match its parameter");
+                        reportError(
+                            node->line,
+                            "runtime closure argument type does not "
+                            "match its parameter");
                         return nullptr;
                     }
                 }
@@ -3709,23 +3854,29 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 callArguments.push_back(argument);
             }
         }
-        llvm::FunctionType* signature =
-            llvm::FunctionType::get(parameterLLVMType(closureType->returnType),
-                                    signatureParameters, false);
+        llvm::FunctionType* signature = llvm::FunctionType::get(
+            parameterLLVMType(closureType->returnType),
+            signatureParameters,
+            false);
 #if LLVM_VERSION_MAJOR < 15
-        code = builder.CreateBitCast(code, signature->getPointerTo(),
-                                     node->name + ".callable");
+        code = builder.CreateBitCast(
+            code,
+            signature->getPointerTo(),
+            node->name + ".callable");
 #endif
         llvm::Value* callResult = builder.CreateCall(
-            signature, code, callArguments,
-            signature->getReturnType()->isVoidTy() ? ""
-                                                  : node->name + ".call");
+            signature,
+            code,
+            callArguments,
+            signature->getReturnType()->isVoidTy() ? "" : node->name + ".call");
 
         auto runtimeClosure = runtimeClosureVariables.find(node->name);
         if(runtimeClosure != runtimeClosureVariables.end() &&
            runtimeClosure->second)
             applyRuntimeClosurePointerBorrowEffects(
-                node->name, runtimeClosure->second, node->line);
+                node->name,
+                runtimeClosure->second,
+                node->line);
         return callResult;
     }
 
@@ -3737,8 +3888,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             // Re-entrancy guard — recursive inline closures are unsupported.
             if(!activeInlineClosures.insert(node->name).second)
             {
-                reportError(node->line, "recursive call to inline closure '" +
-                                            node->name + "' is not supported");
+                reportError(
+                    node->line,
+                    "recursive call to inline closure '" + node->name +
+                        "' is not supported");
                 return nullptr;
             }
             ClosureNode* closure = closIt->second;
@@ -3747,11 +3900,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                      : 0);
             if(node->arguments.size() != expectedArgs)
             {
-                reportError(node->line,
-                            "inline lambda '" + node->name + "' expects " +
-                                std::to_string(expectedArgs) +
-                                " argument(s), got " +
-                                std::to_string(node->arguments.size()));
+                reportError(
+                    node->line,
+                    "inline lambda '" + node->name + "' expects " +
+                        std::to_string(expectedArgs) + " argument(s), got " +
+                        std::to_string(node->arguments.size()));
                 activeInlineClosures.erase(node->name);
                 return nullptr;
             }
@@ -3803,7 +3956,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         llvm::cast<llvm::AllocaInst>(hiddenValue->second)
                             ->getAllocatedType();
                     llvm::Value* captureAddress = builder.CreateLoad(
-                        capturePointerType, hiddenValue->second,
+                        capturePointerType,
+                        hiddenValue->second,
                         capturedName + ".capture");
                     TypeNode* capturedType =
                         closureCaptureTypes[node->name][capturedName];
@@ -3832,8 +3986,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                dynamic_cast<MapTypeNode*>(capturedType))
                         {
                             variableTypes[capturedName] = TypeNode::TYPE_MAP;
-                            mapKeyValueTypes[capturedName] = {
-                                mapType->keyType, mapType->valueType};
+                            mapKeyValueTypes[capturedName] =
+                                {mapType->keyType, mapType->valueType};
                         }
                         if(auto* tupleType =
                                dynamic_cast<TupleTypeNode*>(capturedType))
@@ -3869,7 +4023,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     return nullptr;
                 }
                 consumeMoveFromExpression(
-                    node->arguments[i], node->line,
+                    node->arguments[i],
+                    node->line,
                     "passing argument to inline lambda '" + node->name + "'");
                 llvm::Type* expectedType = getLLVMTypeFromNode(param->type);
                 if(!expectedType)
@@ -3883,10 +4038,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     int cost = 0;
                     if(!canConvertType(argVal->getType(), expectedType, cost))
                     {
-                        reportError(node->line,
-                                    "argument " + std::to_string(i + 1) +
-                                        " has wrong type for inline lambda '" +
-                                        node->name + "'");
+                        reportError(
+                            node->line,
+                            "argument " + std::to_string(i + 1) +
+                                " has wrong type for inline lambda '" +
+                                node->name + "'");
                         restoreInlineState();
                         activeInlineClosures.erase(node->name);
                         return nullptr;
@@ -3898,40 +4054,58 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             argVal->getType()->getIntegerBitWidth();
                         unsigned dstBits = expectedType->getIntegerBitWidth();
                         if(srcBits > dstBits)
-                            argVal = builder.CreateTrunc(argVal, expectedType,
-                                                         "lam.arg.trunc");
+                            argVal = builder.CreateTrunc(
+                                argVal,
+                                expectedType,
+                                "lam.arg.trunc");
                         else if(srcBits < dstBits)
-                            argVal = builder.CreateSExt(argVal, expectedType,
-                                                        "lam.arg.sext");
+                            argVal = builder.CreateSExt(
+                                argVal,
+                                expectedType,
+                                "lam.arg.sext");
                     }
-                    else if(argVal->getType()->isIntegerTy() &&
-                            expectedType->isFloatingPointTy())
+                    else if(
+                        argVal->getType()->isIntegerTy() &&
+                        expectedType->isFloatingPointTy())
                     {
-                        argVal = builder.CreateSIToFP(argVal, expectedType,
-                                                      "lam.arg.sitofp");
+                        argVal = builder.CreateSIToFP(
+                            argVal,
+                            expectedType,
+                            "lam.arg.sitofp");
                     }
-                    else if(argVal->getType()->isFloatingPointTy() &&
-                            expectedType->isIntegerTy())
+                    else if(
+                        argVal->getType()->isFloatingPointTy() &&
+                        expectedType->isIntegerTy())
                     {
-                        argVal = builder.CreateFPToSI(argVal, expectedType,
-                                                      "lam.arg.fptosi");
+                        argVal = builder.CreateFPToSI(
+                            argVal,
+                            expectedType,
+                            "lam.arg.fptosi");
                     }
-                    else if(argVal->getType()->isFloatingPointTy() &&
-                            expectedType->isFloatingPointTy())
+                    else if(
+                        argVal->getType()->isFloatingPointTy() &&
+                        expectedType->isFloatingPointTy())
                     {
-                        argVal = builder.CreateFPCast(argVal, expectedType,
-                                                      "lam.arg.fpcast");
+                        argVal = builder.CreateFPCast(
+                            argVal,
+                            expectedType,
+                            "lam.arg.fpcast");
                     }
-                    else if(argVal->getType()->isPointerTy() &&
-                            expectedType->isPointerTy())
+                    else if(
+                        argVal->getType()->isPointerTy() &&
+                        expectedType->isPointerTy())
                     {
-                        argVal = builder.CreateBitCast(argVal, expectedType,
-                                                       "lam.arg.ptrcast");
+                        argVal = builder.CreateBitCast(
+                            argVal,
+                            expectedType,
+                            "lam.arg.ptrcast");
                     }
                 }
 
                 llvm::AllocaInst* alloca = builder.CreateAlloca(
-                    expectedType, nullptr, param->name + ".lam.addr");
+                    expectedType,
+                    nullptr,
+                    param->name + ".lam.addr");
                 argVal = applyStructCopySemantics(argVal, param->type);
                 builder.CreateStore(argVal, alloca);
                 namedValues[param->name] = alloca;
@@ -3983,7 +4157,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
             InlineClosureReturnState closureReturn;
             closureReturn.exitBlock = llvm::BasicBlock::Create(
-                context, "lambda.exit", builder.GetInsertBlock()->getParent());
+                context,
+                "lambda.exit",
+                builder.GetInsertBlock()->getParent());
             inlineClosureReturnStates.push_back(&closureReturn);
             enterCleanupScope();
             if(closure->body)
@@ -4012,7 +4188,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             if(closureReturn.resultStorage)
                 return builder.CreateLoad(
                     closureReturn.resultStorage->getAllocatedType(),
-                    closureReturn.resultStorage, "lambda.result");
+                    closureReturn.resultStorage,
+                    "lambda.result");
             return nullptr; // inline closures without a value return are void
         }
     }
@@ -4080,7 +4257,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(type))
         {
             std::string resolved = getOrCreateMonomorphizedStruct(
-                genRef->structName, genRef->typeArgs);
+                genRef->structName,
+                genRef->typeArgs);
             auto it = structImplementedTraits.find(resolved);
             return it != structImplementedTraits.end() &&
                    it->second.find(traitName) != it->second.end();
@@ -4153,9 +4331,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
     std::string literalSuffixForScope, literalInputForScope;
     if(node->name.find("::") == std::string::npos &&
-       (structuralRequirementProbe ||
-        mlang::literals::decodeOperatorName(node->name, literalSuffixForScope,
-                                            literalInputForScope)) &&
+       (structuralRequirementProbe || mlang::literals::decodeOperatorName(
+                                          node->name,
+                                          literalSuffixForScope,
+                                          literalInputForScope)) &&
        builder.GetInsertBlock())
     {
         const std::string caller =
@@ -4164,7 +4343,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         if(scopeEnd != std::string::npos)
         {
             const std::string resolved = mlang::literals::scopedOperatorName(
-                node->name, caller.substr(0, scopeEnd),
+                node->name,
+                caller.substr(0, scopeEnd),
                 [&](const std::string& name)
                 { return functionOverloads.count(name) != 0; });
             if(resolved != node->name)
@@ -4241,16 +4421,18 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     {
         if(!node->arguments.empty())
         {
-            reportError(node->line,
-                        "std::source_location::current() takes no arguments");
+            reportError(
+                node->line,
+                "std::source_location::current() takes no arguments");
             return nullptr;
         }
         if(!sourceLocationOverload || !sourceLocationOverload->function ||
            !sourceLocationOverload->function->getReturnType()->isStructTy())
         {
-            reportError(node->line,
-                        "std::source_location::current() has an invalid "
-                        "return type");
+            reportError(
+                node->line,
+                "std::source_location::current() has an invalid "
+                "return type");
             return nullptr;
         }
 
@@ -4262,9 +4444,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         if(members == structMembers.end() ||
            layouts == structFieldLayouts.end())
         {
-            reportError(node->line,
-                        "std::source_location::current() requires the "
-                        "std::source_location::SourceLocation struct");
+            reportError(
+                node->line,
+                "std::source_location::current() requires the "
+                "std::source_location::SourceLocation struct");
             return nullptr;
         }
 
@@ -4313,29 +4496,33 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 fieldValue = columnValue;
             else
             {
-                reportError(node->line,
-                            "unknown field '" + fieldName +
-                                "' in std::source_location::SourceLocation");
+                reportError(
+                    node->line,
+                    "unknown field '" + fieldName +
+                        "' in std::source_location::SourceLocation");
                 return nullptr;
             }
-            result = builder.CreateInsertValue(result, fieldValue,
-                                               {layout.storageIndex},
-                                               "source.location." + fieldName);
+            result = builder.CreateInsertValue(
+                result,
+                fieldValue,
+                {layout.storageIndex},
+                "source.location." + fieldName);
         }
         return result;
     }
-    std::vector<TypeNode*> preInstantiationArrayArgumentTypes(
-        node->arguments.size(), nullptr);
+    std::vector<TypeNode*>
+        preInstantiationArrayArgumentTypes(node->arguments.size(), nullptr);
     for(size_t i = 0; i < node->arguments.size(); ++i)
-        if(auto* identifier =
-               dynamic_cast<IdentifierNode*>(node->arguments[i]);
+        if(auto* identifier = dynamic_cast<IdentifierNode*>(node->arguments[i]);
            identifier && arrayCapacities.count(identifier->name))
             preInstantiationArrayArgumentTypes[i] =
                 semanticArgumentType(node->arguments[i]);
 
     if(overloadIt != functionOverloads.end())
-        instantiateGenericFunctionOverloads(node, node->name,
-                                            overloadIt->second);
+        instantiateGenericFunctionOverloads(
+            node,
+            node->name,
+            overloadIt->second);
     if(overloadIt == functionOverloads.end())
     {
         // Static struct method call syntax: Type::method(...)
@@ -4350,8 +4537,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             {
                 std::set<std::string> emptyTypeParams;
                 std::vector<std::string> aliasStack;
-                parsedType = resolveTypeAliasNode(parsedType, emptyTypeParams,
-                                                  aliasStack);
+                parsedType = resolveTypeAliasNode(
+                    parsedType,
+                    emptyTypeParams,
+                    aliasStack);
                 // Static generic method calls nested inside a generic
                 // function can spell their receiver using the caller's type
                 // parameters (for example FlatMap<K, V>::new()). Resolve
@@ -4373,8 +4562,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         typeParamNames.push_back(binding.first);
                         typeArgs.push_back(binding.second);
                     }
-                    parsedType = substituteTypeParams(parsedType,
-                                                      typeParamNames, typeArgs);
+                    parsedType = substituteTypeParams(
+                        parsedType,
+                        typeParamNames,
+                        typeArgs);
                 }
                 if(auto* genericStructType =
                        dynamic_cast<GenericStructTypeRefNode*>(parsedType))
@@ -4382,17 +4573,22 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     std::string visibleStructName =
                         Helpers::resolve_visible_struct_base_name(
                             genericStructType->structName,
-                            genericStructTemplates, structMethods,
+                            genericStructTemplates,
+                            structMethods,
                             structVisibility);
                     structName = getOrCreateMonomorphizedStruct(
-                        visibleStructName, genericStructType->typeArgs);
+                        visibleStructName,
+                        genericStructType->typeArgs);
                 }
-                else if(auto* structType =
-                            dynamic_cast<StructTypeRefNode*>(parsedType))
+                else if(
+                    auto* structType =
+                        dynamic_cast<StructTypeRefNode*>(parsedType))
                 {
                     structName = Helpers::resolve_visible_struct_base_name(
-                        structType->structName, genericStructTemplates,
-                        structMethods, structVisibility);
+                        structType->structName,
+                        genericStructTemplates,
+                        structMethods,
+                        structVisibility);
                 }
             }
 
@@ -4413,8 +4609,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         break;
                     }
                     if(candidate.size() > structName.size() &&
-                       candidate.compare(candidate.size() - structName.size(),
-                                         structName.size(), structName) == 0)
+                       candidate.compare(
+                           candidate.size() - structName.size(),
+                           structName.size(),
+                           structName) == 0)
                     {
                         char sep =
                             candidate[candidate.size() - structName.size() - 1];
@@ -4435,10 +4633,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 {
                     if(!mit->second.second->isStatic)
                     {
-                        reportError(node->line,
-                                    "instance method '" + displayStructName +
-                                        "::" + methodName +
-                                        "' must be called on a value");
+                        reportError(
+                            node->line,
+                            "instance method '" + displayStructName + "::" +
+                                methodName + "' must be called on a value");
                         return nullptr;
                     }
 
@@ -4447,8 +4645,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     llvm::Function* callee = module->getFunction(mangledName);
                     if(!callee)
                     {
-                        callee = generateMethodDeclaration(resolvedStructName,
-                                                           mit->second.second);
+                        callee = generateMethodDeclaration(
+                            resolvedStructName,
+                            mit->second.second);
                     }
                     if(callee && callee->empty())
                     {
@@ -4475,8 +4674,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         auto savedVariableScopeDepthScopes =
                             variableScopeDepthScopes;
 
-                        callee = generateMethodDefinition(resolvedStructName,
-                                                          mit->second.second);
+                        callee = generateMethodDefinition(
+                            resolvedStructName,
+                            mit->second.second);
 
                         namedValues = savedNamedValues;
                         constantVariables = savedConstantVariables;
@@ -4505,8 +4705,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     }
                     if(!callee)
                     {
-                        reportError(node->line, "unknown static method: '" +
-                                                    node->name + "'");
+                        reportError(
+                            node->line,
+                            "unknown static method: '" + node->name + "'");
                         return nullptr;
                     }
 
@@ -4521,9 +4722,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         return nullptr;
                     }
 
-                    if(!validateTemporaryBorrowArguments(node->arguments,
-                                                         node->name, "",
-                                                         nullptr))
+                    if(!validateTemporaryBorrowArguments(
+                           node->arguments,
+                           node->name,
+                           "",
+                           nullptr))
                     {
                         return nullptr;
                     }
@@ -4537,7 +4740,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         if(!argVal)
                             return nullptr;
                         consumeMoveFromExpression(
-                            argNode, node->line,
+                            argNode,
+                            node->line,
                             "passing argument to static method '" + node->name +
                                 "'");
 
@@ -4546,13 +4750,16 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         if(argVal->getType() != expectedType)
                         {
                             int convCost = 0;
-                            if(!canConvertType(argVal->getType(), expectedType,
-                                               convCost))
+                            if(!canConvertType(
+                                   argVal->getType(),
+                                   expectedType,
+                                   convCost))
                             {
-                                reportError(node->line,
-                                            "argument type mismatch for static "
-                                            "method '" +
-                                                node->name + "'");
+                                reportError(
+                                    node->line,
+                                    "argument type mismatch for static "
+                                    "method '" +
+                                        node->name + "'");
                                 return nullptr;
                             }
 
@@ -4560,25 +4767,37 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                expectedType->isIntegerTy())
                             {
                                 argVal = builder.CreateIntCast(
-                                    argVal, expectedType, true, "arg.cast");
+                                    argVal,
+                                    expectedType,
+                                    true,
+                                    "arg.cast");
                             }
-                            else if(argVal->getType()->isIntegerTy() &&
-                                    expectedType->isFloatingPointTy())
+                            else if(
+                                argVal->getType()->isIntegerTy() &&
+                                expectedType->isFloatingPointTy())
                             {
                                 argVal = builder.CreateSIToFP(
-                                    argVal, expectedType, "arg.sitofp");
+                                    argVal,
+                                    expectedType,
+                                    "arg.sitofp");
                             }
-                            else if(argVal->getType()->isFloatingPointTy() &&
-                                    expectedType->isFloatingPointTy())
+                            else if(
+                                argVal->getType()->isFloatingPointTy() &&
+                                expectedType->isFloatingPointTy())
                             {
                                 argVal = builder.CreateFPCast(
-                                    argVal, expectedType, "arg.fpcast");
+                                    argVal,
+                                    expectedType,
+                                    "arg.fpcast");
                             }
-                            else if(argVal->getType()->isPointerTy() &&
-                                    expectedType->isPointerTy())
+                            else if(
+                                argVal->getType()->isPointerTy() &&
+                                expectedType->isPointerTy())
                             {
                                 argVal = builder.CreateBitCast(
-                                    argVal, expectedType, "arg.ptrcast");
+                                    argVal,
+                                    expectedType,
+                                    "arg.ptrcast");
                             }
                         }
 
@@ -4594,12 +4813,14 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         }
 
         std::string literalSuffix, literalInput;
-        if(mlang::literals::decodeOperatorName(node->name, literalSuffix,
-                                               literalInput))
-            reportError(node->line,
-                        "no user-defined literal operator for suffix '" +
-                            literalSuffix + "' with input type '" +
-                            literalInput + "'");
+        if(mlang::literals::decodeOperatorName(
+               node->name,
+               literalSuffix,
+               literalInput))
+            reportError(
+                node->line,
+                "no user-defined literal operator for suffix '" +
+                    literalSuffix + "' with input type '" + literalInput + "'");
         else
             reportError(node->line, "unknown function: '" + node->name + "'");
         return nullptr;
@@ -4609,7 +4830,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     for(size_t i = 0; i < sharedReferenceParameters.size(); ++i)
     {
         TypeNode* commonType = overloadParameterType(
-            overloadIt->second, node->arguments.size(), i);
+            overloadIt->second,
+            node->arguments.size(),
+            i);
         if(auto* reference = dynamic_cast<ReferenceTypeNode*>(commonType))
         {
             sharedReferenceParameters[i] = !reference->isMutable;
@@ -4646,25 +4869,28 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
             else
             {
-                TypeNode* argumentType = semanticArgumentType(
-                    node->arguments[i]);
+                TypeNode* argumentType =
+                    semanticArgumentType(node->arguments[i]);
                 if(parameterType && argumentType &&
                    typeMangle(parameterType) == typeMangle(argumentType))
                     hasMatchingNonSharedCandidate = true;
             }
         }
-        sharedReferenceParameters[i] = hasSharedReferenceCandidate &&
-                                       !hasMatchingNonSharedCandidate;
+        sharedReferenceParameters[i] =
+            hasSharedReferenceCandidate && !hasMatchingNonSharedCandidate;
     }
-    if(!validateTemporaryBorrowArguments(node->arguments, node->name, "",
-                                         &sharedReferenceParameters))
+    if(!validateTemporaryBorrowArguments(
+           node->arguments,
+           node->name,
+           "",
+           &sharedReferenceParameters))
         return nullptr;
 
     // Validate temporary closure borrows before generating their bodies. This
     // keeps an aliasing diagnostic from being obscured by later LLVM lowering
     // (for example, attempting an unsafe dereference in another argument).
-    for(size_t argumentIndex = 0;
-        argumentIndex < node->arguments.size(); ++argumentIndex)
+    for(size_t argumentIndex = 0; argumentIndex < node->arguments.size();
+        ++argumentIndex)
     {
         auto* closure =
             dynamic_cast<ClosureNode*>(node->arguments[argumentIndex]);
@@ -4674,12 +4900,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         for(const auto& candidate : overloadIt->second)
         {
             if(!candidate.node || !candidate.node->parameters ||
-               argumentIndex >=
-                   candidate.node->parameters->parameters.size())
+               argumentIndex >= candidate.node->parameters->parameters.size())
                 continue;
             if(dynamic_cast<FunctionTypeNode*>(
-                   candidate.node->parameters->parameters[argumentIndex]
-                       ->type))
+                   candidate.node->parameters->parameters[argumentIndex]->type))
             {
                 isCallableArgument = true;
                 break;
@@ -4691,10 +4915,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         std::vector<std::string> capturedNames;
         const bool hasUnannotatedParameter =
             closure->parameters &&
-            std::any_of(closure->parameters->parameters.begin(),
-                        closure->parameters->parameters.end(),
-                        [](ParameterNode* parameter)
-                        { return !parameter || !parameter->type; });
+            std::any_of(
+                closure->parameters->parameters.begin(),
+                closure->parameters->parameters.end(),
+                [](ParameterNode* parameter)
+                { return !parameter || !parameter->type; });
         if(hasUnannotatedParameter)
         {
             std::set<std::string> used;
@@ -4719,8 +4944,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         {
             std::vector<std::pair<std::string, TypeNode*>> captures;
             TypeNode* closureReturnType = nullptr;
-            if(!getRuntimeClosureCaptures(closure, captures,
-                                          closureReturnType))
+            if(!getRuntimeClosureCaptures(closure, captures, closureReturnType))
                 return nullptr;
             for(const auto& capture : captures)
                 capturedNames.push_back(capture.first);
@@ -4730,22 +4954,22 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             auto exclusive = activeMutBorrower.find(captureName);
             auto shared = activeBorrowers.find(captureName);
             if(exclusive != activeMutBorrower.end() ||
-               (shared != activeBorrowers.end() &&
-                !shared->second.empty()))
+               (shared != activeBorrowers.end() && !shared->second.empty()))
             {
-                reportError(node->line,
-                            "cannot pass inline closure because captured "
-                            "variable '" +
-                                captureName + "' is already borrowed");
+                reportError(
+                    node->line,
+                    "cannot pass inline closure because captured "
+                    "variable '" +
+                        captureName + "' is already borrowed");
                 return nullptr;
             }
-            for(size_t otherIndex = 0;
-                otherIndex < node->arguments.size(); ++otherIndex)
+            for(size_t otherIndex = 0; otherIndex < node->arguments.size();
+                ++otherIndex)
             {
                 if(otherIndex == argumentIndex)
                     continue;
-                auto* borrow = dynamic_cast<UnaryOpNode*>(
-                    node->arguments[otherIndex]);
+                auto* borrow =
+                    dynamic_cast<UnaryOpNode*>(node->arguments[otherIndex]);
                 auto* borrowedName =
                     borrow ? dynamic_cast<IdentifierNode*>(borrow->operand)
                            : nullptr;
@@ -4794,13 +5018,17 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                              ? nullptr
                              : llvm::dyn_cast<llvm::AllocaInst>(value->second);
             if(functionType != functionTypeVariables.end() && slot)
-                argVal = builder.CreateLoad(slot->getAllocatedType(), slot,
-                                            identifier->name + ".closure.arg");
+                argVal = builder.CreateLoad(
+                    slot->getAllocatedType(),
+                    slot,
+                    identifier->name + ".closure.arg");
         }
         if(!argVal)
         {
             TypeNode* expectedArgumentType = overloadParameterType(
-                overloadIt->second, node->arguments.size(), argIndex);
+                overloadIt->second,
+                node->arguments.size(),
+                argIndex);
             if(!expectedArgumentType)
             {
                 if(auto* closure = dynamic_cast<ClosureNode*>(arg))
@@ -4818,8 +5046,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                candidate.node->parameters->parameters.size())
                             continue;
                         auto* callbackType = dynamic_cast<FunctionTypeNode*>(
-                            candidate.node->parameters
-                                ->parameters[argIndex]->type);
+                            candidate.node->parameters->parameters[argIndex]
+                                ->type);
                         const size_t expectedCount =
                             callbackType && callbackType->parameterTypes
                                 ? callbackType->parameterTypes->types.size()
@@ -4839,16 +5067,15 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             ++parameterIndex)
                         {
                             auto* actualParameter =
-                                closure->parameters
-                                    ->parameters[parameterIndex];
+                                closure->parameters->parameters[parameterIndex];
                             TypeNode* declared = actualParameter
                                                      ? actualParameter->type
                                                      : nullptr;
                             TypeNode* expected = callbackType->parameterTypes
                                                      ->types[parameterIndex];
                             if(!expected ||
-                               (declared && typeMangle(declared) !=
-                                                typeMangle(expected)))
+                               (declared &&
+                                typeMangle(declared) != typeMangle(expected)))
                             {
                                 signatureMatches = false;
                                 break;
@@ -4863,9 +5090,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             if(i == argIndex)
                                 continue;
                             TypeNode* actual = inferExpressionTypeNode(
-                                node->arguments[i], node->line);
-                            TypeNode* expected = candidate.node->parameters
-                                                     ->parameters[i]->type;
+                                node->arguments[i],
+                                node->line);
+                            TypeNode* expected =
+                                candidate.node->parameters->parameters[i]->type;
                             if(!actual || !expected ||
                                typeMangle(actual) != typeMangle(expected))
                             {
@@ -4876,8 +5104,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         if(!otherArgumentsMatch)
                             continue;
                         if(selectedType &&
-                           typeMangle(selectedType) !=
-                               typeMangle(callbackType))
+                           typeMangle(selectedType) != typeMangle(callbackType))
                         {
                             conflictingTypes = true;
                             break;
@@ -4894,8 +5121,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             // concrete callback signature from the unique specialization
             // whose other arguments match and which accepts this function
             // item.
-            if(!expectedArgumentType &&
-               dynamic_cast<IdentifierNode*>(arg))
+            if(!expectedArgumentType && dynamic_cast<IdentifierNode*>(arg))
             {
                 auto* functionItem = static_cast<IdentifierNode*>(arg);
                 auto items = functionOverloads.find(functionItem->name);
@@ -4913,8 +5139,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                candidate.node->parameters->parameters.size())
                             continue;
                         auto* callbackType = dynamic_cast<FunctionTypeNode*>(
-                            candidate.node->parameters
-                                ->parameters[argIndex]->type);
+                            candidate.node->parameters->parameters[argIndex]
+                                ->type);
                         if(!callbackType)
                             continue;
 
@@ -4924,9 +5150,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             if(i == argIndex)
                                 continue;
                             TypeNode* actual = inferExpressionTypeNode(
-                                node->arguments[i], node->line);
-                            TypeNode* expected = candidate.node->parameters
-                                                     ->parameters[i]->type;
+                                node->arguments[i],
+                                node->line);
+                            TypeNode* expected =
+                                candidate.node->parameters->parameters[i]->type;
                             if(!actual || !expected ||
                                typeMangle(actual) != typeMangle(expected))
                             {
@@ -4946,7 +5173,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                !item.node->typeParams.empty() ||
                                item.node->parameters->parameters.size() !=
                                    (callbackType->parameterTypes
-                                        ? callbackType->parameterTypes->types.size()
+                                        ? callbackType->parameterTypes->types
+                                              .size()
                                         : 0))
                                 continue;
                             auto* itemParameters = new TypeListNode();
@@ -4957,15 +5185,13 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             auto* itemType = new FunctionTypeNode(
                                 itemParameters,
                                 cloneTypeNode(item.node->returnType));
-                            if(typeMangle(itemType) ==
-                               typeMangle(callbackType))
+                            if(typeMangle(itemType) == typeMangle(callbackType))
                                 ++matchingItems;
                         }
                         if(matchingItems != 1)
                             continue;
                         if(selectedType &&
-                           typeMangle(selectedType) !=
-                               typeMangle(callbackType))
+                           typeMangle(selectedType) != typeMangle(callbackType))
                         {
                             conflictingTypes = true;
                             break;
@@ -4980,11 +5206,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             {
                 const bool hasUnannotatedParameter =
                     closure->parameters &&
-                    std::any_of(closure->parameters->parameters.begin(),
-                                closure->parameters->parameters.end(),
-                                [](const auto* parameter) {
-                                    return !parameter || !parameter->type;
-                                });
+                    std::any_of(
+                        closure->parameters->parameters.begin(),
+                        closure->parameters->parameters.end(),
+                        [](const auto* parameter)
+                        { return !parameter || !parameter->type; });
                 bool expectedCallbackIsUnresolved = false;
                 if(hasUnannotatedParameter && expectedArgumentType)
                 {
@@ -4995,24 +5221,27 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         if(!candidate.node ||
                            candidate.node->typeParams.empty() ||
                            !candidate.node->parameters ||
-                           argIndex >= candidate.node->parameters
-                                           ->parameters.size())
+                           argIndex >=
+                               candidate.node->parameters->parameters.size())
                             continue;
-                        auto* templateCallback = dynamic_cast<FunctionTypeNode*>(
-                            candidate.node->parameters
-                                ->parameters[argIndex]->type);
+                        auto* templateCallback =
+                            dynamic_cast<FunctionTypeNode*>(
+                                candidate.node->parameters->parameters[argIndex]
+                                    ->type);
                         if(!templateCallback || !callbackType ||
                            typeMangle(templateCallback) !=
                                typeMangle(callbackType))
                             continue;
                         const auto& typeParams = candidate.node->typeParams;
-                        auto isTemplateType = [&](TypeNode* type) {
-                            auto* named = dynamic_cast<StructTypeRefNode*>(type);
+                        auto isTemplateType = [&](TypeNode* type)
+                        {
+                            auto* named =
+                                dynamic_cast<StructTypeRefNode*>(type);
                             return named &&
-                                   std::find(typeParams.begin(),
-                                             typeParams.end(),
-                                             named->structName) !=
-                                       typeParams.end();
+                                   std::find(
+                                       typeParams.begin(),
+                                       typeParams.end(),
+                                       named->structName) != typeParams.end();
                         };
                         if((templateCallback->parameterTypes &&
                             std::any_of(
@@ -5048,8 +5277,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                    (unary->op == UnaryOpNode::OP_ADDR ||
                     unary->op == UnaryOpNode::OP_ADDR_MUT))
                 {
-                    argVal = generateArgumentValue(unary->operand,
-                                                   reference->elementType);
+                    argVal = generateArgumentValue(
+                        unary->operand,
+                        reference->elementType);
                     sharedReferenceValues[argIndex] = true;
                 }
                 else
@@ -5077,8 +5307,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         tit->second == TypeNode::TYPE_STR8 ||
                         tit->second == TypeNode::TYPE_STR16))
                     {
-                        argVal = builder.CreateLoad(argVal->getType(), argVal,
-                                                    id->name + ".str_deref");
+                        argVal = builder.CreateLoad(
+                            argVal->getType(),
+                            argVal,
+                            id->name + ".str_deref");
                         sharedReferenceValues[argIndex] = true;
                     }
                 }
@@ -5096,8 +5328,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     for(auto& info : overloadIt->second)
     {
         if(usingTailQualifiedLookup && !qualifiedModuleFilter.empty() &&
-           !Helpers::is_same_module_family(qualifiedModuleFilter,
-                                           info.sourceModule))
+           !Helpers::is_same_module_family(
+               qualifiedModuleFilter,
+               info.sourceModule))
         {
             continue;
         }
@@ -5224,16 +5457,18 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             if(operandType &&
                                typeMangle(operandType) !=
                                    typeMangle(expectedSemantic) &&
-                               !isListToFixedArrayCompatible(expectedSemantic,
-                                                             operandType))
+                               !isListToFixedArrayCompatible(
+                                   expectedSemantic,
+                                   operandType))
                             {
                                 ok = false;
                                 break;
                             }
                             int cost = 0;
-                            if(!canConvertType(argVals[i]->getType(),
-                                               callee->getArg(i)->getType(),
-                                               cost))
+                            if(!canConvertType(
+                                   argVals[i]->getType(),
+                                   callee->getArg(i)->getType(),
+                                   cost))
                             {
                                 ok = false;
                                 break;
@@ -5244,9 +5479,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 }
 
                 TypeNode* actualSemantic = semanticArgumentTypes[i];
-                if(auto* reference =
-                       dynamic_cast<ReferenceTypeNode*>(
-                           info.node->parameters->parameters[i]->type))
+                if(auto* reference = dynamic_cast<ReferenceTypeNode*>(
+                       info.node->parameters->parameters[i]->type))
                 {
                     auto* unary =
                         dynamic_cast<UnaryOpNode*>(node->arguments[i]);
@@ -5260,8 +5494,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 {
                     FunctionTypeNode* actualFunction =
                         dynamic_cast<FunctionTypeNode*>(actualSemantic);
-                    if(auto* closure = dynamic_cast<ClosureNode*>(
-                           node->arguments[i]))
+                    if(auto* closure =
+                           dynamic_cast<ClosureNode*>(node->arguments[i]))
                     {
                         const size_t expectedCount =
                             expectedFunction->parameterTypes
@@ -5277,25 +5511,24 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             ++parameterIndex)
                         {
                             auto* declaredParameter =
-                                closure->parameters
-                                    ->parameters[parameterIndex];
+                                closure->parameters->parameters[parameterIndex];
                             TypeNode* actualParameter =
                                 declaredParameter ? declaredParameter->type
                                                   : nullptr;
                             TypeNode* expectedParameter =
                                 expectedFunction->parameterTypes
                                     ->types[parameterIndex];
-                            parametersMatch = expectedParameter &&
-                                              (!actualParameter ||
-                                               typeMangle(actualParameter) ==
-                                                   typeMangle(
-                                                       expectedParameter));
+                            parametersMatch =
+                                expectedParameter &&
+                                (!actualParameter ||
+                                 typeMangle(actualParameter) ==
+                                     typeMangle(expectedParameter));
                         }
                         if(parametersMatch)
                             actualFunction = expectedFunction;
                     }
-                    if(auto* id = dynamic_cast<IdentifierNode*>(
-                           node->arguments[i]))
+                    if(auto* id =
+                           dynamic_cast<IdentifierNode*>(node->arguments[i]))
                     {
                         auto actual = functionTypeVariables.find(id->name);
                         if(actual != functionTypeVariables.end())
@@ -5313,10 +5546,12 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                        !item.node->parameters ||
                                        item.node->parameters->isVarArg ||
                                        !item.node->typeParams.empty() ||
-                                       item.node->parameters->parameters.size() !=
+                                       item.node->parameters->parameters
+                                               .size() !=
                                            (expectedFunction->parameterTypes
-                                                ? expectedFunction->parameterTypes
-                                                      ->types.size()
+                                                ? expectedFunction
+                                                      ->parameterTypes->types
+                                                      .size()
                                                 : 0))
                                         continue;
                                     auto* itemParams = new TypeListNode();
@@ -5336,9 +5571,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             }
                         }
                     }
-                    if(!actualFunction ||
-                       typeMangle(expectedFunction) !=
-                           typeMangle(actualFunction))
+                    if(!actualFunction || typeMangle(expectedFunction) !=
+                                              typeMangle(actualFunction))
                     {
                         ok = false;
                         break;
@@ -5352,11 +5586,13 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                            dynamic_cast<TraitObjectTypeNode*>(actualSemantic))
                     {
                         if(Helpers::trait_names_equivalent(
-                               actualTraitObj->traitName, traitObj->traitName))
+                               actualTraitObj->traitName,
+                               traitObj->traitName))
                             continue;
                     }
-                    if(!concreteTypeImplementsTrait(actualSemantic,
-                                                    traitObj->traitName))
+                    if(!concreteTypeImplementsTrait(
+                           actualSemantic,
+                           traitObj->traitName))
                     {
                         ok = false;
                         break;
@@ -5364,7 +5600,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     continue;
                 }
                 const bool fixedArrayAsRange = isListToFixedArrayCompatible(
-                    expectedSemantic, actualSemantic);
+                    expectedSemantic,
+                    actualSemantic);
                 if((isCompositeSemanticType(expectedSemantic) ||
                     isCompositeSemanticType(actualSemantic)) &&
                    actualSemantic &&
@@ -5392,8 +5629,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 // borrow validation; immutable references use the value ABI.
                 cost = 0;
             }
-            else if(!canConvertType(argVals[i]->getType(),
-                                    callee->getArg(i)->getType(), cost))
+            else if(!canConvertType(
+                        argVals[i]->getType(),
+                        callee->getArg(i)->getType(),
+                        cost))
             {
                 ok = false;
                 break;
@@ -5423,7 +5662,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             bool dominated = false;
             for(auto* other : equallyGood)
                 if(other != candidate && mlang::concepts::moreConstrained(
-                                             other->node, candidate->node))
+                                             other->node,
+                                             candidate->node))
                 {
                     dominated = true;
                     break;
@@ -5440,9 +5680,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     {
         if(!privateModule.empty())
         {
-            reportError(node->line, "function '" + node->name +
-                                        "' is private in module '" +
-                                        privateModule + "'");
+            reportError(
+                node->line,
+                "function '" + node->name + "' is private in module '" +
+                    privateModule + "'");
         }
         else
         {
@@ -5455,24 +5696,30 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     continue;
                 std::map<std::string, TypeNode*> bindings;
                 if(inferGenericFunctionTypeBindings(
-                       candidate.node, node->arguments, bindings) &&
-                   !satisfiesFunctionConstraints(candidate.node, bindings,
-                                                 &constraintFailure))
+                       candidate.node,
+                       node->arguments,
+                       bindings) &&
+                   !satisfiesFunctionConstraints(
+                       candidate.node,
+                       bindings,
+                       &constraintFailure))
                     break;
             }
-            reportError(node->line, "no matching overload for function '" +
-                                        node->name + "'" +
-                                        (constraintFailure.empty()
-                                             ? ""
-                                             : ": constraints not satisfied: " +
-                                                   constraintFailure));
+            reportError(
+                node->line,
+                "no matching overload for function '" + node->name + "'" +
+                    (constraintFailure.empty()
+                         ? ""
+                         : ": constraints not satisfied: " +
+                               constraintFailure));
         }
         return nullptr;
     }
     if(ambiguous)
     {
-        reportError(node->line,
-                    "ambiguous call to function '" + node->name + "'");
+        reportError(
+            node->line,
+            "ambiguous call to function '" + node->name + "'");
         return nullptr;
     }
 
@@ -5487,48 +5734,56 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     // mutability is otherwise erased. Inspect the selected body for writes
     // through a pointer parameter and reject a known shared borrow at this
     // boundary. Unknown raw pointers remain governed by unsafe code.
-    std::function<bool(FunctionDefNode*, size_t, const void*,
-                       std::set<std::pair<const void*, size_t>>&)>
+    std::function<bool(
+        FunctionDefNode*,
+        size_t,
+        const void*,
+        std::set<std::pair<const void*, size_t>>&)>
         functionMutatesPointerParameter;
-    functionMutatesPointerParameter = [&](FunctionDefNode* function,
-                                          size_t parameterIndex,
-                                          const void* callableIdentity,
-                                          std::set<std::pair<const void*,
-                                                             size_t>>& visiting) {
+    functionMutatesPointerParameter =
+        [&](FunctionDefNode* function,
+            size_t parameterIndex,
+            const void* callableIdentity,
+            std::set<std::pair<const void*, size_t>>& visiting)
+    {
         if(!function || !function->parameters ||
            parameterIndex >= function->parameters->parameters.size())
             return false;
         ParameterNode* parameter =
             function->parameters->parameters[parameterIndex];
-        if(!parameter ||
-           !dynamic_cast<PointerTypeNode*>(parameter->type))
+        if(!parameter || !dynamic_cast<PointerTypeNode*>(parameter->type))
             return false;
         if(!function->body)
             return true;
         const auto functionAndParameter = std::make_pair(
-            callableIdentity ? callableIdentity : static_cast<const void*>(function),
-                                                         parameterIndex);
+            callableIdentity ? callableIdentity
+                             : static_cast<const void*>(function),
+            parameterIndex);
         if(!visiting.insert(functionAndParameter).second)
             return false;
         const std::string parameterName = parameter->name;
         std::set<std::string> pointerAliases{parameterName};
-        auto usesPointerAlias = [&](ASTNode* expression) {
+        auto usesPointerAlias = [&](ASTNode* expression)
+        {
             std::set<std::string> identifiers;
             collect_used_idents(expression, identifiers);
-            return std::any_of(identifiers.begin(), identifiers.end(),
-                               [&](const std::string& identifier) {
-                                   return pointerAliases.count(identifier) != 0;
-                               });
+            return std::any_of(
+                identifiers.begin(),
+                identifiers.end(),
+                [&](const std::string& identifier)
+                { return pointerAliases.count(identifier) != 0; });
         };
         std::function<void(StatementListNode*)> collectAliasesFromList;
         std::function<void(StatementNode*)> collectAliasesFromStatement;
-        collectAliasesFromList = [&](StatementListNode* statements) {
+        collectAliasesFromList = [&](StatementListNode* statements)
+        {
             if(!statements)
                 return;
             for(auto* statement : statements->statements)
                 collectAliasesFromStatement(statement);
         };
-        collectAliasesFromStatement = [&](StatementNode* statement) {
+        collectAliasesFromStatement = [&](StatementNode* statement)
+        {
             if(!statement)
                 return;
             if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
@@ -5581,42 +5836,47 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             addedPointerAlias = pointerAliases.size() != previousCount;
         } while(addedPointerAlias);
 
-        auto structNameFromType = [&](TypeNode* type) {
+        auto structNameFromType = [&](TypeNode* type)
+        {
             if(auto* reference = dynamic_cast<ReferenceTypeNode*>(type))
                 type = reference->elementType;
             if(auto* structure = dynamic_cast<StructTypeRefNode*>(type))
                 return structure->structName;
-            if(auto* generic =
-                   dynamic_cast<GenericStructTypeRefNode*>(type))
+            if(auto* generic = dynamic_cast<GenericStructTypeRefNode*>(type))
                 return generic->getMangledName();
             return std::string();
         };
-        auto structNameFromExpression = [&](ExpressionNode* expression) {
+        auto structNameFromExpression = [&](ExpressionNode* expression)
+        {
             if(auto* structure = dynamic_cast<StructLiteralNode*>(expression))
                 return structure->structName;
             return std::string();
         };
-        auto receiverStructName = [&](ExpressionNode* receiver) {
+        auto receiverStructName = [&](ExpressionNode* receiver)
+        {
             if(auto* id = dynamic_cast<IdentifierNode*>(receiver))
             {
                 if(function->parameters)
                     for(auto* parameter : function->parameters->parameters)
                         if(parameter && parameter->name == id->name)
                         {
-                            std::string name = structNameFromType(parameter->type);
+                            std::string name =
+                                structNameFromType(parameter->type);
                             if(!name.empty())
                                 return name;
                         }
                 std::string resolvedName;
                 std::function<void(StatementListNode*)> findLocal;
                 std::function<void(StatementNode*)> findInStatement;
-                findLocal = [&](StatementListNode* statements) {
+                findLocal = [&](StatementListNode* statements)
+                {
                     if(!statements)
                         return;
                     for(auto* statement : statements->statements)
                         findInStatement(statement);
                 };
-                findInStatement = [&](StatementNode* statement) {
+                findInStatement = [&](StatementNode* statement)
+                {
                     if(!statement)
                         return;
                     if(auto* declaration =
@@ -5624,25 +5884,29 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     {
                         if(declaration->name == id->name)
                         {
-                            resolvedName = structNameFromType(declaration->type);
+                            resolvedName =
+                                structNameFromType(declaration->type);
                             if(resolvedName.empty())
                                 resolvedName = structNameFromExpression(
                                     declaration->expression);
                         }
                     }
-                    else if(auto* declaration =
-                                dynamic_cast<VarDeclNode*>(statement))
+                    else if(
+                        auto* declaration =
+                            dynamic_cast<VarDeclNode*>(statement))
                     {
                         if(declaration->name == id->name)
                         {
-                            resolvedName = structNameFromType(declaration->type);
+                            resolvedName =
+                                structNameFromType(declaration->type);
                             if(resolvedName.empty())
                                 resolvedName = structNameFromExpression(
                                     declaration->initExpr);
                         }
                     }
-                    else if(auto* block =
-                                dynamic_cast<BlockStatementNode*>(statement))
+                    else if(
+                        auto* block =
+                            dynamic_cast<BlockStatementNode*>(statement))
                         findLocal(block->statements);
                     else if(auto* branch = dynamic_cast<IfNode*>(statement))
                     {
@@ -5650,8 +5914,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         findInStatement(branch->elseIfBranch);
                         findLocal(branch->elseBranch);
                     }
-                    else if(auto* branch =
-                                dynamic_cast<CexprIfNode*>(statement))
+                    else if(
+                        auto* branch = dynamic_cast<CexprIfNode*>(statement))
                     {
                         findLocal(branch->thenBranch);
                         findInStatement(branch->elseIfBranch);
@@ -5668,9 +5932,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             return structNameFromExpression(receiver);
         };
 
-        auto suppliedCallableEffect = [&](const std::string& callableName,
-                                           const std::vector<ExpressionNode*>&
-                                               arguments) {
+        auto suppliedCallableEffect =
+            [&](const std::string& callableName,
+                const std::vector<ExpressionNode*>& arguments)
+        {
             if(function != best->node || !function->parameters)
                 return std::pair<bool, bool>{false, false};
             for(size_t callableIndex = 0;
@@ -5700,8 +5965,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                 auto overloads =
                                     functionOverloads.find(targetName);
                                 if(overloads == functionOverloads.end())
-                                    return std::pair<bool, bool>{false,
-                                                                 false};
+                                    return std::pair<bool, bool>{false, false};
                                 for(const auto& overload : overloads->second)
                                 {
                                     if(!isOverloadVisible(overload) ||
@@ -5724,8 +5988,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                                    ->type))
                                             continue;
                                         if(functionMutatesPointerParameter(
-                                               overload.node, argumentIndex,
-                                               overload.node, visiting))
+                                               overload.node,
+                                               argumentIndex,
+                                               overload.node,
+                                               visiting))
                                             mayMutate = true;
                                     }
                                 }
@@ -5748,8 +6014,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     return std::pair<bool, bool>{false, false};
 
                 ParameterListNode closureParameters;
-                closureParameters.isVarArg =
-                    closure->parameters->isVarArg;
+                closureParameters.isVarArg = closure->parameters->isVarArg;
                 std::vector<size_t> pointerArgumentIndexes;
                 for(size_t argumentIndex = 0;
                     argumentIndex < arguments.size() &&
@@ -5767,21 +6032,25 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             new TypeNode(TypeNode::TYPE_VOID));
                         pointerArgumentIndexes.push_back(argumentIndex);
                     }
-                    closureParameters.parameters.push_back(
-                        new ParameterNode(closureParameterType,
-                                          closureParameter->name));
+                    closureParameters.parameters.push_back(new ParameterNode(
+                        closureParameterType,
+                        closureParameter->name));
                 }
                 if(pointerArgumentIndexes.empty())
                     return std::pair<bool, bool>{true, false};
 
                 FunctionDefNode closureAdapter(
                     new TypeNode(TypeNode::TYPE_VOID),
-                    "<borrow-check closure>", &closureParameters,
+                    "<borrow-check closure>",
+                    &closureParameters,
                     closure->body);
                 for(size_t argumentIndex : pointerArgumentIndexes)
                 {
                     if(functionMutatesPointerParameter(
-                           &closureAdapter, argumentIndex, closure, visiting))
+                           &closureAdapter,
+                           argumentIndex,
+                           closure,
+                           visiting))
                         return std::pair<bool, bool>{true, true};
                 }
                 return std::pair<bool, bool>{true, false};
@@ -5792,12 +6061,17 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         std::function<bool(StatementListNode*)> scansStatements;
         std::function<bool(StatementNode*)> scansStatement;
         std::function<bool(ExpressionNode*)> expressionCallsMutatingPointer;
-        expressionCallsMutatingPointer = [&](ExpressionNode* expression) {
+        expressionCallsMutatingPointer = [&](ExpressionNode* expression)
+        {
             if(!expression)
                 return false;
-            auto scansChildren = [&](const std::vector<ExpressionNode*>& children) {
-                return std::any_of(children.begin(), children.end(),
-                                   expressionCallsMutatingPointer);
+            auto scansChildren =
+                [&](const std::vector<ExpressionNode*>& children)
+            {
+                return std::any_of(
+                    children.begin(),
+                    children.end(),
+                    expressionCallsMutatingPointer);
             };
             if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
             {
@@ -5821,8 +6095,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         if(callableType && callableType->parameterTypes)
                             for(size_t argumentIndex = 0;
                                 argumentIndex < call->arguments.size() &&
-                                argumentIndex < callableType->parameterTypes
-                                                   ->types.size();
+                                argumentIndex <
+                                    callableType->parameterTypes->types.size();
                                 ++argumentIndex)
                                 if(dynamic_cast<PointerTypeNode*>(
                                        callableType->parameterTypes
@@ -5842,12 +6116,15 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             call->arguments.size(),
                             candidate.node->parameters->parameters.size());
                         for(size_t argumentIndex = 0;
-                            argumentIndex < argumentCount; ++argumentIndex)
+                            argumentIndex < argumentCount;
+                            ++argumentIndex)
                             if(usesPointerAlias(
                                    call->arguments[argumentIndex]) &&
                                functionMutatesPointerParameter(
-                                   candidate.node, argumentIndex,
-                                   candidate.node, visiting))
+                                   candidate.node,
+                                   argumentIndex,
+                                   candidate.node,
+                                   visiting))
                                 return true;
                     }
                 return scansChildren(call->arguments);
@@ -5857,8 +6134,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                        expressionCallsMutatingPointer(binary->right);
             if(auto* unary = dynamic_cast<UnaryOpNode*>(expression))
                 return expressionCallsMutatingPointer(unary->operand);
-            if(auto* update =
-                   dynamic_cast<UpdateExpressionNode*>(expression))
+            if(auto* update = dynamic_cast<UpdateExpressionNode*>(expression))
                 return expressionCallsMutatingPointer(update->operand);
             if(auto* ternary = dynamic_cast<TernaryNode*>(expression))
                 return expressionCallsMutatingPointer(ternary->condition) ||
@@ -5879,7 +6155,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                        dynamic_cast<IdentifierNode*>(invoke->callable))
                 {
                     const auto suppliedEffect = suppliedCallableEffect(
-                        callableName->name, invoke->arguments);
+                        callableName->name,
+                        invoke->arguments);
                     if(suppliedEffect.first)
                         return suppliedEffect.second ||
                                scansChildren(invoke->arguments);
@@ -5889,8 +6166,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                        dynamic_cast<IdentifierNode*>(invoke->callable))
                 {
                     if(function->parameters)
-                        for(auto* parameter :
-                            function->parameters->parameters)
+                        for(auto* parameter : function->parameters->parameters)
                             if(parameter &&
                                parameter->name == callableName->name)
                             {
@@ -5919,8 +6195,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     receiverStructName(method->object);
                 for(const auto& byStruct : structMethods)
                 {
-                    if(!receiverType.empty() &&
-                       byStruct.first != receiverType)
+                    if(!receiverType.empty() && byStruct.first != receiverType)
                         continue;
                     auto methodIt = byStruct.second.find(method->methodName);
                     if(methodIt == byStruct.second.end() ||
@@ -5931,15 +6206,14 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     std::vector<std::pair<ParameterNode*, size_t>>
                         explicitParameters;
                     for(size_t formalIndex = 0;
-                        formalIndex <
-                        methodNode->parameters->parameters.size();
+                        formalIndex < methodNode->parameters->parameters.size();
                         ++formalIndex)
                     {
                         auto* parameter =
                             methodNode->parameters->parameters[formalIndex];
                         if(parameter && parameter->name != "self")
-                            explicitParameters.emplace_back(parameter,
-                                                            formalIndex);
+                            explicitParameters
+                                .emplace_back(parameter, formalIndex);
                     }
                     if(explicitParameters.size() != method->arguments.size())
                         continue;
@@ -5954,12 +6228,16 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                            !usesPointerAlias(method->arguments[argumentIndex]))
                             continue;
                         FunctionDefNode methodAdapter(
-                            methodNode->returnType, methodNode->name,
-                            methodNode->parameters, methodNode->body);
+                            methodNode->returnType,
+                            methodNode->name,
+                            methodNode->parameters,
+                            methodNode->body);
                         const size_t methodFormalIndex =
                             explicitParameters[argumentIndex].second;
                         if(functionMutatesPointerParameter(
-                               &methodAdapter, methodFormalIndex, methodNode,
+                               &methodAdapter,
+                               methodFormalIndex,
+                               methodNode,
                                visiting))
                             return true;
                     }
@@ -5981,17 +6259,18 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             if(auto* cexpr = dynamic_cast<CexprExpressionNode*>(expression))
                 return expressionCallsMutatingPointer(cexpr->expression);
             if(auto* list = dynamic_cast<ListLiteralNode*>(expression))
-                return list->elements && scansChildren(list->elements->elements);
+                return list->elements &&
+                       scansChildren(list->elements->elements);
             if(auto* tuple = dynamic_cast<TupleLiteralNode*>(expression))
-                return tuple->elements && scansChildren(tuple->elements->elements);
+                return tuple->elements &&
+                       scansChildren(tuple->elements->elements);
             if(auto* map = dynamic_cast<MapLiteralNode*>(expression))
             {
                 if(!map->entries)
                     return false;
                 for(auto* entry : map->entries->entries)
-                    if(entry &&
-                       (expressionCallsMutatingPointer(entry->key) ||
-                        expressionCallsMutatingPointer(entry->value)))
+                    if(entry && (expressionCallsMutatingPointer(entry->key) ||
+                                 expressionCallsMutatingPointer(entry->value)))
                         return true;
                 return false;
             }
@@ -6018,7 +6297,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             return false;
         };
 
-        scansStatements = [&](StatementListNode* statements) {
+        scansStatements = [&](StatementListNode* statements)
+        {
             if(!statements)
                 return false;
             for(auto* statement : statements->statements)
@@ -6026,20 +6306,18 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     return true;
             return false;
         };
-        scansStatement = [&](StatementNode* statement) {
+        scansStatement = [&](StatementNode* statement)
+        {
             if(!statement)
                 return false;
-            if(auto* assignment =
-                   dynamic_cast<DerefAssignmentNode*>(statement))
+            if(auto* assignment = dynamic_cast<DerefAssignmentNode*>(statement))
                 return usesPointerAlias(assignment->pointerExpr);
-            if(auto* assignment =
-                   dynamic_cast<FieldAssignmentNode*>(statement))
+            if(auto* assignment = dynamic_cast<FieldAssignmentNode*>(statement))
                 return assignment->target
                            ? usesPointerAlias(assignment->target)
                            : pointerAliases.count(assignment->structName) != 0;
             if(auto* declaration = dynamic_cast<LetDeclNode*>(statement))
-                return expressionCallsMutatingPointer(
-                    declaration->expression);
+                return expressionCallsMutatingPointer(declaration->expression);
             if(auto* declaration = dynamic_cast<VarDeclNode*>(statement))
                 return expressionCallsMutatingPointer(declaration->initExpr);
             if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
@@ -6087,15 +6365,14 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         visiting.erase(functionAndParameter);
         return mutates;
     };
-    auto argumentIsKnownSharedBorrow = [&](ExpressionNode* argument) {
-        return expressionIsKnownSharedBorrow(argument);
-    };
-    auto argumentCarriesLocalBorrow = [&](ExpressionNode* argument) {
+    auto argumentIsKnownSharedBorrow = [&](ExpressionNode* argument)
+    { return expressionIsKnownSharedBorrow(argument); };
+    auto argumentCarriesLocalBorrow = [&](ExpressionNode* argument)
+    {
         if(expressionCarriesLocalBorrow(argument))
             return true;
-        auto ownerIsLocal = [&](const std::string& owner) {
-            return !owner.empty() && variableScopeDepth.count(owner) != 0;
-        };
+        auto ownerIsLocal = [&](const std::string& owner)
+        { return !owner.empty() && variableScopeDepth.count(owner) != 0; };
         if(auto* address = dynamic_cast<UnaryOpNode*>(argument))
             if(address->op == UnaryOpNode::OP_ADDR ||
                address->op == UnaryOpNode::OP_ADDR_MUT)
@@ -6113,8 +6390,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     if(ownerIsLocal(owner))
                         return true;
         }
-        const std::string container =
-            resolveBorrowOwnerFromLValue(argument);
+        const std::string container = resolveBorrowOwnerFromLValue(argument);
         auto origins = aggregateBorrowOrigins.find(container);
         if(origins != aggregateBorrowOrigins.end())
             for(const auto& owner : origins->second)
@@ -6126,8 +6402,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     // while generating the body. Re-analyzing the call-site closure there can
     // corrupt generic closure return-type inference; this transfer is only
     // needed for ordinary concrete wrapper functions.
-    if(best->node && best->node->parameters &&
-       best->node->typeParams.empty() &&
+    if(best->node && best->node->parameters && best->node->typeParams.empty() &&
        best->node->boundClosureParameters.empty() &&
        best->node->closureSpecializationKey.empty())
         for(size_t parameterIndex = 0;
@@ -6137,22 +6412,24 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         {
             ParameterNode* parameter =
                 best->node->parameters->parameters[parameterIndex];
-            if(parameter &&
-               dynamic_cast<PointerTypeNode*>(parameter->type) &&
+            if(parameter && dynamic_cast<PointerTypeNode*>(parameter->type) &&
                !best->node->body && unsafeDepth == 0 &&
-               argumentCarriesLocalBorrow(
-                   node->arguments[parameterIndex]))
+               argumentCarriesLocalBorrow(node->arguments[parameterIndex]))
             {
                 reportError(
                     node->line,
                     "cannot pass a borrow of local storage to opaque pointer "
-                    "parameter '" + parameter->name +
+                    "parameter '" +
+                        parameter->name +
                         "' outside unsafe because the callee may retain it");
                 return nullptr;
             }
             std::set<std::pair<const void*, size_t>> visiting;
-            if(functionMutatesPointerParameter(best->node, parameterIndex,
-                                               best->node, visiting) &&
+            if(functionMutatesPointerParameter(
+                   best->node,
+                   parameterIndex,
+                   best->node,
+                   visiting) &&
                argumentIsKnownSharedBorrow(node->arguments[parameterIndex]))
             {
                 std::string argumentName = "argument";
@@ -6164,7 +6441,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     "cannot pass shared borrow '" + argumentName +
                         "' to mutating pointer parameter '" +
                         best->node->parameters->parameters[parameterIndex]
-                            ->name + "'");
+                            ->name +
+                        "'");
                 return nullptr;
             }
         }
@@ -6176,17 +6454,18 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             return false;
         ParameterNode* parameter =
             best->node->parameters->parameters[parameterIndex];
-        if(!parameter ||
-           !dynamic_cast<FunctionTypeNode*>(parameter->type))
+        if(!parameter || !dynamic_cast<FunctionTypeNode*>(parameter->type))
             return false;
 
-        auto conditionUsesParameter = [&](ExpressionNode* expression) {
+        auto conditionUsesParameter = [&](ExpressionNode* expression)
+        {
             std::set<std::string> usedIdentifiers;
             collect_used_idents(expression, usedIdentifiers);
             return usedIdentifiers.count(parameter->name) != 0;
         };
         std::function<bool(ExpressionNode*)> expressionIsNoEscape;
-        expressionIsNoEscape = [&](ExpressionNode* expression) {
+        expressionIsNoEscape = [&](ExpressionNode* expression)
+        {
             if(!expression || !conditionUsesParameter(expression))
                 return true;
             if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
@@ -6214,7 +6493,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 return expressionIsNoEscape(attempt->expression);
             return false;
         };
-        auto isDirectInvocation = [&](ExpressionNode* expression) {
+        auto isDirectInvocation = [&](ExpressionNode* expression)
+        {
             auto* call = dynamic_cast<FunctionCallNode*>(expression);
             if(!call || call->name != parameter->name)
                 return false;
@@ -6225,7 +6505,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         };
         std::function<bool(StatementNode*)> statementIsNoEscape;
         std::function<bool(StatementListNode*)> statementsAreNoEscape;
-        statementsAreNoEscape = [&](StatementListNode* statements) {
+        statementsAreNoEscape = [&](StatementListNode* statements)
+        {
             if(!statements)
                 return true;
             for(auto* statement : statements->statements)
@@ -6233,7 +6514,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     return false;
             return true;
         };
-        statementIsNoEscape = [&](StatementNode* statement) {
+        statementIsNoEscape = [&](StatementNode* statement)
+        {
             if(!statement)
                 return true;
             if(auto* expressionStatement =
@@ -6268,9 +6550,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                        statementIsNoEscape(attempt->catchBlock);
             if(auto* print = dynamic_cast<PrintNode*>(statement))
             {
-                auto argumentIsSafe = [&](ExpressionNode* expression) {
-                    return expressionIsNoEscape(expression);
-                };
+                auto argumentIsSafe = [&](ExpressionNode* expression)
+                { return expressionIsNoEscape(expression); };
                 for(auto* argument : print->arguments)
                     if(!argumentIsSafe(argument))
                         return false;
@@ -6283,9 +6564,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 return expressionIsNoEscape(assertion->condition);
             if(auto* assertion = dynamic_cast<AssertEqNode*>(statement))
             {
-                auto expressionIsSafe = [&](ExpressionNode* expression) {
-                    return expressionIsNoEscape(expression);
-                };
+                auto expressionIsSafe = [&](ExpressionNode* expression)
+                { return expressionIsNoEscape(expression); };
                 return expressionIsSafe(assertion->left) &&
                        expressionIsSafe(assertion->right);
             }
@@ -6294,7 +6574,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return statementsAreNoEscape(best->node->body);
     };
 
-    auto callableParameterIsDirectlyInvoked = [&](size_t parameterIndex) {
+    auto callableParameterIsDirectlyInvoked = [&](size_t parameterIndex)
+    {
         if(!best->node || !best->node->body || !best->node->parameters ||
            parameterIndex >= best->node->parameters->parameters.size())
             return false;
@@ -6302,13 +6583,15 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             best->node->parameters->parameters[parameterIndex];
         if(!parameter || !dynamic_cast<FunctionTypeNode*>(parameter->type))
             return false;
-        auto isDirectInvocation = [&](ExpressionNode* expression) {
+        auto isDirectInvocation = [&](ExpressionNode* expression)
+        {
             auto* call = dynamic_cast<FunctionCallNode*>(expression);
             return call && call->name == parameter->name;
         };
         std::function<bool(StatementNode*)> statementInvokes;
         std::function<bool(StatementListNode*)> statementsInvoke;
-        statementsInvoke = [&](StatementListNode* statements) {
+        statementsInvoke = [&](StatementListNode* statements)
+        {
             if(!statements)
                 return false;
             for(auto* statement : statements->statements)
@@ -6316,7 +6599,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     return true;
             return false;
         };
-        statementInvokes = [&](StatementNode* statement) {
+        statementInvokes = [&](StatementNode* statement)
+        {
             if(!statement)
                 return false;
             if(auto* expressionStatement =
@@ -6361,17 +6645,17 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return statementsInvoke(best->node->body);
     };
 
-    for(size_t argumentIndex = 0;
-        argumentIndex < node->arguments.size(); ++argumentIndex)
+    for(size_t argumentIndex = 0; argumentIndex < node->arguments.size();
+        ++argumentIndex)
     {
         if(dynamic_cast<ClosureNode*>(node->arguments[argumentIndex]))
         {
             if(!callableParameterIsNoEscape(argumentIndex))
             {
-                reportError(node->line,
-                            "cannot pass an inline closure to function '" +
-                                node->name +
-                                "' because that callback parameter may escape");
+                reportError(
+                    node->line,
+                    "cannot pass an inline closure to function '" + node->name +
+                        "' because that callback parameter may escape");
                 return nullptr;
             }
 
@@ -6384,15 +6668,16 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         auto callableType = functionTypeVariables.find(identifier->name);
         auto runtime = runtimeClosureVariables.find(identifier->name);
         auto declared = closureVariables.find(identifier->name);
-        const bool hasRuntimeAst =
-            runtime != runtimeClosureVariables.end() &&
-            declared != closureVariables.end() &&
-            runtime->second == declared->second && runtime->second;
+        const bool hasRuntimeAst = runtime != runtimeClosureVariables.end() &&
+                                   declared != closureVariables.end() &&
+                                   runtime->second == declared->second &&
+                                   runtime->second;
         if(callableType != functionTypeVariables.end() && !hasRuntimeAst)
         {
             auto* expectedType =
                 best->node && best->node->parameters &&
-                        argumentIndex < best->node->parameters->parameters.size()
+                        argumentIndex <
+                            best->node->parameters->parameters.size()
                     ? dynamic_cast<FunctionTypeNode*>(
                           best->node->parameters->parameters[argumentIndex]
                               ->type)
@@ -6400,18 +6685,21 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             if(!expectedType ||
                typeMangle(callableType->second) != typeMangle(expectedType))
             {
-                reportError(node->line,
-                            "callable argument '" + identifier->name +
-                                "' requires a matching fn(...) -> ... "
-                                "parameter on function '" + node->name + "'");
+                reportError(
+                    node->line,
+                    "callable argument '" + identifier->name +
+                        "' requires a matching fn(...) -> ... "
+                        "parameter on function '" +
+                        node->name + "'");
                 return nullptr;
             }
             if(!callableParameterIsNoEscape(argumentIndex))
             {
-                reportError(node->line,
-                            "cannot pass callable '" + identifier->name +
-                                "' to function '" + node->name +
-                                "' because that parameter may escape");
+                reportError(
+                    node->line,
+                    "cannot pass callable '" + identifier->name +
+                        "' to function '" + node->name +
+                        "' because that parameter may escape");
                 return nullptr;
             }
             continue;
@@ -6429,8 +6717,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 if(bound.second != runtime->second)
                     continue;
                 for(size_t parameterIndex = 0;
-                    parameterIndex <
-                    best->node->parameters->parameters.size();
+                    parameterIndex < best->node->parameters->parameters.size();
                     ++parameterIndex)
                 {
                     if(best->node->parameters->parameters[parameterIndex]
@@ -6448,11 +6735,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
            !owners->second.empty() &&
            !callableParameterIsNoEscape(argumentIndex))
         {
-            reportError(node->line, "cannot pass closure '" +
-                                        identifier->name +
-                                        "' to function '" + node->name +
-                                        "' because it borrows local variable '" +
-                                        *owners->second.begin() + "'");
+            reportError(
+                node->line,
+                "cannot pass closure '" + identifier->name + "' to function '" +
+                    node->name + "' because it borrows local variable '" +
+                    *owners->second.begin() + "'");
             return nullptr;
         }
         auto* expectedType =
@@ -6465,18 +6752,19 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         if(!expectedType || actualType == functionTypeVariables.end() ||
            typeMangle(actualType->second) != typeMangle(expectedType))
         {
-            reportError(node->line,
-                        "runtime closure values can only be passed to a "
-                        "matching fn(...) -> ... parameter or used as a "
-                        "generic callback");
+            reportError(
+                node->line,
+                "runtime closure values can only be passed to a "
+                "matching fn(...) -> ... parameter or used as a "
+                "generic callback");
             return nullptr;
         }
         if(!callableParameterIsNoEscape(argumentIndex))
         {
-            reportError(node->line,
-                        "cannot pass closure '" + identifier->name +
-                            "' to function '" + node->name +
-                            "' because that parameter may escape");
+            reportError(
+                node->line,
+                "cannot pass closure '" + identifier->name + "' to function '" +
+                    node->name + "' because that parameter may escape");
             return nullptr;
         }
         continue;
@@ -6555,8 +6843,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     if(auto* expressionStatement =
                            dynamic_cast<ExpressionStatementNode*>(statement))
                         expression = expressionStatement->expression;
-                    else if(auto* returnStatement =
-                                dynamic_cast<ReturnNode*>(statement))
+                    else if(
+                        auto* returnStatement =
+                            dynamic_cast<ReturnNode*>(statement))
                         expression = returnStatement->expression;
                     auto* invocation =
                         dynamic_cast<FunctionCallNode*>(expression);
@@ -6601,11 +6890,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
     if(isVarArg && argVals.size() < sourceParameterCount)
     {
-        reportError(node->line,
-                    "function '" + node->name + "' requires at least " +
-                        std::to_string(sourceParameterCount) +
-                        " argument(s), but " + std::to_string(argVals.size()) +
-                        " provided");
+        reportError(
+            node->line,
+            "function '" + node->name + "' requires at least " +
+                std::to_string(sourceParameterCount) + " argument(s), but " +
+                std::to_string(argVals.size()) + " provided");
         return nullptr;
     }
 
@@ -6613,7 +6902,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(best->node && best->node->parameters)
     {
         for(size_t i = 0; i < node->arguments.size() &&
-                           i < best->node->parameters->parameters.size();
+                          i < best->node->parameters->parameters.size();
             ++i)
         {
             auto* reference = dynamic_cast<ReferenceTypeNode*>(
@@ -6625,13 +6914,14 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                !sharedReferenceValues[i] &&
                callArgVals[i]->getType()->isPointerTy())
                 callArgVals[i] = builder.CreateLoad(
-                    callee->getArg(i)->getType(), callArgVals[i],
+                    callee->getArg(i)->getType(),
+                    callArgVals[i],
                     "shared.ref.arg");
         }
         for(const auto& bound : best->node->boundClosureParameters)
         {
             for(size_t i = 0; i < node->arguments.size() &&
-                               i < best->node->parameters->parameters.size();
+                              i < best->node->parameters->parameters.size();
                 ++i)
             {
                 if(best->node->parameters->parameters[i]->name != bound.first)
@@ -6664,10 +6954,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 auto captured = namedValues.find(capture.first);
                 if(captured == namedValues.end())
                 {
-                    reportError(node->line,
-                                "cannot pass captured variable '" +
-                                    capture.first +
-                                    "' to generic closure specialization");
+                    reportError(
+                        node->line,
+                        "cannot pass captured variable '" + capture.first +
+                            "' to generic closure specialization");
                     return nullptr;
                 }
                 llvm::Value* captureValue = captured->second;
@@ -6705,27 +6995,31 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             builder.CreateSExt(argVal, expectedType, "sext");
                     }
                 }
-                else if(actualType->isIntegerTy() &&
-                        expectedType->isFloatingPointTy())
+                else if(
+                    actualType->isIntegerTy() &&
+                    expectedType->isFloatingPointTy())
                 {
                     argVal =
                         builder.CreateSIToFP(argVal, expectedType, "sitofp");
                 }
-                else if(actualType->isFloatingPointTy() &&
-                        expectedType->isIntegerTy())
+                else if(
+                    actualType->isFloatingPointTy() &&
+                    expectedType->isIntegerTy())
                 {
                     argVal =
                         builder.CreateFPToSI(argVal, expectedType, "fptosi");
                 }
-                else if(actualType->isFloatingPointTy() &&
-                        expectedType->isFloatingPointTy())
+                else if(
+                    actualType->isFloatingPointTy() &&
+                    expectedType->isFloatingPointTy())
                 {
                     argVal =
                         builder.CreateFPCast(argVal, expectedType, "fpcast");
                 }
-                else if(best->node &&
-                        paramIdx <
-                            (size_t)best->node->parameters->parameters.size())
+                else if(
+                    best->node &&
+                    paramIdx <
+                        (size_t)best->node->parameters->parameters.size())
                 {
                     auto* declParam =
                         best->node->parameters->parameters[paramIdx];
@@ -6738,12 +7032,15 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         if(dynamic_cast<TraitObjectTypeNode*>(actualSemantic))
                         {
                             traitObjVal = coerceTraitObjectValue(
-                                argVal, expectedType, node->line);
+                                argVal,
+                                expectedType,
+                                node->line);
                         }
                         else
                         {
                             traitObjVal = buildTraitObjectValue(
-                                node->arguments[paramIdx], traitObj->traitName,
+                                node->arguments[paramIdx],
+                                traitObj->traitName,
                                 node->line);
                         }
                         if(!traitObjVal)
@@ -6788,11 +7085,12 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     else
                         expectedStr = "unknown";
 
-                    reportError(node->line,
-                                "argument " + std::to_string(paramIdx + 1) +
-                                    " of function '" + node->name +
-                                    "' has wrong type: expected '" +
-                                    expectedStr + "', got '" + actualStr + "'");
+                    reportError(
+                        node->line,
+                        "argument " + std::to_string(paramIdx + 1) +
+                            " of function '" + node->name +
+                            "' has wrong type: expected '" + expectedStr +
+                            "', got '" + actualStr + "'");
                     return nullptr;
                 }
             }
@@ -6816,9 +7114,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         unary && unary->op == UnaryOpNode::OP_ADDR_MUT;
                     if(!isRefMut)
                     {
-                        reportError(node->line, "parameter '" +
-                                                    declParam->name +
-                                                    "' expects &mut argument");
+                        reportError(
+                            node->line,
+                            "parameter '" + declParam->name +
+                                "' expects &mut argument");
                         return nullptr;
                     }
                 }
@@ -6838,9 +7137,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         }
         if(shouldConsume && paramIdx < node->arguments.size())
         {
-            consumeMoveFromExpression(node->arguments[paramIdx], node->line,
-                                      "passing argument to function '" +
-                                          node->name + "'");
+            consumeMoveFromExpression(
+                node->arguments[paramIdx],
+                node->line,
+                "passing argument to function '" + node->name + "'");
         }
 
         args.push_back(argVal);
@@ -6875,28 +7175,30 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                    declared != closureVariables.end() && runtime->second &&
                    runtime->second == declared->second)
                     applyRuntimeClosurePointerBorrowEffects(
-                        identifier->name, runtime->second, node->line);
+                        identifier->name,
+                        runtime->second,
+                        node->line);
                 continue;
             }
-            auto* inlineClosure = dynamic_cast<ClosureNode*>(
-                node->arguments[parameterIndex]);
+            auto* inlineClosure =
+                dynamic_cast<ClosureNode*>(node->arguments[parameterIndex]);
             if(!inlineClosure)
                 continue;
             std::function<bool(StatementListNode*)> assignsCapturedPointer;
             std::function<bool(StatementNode*)> statementAssignsCapturedPointer;
-            assignsCapturedPointer = [&](StatementListNode* statements) {
+            assignsCapturedPointer = [&](StatementListNode* statements)
+            {
                 if(!statements)
                     return false;
                 return std::any_of(
                     statements->statements.begin(),
                     statements->statements.end(),
-                    [&](StatementNode* statement) {
-                        return statementAssignsCapturedPointer(statement);
-                    });
+                    [&](StatementNode* statement)
+                    { return statementAssignsCapturedPointer(statement); });
             };
-            statementAssignsCapturedPointer = [&](StatementNode* statement) {
-                if(auto* assignment =
-                       dynamic_cast<AssignmentNode*>(statement))
+            statementAssignsCapturedPointer = [&](StatementNode* statement)
+            {
+                if(auto* assignment = dynamic_cast<AssignmentNode*>(statement))
                     return pointerElementTypes.count(assignment->name) != 0;
                 if(auto* block = dynamic_cast<BlockStatementNode*>(statement))
                     return assignsCapturedPointer(block->statements);
@@ -6922,13 +7224,18 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 continue;
             std::vector<std::pair<std::string, TypeNode*>> captures;
             TypeNode* closureReturnType = nullptr;
-            if(getRuntimeClosureCaptures(inlineClosure, captures,
-                                         closureReturnType))
+            if(getRuntimeClosureCaptures(
+                   inlineClosure,
+                   captures,
+                   closureReturnType))
             {
-                analyzeRuntimeClosurePointerBorrowEffects(inlineClosure,
-                                                          captures);
+                analyzeRuntimeClosurePointerBorrowEffects(
+                    inlineClosure,
+                    captures);
                 applyRuntimeClosurePointerBorrowEffects(
-                    "", inlineClosure, node->line);
+                    "",
+                    inlineClosure,
+                    node->line);
             }
         }
 
@@ -6964,9 +7271,10 @@ llvm::Function* CodeGenerator::generateClosureFn(
                 parameter ? parameterLLVMType(parameter->type) : nullptr;
             if(!parameterType)
             {
-                reportError(node->line,
-                            "runtime closure parameter has an unsupported "
-                            "type");
+                reportError(
+                    node->line,
+                    "runtime closure parameter has an unsupported "
+                    "type");
                 return nullptr;
             }
             closureParameters.push_back(parameterType);
@@ -6976,15 +7284,18 @@ llvm::Function* CodeGenerator::generateClosureFn(
                                             : llvm::Type::getVoidTy(context);
     if(!llvmReturnType)
     {
-        reportError(node->line,
-                    "runtime closure has an unsupported return type");
+        reportError(
+            node->line,
+            "runtime closure has an unsupported return type");
         return nullptr;
     }
-    llvm::FunctionType* closureFnType = llvm::FunctionType::get(
-        llvmReturnType, closureParameters, false);
-    llvm::Function* closureFn =
-        llvm::Function::Create(closureFnType, llvm::Function::PrivateLinkage,
-                               closureName, module.get());
+    llvm::FunctionType* closureFnType =
+        llvm::FunctionType::get(llvmReturnType, closureParameters, false);
+    llvm::Function* closureFn = llvm::Function::Create(
+        closureFnType,
+        llvm::Function::PrivateLinkage,
+        closureName,
+        module.get());
 
     // Save current codegen state so we can restore it after the closure body
     auto savedIP = builder.saveIP();
@@ -7086,15 +7397,16 @@ llvm::Function* CodeGenerator::generateClosureFn(
 
     if(captures && !captures->empty())
     {
-        std::vector<llvm::Type*> environmentFields(captures->size(),
-                                                   erasedPointerType);
+        std::vector<llvm::Type*>
+            environmentFields(captures->size(), erasedPointerType);
         llvm::StructType* environmentType =
             llvm::StructType::get(context, environmentFields);
         llvm::Value* environment = &*closureFn->arg_begin();
 #if LLVM_VERSION_MAJOR < 15
         environment = builder.CreateBitCast(
             environment,
-            llvm::PointerType::get(environmentType, 0), "closure.env.cast");
+            llvm::PointerType::get(environmentType, 0),
+            "closure.env.cast");
 #endif
         for(size_t i = 0; i < captures->size(); ++i)
         {
@@ -7102,19 +7414,25 @@ llvm::Function* CodeGenerator::generateClosureFn(
             llvm::Type* capturedType = getLLVMTypeFromNode(capture.second);
             if(!capturedType)
             {
-                reportError(node->line,
-                            "unsupported runtime closure capture type for '" +
-                                capture.first + "'");
+                reportError(
+                    node->line,
+                    "unsupported runtime closure capture type for '" +
+                        capture.first + "'");
                 continue;
             }
             llvm::Value* field = builder.CreateStructGEP(
-                environmentType, environment, static_cast<unsigned>(i),
+                environmentType,
+                environment,
+                static_cast<unsigned>(i),
                 capture.first + ".capture.field");
             llvm::Value* address = builder.CreateLoad(
-                erasedPointerType, field, capture.first + ".capture.address");
+                erasedPointerType,
+                field,
+                capture.first + ".capture.address");
 #if LLVM_VERSION_MAJOR < 15
             address = builder.CreateBitCast(
-                address, llvm::PointerType::get(capturedType, 0),
+                address,
+                llvm::PointerType::get(capturedType, 0),
                 capture.first + ".capture.typed");
 #endif
             namedValues[capture.first] = address;
@@ -7146,8 +7464,8 @@ llvm::Function* CodeGenerator::generateClosureFn(
                         multiarrayType->elementsMutable;
             }
             if(auto* mapType = dynamic_cast<MapTypeNode*>(capture.second))
-                mapKeyValueTypes[capture.first] = {
-                    mapType->keyType, mapType->valueType};
+                mapKeyValueTypes[capture.first] =
+                    {mapType->keyType, mapType->valueType};
             if(auto* tupleType = dynamic_cast<TupleTypeNode*>(capture.second))
                 tupleElementTypes[capture.first] =
                     tupleType->elementTypes->types;
@@ -7172,12 +7490,16 @@ llvm::Function* CodeGenerator::generateClosureFn(
                 inoutType ? getLLVMTypeFromNode(inoutType->elementType)
                           : argument->getType();
             llvm::AllocaInst* local = builder.CreateAlloca(
-                localType, nullptr, parameter->name + ".addr");
+                localType,
+                nullptr,
+                parameter->name + ".addr");
             llvm::Value* incoming = &*argument;
             if(inoutType)
             {
                 incoming = builder.CreateLoad(
-                    localType, argument, parameter->name + ".in");
+                    localType,
+                    argument,
+                    parameter->name + ".in");
                 inoutParams.push_back({argument, parameter->name});
             }
             else if(localType->isStructTy())
@@ -7209,11 +7531,9 @@ llvm::Function* CodeGenerator::generateClosureFn(
                         activeBorrowers[parameter->name].insert(
                             parameter->name);
                 }
-                if(auto* pointer =
-                       dynamic_cast<PointerTypeNode*>(semanticType))
+                if(auto* pointer = dynamic_cast<PointerTypeNode*>(semanticType))
                 {
-                    pointerElementTypes[parameter->name] =
-                        pointer->elementType;
+                    pointerElementTypes[parameter->name] = pointer->elementType;
                     pointerBorrowTarget[parameter->name] = parameter->name;
                     pointerBorrowPlace[parameter->name] = parameter->name;
                     pointerParameterBorrowOrigins.insert(parameter->name);
@@ -7238,34 +7558,35 @@ llvm::Function* CodeGenerator::generateClosureFn(
                         structVariableTypes[parameter->name] =
                             structType->structName;
                 }
-                else if(auto* genericStruct =
-                            dynamic_cast<GenericStructTypeRefNode*>(
-                                semanticType))
+                else if(
+                    auto* genericStruct =
+                        dynamic_cast<GenericStructTypeRefNode*>(semanticType))
                     structVariableTypes[parameter->name] =
                         genericStruct->getMangledName();
-                else if(auto* listType =
-                            dynamic_cast<GenericListTypeNode*>(semanticType))
+                else if(
+                    auto* listType =
+                        dynamic_cast<GenericListTypeNode*>(semanticType))
                 {
                     listElementTypes[parameter->name] = listType->elementType;
-                    if(auto* arrayType =
-                           dynamic_cast<ArrayTypeNode*>(listType))
-                        arrayCapacities[parameter->name] =
-                            arrayType->capacity;
+                    if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(listType))
+                        arrayCapacities[parameter->name] = arrayType->capacity;
                     if(auto* multiarrayType =
                            dynamic_cast<MultiArrayTypeNode*>(listType))
                         multiarrayMutability[parameter->name] =
                             multiarrayType->elementsMutable;
                 }
-                else if(auto* mapType =
-                            dynamic_cast<MapTypeNode*>(semanticType))
-                    mapKeyValueTypes[parameter->name] = {
-                        mapType->keyType, mapType->valueType};
-                else if(auto* tupleType =
-                            dynamic_cast<TupleTypeNode*>(semanticType))
+                else if(
+                    auto* mapType = dynamic_cast<MapTypeNode*>(semanticType))
+                    mapKeyValueTypes[parameter->name] =
+                        {mapType->keyType, mapType->valueType};
+                else if(
+                    auto* tupleType =
+                        dynamic_cast<TupleTypeNode*>(semanticType))
                     tupleElementTypes[parameter->name] =
                         tupleType->elementTypes->types;
-                else if(auto* pointerType =
-                            dynamic_cast<PointerTypeNode*>(semanticType))
+                else if(
+                    auto* pointerType =
+                        dynamic_cast<PointerTypeNode*>(semanticType))
                     pointerElementTypes[parameter->name] =
                         pointerType->elementType;
             }
@@ -7293,9 +7614,10 @@ llvm::Function* CodeGenerator::generateClosureFn(
             builder.CreateRetVoid();
         else
         {
-            reportError(node->line,
-                        "runtime closure with a value return must return on "
-                        "every reachable path");
+            reportError(
+                node->line,
+                "runtime closure with a value return must return on "
+                "every reachable path");
             builder.CreateRet(llvm::UndefValue::get(llvmReturnType));
         }
     }
@@ -7303,8 +7625,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     // Restore caller state
     namedValues = std::move(savedNamedValues);
     constantVariables = std::move(savedConstantVars);
-    immutableReferenceVariables =
-        std::move(savedImmutableReferenceVars);
+    immutableReferenceVariables = std::move(savedImmutableReferenceVars);
     movedVariables = std::move(savedMovedVars);
     pointerBorrowTarget = std::move(savedPtrBorrowTarget);
     pointerBorrowParent = std::move(savedPtrBorrowParent);
@@ -7336,8 +7657,7 @@ llvm::Function* CodeGenerator::generateClosureFn(
     functionTypeParameters = std::move(savedFunctionTypeParameters);
     pointerParameterBorrowOrigins =
         std::move(savedPointerParameterBorrowOrigins);
-    runtimeClosureBorrowOwners =
-        std::move(savedRuntimeClosureBorrowOwners);
+    runtimeClosureBorrowOwners = std::move(savedRuntimeClosureBorrowOwners);
     closureCaptureAliases = std::move(savedClosureCaptureAliases);
     closureCaptureTypes = std::move(savedClosureCaptureTypes);
     closureConstCaptures = std::move(savedClosureConstCaptures);
@@ -7364,7 +7684,8 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
             if(structDef && structDef->name == "thread")
             {
                 structVisibility[structDef->name] = std::make_pair(
-                    structDef->isPublic, structDef->sourceModule);
+                    structDef->isPublic,
+                    structDef->sourceModule);
                 generateStructDefinition(structDef);
                 break;
             }
@@ -7373,9 +7694,10 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
 
     if(node->arguments.size() < 1 || node->arguments.size() > 5)
     {
-        reportError(node->line,
-                    "thread_spawn expects a function name and up to 4 integer "
-                    "arguments");
+        reportError(
+            node->line,
+            "thread_spawn expects a function name and up to 4 integer "
+            "arguments");
         return nullptr;
     }
 
@@ -7387,14 +7709,16 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
         if(closureArg->parameters &&
            !closureArg->parameters->parameters.empty())
         {
-            reportError(node->line,
-                        "thread_spawn closure does not support parameters");
+            reportError(
+                node->line,
+                "thread_spawn closure does not support parameters");
             return nullptr;
         }
         if(node->arguments.size() != 1)
         {
-            reportError(node->line,
-                        "closure-based thread_spawn takes no extra arguments");
+            reportError(
+                node->line,
+                "closure-based thread_spawn takes no extra arguments");
             return nullptr;
         }
         targetFunc = generateClosureFn(closureArg);
@@ -7429,9 +7753,10 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
                     continue;
                 if(targetFunc && targetFunc != candidate)
                 {
-                    reportError(node->line, "ambiguous function: '" +
-                                                targetId->name +
-                                                "' for thread_spawn");
+                    reportError(
+                        node->line,
+                        "ambiguous function: '" + targetId->name +
+                            "' for thread_spawn");
                     return nullptr;
                 }
                 targetFunc = candidate;
@@ -7442,15 +7767,17 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
             targetFunc = module->getFunction(targetId->name);
         if(!targetFunc)
         {
-            reportError(node->line,
-                        "unknown function: '" + targetId->name + "'");
+            reportError(
+                node->line,
+                "unknown function: '" + targetId->name + "'");
             return nullptr;
         }
 
         if(targetFunc->arg_size() != argCount)
         {
-            reportError(node->line,
-                        "thread_spawn target argument count mismatch");
+            reportError(
+                node->line,
+                "thread_spawn target argument count mismatch");
             return nullptr;
         }
 
@@ -7507,9 +7834,11 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
     {
         llvm::FunctionType* wrapperType =
             llvm::FunctionType::get(ptrType, {ptrType}, false);
-        wrapperFunc =
-            llvm::Function::Create(wrapperType, llvm::Function::PrivateLinkage,
-                                   wrapperName, module.get());
+        wrapperFunc = llvm::Function::Create(
+            wrapperType,
+            llvm::Function::PrivateLinkage,
+            wrapperName,
+            module.get());
 
         auto savedIP = builder.saveIP();
         llvm::BasicBlock* entry =
@@ -7523,14 +7852,19 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
             for(size_t i = 0; i < argCount; ++i)
             {
                 llvm::Value* offset = llvm::ConstantInt::get(
-                    int64Type, static_cast<uint64_t>(i * 8), false);
-                llvm::Value* bytePtr =
-                    builder.CreateGEP(llvm::Type::getInt8Ty(context), basePtr,
-                                      offset, "thread.argbyte");
+                    int64Type,
+                    static_cast<uint64_t>(i * 8),
+                    false);
+                llvm::Value* bytePtr = builder.CreateGEP(
+                    llvm::Type::getInt8Ty(context),
+                    basePtr,
+                    offset,
+                    "thread.argbyte");
 #if LLVM_VERSION_MAJOR < 15
                 llvm::Type* int64PtrType = llvm::PointerType::get(int64Type, 0);
-                llvm::Value* argPtr = builder.CreateBitCast(
-                    bytePtr, int64PtrType, "thread.argptr");
+                llvm::Value* argPtr =
+                    builder
+                        .CreateBitCast(bytePtr, int64PtrType, "thread.argptr");
                 llvm::Value* argVal =
                     builder.CreateLoad(int64Type, argPtr, "thread.arg");
 #else
@@ -7547,11 +7881,15 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
                         unsigned srcBits = int64Type->getIntegerBitWidth();
                         unsigned dstBits = expectedType->getIntegerBitWidth();
                         if(srcBits > dstBits)
-                            callArg = builder.CreateTrunc(callArg, expectedType,
-                                                          "thread.trunc");
+                            callArg = builder.CreateTrunc(
+                                callArg,
+                                expectedType,
+                                "thread.trunc");
                         else if(srcBits < dstBits)
-                            callArg = builder.CreateSExt(callArg, expectedType,
-                                                         "thread.sext");
+                            callArg = builder.CreateSExt(
+                                callArg,
+                                expectedType,
+                                "thread.sext");
                     }
                     callArgs.push_back(callArg);
                 }
@@ -7568,8 +7906,9 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
                 }
                 else
                 {
-                    reportError(node->line,
-                                "thread_spawn arg type unsupported");
+                    reportError(
+                        node->line,
+                        "thread_spawn arg type unsupported");
                     return nullptr;
                 }
             }
@@ -7607,7 +7946,9 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
     if(argCount > 0)
     {
         llvm::Value* sizeVal = llvm::ConstantInt::get(
-            int64Type, static_cast<uint64_t>(argCount * 8), false);
+            int64Type,
+            static_cast<uint64_t>(argCount * 8),
+            false);
         argPtr = builder.CreateCall(mallocFunc, {sizeVal}, "thread.argptr");
         for(size_t i = 0; i < argCount; ++i)
         {
@@ -7642,12 +7983,15 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
                 }
                 if(rawIndex < 0)
                 {
-                    reportError(node->line,
-                                "thread_spawn handle arg missing raw field");
+                    reportError(
+                        node->line,
+                        "thread_spawn handle arg missing raw field");
                     return nullptr;
                 }
-                rawArg = builder.CreateExtractValue(rawArg, rawIndex,
-                                                    "thread.handle.raw");
+                rawArg = builder.CreateExtractValue(
+                    rawArg,
+                    rawIndex,
+                    "thread.handle.raw");
                 if(rawArg->getType() != int64Type)
                 {
                     rawArg =
@@ -7656,19 +8000,25 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
             }
             else
             {
-                reportError(node->line,
-                            "thread_spawn arguments must be integer or handle");
+                reportError(
+                    node->line,
+                    "thread_spawn arguments must be integer or handle");
                 return nullptr;
             }
             llvm::Value* offset = llvm::ConstantInt::get(
-                int64Type, static_cast<uint64_t>(i * 8), false);
-            llvm::Value* bytePtr =
-                builder.CreateGEP(llvm::Type::getInt8Ty(context), argPtr,
-                                  offset, "thread.argbyte");
+                int64Type,
+                static_cast<uint64_t>(i * 8),
+                false);
+            llvm::Value* bytePtr = builder.CreateGEP(
+                llvm::Type::getInt8Ty(context),
+                argPtr,
+                offset,
+                "thread.argbyte");
 #if LLVM_VERSION_MAJOR < 15
             llvm::Type* int64PtrType = llvm::PointerType::get(int64Type, 0);
-            llvm::Value* typedPtr = builder.CreateBitCast(bytePtr, int64PtrType,
-                                                          "thread.argptr_i64");
+            llvm::Value* typedPtr =
+                builder
+                    .CreateBitCast(bytePtr, int64PtrType, "thread.argptr_i64");
             builder.CreateStore(rawArg, typedPtr);
 #else
             builder.CreateStore(rawArg, bytePtr);
@@ -7676,8 +8026,9 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
         }
     }
 
-    builder.CreateCall(pthreadCreateFunc,
-                       {threadHandle, nullPtr, wrapperPtr, argPtr});
+    builder.CreateCall(
+        pthreadCreateFunc,
+        {threadHandle, nullPtr, wrapperPtr, argPtr});
 
     llvm::Value* threadVal =
         builder.CreateLoad(ptrType, threadHandle, "thread.value");
@@ -7720,12 +8071,14 @@ llvm::Value* CodeGenerator::generateThreadJoin(FunctionCallNode* node)
 #endif
     );
 
-    return builder.CreateCall(pthreadJoinFunc, {threadPtr, nullPtr},
-                              "thread.join");
+    return builder
+        .CreateCall(pthreadJoinFunc, {threadPtr, nullPtr}, "thread.join");
 }
 
-llvm::Value* CodeGenerator::buildHandleValue(const std::string& handleTypeName,
-                                             llvm::Value* rawHandle, int line)
+llvm::Value* CodeGenerator::buildHandleValue(
+    const std::string& handleTypeName,
+    llvm::Value* rawHandle,
+    int line)
 {
     if(!rawHandle)
         return nullptr;
@@ -7784,11 +8137,16 @@ llvm::Value* CodeGenerator::buildHandleValue(const std::string& handleTypeName,
 
     llvm::Value* handleVal = llvm::Constant::getNullValue(handleType);
     return builder.CreateInsertValue(
-        handleVal, rawVal, static_cast<unsigned>(rawIndex), "handle.raw");
+        handleVal,
+        rawVal,
+        static_cast<unsigned>(rawIndex),
+        "handle.raw");
 }
 
 llvm::Value* CodeGenerator::extractHandleValue(
-    ExpressionNode* expr, const std::string& expectedHandleType, int line)
+    ExpressionNode* expr,
+    const std::string& expectedHandleType,
+    int line)
 {
     llvm::Value* val = generateExpression(expr);
     if(!val)
@@ -7810,8 +8168,10 @@ llvm::Value* CodeGenerator::extractHandleValue(
         std::string structName = structType->getName().str();
         if(!expectedHandleType.empty() && structName != expectedHandleType)
         {
-            reportError(line, "handle type mismatch: expected " +
-                                  expectedHandleType + ", got " + structName);
+            reportError(
+                line,
+                "handle type mismatch: expected " + expectedHandleType +
+                    ", got " + structName);
             return nullptr;
         }
 
@@ -7880,9 +8240,9 @@ llvm::Value* CodeGenerator::generateMutexCreate(FunctionCallNode* node)
     return rawHandle;
 }
 
-llvm::Value*
-CodeGenerator::createInternalMutexHandle(bool recursive,
-                                         const std::string& namePrefix)
+llvm::Value* CodeGenerator::createInternalMutexHandle(
+    bool recursive,
+    const std::string& namePrefix)
 {
     initializePthreadFunctions();
     initializeStdlibFunctions();
@@ -7905,16 +8265,19 @@ CodeGenerator::createInternalMutexHandle(bool recursive,
     if(recursive)
     {
         llvm::Value* attrSize = llvm::ConstantInt::get(
-            int64Type, static_cast<uint64_t>(sizeof(pthread_mutexattr_t)),
+            int64Type,
+            static_cast<uint64_t>(sizeof(pthread_mutexattr_t)),
             false);
-        llvm::Value* attrMem = builder.CreateCall(mallocFunc, {attrSize},
-                                                  namePrefix + ".attr.mem");
+        llvm::Value* attrMem =
+            builder
+                .CreateCall(mallocFunc, {attrSize}, namePrefix + ".attr.mem");
         builder.CreateCall(pthreadMutexAttrInitFunc, {attrMem});
         builder.CreateCall(
             pthreadMutexAttrSetTypeFunc,
             {attrMem,
              llvm::ConstantInt::get(
-                 int32Type, static_cast<uint64_t>(PTHREAD_MUTEX_RECURSIVE),
+                 int32Type,
+                 static_cast<uint64_t>(PTHREAD_MUTEX_RECURSIVE),
                  false)});
         builder.CreateCall(pthreadMutexInitFunc, {mutexMem, attrMem});
         builder.CreateCall(pthreadMutexAttrDestroyFunc, {attrMem});
@@ -7928,8 +8291,9 @@ CodeGenerator::createInternalMutexHandle(bool recursive,
     return builder.CreatePtrToInt(mutexMem, int64Type, namePrefix + ".handle");
 }
 
-void CodeGenerator::destroyInternalMutexHandle(llvm::Value* rawHandle,
-                                               const std::string& namePrefix)
+void CodeGenerator::destroyInternalMutexHandle(
+    llvm::Value* rawHandle,
+    const std::string& namePrefix)
 {
     if(!rawHandle)
         return;
@@ -7951,7 +8315,9 @@ void CodeGenerator::destroyInternalMutexHandle(llvm::Value* rawHandle,
 }
 
 llvm::Value* CodeGenerator::ensurePropertyMutexHandle(
-    llvm::Value* handleSlotPtr, bool recursive, const std::string& namePrefix)
+    llvm::Value* handleSlotPtr,
+    bool recursive,
+    const std::string& namePrefix)
 {
     if(!handleSlotPtr)
         return nullptr;
@@ -7969,7 +8335,8 @@ llvm::Value* CodeGenerator::ensurePropertyMutexHandle(
     llvm::BasicBlock* doneBB =
         llvm::BasicBlock::Create(context, namePrefix + ".done", curFn);
     llvm::Value* hasHandle = builder.CreateICmpNE(
-        currentHandle, llvm::ConstantInt::get(int64Type, 0),
+        currentHandle,
+        llvm::ConstantInt::get(int64Type, 0),
         namePrefix + ".has_handle");
     builder.CreateCondBr(hasHandle, doneBB, initBB);
 
@@ -7977,8 +8344,11 @@ llvm::Value* CodeGenerator::ensurePropertyMutexHandle(
     llvm::Value* candidate =
         createInternalMutexHandle(recursive, namePrefix + ".new");
     auto* cmpxchg = builder.CreateAtomicCmpXchg(
-        handleSlotPtr, llvm::ConstantInt::get(int64Type, 0), candidate,
-        llvm::Align(8), llvm::AtomicOrdering::SequentiallyConsistent,
+        handleSlotPtr,
+        llvm::ConstantInt::get(int64Type, 0),
+        candidate,
+        llvm::Align(8),
+        llvm::AtomicOrdering::SequentiallyConsistent,
         llvm::AtomicOrdering::SequentiallyConsistent);
     cmpxchg->setWeak(false);
     llvm::Value* installed =
@@ -8059,8 +8429,8 @@ llvm::Value* CodeGenerator::generateMutexUnlock(FunctionCallNode* node)
 
     llvm::Value* mutexPtr =
         builder.CreateIntToPtr(handleVal, ptrType, "mutex.ptr");
-    return builder.CreateCall(pthreadMutexUnlockFunc, {mutexPtr},
-                              "mutex.unlock");
+    return builder
+        .CreateCall(pthreadMutexUnlockFunc, {mutexPtr}, "mutex.unlock");
 }
 
 llvm::Value* CodeGenerator::generateMutexDestroy(FunctionCallNode* node)
@@ -8089,8 +8459,9 @@ llvm::Value* CodeGenerator::generateMutexDestroy(FunctionCallNode* node)
 
     llvm::Value* mutexPtr =
         builder.CreateIntToPtr(handleVal, ptrType, "mutex.ptr");
-    llvm::Value* result = builder.CreateCall(pthreadMutexDestroyFunc,
-                                             {mutexPtr}, "mutex.destroy");
+    llvm::Value* result =
+        builder
+            .CreateCall(pthreadMutexDestroyFunc, {mutexPtr}, "mutex.destroy");
     builder.CreateCall(freeFunc, {mutexPtr});
     return result;
 }
@@ -8238,7 +8609,10 @@ llvm::Value* CodeGenerator::generateAtomicI64Add(FunctionCallNode* node)
     ptr = builder.CreateBitCast(ptr, int64PtrType, "atomic.ptr_i64");
 #endif
     return builder.CreateAtomicRMW(
-        llvm::AtomicRMWInst::Add, ptr, addVal, llvm::Align(8),
+        llvm::AtomicRMWInst::Add,
+        ptr,
+        addVal,
+        llvm::Align(8),
         llvm::AtomicOrdering::SequentiallyConsistent);
 }
 
@@ -8265,8 +8639,9 @@ llvm::Value* CodeGenerator::generateAtomicI64Free(FunctionCallNode* node)
        globalNamedValues.find(freeOwner) == globalNamedValues.end() &&
        isVariableMoved(freeOwner))
     {
-        reportError(node->line, "double free or use-after-free of value: '" +
-                                    freeOwner + "'");
+        reportError(
+            node->line,
+            "double free or use-after-free of value: '" + freeOwner + "'");
         return nullptr;
     }
     llvm::Value* handleVal =

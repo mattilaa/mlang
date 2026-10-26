@@ -5,7 +5,8 @@
 #include <string_view>
 #include <vector>
 
-namespace mlang {
+namespace mlang
+{
 
 inline std::string normalize_region_arch_name(std::string_view arch)
 {
@@ -52,14 +53,17 @@ inline std::string host_arch_region_name()
 
 inline bool host_platform_is_posix()
 {
-#if defined(__unix__) || defined(__unix) || defined(__APPLE__) || defined(__linux__)
+#if defined(__unix__) || defined(__unix) || defined(__APPLE__) ||              \
+    defined(__linux__)
     return true;
 #else
     return false;
 #endif
 }
 
-inline bool region_tag_matches(std::string_view tag, std::string_view targetArch)
+inline bool region_tag_matches(
+    std::string_view tag,
+    std::string_view targetArch)
 {
     std::string arch = normalize_region_arch_name(targetArch);
     if(arch.empty())
@@ -79,8 +83,10 @@ inline bool region_tag_matches(std::string_view tag, std::string_view targetArch
     return false;
 }
 
-inline bool parse_region_tag(std::string_view trimmed, bool& isClosing,
-                             std::string& tag)
+inline bool parse_region_tag(
+    std::string_view trimmed,
+    bool& isClosing,
+    std::string& tag)
 {
     if(trimmed.size() < 3 || trimmed.front() != '[' || trimmed.back() != ']')
         return false;
@@ -108,8 +114,9 @@ inline bool parse_region_tag(std::string_view trimmed, bool& isClosing,
     return false;
 }
 
-inline std::string preprocess_conditional_regions(std::string_view text,
-                                                  std::string_view targetArch)
+inline std::string preprocess_conditional_regions(
+    std::string_view text,
+    std::string_view targetArch)
 {
     std::string output;
     output.reserve(text.size());
@@ -148,8 +155,8 @@ inline std::string preprocess_conditional_regions(std::string_view text,
             else
             {
                 const bool parentActive = activeStack.back();
-                activeStack.push_back(parentActive &&
-                                      region_tag_matches(tag, targetArch));
+                activeStack.push_back(
+                    parentActive && region_tag_matches(tag, targetArch));
             }
             if(hasNewline)
                 output.push_back('\n');

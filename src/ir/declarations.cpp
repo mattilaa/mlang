@@ -9,8 +9,8 @@
 #include <algorithm>
 #include <functional>
 
-using mlang::ir_detail::common::Helpers;
 using mlang::ir_detail::ast_analysis::collect_used_idents;
+using mlang::ir_detail::common::Helpers;
 
 bool CodeGenerator::getRuntimeClosureCaptures(
     ClosureNode* closure,
@@ -56,13 +56,13 @@ bool CodeGenerator::getRuntimeClosureCaptures(
                 break;
             }
             auto* slot = createEntryBlockAlloca(
-                builder.GetInsertBlock()->getParent(), llvmType,
+                builder.GetInsertBlock()->getParent(),
+                llvmType,
                 parameter->name + ".infer.addr");
             namedValues[parameter->name] = slot;
             variableScopeDepth[parameter->name] = currentScopeDepth();
             TypeNode* semanticType = parameter->type;
-            if(auto* reference =
-                   dynamic_cast<ReferenceTypeNode*>(semanticType))
+            if(auto* reference = dynamic_cast<ReferenceTypeNode*>(semanticType))
                 semanticType = reference->elementType;
             variableTypes[parameter->name] = semanticType->kind;
             if(auto* functionType =
@@ -71,8 +71,9 @@ bool CodeGenerator::getRuntimeClosureCaptures(
             if(auto* structType =
                    dynamic_cast<StructTypeRefNode*>(semanticType))
                 structVariableTypes[parameter->name] = structType->structName;
-            else if(auto* genericStruct =
-                        dynamic_cast<GenericStructTypeRefNode*>(semanticType))
+            else if(
+                auto* genericStruct =
+                    dynamic_cast<GenericStructTypeRefNode*>(semanticType))
                 structVariableTypes[parameter->name] =
                     genericStruct->getMangledName();
             if(auto* listType =
@@ -87,16 +88,13 @@ bool CodeGenerator::getRuntimeClosureCaptures(
                         multiarrayType->elementsMutable;
             }
             if(auto* mapType = dynamic_cast<MapTypeNode*>(semanticType))
-                mapKeyValueTypes[parameter->name] = {
-                    mapType->keyType, mapType->valueType};
-            if(auto* tupleType =
-                   dynamic_cast<TupleTypeNode*>(semanticType))
+                mapKeyValueTypes[parameter->name] =
+                    {mapType->keyType, mapType->valueType};
+            if(auto* tupleType = dynamic_cast<TupleTypeNode*>(semanticType))
                 tupleElementTypes[parameter->name] =
                     tupleType->elementTypes->types;
-            if(auto* pointerType =
-                   dynamic_cast<PointerTypeNode*>(semanticType))
-                pointerElementTypes[parameter->name] =
-                    pointerType->elementType;
+            if(auto* pointerType = dynamic_cast<PointerTypeNode*>(semanticType))
+                pointerElementTypes[parameter->name] = pointerType->elementType;
         }
     }
 
@@ -109,20 +107,20 @@ bool CodeGenerator::getRuntimeClosureCaptures(
     {
         if(auto* let = dynamic_cast<LetDeclNode*>(statement))
         {
-            TypeNode* localType = let->type
-                                      ? cloneTypeNode(let->type)
-                                      : inferExpressionTypeNode(let->expression,
-                                                                closure->line);
+            TypeNode* localType =
+                let->type
+                    ? cloneTypeNode(let->type)
+                    : inferExpressionTypeNode(let->expression, closure->line);
             if(localType)
                 inferredLocalScopes.back()[let->name] = localType;
             return;
         }
         if(auto* variable = dynamic_cast<VarDeclNode*>(statement))
         {
-            TypeNode* localType = variable->type
-                                      ? cloneTypeNode(variable->type)
-                                      : inferExpressionTypeNode(
-                                            variable->initExpr, closure->line);
+            TypeNode* localType = variable->type ? cloneTypeNode(variable->type)
+                                                 : inferExpressionTypeNode(
+                                                       variable->initExpr,
+                                                       closure->line);
             if(localType)
                 inferredLocalScopes.back()[variable->name] = localType;
             return;
@@ -139,7 +137,8 @@ bool CodeGenerator::getRuntimeClosureCaptures(
                    dynamic_cast<IdentifierNode*>(ret->expression))
             {
                 for(auto scope = inferredLocalScopes.rbegin();
-                    scope != inferredLocalScopes.rend(); ++scope)
+                    scope != inferredLocalScopes.rend();
+                    ++scope)
                 {
                     auto local = scope->find(identifier->name);
                     if(local != scope->end())
@@ -150,8 +149,8 @@ bool CodeGenerator::getRuntimeClosureCaptures(
                 }
             }
             if(!inferred)
-                inferred = inferExpressionTypeNode(ret->expression,
-                                                   closure->line);
+                inferred =
+                    inferExpressionTypeNode(ret->expression, closure->line);
             if(!inferred)
             {
                 returnTypesValid = false;
@@ -236,9 +235,10 @@ bool CodeGenerator::getRuntimeClosureCaptures(
     multiarrayMutability = std::move(savedMultiarrayMutability);
     if(!returnTypesValid || (sawValueReturn && sawVoidReturn))
     {
-        reportError(closure->line,
-                    "runtime closure return expressions must have one "
-                    "consistent, inferable type");
+        reportError(
+            closure->line,
+            "runtime closure return expressions must have one "
+            "consistent, inferable type");
         return false;
     }
     if(!sawValueReturn)
@@ -258,9 +258,9 @@ bool CodeGenerator::getRuntimeClosureCaptures(
         for(const auto& movedPlace : movedVariables)
             if(borrowPlacesOverlap(name, movedPlace))
             {
-                reportError(closure->line,
-                            "cannot capture moved value: '" + movedPlace +
-                                "'");
+                reportError(
+                    closure->line,
+                    "cannot capture moved value: '" + movedPlace + "'");
                 return false;
             }
 
@@ -278,7 +278,8 @@ bool CodeGenerator::getRuntimeClosureCaptures(
 }
 
 ClosureNode* CodeGenerator::contextualizeClosure(
-    ClosureNode* closure, FunctionTypeNode* expectedType)
+    ClosureNode* closure,
+    FunctionTypeNode* expectedType)
 {
     if(!closure || !expectedType)
         return closure;
@@ -286,14 +287,14 @@ ClosureNode* CodeGenerator::contextualizeClosure(
         expectedType->parameterTypes
             ? expectedType->parameterTypes->types.size()
             : 0;
-    const size_t actualCount = closure->parameters
-                                   ? closure->parameters->parameters.size()
-                                   : 0;
+    const size_t actualCount =
+        closure->parameters ? closure->parameters->parameters.size() : 0;
     if(expectedCount != actualCount)
     {
-        reportError(closure->line,
-                    "inline closure parameter count does not match its "
-                    "callable type");
+        reportError(
+            closure->line,
+            "inline closure parameter count does not match its "
+            "callable type");
         return nullptr;
     }
 
@@ -306,9 +307,10 @@ ClosureNode* CodeGenerator::contextualizeClosure(
            (original->type &&
             typeMangle(original->type) != typeMangle(expected)))
         {
-            reportError(closure->line,
-                        "inline closure parameter type does not match its "
-                        "callable type");
+            reportError(
+                closure->line,
+                "inline closure parameter type does not match its "
+                "callable type");
             return nullptr;
         }
         auto* parameter = new ParameterNode(
@@ -323,8 +325,9 @@ ClosureNode* CodeGenerator::contextualizeClosure(
     return result;
 }
 
-bool CodeGenerator::isClosureReturnTypeCompatible(TypeNode* inferredType,
-                                                  TypeNode* expectedType)
+bool CodeGenerator::isClosureReturnTypeCompatible(
+    TypeNode* inferredType,
+    TypeNode* expectedType)
 {
     if(!inferredType || !expectedType)
         return false;
@@ -349,11 +352,11 @@ void CodeGenerator::analyzeRuntimeClosurePointerBorrowEffects(
     for(const auto& capture : captures)
         if(dynamic_cast<PointerTypeNode*>(capture.second))
             capturedPointers.insert(capture.first);
-    auto& pointerBorrowEffects =
-        runtimeClosurePointerBorrowEffects[closure];
+    auto& pointerBorrowEffects = runtimeClosurePointerBorrowEffects[closure];
     pointerBorrowEffects.clear();
-    using ClosurePointerOrigins = std::map<
-        std::string, std::vector<RuntimeClosurePointerBorrowEffect>>;
+    using ClosurePointerOrigins =
+        std::map<std::string, std::vector<RuntimeClosurePointerBorrowEffect>>;
+
     struct ClosurePointerPath
     {
         ClosurePointerOrigins origins;
@@ -366,13 +369,19 @@ void CodeGenerator::analyzeRuntimeClosurePointerBorrowEffects(
             Throw
         } exit = Exit::Normal;
     };
+
     std::vector<ClosurePointerPath> possibleOrigins(1);
     std::set<std::string> assignedPointers;
-    auto mergePaths = [&](std::vector<ClosurePointerPath>& paths) {
+    auto mergePaths = [&](std::vector<ClosurePointerPath>& paths)
+    {
         std::vector<ClosurePointerPath> merged;
-        auto appendUnique = [](auto& destination, const auto& effect) {
+        auto appendUnique = [](auto& destination, const auto& effect)
+        {
             auto duplicate = std::find_if(
-                destination.begin(), destination.end(), [&](const auto& item) {
+                destination.begin(),
+                destination.end(),
+                [&](const auto& item)
+                {
                     return item.expression == effect.expression &&
                            item.preserveIncoming == effect.preserveIncoming;
                 });
@@ -382,9 +391,10 @@ void CodeGenerator::analyzeRuntimeClosurePointerBorrowEffects(
         for(const auto& path : paths)
         {
             auto existing = std::find_if(
-                merged.begin(), merged.end(), [&](const auto& candidate) {
-                    return candidate.exit == path.exit;
-                });
+                merged.begin(),
+                merged.end(),
+                [&](const auto& candidate)
+                { return candidate.exit == path.exit; });
             if(existing == merged.end())
             {
                 merged.push_back(path);
@@ -402,14 +412,22 @@ void CodeGenerator::analyzeRuntimeClosurePointerBorrowEffects(
                 if(incoming == path.origins.end())
                 {
                     RuntimeClosurePointerBorrowEffect preserve{
-                        pointerName, nullptr, closure->line, false, true};
+                        pointerName,
+                        nullptr,
+                        closure->line,
+                        false,
+                        true};
                     appendUnique(alternatives, preserve);
                     continue;
                 }
                 if(alternatives.empty())
                 {
                     RuntimeClosurePointerBorrowEffect preserve{
-                        pointerName, nullptr, closure->line, false, true};
+                        pointerName,
+                        nullptr,
+                        closure->line,
+                        false,
+                        true};
                     appendUnique(alternatives, preserve);
                 }
                 for(const auto& effect : incoming->second)
@@ -423,7 +441,8 @@ void CodeGenerator::analyzeRuntimeClosurePointerBorrowEffects(
     std::function<void(StatementNode*, std::vector<ClosurePointerPath>&)>
         analyzeStatement;
     analyzeList = [&](StatementListNode* statements,
-                      std::vector<ClosurePointerPath>& states) {
+                      std::vector<ClosurePointerPath>& states)
+    {
         if(!statements)
             return;
         for(auto* statement : statements->statements)
@@ -432,9 +451,11 @@ void CodeGenerator::analyzeRuntimeClosurePointerBorrowEffects(
             mergePaths(states);
         }
     };
-    analyzeStatement = [&](StatementNode* statement,
-                           std::vector<ClosurePointerPath>& states) {
-        auto setExit = [&](ClosurePointerPath::Exit exit) {
+    analyzeStatement =
+        [&](StatementNode* statement, std::vector<ClosurePointerPath>& states)
+    {
+        auto setExit = [&](ClosurePointerPath::Exit exit)
+        {
             for(auto& state : states)
                 if(state.exit == ClosurePointerPath::Exit::Normal)
                     state.exit = exit;
@@ -467,12 +488,16 @@ void CodeGenerator::analyzeRuntimeClosurePointerBorrowEffects(
             if(auto* address =
                    dynamic_cast<UnaryOpNode*>(assignment->expression))
                 isMutable = address->op == UnaryOpNode::OP_ADDR_MUT;
-            else if(auto* source = dynamic_cast<IdentifierNode*>(
-                        assignment->expression))
+            else if(
+                auto* source =
+                    dynamic_cast<IdentifierNode*>(assignment->expression))
                 isMutable = isMutBorrower(source->name);
             RuntimeClosurePointerBorrowEffect effect{
-                assignment->name, assignment->expression, assignment->line,
-                isMutable, false};
+                assignment->name,
+                assignment->expression,
+                assignment->line,
+                isMutable,
+                false};
             assignedPointers.insert(assignment->name);
             for(auto& state : states)
                 if(state.exit == ClosurePointerPath::Exit::Normal)
@@ -494,15 +519,15 @@ void CodeGenerator::analyzeRuntimeClosurePointerBorrowEffects(
             {
                 auto elseStates = incoming;
                 analyzeStatement(conditional->elseIfBranch, elseStates);
-                states.insert(states.end(), elseStates.begin(),
-                              elseStates.end());
+                states
+                    .insert(states.end(), elseStates.begin(), elseStates.end());
             }
             else if(conditional->elseBranch)
             {
                 auto elseStates = incoming;
                 analyzeList(conditional->elseBranch, elseStates);
-                states.insert(states.end(), elseStates.begin(),
-                              elseStates.end());
+                states
+                    .insert(states.end(), elseStates.begin(), elseStates.end());
             }
             else
                 states.insert(states.end(), incoming.begin(), incoming.end());
@@ -518,15 +543,15 @@ void CodeGenerator::analyzeRuntimeClosurePointerBorrowEffects(
             {
                 auto elseStates = incoming;
                 analyzeStatement(conditional->elseIfBranch, elseStates);
-                states.insert(states.end(), elseStates.begin(),
-                              elseStates.end());
+                states
+                    .insert(states.end(), elseStates.begin(), elseStates.end());
             }
             else if(conditional->elseBranch)
             {
                 auto elseStates = incoming;
                 analyzeList(conditional->elseBranch, elseStates);
-                states.insert(states.end(), elseStates.begin(),
-                              elseStates.end());
+                states
+                    .insert(states.end(), elseStates.begin(), elseStates.end());
             }
             else
                 states.insert(states.end(), incoming.begin(), incoming.end());
@@ -564,8 +589,7 @@ void CodeGenerator::analyzeRuntimeClosurePointerBorrowEffects(
             if(tryCatch->catchBlock)
                 analyzeList(tryCatch->catchBlock->statements, catchStates);
             states = std::move(tryStates);
-            states.insert(states.end(), catchStates.begin(),
-                          catchStates.end());
+            states.insert(states.end(), catchStates.begin(), catchStates.end());
         }
     };
     analyzeList(closure->body, possibleOrigins);
@@ -598,10 +622,11 @@ void CodeGenerator::analyzeRuntimeClosurePointerBorrowEffects(
     }
 }
 
-bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
-                                                   ClosureNode* closure,
-                                                   int line,
-                                                   FunctionTypeNode* expectedType)
+bool CodeGenerator::tryGenerateRuntimeClosureValue(
+    const std::string& name,
+    ClosureNode* closure,
+    int line,
+    FunctionTypeNode* expectedType)
 {
     std::vector<std::pair<std::string, TypeNode*>> captures;
     TypeNode* inferredReturnType = nullptr;
@@ -612,11 +637,11 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
     for(const auto& capture : captures)
         if(dynamic_cast<PointerTypeNode*>(capture.second))
             capturedPointers.insert(capture.first);
-    auto& pointerBorrowEffects =
-        runtimeClosurePointerBorrowEffects[closure];
+    auto& pointerBorrowEffects = runtimeClosurePointerBorrowEffects[closure];
     pointerBorrowEffects.clear();
-    using ClosurePointerOrigins = std::map<
-        std::string, std::vector<RuntimeClosurePointerBorrowEffect>>;
+    using ClosurePointerOrigins =
+        std::map<std::string, std::vector<RuntimeClosurePointerBorrowEffect>>;
+
     struct ClosurePointerPath
     {
         ClosurePointerOrigins origins;
@@ -629,13 +654,19 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
             Throw
         } exit = Exit::Normal;
     };
+
     std::vector<ClosurePointerPath> possibleOrigins(1);
     std::set<std::string> assignedPointers;
-    auto mergePaths = [&](std::vector<ClosurePointerPath>& paths) {
+    auto mergePaths = [&](std::vector<ClosurePointerPath>& paths)
+    {
         std::vector<ClosurePointerPath> merged;
-        auto appendUnique = [](auto& destination, const auto& effect) {
+        auto appendUnique = [](auto& destination, const auto& effect)
+        {
             auto duplicate = std::find_if(
-                destination.begin(), destination.end(), [&](const auto& item) {
+                destination.begin(),
+                destination.end(),
+                [&](const auto& item)
+                {
                     return item.expression == effect.expression &&
                            item.preserveIncoming == effect.preserveIncoming;
                 });
@@ -645,9 +676,10 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
         for(const auto& path : paths)
         {
             auto existing = std::find_if(
-                merged.begin(), merged.end(), [&](const auto& candidate) {
-                    return candidate.exit == path.exit;
-                });
+                merged.begin(),
+                merged.end(),
+                [&](const auto& candidate)
+                { return candidate.exit == path.exit; });
             if(existing == merged.end())
             {
                 merged.push_back(path);
@@ -666,14 +698,22 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
                 if(incoming == path.origins.end())
                 {
                     RuntimeClosurePointerBorrowEffect preserve{
-                        pointerName, nullptr, closure->line, false, true};
+                        pointerName,
+                        nullptr,
+                        closure->line,
+                        false,
+                        true};
                     appendUnique(alternatives, preserve);
                     continue;
                 }
                 if(alternatives.empty())
                 {
                     RuntimeClosurePointerBorrowEffect preserve{
-                        pointerName, nullptr, closure->line, false, true};
+                        pointerName,
+                        nullptr,
+                        closure->line,
+                        false,
+                        true};
                     appendUnique(alternatives, preserve);
                 }
                 for(const auto& effect : incoming->second)
@@ -687,7 +727,8 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
     std::function<void(StatementNode*, std::vector<ClosurePointerPath>&)>
         analyzeStatement;
     analyzeList = [&](StatementListNode* statements,
-                      std::vector<ClosurePointerPath>& states) {
+                      std::vector<ClosurePointerPath>& states)
+    {
         if(!statements)
             return;
         for(auto* statement : statements->statements)
@@ -696,8 +737,9 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
             mergePaths(states);
         }
     };
-    analyzeStatement = [&](StatementNode* statement,
-                           std::vector<ClosurePointerPath>& states) {
+    analyzeStatement =
+        [&](StatementNode* statement, std::vector<ClosurePointerPath>& states)
+    {
         if(dynamic_cast<ReturnNode*>(statement))
         {
             for(auto& state : states)
@@ -734,12 +776,16 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
             if(auto* address =
                    dynamic_cast<UnaryOpNode*>(assignment->expression))
                 isMutable = address->op == UnaryOpNode::OP_ADDR_MUT;
-            else if(auto* source = dynamic_cast<IdentifierNode*>(
-                        assignment->expression))
+            else if(
+                auto* source =
+                    dynamic_cast<IdentifierNode*>(assignment->expression))
                 isMutable = isMutBorrower(source->name);
             RuntimeClosurePointerBorrowEffect effect{
-                assignment->name, assignment->expression, assignment->line,
-                isMutable, false};
+                assignment->name,
+                assignment->expression,
+                assignment->line,
+                isMutable,
+                false};
             assignedPointers.insert(assignment->name);
             for(auto& state : states)
                 if(state.exit == ClosurePointerPath::Exit::Normal)
@@ -764,15 +810,15 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
             {
                 auto elseStates = incoming;
                 analyzeStatement(conditional->elseIfBranch, elseStates);
-                states.insert(states.end(), elseStates.begin(),
-                              elseStates.end());
+                states
+                    .insert(states.end(), elseStates.begin(), elseStates.end());
             }
             else if(conditional->elseBranch)
             {
                 auto elseStates = incoming;
                 analyzeList(conditional->elseBranch, elseStates);
-                states.insert(states.end(), elseStates.begin(),
-                              elseStates.end());
+                states
+                    .insert(states.end(), elseStates.begin(), elseStates.end());
             }
             else
                 states.insert(states.end(), incoming.begin(), incoming.end());
@@ -788,15 +834,15 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
             {
                 auto elseStates = incoming;
                 analyzeStatement(conditional->elseIfBranch, elseStates);
-                states.insert(states.end(), elseStates.begin(),
-                              elseStates.end());
+                states
+                    .insert(states.end(), elseStates.begin(), elseStates.end());
             }
             else if(conditional->elseBranch)
             {
                 auto elseStates = incoming;
                 analyzeList(conditional->elseBranch, elseStates);
-                states.insert(states.end(), elseStates.begin(),
-                              elseStates.end());
+                states
+                    .insert(states.end(), elseStates.begin(), elseStates.end());
             }
             else
                 states.insert(states.end(), incoming.begin(), incoming.end());
@@ -834,8 +880,7 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
             if(tryCatch->catchBlock)
                 analyzeList(tryCatch->catchBlock->statements, catchStates);
             states = std::move(tryStates);
-            states.insert(states.end(), catchStates.begin(),
-                          catchStates.end());
+            states.insert(states.end(), catchStates.begin(), catchStates.end());
         }
     };
     analyzeList(closure->body, possibleOrigins);
@@ -872,20 +917,21 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
     if(expectedType)
     {
         TypeNode* expectedReturnType = expectedType->returnType;
-        if(!isClosureReturnTypeCompatible(inferredReturnType,
-                                          expectedReturnType))
+        if(!isClosureReturnTypeCompatible(
+               inferredReturnType,
+               expectedReturnType))
         {
-            reportError(line,
-                        "closure return type does not match its callable "
-                        "type");
+            reportError(
+                line,
+                "closure return type does not match its callable "
+                "type");
             return true;
         }
         returnType = expectedReturnType;
     }
 
     llvm::Function* closureFn =
-        generateClosureFn(closure, &captures, &constantVariables,
-                          returnType);
+        generateClosureFn(closure, &captures, &constantVariables, returnType);
     if(!closureFn)
         return true; // A diagnostic has already been reported.
 
@@ -896,54 +942,67 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
         llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
 
-    llvm::Value* environmentValue =
-        llvm::ConstantPointerNull::get(
-            llvm::cast<llvm::PointerType>(erasedPointerType));
+    llvm::Value* environmentValue = llvm::ConstantPointerNull::get(
+        llvm::cast<llvm::PointerType>(erasedPointerType));
     if(!captures.empty())
     {
         std::vector<llvm::Type*> fields(captures.size(), erasedPointerType);
         llvm::StructType* environmentType =
             llvm::StructType::get(context, fields);
-        llvm::Function* currentFunction =
-            builder.GetInsertBlock()->getParent();
+        llvm::Function* currentFunction = builder.GetInsertBlock()->getParent();
         llvm::AllocaInst* environment = createEntryBlockAlloca(
-            currentFunction, environmentType, name + ".env");
+            currentFunction,
+            environmentType,
+            name + ".env");
         for(size_t i = 0; i < captures.size(); ++i)
         {
             auto captured = namedValues.find(captures[i].first);
             if(captured == namedValues.end())
             {
-                reportError(line, "captured variable is unavailable: '" +
-                                       captures[i].first + "'");
+                reportError(
+                    line,
+                    "captured variable is unavailable: '" + captures[i].first +
+                        "'");
                 return true;
             }
             llvm::Value* address = builder.CreatePointerCast(
-                captured->second, erasedPointerType, "capture.address");
+                captured->second,
+                erasedPointerType,
+                "capture.address");
             llvm::Value* field = builder.CreateStructGEP(
-                environmentType, environment, static_cast<unsigned>(i),
+                environmentType,
+                environment,
+                static_cast<unsigned>(i),
                 captures[i].first + ".capture.field");
             builder.CreateStore(address, field);
         }
-        environmentValue = builder.CreatePointerCast(environment,
-                                                    erasedPointerType,
-                                                    name + ".env.ptr");
+        environmentValue = builder.CreatePointerCast(
+            environment,
+            erasedPointerType,
+            name + ".env.ptr");
     }
 
-    std::vector<llvm::Type*> closureFields = {erasedPointerType,
-                                             erasedPointerType};
+    std::vector<llvm::Type*> closureFields =
+        {erasedPointerType, erasedPointerType};
     llvm::StructType* closureType =
         llvm::StructType::get(context, closureFields);
     llvm::AllocaInst* closureSlot = createEntryBlockAlloca(
-        builder.GetInsertBlock()->getParent(), closureType, name + ".closure");
-    llvm::Value* codeField =
-        builder.CreateStructGEP(closureType, closureSlot, 0,
-                                name + ".closure.code.addr");
-    llvm::Value* envField =
-        builder.CreateStructGEP(closureType, closureSlot, 1,
-                                name + ".closure.env.addr");
-    builder.CreateStore(builder.CreatePointerCast(closureFn,
-                                                  erasedPointerType),
-                        codeField);
+        builder.GetInsertBlock()->getParent(),
+        closureType,
+        name + ".closure");
+    llvm::Value* codeField = builder.CreateStructGEP(
+        closureType,
+        closureSlot,
+        0,
+        name + ".closure.code.addr");
+    llvm::Value* envField = builder.CreateStructGEP(
+        closureType,
+        closureSlot,
+        1,
+        name + ".closure.env.addr");
+    builder.CreateStore(
+        builder.CreatePointerCast(closureFn, erasedPointerType),
+        codeField);
     builder.CreateStore(environmentValue, envField);
 
     namedValues[name] = closureSlot;
@@ -958,7 +1017,8 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
             for(auto* parameter : closure->parameters->parameters)
                 signatureParameters->addType(cloneTypeNode(parameter->type));
         functionTypeVariables[name] = new FunctionTypeNode(
-            signatureParameters, cloneTypeNode(returnType));
+            signatureParameters,
+            cloneTypeNode(returnType));
     }
     auto& owners = runtimeClosureBorrowOwners[name];
     owners.clear();
@@ -969,10 +1029,11 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
         auto exclusive = activeMutBorrower.find(owner);
         if(exclusive != activeMutBorrower.end())
         {
-            reportError(line, "cannot capture '" + owner +
-                                   "' in closure '" + name +
-                                   "' while it is mutably borrowed by '" +
-                                   exclusive->second + "'");
+            reportError(
+                line,
+                "cannot capture '" + owner + "' in closure '" + name +
+                    "' while it is mutably borrowed by '" + exclusive->second +
+                    "'");
             return true;
         }
         activeBorrowers[owner].insert(name);
@@ -981,7 +1042,9 @@ bool CodeGenerator::tryGenerateRuntimeClosureValue(const std::string& name,
 }
 
 void CodeGenerator::applyRuntimeClosurePointerBorrowEffects(
-    const std::string& name, ClosureNode* closure, int line)
+    const std::string& name,
+    ClosureNode* closure,
+    int line)
 {
     if(!closure)
         return;
@@ -993,8 +1056,7 @@ void CodeGenerator::applyRuntimeClosurePointerBorrowEffects(
     // Remove this environment's shared-capture markers while transferring the
     // pointer assignments made by its body into the surrounding borrow state.
     releaseRuntimeClosureBorrows(name);
-    std::map<std::string,
-             std::vector<const RuntimeClosurePointerBorrowEffect*>>
+    std::map<std::string, std::vector<const RuntimeClosurePointerBorrowEffect*>>
         effectsByPointer;
     for(const auto& effect : effects->second)
         effectsByPointer[effect.pointerVariable].push_back(&effect);
@@ -1010,9 +1072,10 @@ void CodeGenerator::applyRuntimeClosurePointerBorrowEffects(
             else
                 sources.push_back(effect->expression);
         registerPointerBorrowAlternatives(
-            pointerEffects.first, sources, line,
-            alternatives.size() == 1 ? alternatives.front()->isMutable
-                                     : false,
+            pointerEffects.first,
+            sources,
+            line,
+            alternatives.size() == 1 ? alternatives.front()->isMutable : false,
             preservesIncoming);
     }
     auto owners = runtimeClosureBorrowOwners.find(name);
@@ -1021,16 +1084,17 @@ void CodeGenerator::applyRuntimeClosurePointerBorrowEffects(
             activeBorrowers[owner].insert(name);
 }
 
-bool CodeGenerator::tryCopyRuntimeClosureValue(const std::string& name,
-                                              const std::string& sourceName,
-                                              int line)
+bool CodeGenerator::tryCopyRuntimeClosureValue(
+    const std::string& name,
+    const std::string& sourceName,
+    int line)
 {
     auto runtime = runtimeClosureVariables.find(sourceName);
     auto closure = closureVariables.find(sourceName);
     auto source = namedValues.find(sourceName);
     if(runtime == runtimeClosureVariables.end() ||
-       closure == closureVariables.end() || runtime->second != closure->second ||
-       source == namedValues.end())
+       closure == closureVariables.end() ||
+       runtime->second != closure->second || source == namedValues.end())
         return false;
 
     recordVariableScopeDepth(name);
@@ -1041,11 +1105,13 @@ bool CodeGenerator::tryCopyRuntimeClosureValue(const std::string& name,
         reportError(line, "runtime closure source is not a local value");
         return true;
     }
-    llvm::Value* value = builder.CreateLoad(sourceSlot->getAllocatedType(),
-                                            sourceSlot,
-                                            name + ".closure.copy");
+    llvm::Value* value = builder.CreateLoad(
+        sourceSlot->getAllocatedType(),
+        sourceSlot,
+        name + ".closure.copy");
     llvm::AllocaInst* slot = createEntryBlockAlloca(
-        builder.GetInsertBlock()->getParent(), sourceSlot->getAllocatedType(),
+        builder.GetInsertBlock()->getParent(),
+        sourceSlot->getAllocatedType(),
         name + ".closure");
     builder.CreateStore(value, slot);
     namedValues[name] = slot;
@@ -1066,9 +1132,11 @@ bool CodeGenerator::tryCopyRuntimeClosureValue(const std::string& name,
             auto exclusive = activeMutBorrower.find(owner);
             if(exclusive != activeMutBorrower.end())
             {
-                reportError(line, "cannot copy closure '" + sourceName +
-                                      "' while its capture '" + owner +
-                                      "' is mutably borrowed");
+                reportError(
+                    line,
+                    "cannot copy closure '" + sourceName +
+                        "' while its capture '" + owner +
+                        "' is mutably borrowed");
                 return true;
             }
             activeBorrowers[owner].insert(name);
@@ -1079,61 +1147,79 @@ bool CodeGenerator::tryCopyRuntimeClosureValue(const std::string& name,
 }
 
 bool CodeGenerator::validateBooleanBranchPrediction(
-    BranchPrediction prediction, TypeNode* declaredType,
-    ExpressionNode* initializer, int line, int col)
+    BranchPrediction prediction,
+    TypeNode* declaredType,
+    ExpressionNode* initializer,
+    int line,
+    int col)
 {
     if(prediction == BranchPrediction::None)
         return true;
     if(!initializer)
     {
-        reportError(line, col,
-                    "type mismatch: branch prediction hint requires a "
-                    "boolean initializer");
+        reportError(
+            line,
+            col,
+            "type mismatch: branch prediction hint requires a "
+            "boolean initializer");
         return false;
     }
     if(declaredType && Helpers::normalizeInferredKind(declaredType->kind) !=
                            TypeNode::TYPE_BOOL)
     {
-        reportError(line, col,
-                    "type mismatch: branch prediction hint requires a bool "
-                    "declaration");
+        reportError(
+            line,
+            col,
+            "type mismatch: branch prediction hint requires a bool "
+            "declaration");
         return false;
     }
     TypeNode* initializerType = inferExpressionTypeNode(initializer, line);
-    if(initializerType &&
-       Helpers::normalizeInferredKind(initializerType->kind) !=
-           TypeNode::TYPE_BOOL)
+    if(initializerType && Helpers::normalizeInferredKind(
+                              initializerType->kind) != TypeNode::TYPE_BOOL)
     {
-        reportError(line, col,
-                    "type mismatch: branch prediction hint requires a bool "
-                    "initializer");
+        reportError(
+            line,
+            col,
+            "type mismatch: branch prediction hint requires a bool "
+            "initializer");
         return false;
     }
     return true;
 }
 
 llvm::Value* CodeGenerator::applyBooleanBranchPrediction(
-    llvm::Value* value, BranchPrediction prediction, int line, int col)
+    llvm::Value* value,
+    BranchPrediction prediction,
+    int line,
+    int col)
 {
     if(!value || prediction == BranchPrediction::None)
         return value;
     if(!value->getType()->isIntegerTy(1))
     {
-        reportError(line, col,
-                    "type mismatch: branch prediction hint requires a bool "
-                    "initializer");
+        reportError(
+            line,
+            col,
+            "type mismatch: branch prediction hint requires a bool "
+            "initializer");
         return nullptr;
     }
 
 #if LLVM_VERSION_MAJOR >= 20
     llvm::Function* expect = llvm::Intrinsic::getOrInsertDeclaration(
-        module.get(), llvm::Intrinsic::expect, {value->getType()});
+        module.get(),
+        llvm::Intrinsic::expect,
+        {value->getType()});
 #else
     llvm::Function* expect = llvm::Intrinsic::getDeclaration(
-        module.get(), llvm::Intrinsic::expect, {value->getType()});
+        module.get(),
+        llvm::Intrinsic::expect,
+        {value->getType()});
 #endif
     llvm::Value* expected = llvm::ConstantInt::get(
-        value->getType(), prediction == BranchPrediction::Likely ? 1 : 0);
+        value->getType(),
+        prediction == BranchPrediction::Likely ? 1 : 0);
     return builder.CreateCall(expect, {value, expected}, "expected.bool");
 }
 
@@ -1149,26 +1235,29 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             typeParams.push_back(binding.first);
             typeArgs.push_back(binding.second);
         }
-        declaredType = substituteTypeParams(declaredType, typeParams,
-                                            typeArgs);
+        declaredType = substituteTypeParams(declaredType, typeParams, typeArgs);
     }
     recordScopedPointerVariable(node->name);
     enumVariableTypes.erase(node->name);
     if(auto* functionType = dynamic_cast<FunctionTypeNode*>(declaredType))
         functionTypeVariables[node->name] = functionType;
 
-    if(!validateFixedArrayInitializer(declaredType, node->expression,
-                                      node->line))
+    if(!validateFixedArrayInitializer(
+           declaredType,
+           node->expression,
+           node->line))
         return;
-    if(!validateBooleanBranchPrediction(node->branchPrediction, declaredType,
-                                        node->expression, node->line,
-                                        node->col))
+    if(!validateBooleanBranchPrediction(
+           node->branchPrediction,
+           declaredType,
+           node->expression,
+           node->line,
+           node->col))
         return;
 
     if(!declaredType)
     {
-        if(auto* functionItem =
-               dynamic_cast<IdentifierNode*>(node->expression))
+        if(auto* functionItem = dynamic_cast<IdentifierNode*>(node->expression))
         {
             if(functionOverloads.count(functionItem->name) &&
                !namedValues.count(functionItem->name) &&
@@ -1180,19 +1269,20 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                     return;
                 llvm::Value* initValue =
                     generateFunctionItemValue(functionItem, inferredType);
-                llvm::Type* storageType =
-                    getLLVMTypeFromNode(inferredType);
+                llvm::Type* storageType = getLLVMTypeFromNode(inferredType);
                 if(!initValue || !storageType ||
                    initValue->getType() != storageType)
                 {
                     if(initValue)
-                        reportError(node->line,
-                                    "cannot store inferred function item '" +
-                                        functionItem->name + "'");
+                        reportError(
+                            node->line,
+                            "cannot store inferred function item '" +
+                                functionItem->name + "'");
                     return;
                 }
                 llvm::AllocaInst* alloca = createEntryBlockAlloca(
-                    builder.GetInsertBlock()->getParent(), storageType,
+                    builder.GetInsertBlock()->getParent(),
+                    storageType,
                     node->name);
                 recordVariableScopeDepth(node->name);
                 builder.CreateStore(initValue, alloca);
@@ -1201,8 +1291,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 clearPointerBorrow(node->name);
                 variableTypes[node->name] = TypeNode::TYPE_FUNCTION;
                 functionTypeVariables[node->name] = inferredType;
-                std::string target = resolveFunctionItemTarget(
-                    functionItem, inferredType);
+                std::string target =
+                    resolveFunctionItemTarget(functionItem, inferredType);
                 functionItemVariables[node->name] =
                     target.empty() ? std::set<std::string>{}
                                    : std::set<std::string>{target};
@@ -1220,8 +1310,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
            closure != closureVariables.end() &&
            runtime->second == closure->second)
         {
-            if(tryCopyRuntimeClosureValue(node->name, source->name,
-                                          node->line))
+            if(tryCopyRuntimeClosureValue(node->name, source->name, node->line))
                 return;
         }
     }
@@ -1230,25 +1319,28 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     if(auto* closureInit = dynamic_cast<ClosureNode*>(node->expression))
     {
         auto* effectiveClosure = contextualizeClosure(
-            closureInit, dynamic_cast<FunctionTypeNode*>(declaredType));
+            closureInit,
+            dynamic_cast<FunctionTypeNode*>(declaredType));
         if(!effectiveClosure)
             return;
         recordVariableScopeDepth(node->name);
         closureVariables[node->name] = effectiveClosure;
         functionItemVariables[node->name] = {};
         if(tryGenerateRuntimeClosureValue(
-               node->name, effectiveClosure, node->line,
+               node->name,
+               effectiveClosure,
+               node->line,
                dynamic_cast<FunctionTypeNode*>(declaredType)))
         {
-            if(auto* expected =
-                   dynamic_cast<FunctionTypeNode*>(declaredType))
+            if(auto* expected = dynamic_cast<FunctionTypeNode*>(declaredType))
             {
                 auto actual = functionTypeVariables.find(node->name);
                 if(actual == functionTypeVariables.end() ||
                    typeMangle(actual->second) != typeMangle(expected))
-                    reportError(node->line,
-                                "closure initializer does not match declared "
-                                "function type");
+                    reportError(
+                        node->line,
+                        "closure initializer does not match declared "
+                        "function type");
                 else
                     functionTypeVariables[node->name] = expected;
             }
@@ -1262,9 +1354,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 #endif
         llvm::AllocaInst* alloca =
             builder.CreateAlloca(ptrType, nullptr, node->name + ".closure");
-        builder.CreateStore(llvm::ConstantPointerNull::get(
-                                llvm::cast<llvm::PointerType>(ptrType)),
-                            alloca);
+        builder.CreateStore(
+            llvm::ConstantPointerNull::get(
+                llvm::cast<llvm::PointerType>(ptrType)),
+            alloca);
         namedValues[node->name] = alloca;
         return;
     }
@@ -1274,13 +1367,16 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         llvm::Type* traitObjType = getLLVMTypeFromNode(traitObj);
         if(!traitObjType)
         {
-            reportError(node->line,
-                        "unknown trait object type: " + traitObj->traitName);
+            reportError(
+                node->line,
+                "unknown trait object type: " + traitObj->traitName);
             return;
         }
 
         llvm::AllocaInst* alloca = createEntryBlockAlloca(
-            builder.GetInsertBlock()->getParent(), traitObjType, node->name);
+            builder.GetInsertBlock()->getParent(),
+            traitObjType,
+            node->name);
 
         llvm::Value* storedValue = nullptr;
         if(node->expression)
@@ -1289,17 +1385,23 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             if(dynamic_cast<TraitObjectTypeNode*>(exprType))
             {
                 storedValue = generateExpression(node->expression);
-                storedValue = coerceTraitObjectValue(storedValue, traitObjType,
-                                                     node->line);
+                storedValue = coerceTraitObjectValue(
+                    storedValue,
+                    traitObjType,
+                    node->line);
             }
             else if(exprType)
                 storedValue = buildTraitObjectValue(
-                    node->expression, traitObj->traitName, node->line);
+                    node->expression,
+                    traitObj->traitName,
+                    node->line);
             else
             {
                 storedValue = generateExpression(node->expression);
-                storedValue = coerceTraitObjectValue(storedValue, traitObjType,
-                                                     node->line);
+                storedValue = coerceTraitObjectValue(
+                    storedValue,
+                    traitObjType,
+                    node->line);
             }
             if(!storedValue)
                 return;
@@ -1313,8 +1415,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         recordVariableScopeDepth(node->name);
         builder.CreateStore(storedValue, alloca);
         if(node->expression)
-            consumeMoveFromExpression(node->expression, node->line,
-                                      "initializing '" + node->name + "'");
+            consumeMoveFromExpression(
+                node->expression,
+                node->line,
+                "initializing '" + node->name + "'");
         clearMovedVariable(node->name);
         clearPointerBorrow(node->name);
         namedValues[node->name] = alloca;
@@ -1332,8 +1436,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     {
         llvm::Type* declElem = getLLVMTypeFromNode(genListType->elementType);
         if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->expression))
-            initValue = generateListLiteral(listLit, declElem,
-                                            genListType->elementType);
+            initValue = generateListLiteral(
+                listLit,
+                declElem,
+                genListType->elementType);
         else if(auto* arrFill = dynamic_cast<ArrayFillNode*>(node->expression))
             initValue = generateArrayFill(arrFill, declElem);
     }
@@ -1342,7 +1448,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     if(!initValue)
         return;
     initValue = applyBooleanBranchPrediction(
-        initValue, node->branchPrediction, node->line, node->col);
+        initValue,
+        node->branchPrediction,
+        node->line,
+        node->col);
     if(!initValue)
         return;
     // For `let r = &s` where s is a string: getLValuePointer returns the alloca
@@ -1359,30 +1468,32 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 if(typeIt != variableTypes.end() &&
                    typeIt->second == TypeNode::TYPE_STRING)
                 {
-                    initValue =
-                        builder.CreateLoad(initValue->getType(), initValue,
-                                           id->name + ".str_borrow");
+                    initValue = builder.CreateLoad(
+                        initValue->getType(),
+                        initValue,
+                        id->name + ".str_borrow");
                 }
             }
         }
     }
-    consumeMoveFromExpression(node->expression, node->line,
-                              "initializing '" + node->name + "'");
+    consumeMoveFromExpression(
+        node->expression,
+        node->line,
+        "initializing '" + node->name + "'");
     recordVariableScopeDepth(node->name);
     clearMovedVariable(node->name);
     clearPointerBorrow(node->name);
     if(auto* callableType = dynamic_cast<FunctionTypeNode*>(declaredType))
     {
-        if(auto* functionItem =
-               dynamic_cast<IdentifierNode*>(node->expression))
+        if(auto* functionItem = dynamic_cast<IdentifierNode*>(node->expression))
         {
             auto copied = functionItemVariables.find(functionItem->name);
             if(copied != functionItemVariables.end())
                 functionItemVariables[node->name] = copied->second;
             else
             {
-                std::string target = resolveFunctionItemTarget(
-                    functionItem, callableType);
+                std::string target =
+                    resolveFunctionItemTarget(functionItem, callableType);
                 functionItemVariables[node->name] =
                     target.empty() ? std::set<std::string>{}
                                    : std::set<std::string>{target};
@@ -1397,10 +1508,12 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         llvm::Function* currentFunction = builder.GetInsertBlock()->getParent();
         llvm::AllocaInst* alloca =
             initValue->getType()->isStructTy()
-                ? createEntryBlockAlloca(currentFunction, initValue->getType(),
-                                         node->name)
-                : builder.CreateAlloca(initValue->getType(), nullptr,
-                                       node->name);
+                ? createEntryBlockAlloca(
+                      currentFunction,
+                      initValue->getType(),
+                      node->name)
+                : builder
+                      .CreateAlloca(initValue->getType(), nullptr, node->name);
         initValue = applyStructCopySemantics(initValue);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
@@ -1582,27 +1695,29 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 {
                     variableTypes[node->name] = TypeNode::TYPE_STRUCT;
                     structVariableTypes[node->name] = structRef->structName;
-                    registerStructCleanupIfNeeded(node->name,
-                                                  structRef->structName);
+                    registerStructCleanupIfNeeded(
+                        node->name,
+                        structRef->structName);
                 }
             }
-            else if(auto* genStructRef =
-                        dynamic_cast<GenericStructTypeRefNode*>(
-                            inferredExprType))
+            else if(
+                auto* genStructRef =
+                    dynamic_cast<GenericStructTypeRefNode*>(inferredExprType))
             {
                 std::string mangledName = getOrCreateMonomorphizedStruct(
-                    genStructRef->structName, genStructRef->typeArgs);
+                    genStructRef->structName,
+                    genStructRef->typeArgs);
                 variableTypes[node->name] = TypeNode::TYPE_STRUCT;
                 structVariableTypes[node->name] = mangledName;
                 registerStructCleanupIfNeeded(node->name, mangledName);
             }
-            else if(auto* genListType =
-                        dynamic_cast<GenericListTypeNode*>(inferredExprType))
+            else if(
+                auto* genListType =
+                    dynamic_cast<GenericListTypeNode*>(inferredExprType))
             {
                 variableTypes[node->name] = TypeNode::TYPE_LIST;
                 listElementTypes[node->name] = genListType->elementType;
-                if(auto* arrayType =
-                       dynamic_cast<ArrayTypeNode*>(genListType))
+                if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(genListType))
                 {
                     arrayCapacities[node->name] = arrayType->capacity;
                     if(auto size =
@@ -1612,15 +1727,16 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                         arrayKnownLengths.erase(node->name);
                 }
             }
-            else if(auto* mapType =
-                        dynamic_cast<MapTypeNode*>(inferredExprType))
+            else if(
+                auto* mapType = dynamic_cast<MapTypeNode*>(inferredExprType))
             {
                 variableTypes[node->name] = TypeNode::TYPE_MAP;
                 mapKeyValueTypes[node->name] =
                     std::make_pair(mapType->keyType, mapType->valueType);
             }
-            else if(auto* tupleType =
-                        dynamic_cast<TupleTypeNode*>(inferredExprType))
+            else if(
+                auto* tupleType =
+                    dynamic_cast<TupleTypeNode*>(inferredExprType))
             {
                 variableTypes[node->name] = TypeNode::TYPE_TUPLE;
                 std::vector<TypeNode*> elemTypes;
@@ -1631,8 +1747,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 }
                 tupleElementTypes[node->name] = elemTypes;
             }
-            else if(auto* ptrType =
-                        dynamic_cast<PointerTypeNode*>(inferredExprType))
+            else if(
+                auto* ptrType =
+                    dynamic_cast<PointerTypeNode*>(inferredExprType))
             {
                 variableTypes[node->name] = TypeNode::TYPE_PTR;
                 pointerElementTypes[node->name] = ptrType->elementType;
@@ -1642,13 +1759,13 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 else
                     pointerKnownNull.erase(node->name);
             }
-            else if(auto* callableType =
-                        dynamic_cast<FunctionTypeNode*>(inferredExprType))
+            else if(
+                auto* callableType =
+                    dynamic_cast<FunctionTypeNode*>(inferredExprType))
             {
                 variableTypes[node->name] = TypeNode::TYPE_FUNCTION;
                 functionTypeVariables[node->name] =
-                    static_cast<FunctionTypeNode*>(
-                        cloneTypeNode(callableType));
+                    static_cast<FunctionTypeNode*>(cloneTypeNode(callableType));
             }
         }
 
@@ -1713,8 +1830,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 static_cast<TypeNode*>(create_type_node(keyKind)),
                 static_cast<TypeNode*>(create_type_node(valKind)));
         }
-        else if(auto* tupleLit =
-                    dynamic_cast<TupleLiteralNode*>(node->expression))
+        else if(
+            auto* tupleLit = dynamic_cast<TupleLiteralNode*>(node->expression))
         {
             variableTypes[node->name] = TypeNode::TYPE_TUPLE;
             std::vector<TypeNode*> elems;
@@ -1722,14 +1839,16 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             {
                 for(auto* e : tupleLit->elements->elements)
                 {
-                    elems.push_back(static_cast<TypeNode*>(
-                        create_type_node(infer_kind_from_expr(e))));
+                    elems.push_back(
+                        static_cast<TypeNode*>(
+                            create_type_node(infer_kind_from_expr(e))));
                 }
             }
             tupleElementTypes[node->name] = elems;
         }
-        else if(auto* structLit =
-                    dynamic_cast<StructLiteralNode*>(node->expression))
+        else if(
+            auto* structLit =
+                dynamic_cast<StructLiteralNode*>(node->expression))
         {
             variableTypes[node->name] = TypeNode::TYPE_STRUCT;
             structVariableTypes[node->name] = structLit->structName;
@@ -1748,8 +1867,11 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
             bool _is_mut_borrow =
                 _borrow_unary && _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
-            registerPointerBorrow(node->name, node->expression, node->line,
-                                  _is_mut_borrow);
+            registerPointerBorrow(
+                node->name,
+                node->expression,
+                node->line,
+                _is_mut_borrow);
         }
 
         constantVariables.insert(node->name);
@@ -1757,22 +1879,27 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     }
 
     // Handle generic struct type reference (e.g., Pair<i32, i64>)
-    if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(declaredType))
+    if(auto* genStructRef =
+           dynamic_cast<GenericStructTypeRefNode*>(declaredType))
     {
         // Get or create the monomorphized struct type
         std::string mangledName = getOrCreateMonomorphizedStruct(
-            genStructRef->structName, genStructRef->typeArgs);
+            genStructRef->structName,
+            genStructRef->typeArgs);
 
         llvm::Type* structType = getStructType(mangledName);
         if(!structType)
         {
-            reportError(node->line, "failed to monomorphize struct: " +
-                                        genStructRef->structName);
+            reportError(
+                node->line,
+                "failed to monomorphize struct: " + genStructRef->structName);
             return;
         }
 
         llvm::AllocaInst* alloca = createEntryBlockAlloca(
-            builder.GetInsertBlock()->getParent(), structType, node->name);
+            builder.GetInsertBlock()->getParent(),
+            structType,
+            node->name);
         initValue = applyStructCopySemantics(initValue, genStructRef);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
@@ -1809,7 +1936,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
         llvm::Type* ptrType = llvm::PointerType::get(
-            getLLVMType(genListType->elementType->kind), 0);
+            getLLVMType(genListType->elementType->kind),
+            0);
 #endif
         std::vector<llvm::Type*> listStructTypes = {i64Type, ptrType};
         llvm::StructType* listStructType =
@@ -1903,8 +2031,11 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
             bool _is_mut_borrow =
                 _borrow_unary && _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
-            registerPointerBorrow(node->name, node->expression, node->line,
-                                  _is_mut_borrow);
+            registerPointerBorrow(
+                node->name,
+                node->expression,
+                node->line,
+                _is_mut_borrow);
         }
         constantVariables.insert(node->name);
         return;
@@ -1953,7 +2084,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 ++i)
             {
                 llvm::Value* elemVal = builder.CreateExtractValue(
-                    initValue, {static_cast<unsigned>(i)}, "tuple.extract");
+                    initValue,
+                    {static_cast<unsigned>(i)},
+                    "tuple.extract");
                 if(!elemVal)
                     return;
 
@@ -1971,38 +2104,54 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                         if(srcBits > dstBits)
                         {
                             elemVal = builder.CreateTrunc(
-                                elemVal, targetElemType, "trunc");
+                                elemVal,
+                                targetElemType,
+                                "trunc");
                         }
                         else if(srcBits < dstBits)
                         {
                             elemVal = builder.CreateSExt(
-                                elemVal, targetElemType, "sext");
+                                elemVal,
+                                targetElemType,
+                                "sext");
                         }
                     }
-                    else if(sourceElemType->isIntegerTy() &&
-                            targetElemType->isFloatingPointTy())
+                    else if(
+                        sourceElemType->isIntegerTy() &&
+                        targetElemType->isFloatingPointTy())
                     {
-                        elemVal = builder.CreateSIToFP(elemVal, targetElemType,
-                                                       "sitofp");
+                        elemVal = builder.CreateSIToFP(
+                            elemVal,
+                            targetElemType,
+                            "sitofp");
                     }
-                    else if(sourceElemType->isFloatingPointTy() &&
-                            targetElemType->isIntegerTy())
+                    else if(
+                        sourceElemType->isFloatingPointTy() &&
+                        targetElemType->isIntegerTy())
                     {
-                        elemVal = builder.CreateFPToSI(elemVal, targetElemType,
-                                                       "fptosi");
+                        elemVal = builder.CreateFPToSI(
+                            elemVal,
+                            targetElemType,
+                            "fptosi");
                     }
-                    else if(sourceElemType->isFloatingPointTy() &&
-                            targetElemType->isFloatingPointTy())
+                    else if(
+                        sourceElemType->isFloatingPointTy() &&
+                        targetElemType->isFloatingPointTy())
                     {
-                        elemVal = builder.CreateFPCast(elemVal, targetElemType,
-                                                       "fpcast");
+                        elemVal = builder.CreateFPCast(
+                            elemVal,
+                            targetElemType,
+                            "fpcast");
                     }
                     // For struct types and other complex types, no conversion
                     // needed if types match
                 }
 
                 tupleVal = builder.CreateInsertValue(
-                    tupleVal, elemVal, static_cast<unsigned>(i), "tuple.elem");
+                    tupleVal,
+                    elemVal,
+                    static_cast<unsigned>(i),
+                    "tuple.elem");
             }
 
             builder.CreateStore(tupleVal, alloca);
@@ -2055,22 +2204,27 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 if(Helpers::isEnumStringType(baseKind) &&
                    initValue->getType()->isPointerTy())
                 {
-                    initValue = builder.CreateBitCast(initValue, targetType,
-                                                      "enum.cast.ptr");
+                    initValue = builder.CreateBitCast(
+                        initValue,
+                        targetType,
+                        "enum.cast.ptr");
                 }
                 else if(initValue->getType()->isIntegerTy())
                 {
                     initValue = builder.CreateIntCast(
-                        initValue, targetType, !Helpers::enumIsUnsigned(baseKind),
+                        initValue,
+                        targetType,
+                        !Helpers::enumIsUnsigned(baseKind),
                         Helpers::enumIsUnsigned(baseKind) ? "enum.cast.u"
-                                                 : "enum.cast.s");
+                                                          : "enum.cast.s");
                 }
                 else
                 {
-                    reportError(node->line,
-                                Helpers::isEnumStringType(baseKind)
-                                    ? "enum initializer must be str8"
-                                    : "enum initializer must be integer");
+                    reportError(
+                        node->line,
+                        Helpers::isEnumStringType(baseKind)
+                            ? "enum initializer must be str8"
+                            : "enum initializer must be integer");
                     return;
                 }
             }
@@ -2089,13 +2243,16 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         llvm::Type* structType = getStructType(resolvedStructName);
         if(!structType)
         {
-            reportError(node->line,
-                        "unknown struct type: " + structRef->structName);
+            reportError(
+                node->line,
+                "unknown struct type: " + structRef->structName);
             return;
         }
 
         llvm::AllocaInst* alloca = createEntryBlockAlloca(
-            builder.GetInsertBlock()->getParent(), structType, node->name);
+            builder.GetInsertBlock()->getParent(),
+            structType,
+            node->name);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_STRUCT;
@@ -2110,13 +2267,16 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         llvm::Type* callableType = getLLVMTypeFromNode(functionType);
         if(!callableType || initValue->getType() != callableType)
         {
-            reportError(node->line,
-                        "initializer does not match callable type for '" +
-                            node->name + "'");
+            reportError(
+                node->line,
+                "initializer does not match callable type for '" + node->name +
+                    "'");
             return;
         }
         llvm::AllocaInst* alloca = createEntryBlockAlloca(
-            builder.GetInsertBlock()->getParent(), callableType, node->name);
+            builder.GetInsertBlock()->getParent(),
+            callableType,
+            node->name);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_FUNCTION;
@@ -2164,8 +2324,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         {
             initValue = builder.CreateFPToSI(initValue, targetType, "fptosi");
         }
-        else if(initType->isFloatingPointTy() &&
-                targetType->isFloatingPointTy())
+        else if(
+            initType->isFloatingPointTy() && targetType->isFloatingPointTy())
         {
             initValue = builder.CreateFPCast(initValue, targetType, "fpcast");
         }
@@ -2179,38 +2339,44 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     constantVariables.insert(node->name);
 }
 
-void CodeGenerator::generateCexprDeclaration(CexprDeclNode* node,
-                                             bool emitRuntimeBinding)
+void CodeGenerator::generateCexprDeclaration(
+    CexprDeclNode* node,
+    bool emitRuntimeBinding)
 {
     if(!node)
         return;
     if(!node->type)
     {
-        reportError(node->line,
-                    "cexpr declaration requires an explicit type");
+        reportError(node->line, "cexpr declaration requires an explicit type");
         return;
     }
     if(!node->expression)
     {
-        reportError(node->line,
-                    "cexpr declaration requires an initializer");
+        reportError(node->line, "cexpr declaration requires an initializer");
         return;
     }
 
     ConstexprValue value;
     std::string errorMessage;
-    if(!evalConstexprExpression(node->expression, value, &errorMessage,
-                                nullptr, 0))
+    if(!evalConstexprExpression(
+           node->expression,
+           value,
+           &errorMessage,
+           nullptr,
+           0))
     {
-        reportError(node->line,
-                    errorMessage.empty()
-                        ? "cexpr declaration requires a compile-time "
-                          "expression"
-                        : errorMessage);
+        reportError(
+            node->line,
+            errorMessage.empty() ? "cexpr declaration requires a compile-time "
+                                   "expression"
+                                 : errorMessage);
         return;
     }
-    if(!coerceConstexprValueToKind(value, node->type->kind, &errorMessage,
-                                   "cexpr declarations"))
+    if(!coerceConstexprValueToKind(
+           value,
+           node->type->kind,
+           &errorMessage,
+           "cexpr declarations"))
     {
         reportError(node->line, errorMessage);
         return;
@@ -2225,12 +2391,14 @@ void CodeGenerator::generateCexprDeclaration(CexprDeclNode* node,
     if(!initValue)
         return;
     llvm::Function* currentFunction = builder.GetInsertBlock()->getParent();
-    llvm::AllocaInst* alloca =
-        createEntryBlockAlloca(currentFunction, initValue->getType(),
-                               node->name);
+    llvm::AllocaInst* alloca = createEntryBlockAlloca(
+        currentFunction,
+        initValue->getType(),
+        node->name);
     builder.CreateStore(initValue, alloca);
     namedValues[node->name] = alloca;
-    variableTypes[node->name] = Helpers::normalizeInferredKind(node->type->kind);
+    variableTypes[node->name] =
+        Helpers::normalizeInferredKind(node->type->kind);
     constantVariables.insert(node->name);
     recordVariableScopeDepth(node->name);
 }
@@ -2241,8 +2409,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     if(dynamic_cast<ReferenceTypeNode*>(declaredType) &&
        (node->isGlobalStorage || node->isStaticStorage))
     {
-        reportError(node->line,
-                    "reference bindings require local initialized storage");
+        reportError(
+            node->line,
+            "reference bindings require local initialized storage");
         return;
     }
     if(declaredType && !activeFunctionTypeBindings.empty())
@@ -2254,8 +2423,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             typeParams.push_back(binding.first);
             typeArgs.push_back(binding.second);
         }
-        declaredType = substituteTypeParams(declaredType, typeParams,
-                                            typeArgs);
+        declaredType = substituteTypeParams(declaredType, typeParams, typeArgs);
     }
     recordScopedPointerVariable(node->name);
     enumVariableTypes.erase(node->name);
@@ -2267,15 +2435,17 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
     if(!validateFixedArrayInitializer(declaredType, node->initExpr, node->line))
         return;
-    if(!validateBooleanBranchPrediction(node->branchPrediction, declaredType,
-                                        node->initExpr, node->line,
-                                        node->col))
+    if(!validateBooleanBranchPrediction(
+           node->branchPrediction,
+           declaredType,
+           node->initExpr,
+           node->line,
+           node->col))
         return;
 
     if(!declaredType && !node->isGlobalStorage && !node->isStaticStorage)
     {
-        if(auto* functionItem =
-               dynamic_cast<IdentifierNode*>(node->initExpr))
+        if(auto* functionItem = dynamic_cast<IdentifierNode*>(node->initExpr))
         {
             if(functionOverloads.count(functionItem->name) &&
                !namedValues.count(functionItem->name) &&
@@ -2287,19 +2457,20 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                     return;
                 llvm::Value* initValue =
                     generateFunctionItemValue(functionItem, inferredType);
-                llvm::Type* storageType =
-                    getLLVMTypeFromNode(inferredType);
+                llvm::Type* storageType = getLLVMTypeFromNode(inferredType);
                 if(!initValue || !storageType ||
                    initValue->getType() != storageType)
                 {
                     if(initValue)
-                        reportError(node->line,
-                                    "cannot store inferred function item '" +
-                                        functionItem->name + "'");
+                        reportError(
+                            node->line,
+                            "cannot store inferred function item '" +
+                                functionItem->name + "'");
                     return;
                 }
                 llvm::AllocaInst* alloca = createEntryBlockAlloca(
-                    builder.GetInsertBlock()->getParent(), storageType,
+                    builder.GetInsertBlock()->getParent(),
+                    storageType,
                     node->name);
                 builder.CreateStore(initValue, alloca);
                 namedValues[node->name] = alloca;
@@ -2320,8 +2491,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
            closure != closureVariables.end() &&
            runtime->second == closure->second)
         {
-            if(tryCopyRuntimeClosureValue(node->name, source->name,
-                                          node->line))
+            if(tryCopyRuntimeClosureValue(node->name, source->name, node->line))
                 return;
         }
     }
@@ -2329,9 +2499,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     if((node->isStaticStorage || node->isGlobalStorage) &&
        dynamic_cast<ClosureNode*>(node->initExpr))
     {
-        reportError(node->line,
-                    "a closure with a stack environment cannot be stored in "
-                    "global or static storage");
+        reportError(
+            node->line,
+            "a closure with a stack environment cannot be stored in "
+            "global or static storage");
         return;
     }
 
@@ -2340,8 +2511,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         llvm::Type* traitObjType = getLLVMTypeFromNode(traitObj);
         if(!traitObjType)
         {
-            reportError(node->line,
-                        "unknown trait object type: " + traitObj->traitName);
+            reportError(
+                node->line,
+                "unknown trait object type: " + traitObj->traitName);
             return;
         }
 
@@ -2354,17 +2526,23 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             if(dynamic_cast<TraitObjectTypeNode*>(exprType))
             {
                 storedValue = generateExpression(node->initExpr);
-                storedValue = coerceTraitObjectValue(storedValue, traitObjType,
-                                                     node->line);
+                storedValue = coerceTraitObjectValue(
+                    storedValue,
+                    traitObjType,
+                    node->line);
             }
             else if(exprType)
                 storedValue = buildTraitObjectValue(
-                    node->initExpr, traitObj->traitName, node->line);
+                    node->initExpr,
+                    traitObj->traitName,
+                    node->line);
             else
             {
                 storedValue = generateExpression(node->initExpr);
-                storedValue = coerceTraitObjectValue(storedValue, traitObjType,
-                                                     node->line);
+                storedValue = coerceTraitObjectValue(
+                    storedValue,
+                    traitObjType,
+                    node->line);
             }
             if(!storedValue)
                 return;
@@ -2376,8 +2554,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         storedValue = applyStructCopySemantics(storedValue);
         builder.CreateStore(storedValue, alloca);
         if(node->initExpr)
-            consumeMoveFromExpression(node->initExpr, node->line,
-                                      "initializing '" + node->name + "'");
+            consumeMoveFromExpression(
+                node->initExpr,
+                node->line,
+                "initializing '" + node->name + "'");
         clearMovedVariable(node->name);
         namedValues[node->name] = alloca;
         recordVariableScopeDepth(node->name);
@@ -2388,8 +2568,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
     if(node->initExpr)
     {
-        consumeMoveFromExpression(node->initExpr, node->line,
-                                  "initializing '" + node->name + "'");
+        consumeMoveFromExpression(
+            node->initExpr,
+            node->line,
+            "initializing '" + node->name + "'");
     }
     clearMovedVariable(node->name);
     if(node->isStaticStorage || node->isGlobalStorage)
@@ -2397,10 +2579,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(declaredType && !node->initExpr && !node->isExplicitZeroInit &&
            warnImplicitZeroInit)
         {
-            reportWarning(node->line, node->col,
-                          "implicit zero-initialization for typed var '" +
-                              node->name +
-                              "'; use '{}' to make zero-init explicit");
+            reportWarning(
+                node->line,
+                node->col,
+                "implicit zero-initialization for typed var '" + node->name +
+                    "'; use '{}' to make zero-init explicit");
         }
         std::string storageName = node->name;
         if(node->isStaticStorage)
@@ -2428,12 +2611,14 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 kind = TypeNode::TYPE_STRUCT;
                 structTypeName = sr->structName;
             }
-            else if(auto* gsr =
-                        dynamic_cast<GenericStructTypeRefNode*>(declaredType))
+            else if(
+                auto* gsr =
+                    dynamic_cast<GenericStructTypeRefNode*>(declaredType))
             {
                 kind = TypeNode::TYPE_STRUCT;
-                structTypeName = getOrCreateMonomorphizedStruct(gsr->structName,
-                                                                gsr->typeArgs);
+                structTypeName = getOrCreateMonomorphizedStruct(
+                    gsr->structName,
+                    gsr->typeArgs);
             }
         }
 
@@ -2441,8 +2626,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         {
             if(!node->initExpr)
             {
-                reportError(node->line, "static/global var declaration without "
-                                        "type requires initializer");
+                reportError(
+                    node->line,
+                    "static/global var declaration without "
+                    "type requires initializer");
                 return;
             }
             llvm::Value* initValue = generateExpression(node->initExpr);
@@ -2468,15 +2655,20 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(!gv)
         {
             gv = new llvm::GlobalVariable(
-                *module, targetType, false, llvm::GlobalValue::InternalLinkage,
-                llvm::Constant::getNullValue(targetType), storageName);
+                *module,
+                targetType,
+                false,
+                llvm::GlobalValue::InternalLinkage,
+                llvm::Constant::getNullValue(targetType),
+                storageName);
         }
 
         if(node->initExpr)
         {
-            if(!validateNoEscapingBorrow(node->initExpr, node->line,
-                                         "store in global/static '" +
-                                             node->name + "'"))
+            if(!validateNoEscapingBorrow(
+                   node->initExpr,
+                   node->line,
+                   "store in global/static '" + node->name + "'"))
             {
                 return;
             }
@@ -2488,9 +2680,12 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 if(!guard)
                 {
                     guard = new llvm::GlobalVariable(
-                        *module, llvm::Type::getInt1Ty(context), false,
+                        *module,
+                        llvm::Type::getInt1Ty(context),
+                        false,
                         llvm::GlobalValue::InternalLinkage,
-                        llvm::ConstantInt::getFalse(context), guardName);
+                        llvm::ConstantInt::getFalse(context),
+                        guardName);
                 }
 
                 llvm::Function* fn = builder.GetInsertBlock()->getParent();
@@ -2499,7 +2694,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 auto* contBB =
                     llvm::BasicBlock::Create(context, "static.cont", fn);
                 llvm::Value* isInit = builder.CreateLoad(
-                    guard->getValueType(), guard, "static.inited");
+                    guard->getValueType(),
+                    guard,
+                    "static.inited");
                 builder.CreateCondBr(isInit, contBB, initBB);
 
                 builder.SetInsertPoint(initBB);
@@ -2511,19 +2708,30 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                     if(initValue->getType()->isIntegerTy() &&
                        targetType->isIntegerTy())
                         initValue = builder.CreateSExtOrTrunc(
-                            initValue, targetType, "static.cast");
-                    else if(initValue->getType()->isIntegerTy() &&
-                            targetType->isFloatingPointTy())
-                        initValue = builder.CreateSIToFP(initValue, targetType,
-                                                         "static.sitofp");
-                    else if(initValue->getType()->isFloatingPointTy() &&
-                            targetType->isIntegerTy())
-                        initValue = builder.CreateFPToSI(initValue, targetType,
-                                                         "static.fptosi");
-                    else if(initValue->getType()->isFloatingPointTy() &&
-                            targetType->isFloatingPointTy())
-                        initValue = builder.CreateFPCast(initValue, targetType,
-                                                         "static.fpcast");
+                            initValue,
+                            targetType,
+                            "static.cast");
+                    else if(
+                        initValue->getType()->isIntegerTy() &&
+                        targetType->isFloatingPointTy())
+                        initValue = builder.CreateSIToFP(
+                            initValue,
+                            targetType,
+                            "static.sitofp");
+                    else if(
+                        initValue->getType()->isFloatingPointTy() &&
+                        targetType->isIntegerTy())
+                        initValue = builder.CreateFPToSI(
+                            initValue,
+                            targetType,
+                            "static.fptosi");
+                    else if(
+                        initValue->getType()->isFloatingPointTy() &&
+                        targetType->isFloatingPointTy())
+                        initValue = builder.CreateFPCast(
+                            initValue,
+                            targetType,
+                            "static.fpcast");
                     else
                     {
                         reportError(
@@ -2538,8 +2746,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 builder.CreateBr(contBB);
                 builder.SetInsertPoint(contBB);
             }
-            else if(auto* cinit = llvm::dyn_cast<llvm::Constant>(
-                        generateExpression(node->initExpr)))
+            else if(
+                auto* cinit = llvm::dyn_cast<llvm::Constant>(
+                    generateExpression(node->initExpr)))
             {
                 gv->setInitializer(cinit);
             }
@@ -2553,19 +2762,30 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                     if(initValue->getType()->isIntegerTy() &&
                        targetType->isIntegerTy())
                         initValue = builder.CreateSExtOrTrunc(
-                            initValue, targetType, "global.cast");
-                    else if(initValue->getType()->isIntegerTy() &&
-                            targetType->isFloatingPointTy())
-                        initValue = builder.CreateSIToFP(initValue, targetType,
-                                                         "global.sitofp");
-                    else if(initValue->getType()->isFloatingPointTy() &&
-                            targetType->isIntegerTy())
-                        initValue = builder.CreateFPToSI(initValue, targetType,
-                                                         "global.fptosi");
-                    else if(initValue->getType()->isFloatingPointTy() &&
-                            targetType->isFloatingPointTy())
-                        initValue = builder.CreateFPCast(initValue, targetType,
-                                                         "global.fpcast");
+                            initValue,
+                            targetType,
+                            "global.cast");
+                    else if(
+                        initValue->getType()->isIntegerTy() &&
+                        targetType->isFloatingPointTy())
+                        initValue = builder.CreateSIToFP(
+                            initValue,
+                            targetType,
+                            "global.sitofp");
+                    else if(
+                        initValue->getType()->isFloatingPointTy() &&
+                        targetType->isIntegerTy())
+                        initValue = builder.CreateFPToSI(
+                            initValue,
+                            targetType,
+                            "global.fptosi");
+                    else if(
+                        initValue->getType()->isFloatingPointTy() &&
+                        targetType->isFloatingPointTy())
+                        initValue = builder.CreateFPCast(
+                            initValue,
+                            targetType,
+                            "global.fpcast");
                     else
                     {
                         reportError(
@@ -2604,12 +2824,15 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(auto* closureInit = dynamic_cast<ClosureNode*>(node->initExpr))
         {
             auto* effectiveClosure = contextualizeClosure(
-                closureInit, dynamic_cast<FunctionTypeNode*>(declaredType));
+                closureInit,
+                dynamic_cast<FunctionTypeNode*>(declaredType));
             if(!effectiveClosure)
                 return;
             closureVariables[node->name] = effectiveClosure;
             if(tryGenerateRuntimeClosureValue(
-                   node->name, effectiveClosure, node->line,
+                   node->name,
+                   effectiveClosure,
+                   node->line,
                    dynamic_cast<FunctionTypeNode*>(declaredType)))
             {
                 if(auto* expected =
@@ -2618,9 +2841,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                     auto actual = functionTypeVariables.find(node->name);
                     if(actual == functionTypeVariables.end() ||
                        typeMangle(actual->second) != typeMangle(expected))
-                        reportError(node->line,
-                                    "closure initializer does not match "
-                                    "declared function type");
+                        reportError(
+                            node->line,
+                            "closure initializer does not match "
+                            "declared function type");
                     else
                         functionTypeVariables[node->name] = expected;
                 }
@@ -2634,9 +2858,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 #endif
             llvm::AllocaInst* alloca =
                 builder.CreateAlloca(ptrType, nullptr, node->name + ".closure");
-            builder.CreateStore(llvm::ConstantPointerNull::get(
-                                    llvm::cast<llvm::PointerType>(ptrType)),
-                                alloca);
+            builder.CreateStore(
+                llvm::ConstantPointerNull::get(
+                    llvm::cast<llvm::PointerType>(ptrType)),
+                alloca);
             namedValues[node->name] = alloca;
             return;
         }
@@ -2654,18 +2879,20 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(node->initExpr || node->isExplicitZeroInit ||
            !this->warnImplicitZeroInit)
             return;
-        reportWarning(node->line, node->col,
-                      "implicit zero-initialization for typed var '" +
-                          node->name +
-                          "'; use '{}' to make zero-init explicit");
+        reportWarning(
+            node->line,
+            node->col,
+            "implicit zero-initialization for typed var '" + node->name +
+                "'; use '{}' to make zero-init explicit");
     };
 
     if(!declaredType)
     {
         if(!node->initExpr)
         {
-            reportError(node->line,
-                        "var declaration without type requires initializer");
+            reportError(
+                node->line,
+                "var declaration without type requires initializer");
             return;
         }
 
@@ -2673,17 +2900,22 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(!initValue)
             return;
         initValue = applyBooleanBranchPrediction(
-            initValue, node->branchPrediction, node->line, node->col);
+            initValue,
+            node->branchPrediction,
+            node->line,
+            node->col);
         if(!initValue)
             return;
 
         llvm::Function* currentFunction = builder.GetInsertBlock()->getParent();
         llvm::AllocaInst* alloca =
             initValue->getType()->isStructTy()
-                ? createEntryBlockAlloca(currentFunction, initValue->getType(),
-                                         node->name)
-                : builder.CreateAlloca(initValue->getType(), nullptr,
-                                       node->name);
+                ? createEntryBlockAlloca(
+                      currentFunction,
+                      initValue->getType(),
+                      node->name)
+                : builder
+                      .CreateAlloca(initValue->getType(), nullptr, node->name);
         initValue = applyStructCopySemantics(initValue);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
@@ -2796,14 +3028,12 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         TypeNode::TypeKind inferredKind = infer_kind_from_expr(node->initExpr);
         variableTypes[node->name] = inferredKind;
-        if(TypeNode* inferredType =
-               getLValueType(node->initExpr, node->line))
+        if(TypeNode* inferredType = getLValueType(node->initExpr, node->line))
         {
             if(auto* callableType =
                    dynamic_cast<FunctionTypeNode*>(inferredType))
                 functionTypeVariables[node->name] =
-                    static_cast<FunctionTypeNode*>(
-                        cloneTypeNode(callableType));
+                    static_cast<FunctionTypeNode*>(cloneTypeNode(callableType));
         }
 
         if(auto* id = dynamic_cast<IdentifierNode*>(node->initExpr))
@@ -2904,8 +3134,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 static_cast<TypeNode*>(create_type_node(keyKind)),
                 static_cast<TypeNode*>(create_type_node(valKind)));
         }
-        else if(auto* tupleLit =
-                    dynamic_cast<TupleLiteralNode*>(node->initExpr))
+        else if(
+            auto* tupleLit = dynamic_cast<TupleLiteralNode*>(node->initExpr))
         {
             variableTypes[node->name] = TypeNode::TYPE_TUPLE;
             std::vector<TypeNode*> elems;
@@ -2913,14 +3143,15 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             {
                 for(auto* e : tupleLit->elements->elements)
                 {
-                    elems.push_back(static_cast<TypeNode*>(
-                        create_type_node(infer_kind_from_expr(e))));
+                    elems.push_back(
+                        static_cast<TypeNode*>(
+                            create_type_node(infer_kind_from_expr(e))));
                 }
             }
             tupleElementTypes[node->name] = elems;
         }
-        else if(auto* structLit =
-                    dynamic_cast<StructLiteralNode*>(node->initExpr))
+        else if(
+            auto* structLit = dynamic_cast<StructLiteralNode*>(node->initExpr))
         {
             variableTypes[node->name] = TypeNode::TYPE_STRUCT;
             structVariableTypes[node->name] = structLit->structName;
@@ -2939,30 +3170,38 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->initExpr);
             bool _is_mut_borrow =
                 _borrow_unary && _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
-            registerPointerBorrow(node->name, node->initExpr, node->line,
-                                  _is_mut_borrow);
+            registerPointerBorrow(
+                node->name,
+                node->initExpr,
+                node->line,
+                _is_mut_borrow);
         }
 
         return;
     }
 
     // Handle generic struct type reference (e.g., Pair<i32, i64>)
-    if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(declaredType))
+    if(auto* genStructRef =
+           dynamic_cast<GenericStructTypeRefNode*>(declaredType))
     {
         // Get or create the monomorphized struct type
         std::string mangledName = getOrCreateMonomorphizedStruct(
-            genStructRef->structName, genStructRef->typeArgs);
+            genStructRef->structName,
+            genStructRef->typeArgs);
 
         llvm::Type* structType = getStructType(mangledName);
         if(!structType)
         {
-            reportError(node->line, "failed to monomorphize struct: " +
-                                        genStructRef->structName);
+            reportError(
+                node->line,
+                "failed to monomorphize struct: " + genStructRef->structName);
             return;
         }
 
         llvm::AllocaInst* alloca = createEntryBlockAlloca(
-            builder.GetInsertBlock()->getParent(), structType, node->name);
+            builder.GetInsertBlock()->getParent(),
+            structType,
+            node->name);
 
         if(node->initExpr)
         {
@@ -3010,7 +3249,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
         llvm::Type* ptrType = llvm::PointerType::get(
-            getLLVMType(genListType->elementType->kind), 0);
+            getLLVMType(genListType->elementType->kind),
+            0);
 #endif
         std::vector<llvm::Type*> listStructTypes = {i64Type, ptrType};
         llvm::StructType* listStructType =
@@ -3025,10 +3265,12 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 getLLVMTypeFromNode(genListType->elementType);
             llvm::Value* initValue = nullptr;
             if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->initExpr))
-                initValue = generateListLiteral(listLit, declElem,
-                                                genListType->elementType);
-            else if(auto* arrFill =
-                        dynamic_cast<ArrayFillNode*>(node->initExpr))
+                initValue = generateListLiteral(
+                    listLit,
+                    declElem,
+                    genListType->elementType);
+            else if(
+                auto* arrFill = dynamic_cast<ArrayFillNode*>(node->initExpr))
                 initValue = generateArrayFill(arrFill, declElem);
             else
                 initValue = generateExpression(node->initExpr, declaredType);
@@ -3154,8 +3396,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->initExpr);
             bool _is_mut_borrow =
                 _borrow_unary && _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
-            registerPointerBorrow(node->name, node->initExpr, node->line,
-                                  _is_mut_borrow);
+            registerPointerBorrow(
+                node->name,
+                node->initExpr,
+                node->line,
+                _is_mut_borrow);
         }
         return;
     }
@@ -3222,38 +3467,53 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                             if(srcBits > dstBits)
                             {
                                 elemVal = builder.CreateTrunc(
-                                    elemVal, targetElemType, "trunc");
+                                    elemVal,
+                                    targetElemType,
+                                    "trunc");
                             }
                             else if(srcBits < dstBits)
                             {
                                 elemVal = builder.CreateSExt(
-                                    elemVal, targetElemType, "sext");
+                                    elemVal,
+                                    targetElemType,
+                                    "sext");
                             }
                         }
-                        else if(sourceElemType->isIntegerTy() &&
-                                targetElemType->isFloatingPointTy())
+                        else if(
+                            sourceElemType->isIntegerTy() &&
+                            targetElemType->isFloatingPointTy())
                         {
                             elemVal = builder.CreateSIToFP(
-                                elemVal, targetElemType, "sitofp");
+                                elemVal,
+                                targetElemType,
+                                "sitofp");
                         }
-                        else if(sourceElemType->isFloatingPointTy() &&
-                                targetElemType->isIntegerTy())
+                        else if(
+                            sourceElemType->isFloatingPointTy() &&
+                            targetElemType->isIntegerTy())
                         {
                             elemVal = builder.CreateFPToSI(
-                                elemVal, targetElemType, "fptosi");
+                                elemVal,
+                                targetElemType,
+                                "fptosi");
                         }
-                        else if(sourceElemType->isFloatingPointTy() &&
-                                targetElemType->isFloatingPointTy())
+                        else if(
+                            sourceElemType->isFloatingPointTy() &&
+                            targetElemType->isFloatingPointTy())
                         {
                             elemVal = builder.CreateFPCast(
-                                elemVal, targetElemType, "fpcast");
+                                elemVal,
+                                targetElemType,
+                                "fpcast");
                         }
                         // For struct types and other complex types, no
                         // conversion needed
                     }
 
                     tupleVal = builder.CreateInsertValue(
-                        tupleVal, elemVal, static_cast<unsigned>(i),
+                        tupleVal,
+                        elemVal,
+                        static_cast<unsigned>(i),
                         "tuple.elem");
                 }
 
@@ -3307,15 +3567,19 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                            initValue->getType()->isPointerTy())
                         {
                             initValue = builder.CreateBitCast(
-                                initValue, targetType, "enum.cast.ptr");
+                                initValue,
+                                targetType,
+                                "enum.cast.ptr");
                         }
                         else if(initValue->getType()->isIntegerTy())
                         {
                             initValue = builder.CreateIntCast(
-                                initValue, targetType,
+                                initValue,
+                                targetType,
                                 !Helpers::enumIsUnsigned(baseKind),
-                                Helpers::enumIsUnsigned(baseKind) ? "enum.cast.u"
-                                                         : "enum.cast.s");
+                                Helpers::enumIsUnsigned(baseKind)
+                                    ? "enum.cast.u"
+                                    : "enum.cast.s");
                         }
                         else
                         {
@@ -3347,13 +3611,16 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         llvm::Type* structType = getStructType(resolvedStructName);
         if(!structType)
         {
-            reportError(node->line,
-                        "unknown struct type: " + structRef->structName);
+            reportError(
+                node->line,
+                "unknown struct type: " + structRef->structName);
             return;
         }
 
         llvm::AllocaInst* alloca = createEntryBlockAlloca(
-            builder.GetInsertBlock()->getParent(), structType, node->name);
+            builder.GetInsertBlock()->getParent(),
+            structType,
+            node->name);
 
         if(node->initExpr)
         {
@@ -3382,21 +3649,25 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         llvm::Type* callableType = getLLVMTypeFromNode(functionType);
         if(!callableType)
         {
-            reportError(node->line,
-                        "invalid callable type for '" + node->name + "'");
+            reportError(
+                node->line,
+                "invalid callable type for '" + node->name + "'");
             return;
         }
         llvm::AllocaInst* alloca = createEntryBlockAlloca(
-            builder.GetInsertBlock()->getParent(), callableType, node->name);
+            builder.GetInsertBlock()->getParent(),
+            callableType,
+            node->name);
         if(node->initExpr)
         {
             llvm::Value* initValue =
                 generateExpression(node->initExpr, functionType);
             if(!initValue || initValue->getType() != callableType)
             {
-                reportError(node->line,
-                            "initializer does not match callable type for '" +
-                                node->name + "'");
+                reportError(
+                    node->line,
+                    "initializer does not match callable type for '" +
+                        node->name + "'");
                 return;
             }
             builder.CreateStore(initValue, alloca);
@@ -3408,8 +3679,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                     functionItemVariables[node->name] = copied->second;
                 else
                 {
-                    std::string target = resolveFunctionItemTarget(
-                        functionItem, functionType);
+                    std::string target =
+                        resolveFunctionItemTarget(functionItem, functionType);
                     functionItemVariables[node->name] =
                         target.empty() ? std::set<std::string>{}
                                        : std::set<std::string>{target};
@@ -3455,37 +3726,43 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                         // signed
                         if(isUnsignedType(declaredType->kind))
                         {
-                            initValue = builder.CreateZExt(initValue,
-                                                           targetType, "zext");
+                            initValue =
+                                builder
+                                    .CreateZExt(initValue, targetType, "zext");
                         }
                         else
                         {
-                            initValue = builder.CreateSExt(initValue,
-                                                           targetType, "sext");
+                            initValue =
+                                builder
+                                    .CreateSExt(initValue, targetType, "sext");
                         }
                     }
                 }
-                else if(initType->isIntegerTy() &&
-                        targetType->isFloatingPointTy())
+                else if(
+                    initType->isIntegerTy() && targetType->isFloatingPointTy())
                 {
                     initValue =
                         builder.CreateSIToFP(initValue, targetType, "sitofp");
                 }
-                else if(initType->isFloatingPointTy() &&
-                        targetType->isIntegerTy())
+                else if(
+                    initType->isFloatingPointTy() && targetType->isIntegerTy())
                 {
                     initValue =
                         builder.CreateFPToSI(initValue, targetType, "fptosi");
                 }
-                else if(initType->isFloatingPointTy() &&
-                        targetType->isFloatingPointTy())
+                else if(
+                    initType->isFloatingPointTy() &&
+                    targetType->isFloatingPointTy())
                 {
                     initValue =
                         builder.CreateFPCast(initValue, targetType, "fpcast");
                 }
             }
             initValue = applyBooleanBranchPrediction(
-                initValue, node->branchPrediction, node->line, node->col);
+                initValue,
+                node->branchPrediction,
+                node->line,
+                node->col);
             if(!initValue)
                 return;
             builder.CreateStore(initValue, alloca);

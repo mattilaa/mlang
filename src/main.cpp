@@ -6,17 +6,19 @@
 #include "module.h"
 #include "package_manager.h"
 #include "source_filter.h"
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <chrono>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <exception>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <iostream>
-#include <cstdlib>
-#include <exception>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
@@ -25,17 +27,15 @@
 #include <map>
 #include <optional>
 #include <sstream>
-#include <algorithm>
-#include <unordered_set>
-#include <functional>
-#include <vector>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <unordered_set>
+#include <vector>
 
 // Declare functions and globals from parser/lexer
 extern int yyparse();
 extern FILE* yyin;
-extern const char* g_sourceFile;   // set before yyparse() for error messages
+extern const char* g_sourceFile; // set before yyparse() for error messages
 extern const char* g_targetArchForParse;
 extern "C"
 {
@@ -59,57 +59,90 @@ void printUsage(const char* programName)
         << "  " << programName << " <command> [options]\n\n"
         << "COMMANDS\n"
         << "  <source.mla>                 Compile and link a source file.\n"
-        << "  test [path]                  Run #[test] functions in a file or directory.\n"
-        << "  bench [path]                 Benchmark #[test] functions in a file or directory.\n"
+        << "  test [path]                  Run #[test] functions in a file or "
+           "directory.\n"
+        << "  bench [path]                 Benchmark #[test] functions in a "
+           "file or directory.\n"
         << "  run tests [path]             Alias for test.\n"
         << "  run docs [--doxyfile FILE]   Build the documentation site.\n"
-        << "  pkg <command>                Manage an MLang package; see pkg commands below.\n\n"
+        << "  pkg <command>                Manage an MLang package; see pkg "
+           "commands below.\n\n"
         << "COMPILER OPTIONS\n"
-        << "  -o FILE                      Write the output to FILE (default: a.out).\n"
+        << "  -o FILE                      Write the output to FILE (default: "
+           "a.out).\n"
         << "  -c                           Compile only; do not link.\n"
         << "  -S                           Emit assembly (.s).\n"
-        << "  -emit-llvm | -emit-bc        Emit LLVM IR (.ll) or bitcode (.bc).\n"
-        << "  --shared                     Build a shared library; main is not required.\n"
-        << "  --static-library             Build a static .a library; main is not required.\n"
-        << "  -O0|-Og|-O1|-O2|-O3|-Os|-Oz Select an optimization level (default: -O2).\n"
-        << "  -g | --debug-info            Emit DWARF debug info (source lines, variables) for\n"
-        << "                               lldb/gdb; use with -O0. On macOS an executable gets\n"
+        << "  -emit-llvm | -emit-bc        Emit LLVM IR (.ll) or bitcode "
+           "(.bc).\n"
+        << "  --shared                     Build a shared library; main is not "
+           "required.\n"
+        << "  --static-library             Build a static .a library; main is "
+           "not required.\n"
+        << "  -O0|-Og|-O1|-O2|-O3|-Os|-Oz Select an optimization level "
+           "(default: -O2).\n"
+        << "  -g | --debug-info            Emit DWARF debug info (source "
+           "lines, variables) for\n"
+        << "                               lldb/gdb; use with -O0. On macOS an "
+           "executable gets\n"
         << "                               a .dSYM bundle next to it.\n"
         << "  --target-arch ARCH           Target x86, x64, or aarch64.\n"
-        << "  -L DIR | -l NAME | -Wl,ARGS  Add a library path, library, or linker arguments.\n"
-        << "  --no-tests                   Exclude #[test] functions from a normal build.\n"
+        << "  -L DIR | -l NAME | -Wl,ARGS  Add a library path, library, or "
+           "linker arguments.\n"
+        << "  --no-tests                   Exclude #[test] functions from a "
+           "normal build.\n"
         << "  -v | --debug                 Enable verbose or debug logging.\n"
-        << "  --force                      Rebuild/install the bootstrap toolchain first.\n"
-        << "  -Wno-colon-if                Suppress the plain colon-if warning.\n"
-        << "  -Wno-colon-while             Suppress the plain colon-while warning.\n"
+        << "  --force                      Rebuild/install the bootstrap "
+           "toolchain first.\n"
+        << "  -Wno-colon-if                Suppress the plain colon-if "
+           "warning.\n"
+        << "  -Wno-colon-while             Suppress the plain colon-while "
+           "warning.\n"
         << "  -Wno-unwrap                  Suppress result.unwrap() warnings.\n"
         << "  -h, --help | --version       Print this help or the version.\n\n"
         << "TESTING AND BENCHMARKS\n"
         << "  --tests PATH                 Alternate test command spelling.\n"
-        << "  --filter NAME                Run tests whose names contain NAME.\n"
-        << "  --no-run                     Compile test/bench code without executing it.\n"
-        << "  --bench-iters N              Timed iterations per benchmark (minimum: 1).\n"
-        << "  --bench-warmup N             Warmup iterations per benchmark (minimum: 0).\n\n"
+        << "  --filter NAME                Run tests whose names contain "
+           "NAME.\n"
+        << "  --no-run                     Compile test/bench code without "
+           "executing it.\n"
+        << "  --bench-iters N              Timed iterations per benchmark "
+           "(minimum: 1).\n"
+        << "  --bench-warmup N             Warmup iterations per benchmark "
+           "(minimum: 0).\n\n"
         << "PACKAGE COMMANDS\n"
-        << "  init [--no-readme]           Create mlang.toml, src/main.mla, and README.md.\n"
-        << "  help <build|run>             Print the README.md Build and run instructions.\n"
-        << "  add NAME                     Add a git, path, archive, or system dependency.\n"
-        << "  lock | verify | vendor       Lock, verify, or vendor dependencies.\n"
+        << "  init [--no-readme]           Create mlang.toml, src/main.mla, "
+           "and README.md.\n"
+        << "  help <build|run>             Print the README.md Build and run "
+           "instructions.\n"
+        << "  add NAME                     Add a git, path, archive, or system "
+           "dependency.\n"
+        << "  lock | verify | vendor       Lock, verify, or vendor "
+           "dependencies.\n"
         << "  tree | why NAME              Inspect the dependency graph.\n"
-        << "  fetch | build | run TASK     Fetch, build, or execute package tasks.\n"
+        << "  fetch | build | run TASK     Fetch, build, or execute package "
+           "tasks.\n"
         << "  clean                        Remove build artifacts.\n"
-        << "  package | publish | install  Distribute or install registry packages.\n"
-        << "  audit | sbom                 Audit dependencies or create a CycloneDX SBOM.\n"
-        << "  sign | verify-signature      Sign an archive or verify its signature.\n"
+        << "  package | publish | install  Distribute or install registry "
+           "packages.\n"
+        << "  audit | sbom                 Audit dependencies or create a "
+           "CycloneDX SBOM.\n"
+        << "  sign | verify-signature      Sign an archive or verify its "
+           "signature.\n"
         << "  --tests MANIFEST             Run phase=\"test\" package tasks.\n"
         << "  MANIFEST --tasks             Print runnable package tasks.\n"
-        << "  Run '" << programName << " pkg --help' for every package option.\n\n"
+        << "  Run '" << programName
+        << " pkg --help' for every package option.\n\n"
         << "FEATURES\n"
-        << "  Native compilation            LLVM-backed executables, objects, IR, and libraries.\n"
-        << "  Test and benchmark runner     #[test] discovery, filtering, directory suites, timing.\n"
-        << "  Package manager               Dependencies, workspaces, profiles, features, lockfiles, vendors.\n"
-        << "  Native interop                C libraries through -L/-l, pkg-config, and linker flags.\n"
-        << "  Diagnostics                   Source locations, warning controls, and compiler documentation links.\n\n"
+        << "  Native compilation            LLVM-backed executables, objects, "
+           "IR, and libraries.\n"
+        << "  Test and benchmark runner     #[test] discovery, filtering, "
+           "directory suites, timing.\n"
+        << "  Package manager               Dependencies, workspaces, "
+           "profiles, features, lockfiles, vendors.\n"
+        << "  Native interop                C libraries through -L/-l, "
+           "pkg-config, and linker flags.\n"
+        << "  Diagnostics                   Source locations, warning "
+           "controls, and compiler documentation links.\n\n"
         << "EXAMPLES\n"
         << "  " << programName << " hello.mla\n"
         << "      Compile hello.mla to a.out.\n"
@@ -121,22 +154,27 @@ void printUsage(const char* programName)
         << "      Produce a shared library (use the platform library suffix).\n"
         << "  " << programName << " test tests/unit_tests.mla --filter parser\n"
         << "      Run matching tests.\n"
-        << "  " << programName << " bench tests/bench_parser.mla --bench-iters 1000 --bench-warmup 100\n"
+        << "  " << programName
+        << " bench tests/bench_parser.mla --bench-iters 1000 --bench-warmup "
+           "100\n"
         << "      Run a benchmark suite.\n"
         << "  " << programName << " run docs\n"
         << "      Build documentation.\n"
         << "  " << programName << " pkg init\n"
         << "      Create a package project.\n"
-        << "  " << programName << " pkg add cjson --git https://github.com/DaveGamble/cJSON.git\n"
+        << "  " << programName
+        << " pkg add cjson --git https://github.com/DaveGamble/cJSON.git\n"
         << "      Add a Git dependency.\n"
-        << "  " << programName << " pkg fetch && " << programName << " pkg build\n"
+        << "  " << programName << " pkg fetch && " << programName
+        << " pkg build\n"
         << "      Fetch dependencies and build the package.\n"
         << "  " << programName << " pkg run app\n"
         << "      Run a task named app.\n"
         << "  " << programName << " pkg help build\n"
         << "      Print the project's build instructions.\n\n"
         << "STDLIB LINKING\n"
-        << "  " << programName << " main.mla -L ~/.local/lib/mlang -lmlang_std\n"
+        << "  " << programName
+        << " main.mla -L ~/.local/lib/mlang -lmlang_std\n"
         << "  Or set MLANG_STDLIB_LIB_PATH=~/.local/lib/mlang.\n"
         << std::endl;
 }
@@ -205,7 +243,8 @@ static void write_mlang_commands_json(
     const std::vector<std::string>& typeTokens,
     const std::vector<std::tuple<std::string, std::string, int>>& builtinTypes,
     const std::vector<std::tuple<std::string, std::string, int>>& builtinMacros,
-    const std::vector<std::tuple<std::string, std::string, int>>& builtinFunctions)
+    const std::vector<std::tuple<std::string, std::string, int>>&
+        builtinFunctions)
 {
     std::ofstream out("mlang_commands.json", std::ios::binary);
     if(!out)
@@ -225,24 +264,23 @@ static void write_mlang_commands_json(
         out << "\"" << escape_json_string(modulePaths[i]) << "\"";
     }
     out << "], \"builtins\": [";
-    const char* builtins[] = {
-        "println!",
-        "print!",
-        "eprintln!",
-        "eprint!",
-        "debug!",
-        "debug_json!",
-        "format!",
-        "assert!",
-        "windows!",
-        "posix!",
-        "linux!",
-        "macos!",
-        "x64!",
-        "aarch64!",
-        "static_assert!",
-        "assert_eq!"
-    };
+    const char* builtins[] =
+        {"println!",
+         "print!",
+         "eprintln!",
+         "eprint!",
+         "debug!",
+         "debug_json!",
+         "format!",
+         "assert!",
+         "windows!",
+         "posix!",
+         "linux!",
+         "macos!",
+         "x64!",
+         "aarch64!",
+         "static_assert!",
+         "assert_eq!"};
     for(size_t i = 0; i < sizeof(builtins) / sizeof(builtins[0]); ++i)
     {
         if(i > 0)
@@ -312,11 +350,14 @@ static void append_workspace_mla_files(
     std::filesystem::path abs_root = std::filesystem::absolute(root, ec);
     if(ec)
         abs_root = root;
-    if(!std::filesystem::exists(abs_root, ec) || !std::filesystem::is_directory(abs_root, ec))
+    if(!std::filesystem::exists(abs_root, ec) ||
+       !std::filesystem::is_directory(abs_root, ec))
         return;
 
-    std::filesystem::recursive_directory_iterator it(
-        abs_root, std::filesystem::directory_options::skip_permission_denied, ec);
+    std::filesystem::recursive_directory_iterator
+        it(abs_root,
+           std::filesystem::directory_options::skip_permission_denied,
+           ec);
     std::filesystem::recursive_directory_iterator end;
     if(ec)
         return;
@@ -389,7 +430,8 @@ static std::vector<std::string> default_stdlib_paths()
             paths.emplace_back(MLANG_STDLIB_SOURCE_DIR);
     }
 #endif
-    const std::string installedModules = mlang::installed_path("share/mlang/modules");
+    const std::string installedModules =
+        mlang::installed_path("share/mlang/modules");
     if(!installedModules.empty())
         paths.emplace_back(installedModules);
     if(const char* xdg = std::getenv("XDG_DATA_HOME"))
@@ -401,7 +443,8 @@ static std::vector<std::string> default_stdlib_paths()
 #endif
     paths.emplace_back("/usr/local/share/mlang/modules");
     paths.emplace_back("/usr/share/mlang/modules");
-    const std::string installedStdlib = mlang::installed_path("share/mlang/stdlib");
+    const std::string installedStdlib =
+        mlang::installed_path("share/mlang/stdlib");
     if(!installedStdlib.empty())
         paths.emplace_back(installedStdlib);
     if(const char* xdg = std::getenv("XDG_DATA_HOME"))
@@ -485,12 +528,12 @@ static std::vector<std::string> default_stdlib_lib_paths()
     return paths;
 }
 
-
 static bool stdlib_lib_exists(const std::string& dir)
 {
     std::error_code ec;
     std::filesystem::path base(dir);
-    const char* names[] = {"libmlang_std.a", "libmlang_std.so", "libmlang_std.dylib"};
+    const char* names[] =
+        {"libmlang_std.a", "libmlang_std.so", "libmlang_std.dylib"};
     for(const char* name : names)
     {
         if(std::filesystem::exists(base / name, ec))
@@ -499,8 +542,9 @@ static bool stdlib_lib_exists(const std::string& dir)
     return false;
 }
 
-static void append_unique_link_arg(std::vector<std::string>& linkArgs,
-                                   const std::string& arg)
+static void append_unique_link_arg(
+    std::vector<std::string>& linkArgs,
+    const std::string& arg)
 {
     if(arg.empty())
         return;
@@ -512,8 +556,9 @@ static void append_unique_link_arg(std::vector<std::string>& linkArgs,
     linkArgs.push_back(arg);
 }
 
-static void append_framework_link_args(std::vector<std::string>& linkArgs,
-                                       const std::string& framework)
+static void append_framework_link_args(
+    std::vector<std::string>& linkArgs,
+    const std::string& framework)
 {
     if(framework.empty())
         return;
@@ -526,7 +571,8 @@ static void append_framework_link_args(std::vector<std::string>& linkArgs,
     linkArgs.push_back(framework);
 }
 
-static bool link_args_include_stdlib_dir(const std::vector<std::string>& linkArgs)
+static bool link_args_include_stdlib_dir(
+    const std::vector<std::string>& linkArgs)
 {
     for(std::size_t i = 0; i < linkArgs.size(); ++i)
     {
@@ -546,8 +592,9 @@ static bool link_args_include_stdlib_dir(const std::vector<std::string>& linkArg
     return false;
 }
 
-static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
-                                    std::string_view exePath)
+static void append_stdlib_link_args(
+    std::vector<std::string>& linkArgs,
+    std::string_view exePath)
 {
     bool hasStdlib = false;
     for(const auto& arg : linkArgs)
@@ -565,7 +612,8 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
     {
         std::error_code ec;
         std::filesystem::path exe = std::filesystem::absolute(
-            std::filesystem::path(std::string(exePath)), ec);
+            std::filesystem::path(std::string(exePath)),
+            ec);
         if(!ec)
         {
             std::string exeDir = exe.parent_path().string();
@@ -630,12 +678,14 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
     else
     {
 #ifdef MLANG_OPENSSL_SSL_DIR
-        append_unique_link_arg(linkArgs,
-                               std::string("-L") + MLANG_OPENSSL_SSL_DIR);
+        append_unique_link_arg(
+            linkArgs,
+            std::string("-L") + MLANG_OPENSSL_SSL_DIR);
 #endif
 #ifdef MLANG_OPENSSL_CRYPTO_DIR
-        append_unique_link_arg(linkArgs,
-                               std::string("-L") + MLANG_OPENSSL_CRYPTO_DIR);
+        append_unique_link_arg(
+            linkArgs,
+            std::string("-L") + MLANG_OPENSSL_CRYPTO_DIR);
 #endif
 #ifdef MLANG_OPENSSL_SSL_LIBRARY
         append_unique_link_arg(linkArgs, MLANG_OPENSSL_SSL_LIBRARY);
@@ -646,11 +696,11 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
                 append_unique_link_arg(linkArgs, std::string("-L") + dir);
         }
 #ifdef __APPLE__
-        const char* portableOpenSSLDirs[] = {
-            "/opt/homebrew/opt/openssl@3/lib",
-            "/usr/local/opt/openssl@3/lib",
-            "/opt/homebrew/opt/openssl/lib",
-            "/usr/local/opt/openssl/lib"};
+        const char* portableOpenSSLDirs[] =
+            {"/opt/homebrew/opt/openssl@3/lib",
+             "/usr/local/opt/openssl@3/lib",
+             "/opt/homebrew/opt/openssl/lib",
+             "/usr/local/opt/openssl/lib"};
         for(const char* dir : portableOpenSSLDirs)
         {
             std::error_code ec;
@@ -808,11 +858,11 @@ collect_builtin_function_defs(const std::vector<std::string>& modulePaths)
 static std::string trim(std::string_view s)
 {
     size_t start = 0;
-    while(start < s.size() && std::isspace(static_cast<unsigned char>(s[start])))
+    while(start < s.size() &&
+          std::isspace(static_cast<unsigned char>(s[start])))
         ++start;
     size_t end = s.size();
-    while(end > start &&
-          std::isspace(static_cast<unsigned char>(s[end - 1])))
+    while(end > start && std::isspace(static_cast<unsigned char>(s[end - 1])))
         --end;
     return std::string(s.substr(start, end - start));
 }
@@ -943,13 +993,13 @@ static std::string shell_quote(std::string_view s)
 
 static bool is_linker_input_path(std::string_view arg)
 {
-    auto has_suffix = [arg](std::string_view suffix) {
+    auto has_suffix = [arg](std::string_view suffix)
+    {
         return arg.size() >= suffix.size() &&
                arg.substr(arg.size() - suffix.size()) == suffix;
     };
-    return arg.size() > 2 &&
-           (has_suffix(".a") || has_suffix(".so") || has_suffix(".dylib") ||
-            has_suffix(".o"));
+    return arg.size() > 2 && (has_suffix(".a") || has_suffix(".so") ||
+                              has_suffix(".dylib") || has_suffix(".o"));
 }
 
 static bool report_directory_input_argument(const std::string& arg)
@@ -964,25 +1014,24 @@ static bool report_directory_input_argument(const std::string& arg)
                  "inputs to compile. A library directory must be passed with "
                  "-L; otherwise mlang may try to parse that directory as "
                  "source and report a confusing syntax error.\n";
-    std::cerr << "Use: mlang <source.mla> -L " << arg
-              << " -lmlang_std\n";
+    std::cerr << "Use: mlang <source.mla> -L " << arg << " -lmlang_std\n";
     std::cerr << "Also accepted: -L" << arg << "\n";
     return true;
 }
 
-static std::optional<std::filesystem::path>
-find_mlang_pkg_frontend_source(const char* argv0)
+static std::optional<std::filesystem::path> find_mlang_pkg_frontend_source(
+    const char* argv0)
 {
     namespace fs = std::filesystem;
     std::vector<fs::path> candidates;
-    candidates.push_back(fs::current_path() / "tools" / "mlang-pkg-mla" /
-                         "main.mla");
+    candidates.push_back(
+        fs::current_path() / "tools" / "mlang-pkg-mla" / "main.mla");
 
     fs::path exePath(argv0 ? argv0 : "mlang");
-    fs::path exeDir = exePath.has_parent_path() ? exePath.parent_path()
-                                                : fs::current_path();
-    candidates.push_back(exeDir / ".." / "tools" / "mlang-pkg-mla" /
-                         "main.mla");
+    fs::path exeDir =
+        exePath.has_parent_path() ? exePath.parent_path() : fs::current_path();
+    candidates.push_back(
+        exeDir / ".." / "tools" / "mlang-pkg-mla" / "main.mla");
     candidates.push_back(exeDir / "tools" / "mlang-pkg-mla" / "main.mla");
 
     for(const auto& c : candidates)
@@ -994,19 +1043,19 @@ find_mlang_pkg_frontend_source(const char* argv0)
     return std::nullopt;
 }
 
-static std::optional<std::filesystem::path>
-find_mlang_frontend_source(const char* argv0)
+static std::optional<std::filesystem::path> find_mlang_frontend_source(
+    const char* argv0)
 {
     namespace fs = std::filesystem;
     std::vector<fs::path> candidates;
-    candidates.push_back(fs::current_path() / "tools" / "mlang-frontend-mla" /
-                         "main.mla");
+    candidates.push_back(
+        fs::current_path() / "tools" / "mlang-frontend-mla" / "main.mla");
 
     fs::path exePath(argv0 ? argv0 : "mlang");
-    fs::path exeDir = exePath.has_parent_path() ? exePath.parent_path()
-                                                : fs::current_path();
-    candidates.push_back(exeDir / ".." / "tools" / "mlang-frontend-mla" /
-                         "main.mla");
+    fs::path exeDir =
+        exePath.has_parent_path() ? exePath.parent_path() : fs::current_path();
+    candidates.push_back(
+        exeDir / ".." / "tools" / "mlang-frontend-mla" / "main.mla");
     candidates.push_back(exeDir / "tools" / "mlang-frontend-mla" / "main.mla");
 
     for(const auto& c : candidates)
@@ -1020,16 +1069,16 @@ find_mlang_frontend_source(const char* argv0)
 
 static int decode_system_exit_code(int rc);
 
-static std::optional<std::filesystem::path>
-find_bootstrap_manifest(const char* argv0)
+static std::optional<std::filesystem::path> find_bootstrap_manifest(
+    const char* argv0)
 {
     namespace fs = std::filesystem;
     std::vector<fs::path> candidates;
     candidates.push_back(fs::current_path() / "bootstrap" / "mlang.toml");
 
     fs::path exePath(argv0 ? argv0 : "mlang");
-    fs::path exeDir = exePath.has_parent_path() ? exePath.parent_path()
-                                                : fs::current_path();
+    fs::path exeDir =
+        exePath.has_parent_path() ? exePath.parent_path() : fs::current_path();
     candidates.push_back(exeDir / ".." / "bootstrap" / "mlang.toml");
     candidates.push_back(exeDir / "bootstrap" / "mlang.toml");
 
@@ -1049,8 +1098,8 @@ static std::filesystem::path resolve_backend_compiler_path(const char* argv0)
     std::error_code ec;
     if(fs::exists(exePath, ec))
         exePath = fs::weakly_canonical(exePath, ec);
-    fs::path exeDir = exePath.has_parent_path() ? exePath.parent_path()
-                                                : fs::current_path();
+    fs::path exeDir =
+        exePath.has_parent_path() ? exePath.parent_path() : fs::current_path();
     const std::string exeName = exePath.filename().string();
     if(exeName == "mlang")
         return exePath;
@@ -1070,12 +1119,13 @@ static std::filesystem::path resolve_backend_compiler_path(const char* argv0)
     return exePath;
 }
 
-static bool ensure_compiled_mla_tool(const char* argv0,
-                                     const std::filesystem::path& src,
-                                     const std::filesystem::path& compilerBin,
-                                     std::string_view toolTag,
-                                     std::filesystem::path& outBin,
-                                     bool forceCppFrontendEnv)
+static bool ensure_compiled_mla_tool(
+    const char* argv0,
+    const std::filesystem::path& src,
+    const std::filesystem::path& compilerBin,
+    std::string_view toolTag,
+    std::filesystem::path& outBin,
+    bool forceCppFrontendEnv)
 {
     namespace fs = std::filesystem;
     std::hash<std::string> hasher;
@@ -1096,9 +1146,8 @@ static bool ensure_compiled_mla_tool(const char* argv0,
         }
     }
 
-    fs::path exePath = compilerBin.empty()
-                           ? fs::path(argv0 ? argv0 : "mlang")
-                           : compilerBin;
+    fs::path exePath =
+        compilerBin.empty() ? fs::path(argv0 ? argv0 : "mlang") : compilerBin;
     std::vector<std::string> toolLinkArgs;
     append_stdlib_link_args(toolLinkArgs, exePath.string());
     std::vector<std::string> filteredToolLinkArgs;
@@ -1117,8 +1166,7 @@ static bool ensure_compiled_mla_tool(const char* argv0,
     if(forceCppFrontendEnv)
         compileCmd += "MLANG_FRONTEND_IMPL=cpp ";
     compileCmd += shell_quote(exePath.string()) + " " +
-                  shell_quote(src.string()) +
-                  " -Wno-colon-if -Wno-colon-while";
+                  shell_quote(src.string()) + " -Wno-colon-if -Wno-colon-while";
     for(const auto& arg : filteredToolLinkArgs)
         compileCmd += " " + shell_quote(arg);
     compileCmd += " -o " + shell_quote(outBin.string());
@@ -1136,7 +1184,8 @@ static bool ensure_compiled_mla_tool(const char* argv0,
 }
 
 static std::filesystem::path default_build_artifact_path(
-    const std::string& inputFile, std::string_view ext)
+    const std::string& inputFile,
+    std::string_view ext)
 {
     namespace fs = std::filesystem;
     std::error_code ec;
@@ -1162,12 +1211,18 @@ static std::optional<int> run_mlang_frontend(int argc, char** argv)
     fs::path src = *srcOpt;
     fs::path toolBin;
     fs::path backendBin = resolve_backend_compiler_path(argv[0]);
-    if(!ensure_compiled_mla_tool(argv[0], src, backendBin, "mlang-frontend-mla", toolBin,
-                                 /*forceCppFrontendEnv=*/true))
+    if(!ensure_compiled_mla_tool(
+           argv[0],
+           src,
+           backendBin,
+           "mlang-frontend-mla",
+           toolBin,
+           /*forceCppFrontendEnv=*/true))
         return std::nullopt;
 
-    std::string runCmd = "MLANG_FRONTEND_IMPL=cpp " + shell_quote(toolBin.string()) +
-                         " --backend " + shell_quote(backendBin.string());
+    std::string runCmd = "MLANG_FRONTEND_IMPL=cpp " +
+                         shell_quote(toolBin.string()) + " --backend " +
+                         shell_quote(backendBin.string());
     for(int i = 1; i < argc; ++i)
         runCmd += " " + shell_quote(argv[i]);
 
@@ -1229,8 +1284,9 @@ static bool manifest_requires_cpp_pkg_frontend()
     std::ifstream in(*manifestOpt, std::ios::binary);
     if(!in)
         return false;
-    std::string content((std::istreambuf_iterator<char>(in)),
-                        std::istreambuf_iterator<char>());
+    std::string content(
+        (std::istreambuf_iterator<char>(in)),
+        std::istreambuf_iterator<char>());
     if(content.empty())
         return false;
 
@@ -1304,10 +1360,9 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
             return std::nullopt;
         break;
     }
-    if(argc >= subIndex + 1 &&
-       (std::string(argv[subIndex]) == "--help" ||
-        std::string(argv[subIndex]) == "-h" ||
-        std::string(argv[subIndex]) == "help"))
+    if(argc >= subIndex + 1 && (std::string(argv[subIndex]) == "--help" ||
+                                std::string(argv[subIndex]) == "-h" ||
+                                std::string(argv[subIndex]) == "help"))
     {
         return std::nullopt;
     }
@@ -1320,8 +1375,8 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
             std::string arg = argv[i];
             if(arg == "--url" || arg == "--archive" ||
                arg == "--strip-components" || arg == "--subdir" ||
-               arg == "--path" || arg == "--version" ||
-               arg == "--add-lib" || arg == "--project-dir")
+               arg == "--path" || arg == "--version" || arg == "--add-lib" ||
+               arg == "--project-dir")
             {
                 return std::nullopt;
             }
@@ -1341,10 +1396,9 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
         std::string(argv[subIndex]) == "tree" ||
         std::string(argv[subIndex]) == "why"))
         return std::nullopt;
-    if(argc >= subIndex + 1 &&
-       (std::string(argv[subIndex]) == "fetch" ||
-        std::string(argv[subIndex]) == "build" ||
-        std::string(argv[subIndex]) == "clean"))
+    if(argc >= subIndex + 1 && (std::string(argv[subIndex]) == "fetch" ||
+                                std::string(argv[subIndex]) == "build" ||
+                                std::string(argv[subIndex]) == "clean"))
     {
         for(int i = subIndex + 1; i < argc; ++i)
         {
@@ -1375,11 +1429,17 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
     fs::path src = *srcOpt;
     fs::path toolBin;
     fs::path backendBin = resolve_backend_compiler_path(argv[0]);
-    if(!ensure_compiled_mla_tool(argv[0], src, backendBin, "mlang-pkg-mla", toolBin,
-                                 /*forceCppFrontendEnv=*/true))
+    if(!ensure_compiled_mla_tool(
+           argv[0],
+           src,
+           backendBin,
+           "mlang-pkg-mla",
+           toolBin,
+           /*forceCppFrontendEnv=*/true))
         return std::nullopt;
 
-    std::string runCmd = "MLANG_FRONTEND_IMPL=cpp " + shell_quote(toolBin.string()) + " --backend " +
+    std::string runCmd = "MLANG_FRONTEND_IMPL=cpp " +
+                         shell_quote(toolBin.string()) + " --backend " +
                          shell_quote(backendBin.string());
     for(int i = 1; i < argc; ++i)
         runCmd += " " + shell_quote(argv[i]);
@@ -1457,16 +1517,17 @@ static int run_doxygen_docs(int argc, char** argv)
         {
             doxyfile = fs::absolute(argv[++i]);
             fs::path parent = doxyfile->parent_path();
-            projectRoot = parent.filename() == "docs" ? parent.parent_path()
-                                                       : parent;
+            projectRoot =
+                parent.filename() == "docs" ? parent.parent_path() : parent;
             continue;
         }
         if(arg.rfind("--doxyfile=", 0) == 0)
         {
-            doxyfile = fs::absolute(arg.substr(std::string("--doxyfile=").size()));
+            doxyfile =
+                fs::absolute(arg.substr(std::string("--doxyfile=").size()));
             fs::path parent = doxyfile->parent_path();
-            projectRoot = parent.filename() == "docs" ? parent.parent_path()
-                                                       : parent;
+            projectRoot =
+                parent.filename() == "docs" ? parent.parent_path() : parent;
             continue;
         }
         std::cerr << "Unknown option for 'run docs': " << arg << "\n"
@@ -1479,8 +1540,9 @@ static int run_doxygen_docs(int argc, char** argv)
         doxyfile = find_doxyfile_from(fs::current_path(), projectRoot);
     if(!doxyfile.has_value() || !fs::exists(*doxyfile))
     {
-        std::cerr << "Doxygen config not found. Expected docs/Doxyfile or "
-                     "Doxyfile in the current directory or a parent directory.\n";
+        std::cerr
+            << "Doxygen config not found. Expected docs/Doxyfile or "
+               "Doxyfile in the current directory or a parent directory.\n";
         return 1;
     }
 
@@ -1494,8 +1556,8 @@ static int run_doxygen_docs(int argc, char** argv)
         return 0;
     }
 
-    const int hasDoxygen =
-        decode_system_exit_code(std::system("command -v doxygen >/dev/null 2>&1"));
+    const int hasDoxygen = decode_system_exit_code(
+        std::system("command -v doxygen >/dev/null 2>&1"));
     if(hasDoxygen != 0)
     {
         std::cerr << "doxygen not found in PATH\n";
@@ -1509,7 +1571,8 @@ static int run_doxygen_docs(int argc, char** argv)
     if(rc != 0)
         return rc;
 
-    const fs::path htmlIndex = projectRoot / "docs" / "out" / "html" / "index.html";
+    const fs::path htmlIndex =
+        projectRoot / "docs" / "out" / "html" / "index.html";
     if(fs::exists(htmlIndex))
         std::cout << "Docs generated: "
                   << fs::relative(htmlIndex, projectRoot).generic_string()
@@ -1541,10 +1604,10 @@ static std::string log_date_prefix()
 #endif
     std::ostringstream os;
     os << std::setfill('0') << std::setw(2) << (tmNow.tm_mon + 1) << "/"
-       << std::setw(2) << tmNow.tm_mday << "/" << (tmNow.tm_year + 1900)
-       << " " << std::setw(2) << tmNow.tm_hour << ":" << std::setw(2)
-       << tmNow.tm_min << ":" << std::setw(2) << tmNow.tm_sec << ":"
-       << std::setw(3) << ms.count() << " ";
+       << std::setw(2) << tmNow.tm_mday << "/" << (tmNow.tm_year + 1900) << " "
+       << std::setw(2) << tmNow.tm_hour << ":" << std::setw(2) << tmNow.tm_min
+       << ":" << std::setw(2) << tmNow.tm_sec << ":" << std::setw(3)
+       << ms.count() << " ";
     return os.str();
 }
 
@@ -1640,14 +1703,18 @@ static int run_command_with_dated_output(const std::string& cmd)
 /// \see \ref bench_stdlib.mla — benchmark example
 /// \see \ref mlang_attributes.mla — \c #[test] with \c #[derive(Debug)]
 /// \see \ref testing_mock_example.mla — mock-based testing
-static std::optional<int>
-run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
-                        bool benchmarkMode, bool runTests, int benchIterations,
-                        int benchWarmup, bool warnPlainColonIf,
-                        bool warnPlainColonWhile,
-                        const std::vector<std::string>& linkArgs,
-                        const std::string& targetArch,
-                        const std::string& testFilterStr)
+static std::optional<int> run_test_directory_mode(
+    const char* argv0,
+    const std::filesystem::path& inPath,
+    bool benchmarkMode,
+    bool runTests,
+    int benchIterations,
+    int benchWarmup,
+    bool warnPlainColonIf,
+    bool warnPlainColonWhile,
+    const std::vector<std::string>& linkArgs,
+    const std::string& targetArch,
+    const std::string& testFilterStr)
 {
     std::error_code tec;
     std::vector<std::filesystem::path> files;
@@ -1670,9 +1737,9 @@ run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
         else
         {
             bool isPrefixed = filename.rfind("test_", 0) == 0;
-            bool isSuffixed = filename.size() >= 10 &&
-                              filename.compare(filename.size() - 10, 10,
-                                               "_tests.mla") == 0;
+            bool isSuffixed =
+                filename.size() >= 10 &&
+                filename.compare(filename.size() - 10, 10, "_tests.mla") == 0;
             if(!isPrefixed && !isSuffixed)
                 continue;
         }
@@ -1681,8 +1748,9 @@ run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
             std::ifstream in(p);
             if(!in)
                 continue;
-            std::string contents((std::istreambuf_iterator<char>(in)),
-                                 std::istreambuf_iterator<char>());
+            std::string contents(
+                (std::istreambuf_iterator<char>(in)),
+                std::istreambuf_iterator<char>());
             if(contents.find("#[test]") == std::string::npos)
                 continue;
         }
@@ -1728,8 +1796,9 @@ run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
         if(!targetArch.empty())
             cmd += " --target-arch " + shell_quote(targetArch);
 
-        int rc = benchmarkMode ? decode_system_exit_code(std::system(cmd.c_str()))
-                               : run_command_with_dated_output(cmd);
+        int rc = benchmarkMode
+                     ? decode_system_exit_code(std::system(cmd.c_str()))
+                     : run_command_with_dated_output(cmd);
         if(rc == 0)
             std::cout << log_date_prefix() << "[SUITE PASS] "
                       << file.filename().string() << std::endl;
@@ -1737,8 +1806,7 @@ run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
         {
             ++failedSuites;
             std::cout << log_date_prefix() << "[SUITE FAIL] "
-                      << file.filename().string() << " rc=" << rc
-                      << std::endl;
+                      << file.filename().string() << " rc=" << rc << std::endl;
         }
     }
     return failedSuites == 0 ? 0 : 1;
@@ -1833,8 +1901,7 @@ int main(int argc, char** argv)
                 shorthandTests = true;
         }
 
-        if(preferMla && !forceCpp && !shorthandManifestTasks &&
-           !shorthandTests)
+        if(preferMla && !forceCpp && !shorthandManifestTasks && !shorthandTests)
         {
             if(auto rc = run_mlang_pkg_frontend(argc, argv); rc.has_value())
                 return *rc;
@@ -1859,8 +1926,9 @@ int main(int argc, char** argv)
         runTests = true;
         argStart = 2;
     }
-    else if(argc >= 3 && std::string(argv[1]) == "run" &&
-            std::string(argv[2]) == "tests")
+    else if(
+        argc >= 3 && std::string(argv[1]) == "run" &&
+        std::string(argv[2]) == "tests")
     {
         testMode = true;
         runTests = true;
@@ -1990,9 +2058,9 @@ int main(int argc, char** argv)
         {
             linkArgs.push_back(arg);
         }
-        else if(arg == "-O0" || arg == "-Og" || arg == "-O1" ||
-                arg == "-O2" || arg == "-O3" || arg == "-Os" ||
-                arg == "-Oz")
+        else if(
+            arg == "-O0" || arg == "-Og" || arg == "-O1" || arg == "-O2" ||
+            arg == "-O3" || arg == "-Os" || arg == "-Oz")
         {
             optimizationLevel = arg;
             optimizationLevelExplicit = true;
@@ -2147,7 +2215,8 @@ int main(int argc, char** argv)
 
     if(emitSharedLibrary && !outputPathExplicit)
     {
-        const std::string stem = std::filesystem::path(inputFile).stem().string();
+        const std::string stem =
+            std::filesystem::path(inputFile).stem().string();
 #if defined(__APPLE__)
         outputFile = "lib" + stem + ".dylib";
 #elif defined(_WIN32)
@@ -2158,7 +2227,8 @@ int main(int argc, char** argv)
     }
     else if(emitStaticLibrary && !outputPathExplicit)
     {
-        const std::string stem = std::filesystem::path(inputFile).stem().string();
+        const std::string stem =
+            std::filesystem::path(inputFile).stem().string();
         outputFile = "lib" + stem + ".a";
     }
 
@@ -2168,7 +2238,9 @@ int main(int argc, char** argv)
     if(!artifactDir.empty())
     {
         std::error_code aec;
-        std::filesystem::create_directories(std::filesystem::path(artifactDir), aec);
+        std::filesystem::create_directories(
+            std::filesystem::path(artifactDir),
+            aec);
     }
     if(testMode)
     {
@@ -2176,11 +2248,18 @@ int main(int argc, char** argv)
         std::filesystem::path inPath = inputFile;
         if(std::filesystem::is_directory(inPath, tec))
         {
-            auto rc = run_test_directory_mode(argv[0], inPath, benchmarkMode,
-                                              runTests, benchIterations,
-                                              benchWarmup, warnPlainColonIf,
-                                              warnPlainColonWhile, linkArgs,
-                                              targetArch, testFilterStr);
+            auto rc = run_test_directory_mode(
+                argv[0],
+                inPath,
+                benchmarkMode,
+                runTests,
+                benchIterations,
+                benchWarmup,
+                warnPlainColonIf,
+                warnPlainColonWhile,
+                linkArgs,
+                targetArch,
+                testFilterStr);
             if(rc.has_value())
                 return *rc;
             return 1;
@@ -2228,8 +2307,9 @@ int main(int argc, char** argv)
         std::cerr << "Error opening file: " << inputFile << std::endl;
         return 1;
     }
-    const std::string rawInput((std::istreambuf_iterator<char>(input_stream)),
-                               std::istreambuf_iterator<char>());
+    const std::string rawInput(
+        (std::istreambuf_iterator<char>(input_stream)),
+        std::istreambuf_iterator<char>());
     const std::string filteredInput =
         mlang::preprocess_conditional_regions(rawInput, targetArch);
 
@@ -2374,10 +2454,11 @@ int main(int argc, char** argv)
         // Initialize code generator
         CodeGenerator generator(context, builder, module, debugMode);
         generator.setSourceFile(inputFile);
-        generator.setDebugInfo(debugInfo, optimizationLevel != "-O0" &&
-                                              optimizationLevel != "-Og");
-        generator.setCheckedNarrowCasts(optimizationLevel == "-O0" ||
-                                        optimizationLevel == "-Og");
+        generator.setDebugInfo(
+            debugInfo,
+            optimizationLevel != "-O0" && optimizationLevel != "-Og");
+        generator.setCheckedNarrowCasts(
+            optimizationLevel == "-O0" || optimizationLevel == "-Og");
         generator.setTestMode(testMode);
         generator.setBenchmarkMode(benchmarkMode);
         generator.setBenchmarkIterations(benchIterations);
@@ -2385,11 +2466,9 @@ int main(int argc, char** argv)
         generator.setWarnPlainColonIf(warnPlainColonIf);
         generator.setWarnPlainColonWhile(warnPlainColonWhile);
         generator.setWarnResultUnwrap(warnResultUnwrap);
-        generator.setRequireMain(!testMode && !emitObjectOnly &&
-                                 !emitSharedLibrary &&
-                                 !emitStaticLibrary &&
-                                 !emitAssembly && !emitLLVMIR &&
-                                 !emitBitcode);
+        generator.setRequireMain(
+            !testMode && !emitObjectOnly && !emitSharedLibrary &&
+            !emitStaticLibrary && !emitAssembly && !emitLLVMIR && !emitBitcode);
         generator.setModuleLoader(moduleLoader.get());
         if(!testMode)
             generator.setIncludeTests(includeTests);
@@ -2408,7 +2487,8 @@ int main(int argc, char** argv)
             // before code generation, so size_of and every other layout query
             // see the target's padding and alignment, not LLVM's defaults.
             Backend backend(module, targetArch, optimizationLevel == "-O0");
-            if(debugInfo && (optimizationLevel == "-O0" || optimizationLevel == "-Og"))
+            if(debugInfo &&
+               (optimizationLevel == "-O0" || optimizationLevel == "-Og"))
                 backend.useUnoptimizedCodegen();
 
             generator.generateCode(program);
@@ -2441,8 +2521,8 @@ int main(int argc, char** argv)
             {
                 if(verbose)
                 {
-                    std::cout << "Applying optimizations ("
-                              << optimizationLevel << ")..." << std::endl;
+                    std::cout << "Applying optimizations (" << optimizationLevel
+                              << ")..." << std::endl;
                 }
                 backend.optimize(optimizationLevel);
             }
@@ -2503,8 +2583,7 @@ int main(int argc, char** argv)
             }
             else if(emitSharedLibrary)
             {
-                success =
-                    backend.compileToSharedLibrary(outputFile, linkArgs);
+                success = backend.compileToSharedLibrary(outputFile, linkArgs);
             }
             else if(emitStaticLibrary)
             {
@@ -2520,10 +2599,13 @@ int main(int argc, char** argv)
                 // info stays with the executable.
                 if(success && debugInfo)
                 {
-                    const std::string command = "dsymutil '" + outputFile + "' 2>&1";
+                    const std::string command =
+                        "dsymutil '" + outputFile + "' 2>&1";
                     if(std::system(command.c_str()) != 0)
-                        std::cerr << "warning: dsymutil failed; lldb may not find the "
-                                     "debug info for " << outputFile << std::endl;
+                        std::cerr << "warning: dsymutil failed; lldb may not "
+                                     "find the "
+                                     "debug info for "
+                                  << outputFile << std::endl;
                 }
 #endif
             }
@@ -2554,20 +2636,23 @@ int main(int argc, char** argv)
     std::error_code ec;
     std::filesystem::path inputAbs =
         std::filesystem::absolute(std::filesystem::path(inputFile), ec);
-    std::string inputNorm = ec ? inputFile : inputAbs.lexically_normal().string();
+    std::string inputNorm =
+        ec ? inputFile : inputAbs.lexically_normal().string();
     unique.insert(inputNorm);
     files.push_back(inputNorm);
     for(const auto& path : modulePaths)
     {
         std::filesystem::path p = std::filesystem::path(path);
-        std::filesystem::path abs = p.is_absolute()
-                                        ? p
-                                        : std::filesystem::absolute(p, ec);
+        std::filesystem::path abs =
+            p.is_absolute() ? p : std::filesystem::absolute(p, ec);
         std::string norm = ec ? path : abs.lexically_normal().string();
         if(unique.insert(norm).second)
             files.push_back(norm);
     }
-    append_workspace_mla_files(std::filesystem::current_path(ec), unique, files);
+    append_workspace_mla_files(
+        std::filesystem::current_path(ec),
+        unique,
+        files);
     for(const auto& root : moduleSearchPaths)
         append_workspace_mla_files(std::filesystem::path(root), unique, files);
     std::vector<std::string> searchPaths;
@@ -2575,9 +2660,8 @@ int main(int argc, char** argv)
     for(const auto& path : moduleSearchPaths)
     {
         std::filesystem::path p = std::filesystem::path(path);
-        std::filesystem::path abs = p.is_absolute()
-                                        ? p
-                                        : std::filesystem::absolute(p, ec);
+        std::filesystem::path abs =
+            p.is_absolute() ? p : std::filesystem::absolute(p, ec);
         std::string norm = ec ? path : abs.lexically_normal().string();
         if(searchUnique.insert(norm).second)
             searchPaths.push_back(norm);
@@ -2588,8 +2672,13 @@ int main(int argc, char** argv)
     auto builtinFunctions = collect_builtin_function_defs(searchPaths);
     auto* programNode = dynamic_cast<ProgramNode*>(programRoot);
     auto typeTokens = collect_user_type_tokens(programNode);
-    write_mlang_commands_json(files, searchPaths, typeTokens, builtinTypes,
-                              builtinMacros, builtinFunctions);
+    write_mlang_commands_json(
+        files,
+        searchPaths,
+        typeTokens,
+        builtinTypes,
+        builtinMacros,
+        builtinFunctions);
 
     // Clean up
     delete programRoot;

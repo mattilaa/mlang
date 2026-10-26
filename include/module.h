@@ -34,8 +34,9 @@ private:
     std::string resolveModulePath(const std::string& moduleName);
 
 public:
-    explicit ModuleLoader(const std::string& basePath = ".",
-                          const std::vector<std::string>& extraPaths = {});
+    explicit ModuleLoader(
+        const std::string& basePath = ".",
+        const std::vector<std::string>& extraPaths = {});
 
     // Load a module by name
     bool loadModule(const std::string& moduleName, std::string& errorMsg);
@@ -44,12 +45,13 @@ public:
     ProgramNode* getModule(const std::string& moduleName);
 
     // Get all functions from a module
-    std::vector<FunctionDefNode*>
-    getModuleFunctions(const std::string& moduleName);
+    std::vector<FunctionDefNode*> getModuleFunctions(
+        const std::string& moduleName);
 
     // Get a specific function from a module
-    FunctionDefNode* getFunction(const std::string& moduleName,
-                                 const std::string& funcName);
+    FunctionDefNode* getFunction(
+        const std::string& moduleName,
+        const std::string& funcName);
 
     // Get all structs from a module
     std::vector<StructDefNode*> getModuleStructs(const std::string& moduleName);
@@ -58,8 +60,10 @@ public:
     bool processModDeclarations(ProgramNode* program, std::string& errorMsg);
 
     // Merge imported symbols into the main program
-    bool processUseDeclarations(ProgramNode* program, std::string& errorMsg,
-                                const std::string& currentModuleName = "");
+    bool processUseDeclarations(
+        ProgramNode* program,
+        std::string& errorMsg,
+        const std::string& currentModuleName = "");
 
     // Set the base path for module resolution
     void setBasePath(const std::string& path)

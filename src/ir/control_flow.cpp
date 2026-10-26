@@ -8,8 +8,8 @@
 
 #include <cstdint>
 
-using mlang::ir_detail::ast_analysis::contains_unsupported_try_control_flow;
 using mlang::ir_detail::ast_analysis::collect_used_idents;
+using mlang::ir_detail::ast_analysis::contains_unsupported_try_control_flow;
 using mlang::ir_detail::ast_analysis::strip_iter_methods;
 using mlang::ir_detail::common::Helpers;
 
@@ -49,7 +49,8 @@ private:
 } // namespace
 
 void CodeGenerator::expireUnusedLocalBorrows(
-    const std::vector<StatementNode*>& statements, size_t statementIndex,
+    const std::vector<StatementNode*>& statements,
+    size_t statementIndex,
     int scopeDepth)
 {
     std::set<std::string> futureIdents;
@@ -119,28 +120,38 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
             if(!state->resultStorage)
             {
                 state->resultStorage = createEntryBlockAlloca(
-                    currentFunction, value->getType(), "lambda.return");
+                    currentFunction,
+                    value->getType(),
+                    "lambda.return");
             }
-            else if(value->getType() !=
-                    state->resultStorage->getAllocatedType())
+            else if(
+                value->getType() != state->resultStorage->getAllocatedType())
             {
-                llvm::Type* expected =
-                    state->resultStorage->getAllocatedType();
+                llvm::Type* expected = state->resultStorage->getAllocatedType();
                 if(value->getType()->isIntegerTy() && expected->isIntegerTy())
-                    value = builder.CreateIntCast(value, expected, true,
-                                                  "lambda.return.cast");
-                else if(value->getType()->isFloatingPointTy() &&
-                        expected->isFloatingPointTy())
-                    value = builder.CreateFPCast(value, expected,
-                                                "lambda.return.cast");
-                else if(value->getType()->isPointerTy() &&
-                        expected->isPointerTy())
-                    value = builder.CreateBitCast(value, expected,
-                                                 "lambda.return.cast");
+                    value = builder.CreateIntCast(
+                        value,
+                        expected,
+                        true,
+                        "lambda.return.cast");
+                else if(
+                    value->getType()->isFloatingPointTy() &&
+                    expected->isFloatingPointTy())
+                    value = builder.CreateFPCast(
+                        value,
+                        expected,
+                        "lambda.return.cast");
+                else if(
+                    value->getType()->isPointerTy() && expected->isPointerTy())
+                    value = builder.CreateBitCast(
+                        value,
+                        expected,
+                        "lambda.return.cast");
                 else
                 {
-                    reportError(node->line,
-                                "inconsistent return types in inline closure");
+                    reportError(
+                        node->line,
+                        "inconsistent return types in inline closure");
                     return;
                 }
             }
@@ -167,13 +178,14 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
             {
                 auto functionType = functionTypeVariables.find(id->name);
                 auto value = namedValues.find(id->name);
-                auto* slot = value == namedValues.end()
-                                 ? nullptr
-                                 : llvm::dyn_cast<llvm::AllocaInst>(
-                                       value->second);
+                auto* slot =
+                    value == namedValues.end()
+                        ? nullptr
+                        : llvm::dyn_cast<llvm::AllocaInst>(value->second);
                 if(functionType != functionTypeVariables.end() && slot)
                     returnValue = builder.CreateLoad(
-                        slot->getAllocatedType(), slot,
+                        slot->getAllocatedType(),
+                        slot,
                         id->name + ".closure.return");
             }
         }
@@ -189,31 +201,37 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
                 {
                     returnValue = generateExpression(node->expression);
                     returnValue = coerceTraitObjectValue(
-                        returnValue, traitObjType, node->line);
+                        returnValue,
+                        traitObjType,
+                        node->line);
                 }
                 else if(exprType)
                     returnValue = buildTraitObjectValue(
-                        node->expression, traitObj->traitName, node->line,
+                        node->expression,
+                        traitObj->traitName,
+                        node->line,
                         true);
                 else
                 {
                     returnValue = generateExpression(node->expression);
                     returnValue = coerceTraitObjectValue(
-                        returnValue, traitObjType, node->line);
+                        returnValue,
+                        traitObjType,
+                        node->line);
                 }
             }
             else
             {
-                if(auto* returnList =
-                       dynamic_cast<GenericListTypeNode*>(
-                           currentSemanticReturnType))
+                if(auto* returnList = dynamic_cast<GenericListTypeNode*>(
+                       currentSemanticReturnType))
                 {
-                    if(auto* returnArray =
-                           dynamic_cast<ArrayTypeNode*>(
-                               currentSemanticReturnType))
+                    if(auto* returnArray = dynamic_cast<ArrayTypeNode*>(
+                           currentSemanticReturnType))
                     {
                         if(!validateFixedArrayInitializer(
-                               returnArray, node->expression, node->line))
+                               returnArray,
+                               node->expression,
+                               node->line))
                             return;
                     }
 
@@ -222,12 +240,14 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
                     if(auto* listLit =
                            dynamic_cast<ListLiteralNode*>(node->expression))
                         returnValue = generateListLiteral(listLit, elemType);
-                    else if(auto* arrFill =
-                                dynamic_cast<ArrayFillNode*>(node->expression))
+                    else if(
+                        auto* arrFill =
+                            dynamic_cast<ArrayFillNode*>(node->expression))
                         returnValue = generateArrayFill(arrFill, elemType);
                 }
-                else if(auto* returnMap = dynamic_cast<MapTypeNode*>(
-                            currentSemanticReturnType))
+                else if(
+                    auto* returnMap =
+                        dynamic_cast<MapTypeNode*>(currentSemanticReturnType))
                 {
                     if(auto* mapLit =
                            dynamic_cast<MapLiteralNode*>(node->expression))
@@ -243,7 +263,8 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
 
                 if(!returnValue)
                     returnValue = generateExpression(
-                        node->expression, currentSemanticReturnType);
+                        node->expression,
+                        currentSemanticReturnType);
             }
         }
         if(!returnValue)
@@ -256,8 +277,9 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
         // Check if return type matches
         if(expectedRetType->isVoidTy())
         {
-            reportError(node->line,
-                        "function with void return type cannot return a value");
+            reportError(
+                node->line,
+                "function with void return type cannot return a value");
             return;
         }
 
@@ -271,31 +293,44 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
                 if(actualBits > expectedBits)
                 {
                     returnValue = builder.CreateTrunc(
-                        returnValue, expectedRetType, "rettrunc");
+                        returnValue,
+                        expectedRetType,
+                        "rettrunc");
                 }
                 else if(actualBits < expectedBits)
                 {
                     returnValue = builder.CreateSExt(
-                        returnValue, expectedRetType, "retsext");
+                        returnValue,
+                        expectedRetType,
+                        "retsext");
                 }
             }
-            else if(actualType->isIntegerTy() &&
-                    expectedRetType->isFloatingPointTy())
+            else if(
+                actualType->isIntegerTy() &&
+                expectedRetType->isFloatingPointTy())
             {
-                returnValue = builder.CreateSIToFP(returnValue, expectedRetType,
-                                                   "retsitofp");
+                returnValue = builder.CreateSIToFP(
+                    returnValue,
+                    expectedRetType,
+                    "retsitofp");
             }
-            else if(actualType->isFloatingPointTy() &&
-                    expectedRetType->isIntegerTy())
+            else if(
+                actualType->isFloatingPointTy() &&
+                expectedRetType->isIntegerTy())
             {
-                returnValue = builder.CreateFPToSI(returnValue, expectedRetType,
-                                                   "retfptosi");
+                returnValue = builder.CreateFPToSI(
+                    returnValue,
+                    expectedRetType,
+                    "retfptosi");
             }
-            else if(actualType->isFloatingPointTy() &&
-                    expectedRetType->isFloatingPointTy())
+            else if(
+                actualType->isFloatingPointTy() &&
+                expectedRetType->isFloatingPointTy())
             {
-                returnValue = builder.CreateFPCast(returnValue, expectedRetType,
-                                                   "retfpcast");
+                returnValue = builder.CreateFPCast(
+                    returnValue,
+                    expectedRetType,
+                    "retfpcast");
             }
             else if(!(actualType->isPointerTy() &&
                       expectedRetType->isPointerTy()))
@@ -336,16 +371,18 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
                 else
                     expectedStr = "unknown";
 
-                reportError(node->line, "return type mismatch: expected '" +
-                                            expectedStr + "', got '" +
-                                            actualStr + "'");
+                reportError(
+                    node->line,
+                    "return type mismatch: expected '" + expectedStr +
+                        "', got '" + actualStr + "'");
                 return;
             }
         }
 
         if(currentFunctionExceptionFrame)
-            builder.CreateCall(exceptionsPopFrameFunc,
-                               {currentFunctionExceptionFrame});
+            builder.CreateCall(
+                exceptionsPopFrameFunc,
+                {currentFunctionExceptionFrame});
         emitInoutWriteBack();
         emitAllActiveCleanups();
         builder.CreateRet(returnValue);
@@ -359,8 +396,9 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
             return;
         }
         if(currentFunctionExceptionFrame)
-            builder.CreateCall(exceptionsPopFrameFunc,
-                               {currentFunctionExceptionFrame});
+            builder.CreateCall(
+                exceptionsPopFrameFunc,
+                {currentFunctionExceptionFrame});
         emitInoutWriteBack();
         emitAllActiveCleanups();
         builder.CreateRetVoid();
@@ -392,14 +430,16 @@ void CodeGenerator::generateBreakStatement(BreakNode* node)
 }
 
 void CodeGenerator::mergeLoopExitBorrowStates(
-    const std::vector<LoopExitBorrowState>& states, int loopScopeDepth,
+    const std::vector<LoopExitBorrowState>& states,
+    int loopScopeDepth,
     const std::set<std::string>& loopVariables)
 {
     if(states.empty())
         return;
 
-    auto survivesLoopScope = [&](const LoopExitBorrowState& state,
-                                 const std::string& name) {
+    auto survivesLoopScope =
+        [&](const LoopExitBorrowState& state, const std::string& name)
+    {
         if(loopVariables.count(name))
             return false;
         auto depth = state.variableScopeDepth.find(name);
@@ -438,8 +478,12 @@ void CodeGenerator::mergeLoopExitBorrowStates(
         parent != pointerBorrowParent.end();)
     {
         const bool common = std::all_of(
-            states.begin(), states.end(), [&](const auto& state) {
-                auto branchParent = state.pointerBorrowParent.find(parent->first);
+            states.begin(),
+            states.end(),
+            [&](const auto& state)
+            {
+                auto branchParent =
+                    state.pointerBorrowParent.find(parent->first);
                 return branchParent != state.pointerBorrowParent.end() &&
                        branchParent->second == parent->second;
             });
@@ -452,7 +496,10 @@ void CodeGenerator::mergeLoopExitBorrowStates(
         place != pointerBorrowPlace.end();)
     {
         const bool common = std::all_of(
-            states.begin(), states.end(), [&](const auto& state) {
+            states.begin(),
+            states.end(),
+            [&](const auto& state)
+            {
                 auto branchPlace = state.pointerBorrowPlace.find(place->first);
                 return branchPlace != state.pointerBorrowPlace.end() &&
                        branchPlace->second == place->second;
@@ -556,29 +603,37 @@ void CodeGenerator::generateThrowStatement(ThrowNode* node)
 
     if(typeNameIndex < 0 || messageIndex < 0)
     {
-        reportError(node->line,
-                    "throw expects fields 'type_name' and 'message'");
+        reportError(
+            node->line,
+            "throw expects fields 'type_name' and 'message'");
         return;
     }
 
     initializeStdlibFunctions();
     llvm::Value* typeName = builder.CreateExtractValue(
-        exceptionValue, typeNameIndex, "throw.type_name");
-    llvm::Value* message = builder.CreateExtractValue(
-        exceptionValue, messageIndex, "throw.message");
-    llvm::Value* sourceLine =
-        sourceLineIndex >= 0
-            ? builder.CreateExtractValue(exceptionValue, sourceLineIndex,
-                                         "throw.source_line")
-            : llvm::ConstantInt::get(llvm::Type::getInt32Ty(context),
-                                     node->line);
+        exceptionValue,
+        typeNameIndex,
+        "throw.type_name");
+    llvm::Value* message =
+        builder
+            .CreateExtractValue(exceptionValue, messageIndex, "throw.message");
+    llvm::Value* sourceLine = sourceLineIndex >= 0
+                                  ? builder.CreateExtractValue(
+                                        exceptionValue,
+                                        sourceLineIndex,
+                                        "throw.source_line")
+                                  : llvm::ConstantInt::get(
+                                        llvm::Type::getInt32Ty(context),
+                                        node->line);
 
     if(sourceLine->getType()->isIntegerTy() &&
        sourceLine->getType() != llvm::Type::getInt32Ty(context))
     {
-        sourceLine =
-            builder.CreateIntCast(sourceLine, llvm::Type::getInt32Ty(context),
-                                  true, "throw.line.cast");
+        sourceLine = builder.CreateIntCast(
+            sourceLine,
+            llvm::Type::getInt32Ty(context),
+            true,
+            "throw.line.cast");
     }
 
     consumeMoveFromExpression(node->expression, node->line, "throw");
@@ -593,16 +648,19 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
 
     if(contains_unsupported_try_control_flow(node->tryBlock))
     {
-        reportError(node->line, "return, break, and continue are not yet "
-                                "supported inside try blocks");
+        reportError(
+            node->line,
+            "return, break, and continue are not yet "
+            "supported inside try blocks");
         return;
     }
 
     auto* catchStruct = dynamic_cast<StructTypeRefNode*>(node->catchType);
     if(!catchStruct)
     {
-        reportError(node->line,
-                    "catch currently requires a struct exception type");
+        reportError(
+            node->line,
+            "catch currently requires a struct exception type");
         return;
     }
 
@@ -619,8 +677,9 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
     auto catchMembersIt = structMembers.find(catchStructName);
     if(catchMembersIt == structMembers.end())
     {
-        reportError(node->line,
-                    "unknown catch type: " + catchStruct->structName);
+        reportError(
+            node->line,
+            "unknown catch type: " + catchStruct->structName);
         return;
     }
 
@@ -652,8 +711,9 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
     llvm::Function* function = builder.GetInsertBlock()->getParent();
     llvm::Value* frameHandle =
         builder.CreateCall(exceptionsPushFrameFunc, {}, "try.exc.frame");
-    llvm::Value* frameEnv = builder.CreateCall(exceptionsFrameEnvFunc,
-                                               {frameHandle}, "try.exc.env");
+    llvm::Value* frameEnv =
+        builder
+            .CreateCall(exceptionsFrameEnvFunc, {frameHandle}, "try.exc.env");
     auto* trySetjmpCall =
         builder.CreateCall(exceptionsSetjmpFunc, {frameEnv}, "try.exc.state");
     trySetjmpCall->setCanReturnTwice();
@@ -667,7 +727,8 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
         llvm::BasicBlock::Create(context, "try.cont", function);
 
     llvm::Value* enteredNormally = builder.CreateICmpEQ(
-        frameState, llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0),
+        frameState,
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0),
         "try.exc.ok");
     builder.CreateCondBr(enteredNormally, tryBodyBB, catchBB);
 
@@ -721,16 +782,23 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
         builder.CreateCall(exceptionsTakeTypeNameFunc, {}, "catch.type_name");
     llvm::Value* caughtMessage =
         builder.CreateCall(exceptionsTakeMessageFunc, {}, "catch.message");
-    llvm::Value* caughtSourceLine = builder.CreateCall(
-        exceptionsTakeSourceLineFunc, {}, "catch.source_line");
+    llvm::Value* caughtSourceLine =
+        builder
+            .CreateCall(exceptionsTakeSourceLineFunc, {}, "catch.source_line");
 
     llvm::Value* catchValue = llvm::UndefValue::get(catchStructType);
     catchValue = builder.CreateInsertValue(
-        catchValue, caughtTypeName, {static_cast<unsigned>(typeNameIndex)});
+        catchValue,
+        caughtTypeName,
+        {static_cast<unsigned>(typeNameIndex)});
     catchValue = builder.CreateInsertValue(
-        catchValue, caughtMessage, {static_cast<unsigned>(messageIndex)});
+        catchValue,
+        caughtMessage,
+        {static_cast<unsigned>(messageIndex)});
     catchValue = builder.CreateInsertValue(
-        catchValue, caughtSourceLine, {static_cast<unsigned>(sourceLineIndex)});
+        catchValue,
+        caughtSourceLine,
+        {static_cast<unsigned>(sourceLineIndex)});
     if(ownedIndex >= 0)
     {
         llvm::Type* ownedType =
@@ -747,7 +815,9 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
         if(ownedValue)
         {
             catchValue = builder.CreateInsertValue(
-                catchValue, ownedValue, {static_cast<unsigned>(ownedIndex)});
+                catchValue,
+                ownedValue,
+                {static_cast<unsigned>(ownedIndex)});
         }
     }
 
@@ -780,9 +850,11 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         int warnCol = (node->condition && node->condition->col > 0)
                           ? node->condition->col
                           : node->col;
-        reportWarning(warnLine, warnCol,
-                      "plain if/else-if with ':' is discouraged; use "
-                      "'if cond { ... }' and reserve ':' for guard forms");
+        reportWarning(
+            warnLine,
+            warnCol,
+            "plain if/else-if with ':' is discouraged; use "
+            "'if cond { ... }' and reserve ':' for guard forms");
     }
     if(node->thenBranch && node->thenBranch->statements.empty())
     {
@@ -887,9 +959,10 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         else
             typeStr = "non-boolean";
 
-        reportError(node->line,
-                    "if condition must be a boolean or numeric type, got '" +
-                        typeStr + "'");
+        reportError(
+            node->line,
+            "if condition must be a boolean or numeric type, got '" + typeStr +
+                "'");
         restoreIncomingState();
         return;
     }
@@ -901,13 +974,15 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         {
             // Compare float/double to 0.0
             condValue = builder.CreateFCmpONE(
-                condValue, llvm::ConstantFP::get(condValue->getType(), 0.0),
+                condValue,
+                llvm::ConstantFP::get(condValue->getType(), 0.0),
                 "ifcond");
         }
         else
         {
             condValue = builder.CreateICmpNE(
-                condValue, llvm::ConstantInt::get(condValue->getType(), 0),
+                condValue,
+                llvm::ConstantInt::get(condValue->getType(), 0),
                 "ifcond");
         }
     }
@@ -972,7 +1047,8 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto thenActiveMutBorrower = activeMutBorrower;
     auto thenRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     llvm::BasicBlock* thenEnd = builder.GetInsertBlock();
-    bool thenFallsThrough = thenEnd && !mlang::llvm_compat::terminatorOrNull(thenEnd);
+    bool thenFallsThrough =
+        thenEnd && !mlang::llvm_compat::terminatorOrNull(thenEnd);
 
     // Only add branch if block doesn't already have a terminator
     if(thenFallsThrough)
@@ -1039,7 +1115,8 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto elseActiveMutBorrower = activeMutBorrower;
     auto elseRuntimeClosureBorrowOwners = runtimeClosureBorrowOwners;
     llvm::BasicBlock* elseEnd = builder.GetInsertBlock();
-    bool elseFallsThrough = elseEnd && !mlang::llvm_compat::terminatorOrNull(elseEnd);
+    bool elseFallsThrough =
+        elseEnd && !mlang::llvm_compat::terminatorOrNull(elseEnd);
 
     // Only add branch if block doesn't already have a terminator
     if(elseFallsThrough)
@@ -1069,10 +1146,10 @@ void CodeGenerator::generateIfStatement(IfNode* node)
             if(other != elseFunctionItemVariables.end())
             {
                 std::set<std::string> possibleTargets = target.second;
-                possibleTargets.insert(other->second.begin(),
-                                       other->second.end());
-                functionItemVariables.emplace(target.first,
-                                              std::move(possibleTargets));
+                possibleTargets
+                    .insert(other->second.begin(), other->second.end());
+                functionItemVariables
+                    .emplace(target.first, std::move(possibleTargets));
             }
         }
     }
@@ -1122,14 +1199,21 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         };
 
         if(thenFallsThrough)
-            mergeOne(thenMoved, thenPointerBorrowTarget,
-                     thenAggregateBorrowOrigins, thenActiveBorrowers);
+            mergeOne(
+                thenMoved,
+                thenPointerBorrowTarget,
+                thenAggregateBorrowOrigins,
+                thenActiveBorrowers);
         if(elseFallsThrough)
-            mergeOne(elseMoved, elsePointerBorrowTarget,
-                     elseAggregateBorrowOrigins, elseActiveBorrowers);
+            mergeOne(
+                elseMoved,
+                elsePointerBorrowTarget,
+                elseAggregateBorrowOrigins,
+                elseActiveBorrowers);
 
-        const auto& firstParentState =
-            thenFallsThrough ? thenPointerBorrowParent : elsePointerBorrowParent;
+        const auto& firstParentState = thenFallsThrough
+                                           ? thenPointerBorrowParent
+                                           : elsePointerBorrowParent;
         mergedPointerBorrowParent = firstParentState;
         if(thenFallsThrough && elseFallsThrough)
         {
@@ -1151,8 +1235,9 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         aggregateBorrowOrigins = std::move(mergedAggregateBorrowOrigins);
         aggregateBorrowPlaces.clear();
         aggregateBorrowFieldPlaces.clear();
-        auto mergeAggregatePlaces = [&](
-            const auto& branchOrigins, const auto& branchPlaces) {
+        auto mergeAggregatePlaces =
+            [&](const auto& branchOrigins, const auto& branchPlaces)
+        {
             for(const auto& aggregate : mergedAggregateBorrowOrigins)
             {
                 auto branchAggregate = branchOrigins.find(aggregate.first);
@@ -1176,11 +1261,13 @@ void CodeGenerator::generateIfStatement(IfNode* node)
             }
         };
         if(thenFallsThrough)
-            mergeAggregatePlaces(thenAggregateBorrowOrigins,
-                                 thenAggregateBorrowPlaces);
+            mergeAggregatePlaces(
+                thenAggregateBorrowOrigins,
+                thenAggregateBorrowPlaces);
         if(elseFallsThrough)
-            mergeAggregatePlaces(elseAggregateBorrowOrigins,
-                                 elseAggregateBorrowPlaces);
+            mergeAggregatePlaces(
+                elseAggregateBorrowOrigins,
+                elseAggregateBorrowPlaces);
         // Any branch with an origin but no precise place makes that owner's
         // merged borrow conservative. (The per-owner erase above may be
         // superseded by a later branch, so explicitly remove unknown owners.)
@@ -1188,10 +1275,10 @@ void CodeGenerator::generateIfStatement(IfNode* node)
             for(const auto& owner : aggregate.second)
             {
                 bool hasUnknownPath = false;
-                auto checkBranch = [&](const auto& branchOrigins,
-                                       const auto& branchPlaces) {
-                    auto branchAggregate =
-                        branchOrigins.find(aggregate.first);
+                auto checkBranch =
+                    [&](const auto& branchOrigins, const auto& branchPlaces)
+                {
+                    auto branchAggregate = branchOrigins.find(aggregate.first);
                     if(branchAggregate == branchOrigins.end() ||
                        branchAggregate->second.count(owner) == 0)
                         return;
@@ -1207,11 +1294,13 @@ void CodeGenerator::generateIfStatement(IfNode* node)
                         hasUnknownPath = true;
                 };
                 if(thenFallsThrough)
-                    checkBranch(thenAggregateBorrowOrigins,
-                                thenAggregateBorrowPlaces);
+                    checkBranch(
+                        thenAggregateBorrowOrigins,
+                        thenAggregateBorrowPlaces);
                 if(elseFallsThrough)
-                    checkBranch(elseAggregateBorrowOrigins,
-                                elseAggregateBorrowPlaces);
+                    checkBranch(
+                        elseAggregateBorrowOrigins,
+                        elseAggregateBorrowPlaces);
                 if(hasUnknownPath)
                     aggregateBorrowPlaces[aggregate.first].erase(owner);
             }
@@ -1219,7 +1308,8 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         {
             std::string commonPlace;
             bool hasCommonPlace = true;
-            const auto mergePlaceState = [&](const auto& placeState) {
+            const auto mergePlaceState = [&](const auto& placeState)
+            {
                 auto place = placeState.find(borrow.first);
                 if(place == placeState.end())
                 {
@@ -1246,7 +1336,8 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         // possible owner or must conservatively block its whole object.
         auto mergeJoinedPointerPlaces = [&](const auto& branchTargets,
                                             const auto& branchPlaces,
-                                            const auto& branchMutBorrowers) {
+                                            const auto& branchMutBorrowers)
+        {
             for(const auto& borrow : branchMutBorrowers)
             {
                 const std::string& pointer = borrow.second;
@@ -1265,20 +1356,23 @@ void CodeGenerator::generateIfStatement(IfNode* node)
             }
         };
         if(thenFallsThrough)
-            mergeJoinedPointerPlaces(thenPointerBorrowTarget,
-                                     thenPointerBorrowPlace,
-                                     thenActiveMutBorrower);
+            mergeJoinedPointerPlaces(
+                thenPointerBorrowTarget,
+                thenPointerBorrowPlace,
+                thenActiveMutBorrower);
         if(elseFallsThrough)
-            mergeJoinedPointerPlaces(elsePointerBorrowTarget,
-                                     elsePointerBorrowPlace,
-                                     elseActiveMutBorrower);
+            mergeJoinedPointerPlaces(
+                elsePointerBorrowTarget,
+                elsePointerBorrowPlace,
+                elseActiveMutBorrower);
 
         // Shared pointers also need an owner-specific place when their
         // target differs by branch. A representative target alone loses the
         // other branch during a later nested reborrow.
         auto mergeJoinedSharedPointerPlaces = [&](const auto& branchTargets,
                                                   const auto& branchPlaces,
-                                                  const auto& branchBorrowers) {
+                                                  const auto& branchBorrowers)
+        {
             for(const auto& ownerBorrowers : branchBorrowers)
                 for(const auto& pointer : ownerBorrowers.second)
                 {
@@ -1289,21 +1383,23 @@ void CodeGenerator::generateIfStatement(IfNode* node)
                     auto place = branchPlaces.find(pointer);
                     std::string ownerPlace = ownerBorrowers.first;
                     if(place != branchPlaces.end() &&
-                       place->second.compare(0, ownerPlace.size(),
-                                             ownerPlace) == 0)
+                       place->second
+                               .compare(0, ownerPlace.size(), ownerPlace) == 0)
                         ownerPlace += place->second.substr(ownerPlace.size());
-                    aggregateBorrowPlaces[pointer][ownerBorrowers.first]
-                        .insert(ownerPlace);
+                    aggregateBorrowPlaces[pointer][ownerBorrowers.first].insert(
+                        ownerPlace);
                 }
         };
         if(thenFallsThrough)
-            mergeJoinedSharedPointerPlaces(thenPointerBorrowTarget,
-                                           thenPointerBorrowPlace,
-                                           thenActiveBorrowers);
+            mergeJoinedSharedPointerPlaces(
+                thenPointerBorrowTarget,
+                thenPointerBorrowPlace,
+                thenActiveBorrowers);
         if(elseFallsThrough)
-            mergeJoinedSharedPointerPlaces(elsePointerBorrowTarget,
-                                           elsePointerBorrowPlace,
-                                           elseActiveBorrowers);
+            mergeJoinedSharedPointerPlaces(
+                elsePointerBorrowTarget,
+                elsePointerBorrowPlace,
+                elseActiveBorrowers);
 
         activeBorrowers = std::move(mergedActiveBorrowers);
         // A mutable borrow on either reachable path may be live after the
@@ -1311,8 +1407,9 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         // path that did not create the borrow.
         std::map<std::string, std::string> mergedMutBorrower;
         if(thenFallsThrough)
-            mergedMutBorrower.insert(thenActiveMutBorrower.begin(),
-                                     thenActiveMutBorrower.end());
+            mergedMutBorrower.insert(
+                thenActiveMutBorrower.begin(),
+                thenActiveMutBorrower.end());
         if(elseFallsThrough)
             for(const auto& kv : elseActiveMutBorrower)
                 mergedMutBorrower.emplace(kv.first, kv.second);
@@ -1324,15 +1421,15 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         // closure entries that cannot survive the merge scope.
         std::map<std::string, std::set<std::string>>
             mergedRuntimeClosureBorrowOwners;
-        auto mergeRuntimeClosureOwners = [&](const auto& branchOwners) {
+        auto mergeRuntimeClosureOwners = [&](const auto& branchOwners)
+        {
             for(const auto& closure : branchOwners)
             {
                 auto depth = variableScopeDepth.find(closure.first);
                 if(depth == variableScopeDepth.end() ||
                    depth->second > currentScopeDepth())
                     continue;
-                auto& owners =
-                    mergedRuntimeClosureBorrowOwners[closure.first];
+                auto& owners = mergedRuntimeClosureBorrowOwners[closure.first];
                 owners.insert(closure.second.begin(), closure.second.end());
             }
         };
@@ -1364,30 +1461,34 @@ void CodeGenerator::generateCexprIfStatement(CexprIfNode* node)
 
     ConstexprValue condValue;
     std::string errorMessage;
-    if(!evalConstexprExpression(node->condition, condValue, &errorMessage,
-                                nullptr, 0))
+    if(!evalConstexprExpression(
+           node->condition,
+           condValue,
+           &errorMessage,
+           nullptr,
+           0))
     {
-        reportError(node->line,
-                    errorMessage.empty()
-                        ? "cexpr if condition requires a compile-time "
-                          "expression"
-                        : errorMessage);
+        reportError(
+            node->line,
+            errorMessage.empty() ? "cexpr if condition requires a compile-time "
+                                   "expression"
+                                 : errorMessage);
         return;
     }
 
     if(condValue.kind == ConstexprValue::Kind::OpaqueStruct ||
        condValue.kind == ConstexprValue::Kind::Type)
     {
-        reportError(node->line,
-                    "cexpr if condition requires a bool or numeric value, "
-                    "not a struct or type_id placeholder");
+        reportError(
+            node->line,
+            "cexpr if condition requires a bool or numeric value, "
+            "not a struct or type_id placeholder");
         return;
     }
 
-    const bool takeThen =
-        condValue.kind == ConstexprValue::Kind::Bool
-            ? condValue.boolValue
-            : constexprValueAsDouble(condValue) != 0.0;
+    const bool takeThen = condValue.kind == ConstexprValue::Kind::Bool
+                              ? condValue.boolValue
+                              : constexprValueAsDouble(condValue) != 0.0;
     if(!takeThen && node->elseIfBranch)
     {
         CexprIfNode* last = node->elseIfBranch;
@@ -1401,8 +1502,8 @@ void CodeGenerator::generateCexprIfStatement(CexprIfNode* node)
         return;
     }
 
-    StatementListNode* selected = takeThen ? node->thenBranch
-                                           : node->elseBranch;
+    StatementListNode* selected =
+        takeThen ? node->thenBranch : node->elseBranch;
     if(!selected)
         return;
 
@@ -1428,9 +1529,11 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
         int warnCol = (node->condition && node->condition->col > 0)
                           ? node->condition->col
                           : node->col;
-        reportWarning(warnLine, warnCol,
-                      "plain while with ':' is discouraged; use "
-                      "'while cond { ... }' and reserve ':' for guard forms");
+        reportWarning(
+            warnLine,
+            warnCol,
+            "plain while with ':' is discouraged; use "
+            "'while cond { ... }' and reserve ':' for guard forms");
     }
     if(node->body && node->body->statements.empty())
     {
@@ -1491,9 +1594,10 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
         else
             typeStr = "non-boolean";
 
-        reportError(node->line,
-                    "while condition must be a boolean or numeric type, got '" +
-                        typeStr + "'");
+        reportError(
+            node->line,
+            "while condition must be a boolean or numeric type, got '" +
+                typeStr + "'");
         loopBreakBlocks.pop_back();
         loopContinueBlocks.pop_back();
         loopBreakBorrowStates.pop_back();
@@ -1506,21 +1610,23 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
         if(condValue->getType()->isFloatingPointTy())
         {
             condValue = builder.CreateFCmpONE(
-                condValue, llvm::ConstantFP::get(condValue->getType(), 0.0),
+                condValue,
+                llvm::ConstantFP::get(condValue->getType(), 0.0),
                 "whilecond");
         }
         else
         {
             condValue = builder.CreateICmpNE(
-                condValue, llvm::ConstantInt::get(condValue->getType(), 0),
+                condValue,
+                llvm::ConstantInt::get(condValue->getType(), 0),
                 "whilecond");
         }
     }
 
     builder.CreateCondBr(condValue, bodyBB, endBB);
 
-    MutableCallableTargetsAcrossLoop callableTargetsAcrossLoop(
-        functionItemVariables, constantVariables);
+    MutableCallableTargetsAcrossLoop
+        callableTargetsAcrossLoop(functionItemVariables, constantVariables);
 
     bodyBB->insertInto(function);
     builder.SetInsertPoint(bodyBB);
@@ -1535,13 +1641,16 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
             generateStatement(stmt);
             if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
-            expireUnusedLocalBorrows(node->body->statements, index,
-                                     bodyScopeDepth);
+            expireUnusedLocalBorrows(
+                node->body->statements,
+                index,
+                bodyScopeDepth);
         }
         exitCleanupScope();
     }
     llvm::BasicBlock* bodyEnd = builder.GetInsertBlock();
-    bool bodyFallsThrough = bodyEnd && !mlang::llvm_compat::terminatorOrNull(bodyEnd);
+    bool bodyFallsThrough =
+        bodyEnd && !mlang::llvm_compat::terminatorOrNull(bodyEnd);
     auto bodyMoved = movedVariables;
     auto bodyPointerBorrowTarget = pointerBorrowTarget;
     auto bodyPointerBorrowParent = pointerBorrowParent;
@@ -1566,9 +1675,10 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     loopBreakBorrowStates.pop_back();
     auto continueBorrowStates = std::move(loopContinueBorrowStates.back());
     loopContinueBorrowStates.pop_back();
-    breakBorrowStates.insert(breakBorrowStates.end(),
-                             continueBorrowStates.begin(),
-                             continueBorrowStates.end());
+    breakBorrowStates.insert(
+        breakBorrowStates.end(),
+        continueBorrowStates.begin(),
+        continueBorrowStates.end());
 
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
@@ -1633,19 +1743,23 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
         // conservative because a loop may replace them on later iterations.
         std::map<std::string, std::map<std::string, std::set<std::string>>>
             loopPointerBorrowPlaces;
-        auto isSharedPointerIn = [](const auto& borrowers,
-                                    const std::string& pointer) {
+        auto isSharedPointerIn =
+            [](const auto& borrowers, const std::string& pointer)
+        {
             for(const auto& owner : borrowers)
                 if(owner.second.count(pointer))
                     return true;
             return false;
         };
-        auto mergeLoopPointerPlaces = [&](const auto& branchPlaces) {
+        auto mergeLoopPointerPlaces = [&](const auto& branchPlaces)
+        {
             for(const auto& borrower : branchPlaces)
             {
                 const bool sharedPointer =
                     pointerBorrowTarget.count(borrower.first) &&
-                    (isSharedPointerIn(incomingActiveBorrowers, borrower.first) ||
+                    (isSharedPointerIn(
+                         incomingActiveBorrowers,
+                         borrower.first) ||
                      isSharedPointerIn(bodyActiveBorrowers, borrower.first));
                 if(!isMutBorrower(borrower.first) && !sharedPointer)
                     continue;
@@ -1656,9 +1770,9 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
         };
         mergeLoopPointerPlaces(incomingAggregateBorrowPlaces);
         mergeLoopPointerPlaces(bodyAggregateBorrowPlaces);
-        auto addLoopPointerPlace = [&](const auto& targets,
-                                       const auto& places,
-                                       const auto& borrowers) {
+        auto addLoopPointerPlace =
+            [&](const auto& targets, const auto& places, const auto& borrowers)
+        {
             for(const auto& target : targets)
             {
                 if(!isMutBorrower(target.first) &&
@@ -1669,15 +1783,18 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
                 if(!ownerPlaces.empty())
                     continue;
                 auto place = places.find(target.first);
-                ownerPlaces.insert(place == places.end() ? target.second
-                                                         : place->second);
+                ownerPlaces.insert(
+                    place == places.end() ? target.second : place->second);
             }
         };
-        addLoopPointerPlace(incomingPointerBorrowTarget,
-                            incomingPointerBorrowPlace,
-                            incomingActiveBorrowers);
-        addLoopPointerPlace(bodyPointerBorrowTarget, bodyPointerBorrowPlace,
-                            bodyActiveBorrowers);
+        addLoopPointerPlace(
+            incomingPointerBorrowTarget,
+            incomingPointerBorrowPlace,
+            incomingActiveBorrowers);
+        addLoopPointerPlace(
+            bodyPointerBorrowTarget,
+            bodyPointerBorrowPlace,
+            bodyActiveBorrowers);
         aggregateBorrowPlaces = std::move(loopPointerBorrowPlaces);
         aggregateBorrowFieldPlaces.clear();
         for(const auto& closure : bodyRuntimeClosureBorrowOwners)
@@ -1695,13 +1812,14 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     // condition. Preserve its borrow facts separately from the back-edge join.
     for(const auto& state : breakBorrowStates)
     {
-        auto survivesLoopScope = [&](const std::string& name) {
+        auto survivesLoopScope = [&](const std::string& name)
+        {
             auto depth = state.variableScopeDepth.find(name);
             return depth == state.variableScopeDepth.end() ||
                    depth->second <= loopScopeDepth;
         };
-        movedVariables.insert(state.movedVariables.begin(),
-                              state.movedVariables.end());
+        movedVariables
+            .insert(state.movedVariables.begin(), state.movedVariables.end());
         for(const auto& borrow : state.pointerBorrowTarget)
             if(survivesLoopScope(borrow.first))
                 pointerBorrowTarget.emplace(borrow.first, borrow.second);
@@ -1721,11 +1839,11 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
                 for(const auto& field : aggregate.second)
                     for(const auto& owner : field.second)
                         if(survivesLoopScope(owner.first))
-                            aggregateBorrowFieldPlaces[aggregate.first]
-                                                      [field.first][owner.first]
-                                                          .insert(
-                                                              owner.second.begin(),
-                                                              owner.second.end());
+                            aggregateBorrowFieldPlaces
+                                [aggregate.first][field.first][owner.first]
+                                    .insert(
+                                        owner.second.begin(),
+                                        owner.second.end());
         for(const auto& place : state.pointerBorrowPlace)
         {
             if(!survivesLoopScope(place.first))
@@ -1756,7 +1874,8 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
         // separately from the single representative pointer target.
         for(const auto& state : breakBorrowStates)
         {
-            auto survivesState = [&](const std::string& name) {
+            auto survivesState = [&](const std::string& name)
+            {
                 auto depth = state.variableScopeDepth.find(name);
                 return depth == state.variableScopeDepth.end() ||
                        depth->second <= loopScopeDepth;
@@ -1779,17 +1898,17 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
                 {
                     if(!survivesState(owner))
                         continue;
-                    auto aggregate = state.aggregateBorrowPlaces.find(
-                        pointer.first);
+                    auto aggregate =
+                        state.aggregateBorrowPlaces.find(pointer.first);
                     if(aggregate != state.aggregateBorrowPlaces.end())
                     {
                         auto places = aggregate->second.find(owner);
                         if(places != aggregate->second.end() &&
                            !places->second.empty())
                         {
-                            aggregateBorrowPlaces[pointer.first][owner]
-                                .insert(places->second.begin(),
-                                        places->second.end());
+                            aggregateBorrowPlaces[pointer.first][owner].insert(
+                                places->second.begin(),
+                                places->second.end());
                             continue;
                         }
                     }
@@ -1811,8 +1930,10 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
             parent != pointerBorrowParent.end();)
         {
             const bool common = std::all_of(
-                breakBorrowStates.begin(), breakBorrowStates.end(),
-                [&](const auto& state) {
+                breakBorrowStates.begin(),
+                breakBorrowStates.end(),
+                [&](const auto& state)
+                {
                     auto branchParent =
                         state.pointerBorrowParent.find(parent->first);
                     return branchParent != state.pointerBorrowParent.end() &&
@@ -1827,9 +1948,12 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
             place != pointerBorrowPlace.end();)
         {
             const bool common = std::all_of(
-                breakBorrowStates.begin(), breakBorrowStates.end(),
-                [&](const auto& state) {
-                    auto branchPlace = state.pointerBorrowPlace.find(place->first);
+                breakBorrowStates.begin(),
+                breakBorrowStates.end(),
+                [&](const auto& state)
+                {
+                    auto branchPlace =
+                        state.pointerBorrowPlace.find(place->first);
                     return branchPlace != state.pointerBorrowPlace.end() &&
                            branchPlace->second == place->second;
                 });
@@ -1860,8 +1984,8 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
 
 void CodeGenerator::generateForStatement(ForNode* node)
 {
-    MutableCallableTargetsAcrossLoop callableTargetsAcrossLoop(
-        functionItemVariables, constantVariables);
+    MutableCallableTargetsAcrossLoop
+        callableTargetsAcrossLoop(functionItemVariables, constantVariables);
     llvm::Function* function = builder.GetInsertBlock()->getParent();
 
     // Strip .iter() / .into_iter() / .enumerate() wrappers from the iterable.
@@ -1897,9 +2021,10 @@ void CodeGenerator::generateForStatement(ForNode* node)
             else
                 typeStr = "non-integer";
 
-            reportError(node->line,
-                        "for loop range start must be an integer, got '" +
-                            typeStr + "'");
+            reportError(
+                node->line,
+                "for loop range start must be an integer, got '" + typeStr +
+                    "'");
             return;
         }
 
@@ -1917,9 +2042,9 @@ void CodeGenerator::generateForStatement(ForNode* node)
             else
                 typeStr = "non-integer";
 
-            reportError(node->line,
-                        "for loop range end must be an integer, got '" +
-                            typeStr + "'");
+            reportError(
+                node->line,
+                "for loop range end must be an integer, got '" + typeStr + "'");
             return;
         }
 
@@ -1974,7 +2099,7 @@ void CodeGenerator::generateForStatement(ForNode* node)
 
         namedValues[node->varName] = loopVar;
 
-        debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
+        debugDeclareVariable(node->varName, loopVar, nullptr, node); // mlang -g
         variableTypes[node->varName] = TypeNode::TYPE_I64;
         clearMovedVariable(node->varName);
         recordVariableScopeDepth(node->varName);
@@ -2034,14 +2159,18 @@ void CodeGenerator::generateForStatement(ForNode* node)
         {
             enterCleanupScope();
             const int bodyScopeDepth = currentScopeDepth();
-            for(size_t index = 0; index < node->body->statements.size(); ++index)
+            for(size_t index = 0; index < node->body->statements.size();
+                ++index)
             {
                 auto stmt = node->body->statements[index];
                 generateStatement(stmt);
-                if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
+                if(mlang::llvm_compat::terminatorOrNull(
+                       builder.GetInsertBlock()))
                     break;
-                expireUnusedLocalBorrows(node->body->statements, index,
-                                         bodyScopeDepth);
+                expireUnusedLocalBorrows(
+                    node->body->statements,
+                    index,
+                    bodyScopeDepth);
             }
             exitCleanupScope();
         }
@@ -2062,7 +2191,8 @@ void CodeGenerator::generateForStatement(ForNode* node)
         builder.SetInsertPoint(incBB);
         llvm::Value* nextVal = builder.CreateAdd(
             builder.CreateLoad(loopType, loopVar, ""),
-            llvm::ConstantInt::get(context, llvm::APInt(64, 1)), "nextval");
+            llvm::ConstantInt::get(context, llvm::APInt(64, 1)),
+            "nextval");
         builder.CreateStore(nextVal, loopVar);
         builder.CreateBr(condBB);
 
@@ -2075,12 +2205,12 @@ void CodeGenerator::generateForStatement(ForNode* node)
         loopContinueBlocks.pop_back();
         auto breakBorrowStates = std::move(loopBreakBorrowStates.back());
         loopBreakBorrowStates.pop_back();
-        auto continueBorrowStates =
-            std::move(loopContinueBorrowStates.back());
+        auto continueBorrowStates = std::move(loopContinueBorrowStates.back());
         loopContinueBorrowStates.pop_back();
-        breakBorrowStates.insert(breakBorrowStates.end(),
-                                 continueBorrowStates.begin(),
-                                 continueBorrowStates.end());
+        breakBorrowStates.insert(
+            breakBorrowStates.end(),
+            continueBorrowStates.begin(),
+            continueBorrowStates.end());
 
         // Restore old value
         if(oldVal)
@@ -2109,10 +2239,8 @@ void CodeGenerator::generateForStatement(ForNode* node)
         {
             movedVariables = std::move(stateBeforeLoopMoved);
             pointerBorrowTarget = std::move(stateBeforeLoopPointerBorrowTarget);
-            pointerBorrowPlace =
-                std::move(stateBeforeLoopPointerBorrowPlace);
-            pointerBorrowParent =
-                std::move(stateBeforeLoopPointerBorrowParent);
+            pointerBorrowPlace = std::move(stateBeforeLoopPointerBorrowPlace);
+            pointerBorrowParent = std::move(stateBeforeLoopPointerBorrowParent);
             aggregateBorrowOrigins =
                 std::move(stateBeforeLoopAggregateBorrowOrigins);
             aggregateBorrowPlaces =
@@ -2133,14 +2261,13 @@ void CodeGenerator::generateForStatement(ForNode* node)
                 else
                     ++it;
             }
-            pointerBorrowParent =
-                std::move(stateBeforeLoopPointerBorrowParent);
+            pointerBorrowParent = std::move(stateBeforeLoopPointerBorrowParent);
             for(const auto& aggregate : aggregateBorrowOrigins)
             {
                 auto& origins =
                     stateBeforeLoopAggregateBorrowOrigins[aggregate.first];
-                origins.insert(aggregate.second.begin(),
-                               aggregate.second.end());
+                origins
+                    .insert(aggregate.second.begin(), aggregate.second.end());
             }
             aggregateBorrowOrigins =
                 std::move(stateBeforeLoopAggregateBorrowOrigins);
@@ -2154,17 +2281,16 @@ void CodeGenerator::generateForStatement(ForNode* node)
             activeBorrowers = std::move(stateBeforeLoopActiveBorrowers);
             for(const auto& borrow : activeMutBorrower)
                 stateBeforeLoopActiveMutBorrower.emplace(borrow);
-            activeMutBorrower =
-                std::move(stateBeforeLoopActiveMutBorrower);
+            activeMutBorrower = std::move(stateBeforeLoopActiveMutBorrower);
 
-            std::map<std::string,
-                     std::map<std::string, std::set<std::string>>>
+            std::map<std::string, std::map<std::string, std::set<std::string>>>
                 loopPointerPlaces;
             auto addBranchPointerPlaces = [&](const auto& targets,
-                                             const auto& places,
-                                             const auto& aggregatePlaces,
-                                             const auto& sharedBorrowers,
-                                             const auto& mutableBorrowers) {
+                                              const auto& places,
+                                              const auto& aggregatePlaces,
+                                              const auto& sharedBorrowers,
+                                              const auto& mutableBorrowers)
+            {
                 std::map<std::string, std::set<std::string>> pointerOwners;
                 for(const auto& target : targets)
                     pointerOwners[target.first].insert(target.second);
@@ -2183,8 +2309,9 @@ void CodeGenerator::generateForStatement(ForNode* node)
                     if(existingPaths != aggregatePlaces.end())
                         for(const auto& owner : existingPaths->second)
                             loopPointerPlaces[pointer.first][owner.first]
-                                .insert(owner.second.begin(),
-                                        owner.second.end());
+                                .insert(
+                                    owner.second.begin(),
+                                    owner.second.end());
                     for(const auto& owner : pointerOwners[pointer.first])
                     {
                         auto existingOwnerPaths =
@@ -2203,20 +2330,23 @@ void CodeGenerator::generateForStatement(ForNode* node)
                     }
                 }
             };
-            addBranchPointerPlaces(stateBeforeLoopPointerBorrowTarget,
-                                   stateBeforeLoopPointerBorrowPlace,
-                                   stateBeforeLoopAggregateBorrowPlaces,
-                                   stateBeforeLoopActiveBorrowers,
-                                   stateBeforeLoopActiveMutBorrower);
-            addBranchPointerPlaces(bodyPointerBorrowTarget,
-                                   bodyPointerBorrowPlace,
-                                   bodyAggregateBorrowPlaces,
-                                   bodyActiveBorrowers,
-                                   bodyActiveMutBorrower);
+            addBranchPointerPlaces(
+                stateBeforeLoopPointerBorrowTarget,
+                stateBeforeLoopPointerBorrowPlace,
+                stateBeforeLoopAggregateBorrowPlaces,
+                stateBeforeLoopActiveBorrowers,
+                stateBeforeLoopActiveMutBorrower);
+            addBranchPointerPlaces(
+                bodyPointerBorrowTarget,
+                bodyPointerBorrowPlace,
+                bodyAggregateBorrowPlaces,
+                bodyActiveBorrowers,
+                bodyActiveMutBorrower);
             aggregateBorrowPlaces = std::move(loopPointerPlaces);
         }
         mergeLoopExitBorrowStates(
-            breakBorrowStates, loopScopeDepth,
+            breakBorrowStates,
+            loopScopeDepth,
             {node->varName, node->indexVarName});
     }
     else if(auto* listLit = dynamic_cast<ListLiteralNode*>(iterableExpr))
@@ -2269,8 +2399,9 @@ void CodeGenerator::generateForStatement(ForNode* node)
         }
         else if(!resolveVisibleEnumName(identifier->name).empty())
         {
-            generateForEnumIteration(node,
-                                     resolveVisibleEnumName(identifier->name));
+            generateForEnumIteration(
+                node,
+                resolveVisibleEnumName(identifier->name));
         }
         else
         {
@@ -2285,15 +2416,17 @@ void CodeGenerator::generateForStatement(ForNode* node)
     }
     else
     {
-        reportError(node->line,
-                    "for loops support range expressions (start..end), list "
-                    "iteration, enum iteration, and map iteration "
-                    "(.keys(), .values(), .entries())");
+        reportError(
+            node->line,
+            "for loops support range expressions (start..end), list "
+            "iteration, enum iteration, and map iteration "
+            "(.keys(), .values(), .entries())");
     }
 }
 
-void CodeGenerator::generateForListLiteralIteration(ForNode* node,
-                                                    ListLiteralNode* listLit)
+void CodeGenerator::generateForListLiteralIteration(
+    ForNode* node,
+    ListLiteralNode* listLit)
 {
     llvm::Function* function = builder.GetInsertBlock()->getParent();
     const int loopScopeDepth = currentScopeDepth();
@@ -2304,9 +2437,9 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         return;
     }
 
-    TypeNode* elemTypeNode =
-        inferExpressionTypeNode(listLit->elements->elements.front(),
-                                node->line);
+    TypeNode* elemTypeNode = inferExpressionTypeNode(
+        listLit->elements->elements.front(),
+        node->line);
     if(!elemTypeNode)
     {
         reportError(node->line, "cannot infer list literal element type");
@@ -2316,8 +2449,9 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     llvm::Type* elementType = getLLVMTypeFromNode(elemTypeNode);
     if(!elementType)
     {
-        reportError(node->line,
-                    "list literal iteration has unsupported element type");
+        reportError(
+            node->line,
+            "list literal iteration has unsupported element type");
         delete elemTypeNode;
         return;
     }
@@ -2366,13 +2500,11 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         hadOldEnumType ? oldEnumIt->second : std::string();
     auto oldListIt = listElementTypes.find(node->varName);
     bool hadOldListType = oldListIt != listElementTypes.end();
-    TypeNode* oldListType =
-        hadOldListType ? oldListIt->second : nullptr;
+    TypeNode* oldListType = hadOldListType ? oldListIt->second : nullptr;
     auto oldMapIt = mapKeyValueTypes.find(node->varName);
     bool hadOldMapType = oldMapIt != mapKeyValueTypes.end();
     std::pair<TypeNode*, TypeNode*> oldMapType =
-        hadOldMapType ? oldMapIt->second
-                      : std::make_pair(nullptr, nullptr);
+        hadOldMapType ? oldMapIt->second : std::make_pair(nullptr, nullptr);
     auto oldPointerIt = pointerElementTypes.find(node->varName);
     bool hadOldPointerType = oldPointerIt != pointerElementTypes.end();
     TypeNode* oldPointerType =
@@ -2388,7 +2520,7 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
 
     namedValues[node->varName] = loopVar;
 
-    debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
+    debugDeclareVariable(node->varName, loopVar, nullptr, node); // mlang -g
     variableTypes[node->varName] = elemTypeNode->kind;
     if(auto* structRef = dynamic_cast<StructTypeRefNode*>(elemTypeNode))
     {
@@ -2407,12 +2539,13 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
             enumVariableTypes.erase(node->varName);
         }
     }
-    else if(auto* genRef =
-                dynamic_cast<GenericStructTypeRefNode*>(elemTypeNode))
+    else if(
+        auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(elemTypeNode))
     {
         variableTypes[node->varName] = TypeNode::TYPE_STRUCT;
         structVariableTypes[node->varName] = getOrCreateMonomorphizedStruct(
-            genRef->structName, genRef->typeArgs);
+            genRef->structName,
+            genRef->typeArgs);
         enumVariableTypes.erase(node->varName);
     }
     else if(auto* listType = dynamic_cast<GenericListTypeNode*>(elemTypeNode))
@@ -2472,7 +2605,8 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         hadOldIdxDepth = oldIdxDepthIt != variableScopeDepth.end();
         oldIdxDepth = hadOldIdxDepth ? oldIdxDepthIt->second : 0;
         namedValues[node->indexVarName] = indexVar;
-        debugDeclareVariable(node->indexVarName, indexVar, nullptr, node);  // mlang -g
+        debugDeclareVariable(node->indexVarName, indexVar, nullptr, node); // mlang
+                                                                           // -g
         variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
         recordVariableScopeDepth(node->indexVarName);
     }
@@ -2510,8 +2644,9 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         llvm::Value* idxConst = llvm::ConstantInt::get(indexType, i);
         llvm::Value* isThis =
             builder.CreateICmpEQ(currentIdx, idxConst, "iseq");
-        elemVal = builder.CreateSelect(isThis, elementValues[i], elemVal,
-                                       "selectelem");
+        elemVal =
+            builder
+                .CreateSelect(isThis, elementValues[i], elemVal, "selectelem");
     }
     builder.CreateStore(elemVal, loopVar);
 
@@ -2525,8 +2660,10 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
             generateStatement(stmt);
             if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
-            expireUnusedLocalBorrows(node->body->statements, index,
-                                     bodyScopeDepth);
+            expireUnusedLocalBorrows(
+                node->body->statements,
+                index,
+                bodyScopeDepth);
         }
         exitCleanupScope();
     }
@@ -2539,9 +2676,10 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     // Increment
     incBB->insertInto(function);
     builder.SetInsertPoint(incBB);
-    llvm::Value* nextIdx =
-        builder.CreateAdd(builder.CreateLoad(indexType, indexVar, ""),
-                          llvm::ConstantInt::get(indexType, 1), "nextidx");
+    llvm::Value* nextIdx = builder.CreateAdd(
+        builder.CreateLoad(indexType, indexVar, ""),
+        llvm::ConstantInt::get(indexType, 1),
+        "nextidx");
     builder.CreateStore(nextIdx, indexVar);
     builder.CreateBr(condBB);
 
@@ -2555,9 +2693,10 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     loopBreakBorrowStates.pop_back();
     auto continueBorrowStates = std::move(loopContinueBorrowStates.back());
     loopContinueBorrowStates.pop_back();
-    breakBorrowStates.insert(breakBorrowStates.end(),
-                             continueBorrowStates.begin(),
-                             continueBorrowStates.end());
+    breakBorrowStates.insert(
+        breakBorrowStates.end(),
+        continueBorrowStates.begin(),
+        continueBorrowStates.end());
 
     // Restore index var if used
     if(hasIdxVar)
@@ -2628,13 +2767,15 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         clearMovedVariable(node->varName);
 
     mergeLoopExitBorrowStates(
-        breakBorrowStates, loopScopeDepth,
+        breakBorrowStates,
+        loopScopeDepth,
         {node->varName, node->indexVarName});
     delete elemTypeNode;
 }
 
-void CodeGenerator::generateForListVariableIteration(ForNode* node,
-                                                     IdentifierNode* listId)
+void CodeGenerator::generateForListVariableIteration(
+    ForNode* node,
+    IdentifierNode* listId)
 {
     // For iterating over a list variable, we need the list structure
     // Lists are stored as: { i64 size, ptr data }
@@ -2652,9 +2793,10 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     auto it = listElementTypes.find(listId->name);
     if(it == listElementTypes.end())
     {
-        reportError(node->line,
-                    "cannot iterate: unknown element type for list '" +
-                        listId->name + "'");
+        reportError(
+            node->line,
+            "cannot iterate: unknown element type for list '" + listId->name +
+                "'");
         return;
     }
 
@@ -2662,9 +2804,10 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     llvm::Type* elementType = getLLVMTypeFromNode(elemTypeNode);
     if(!elementType)
     {
-        reportError(node->line,
-                    "list iteration has unsupported element type for '" +
-                        listId->name + "'");
+        reportError(
+            node->line,
+            "list iteration has unsupported element type for '" + listId->name +
+                "'");
         return;
     }
 
@@ -2713,13 +2856,11 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         hadOldEnumType ? oldEnumIt->second : std::string();
     auto oldListIt = listElementTypes.find(node->varName);
     bool hadOldListType = oldListIt != listElementTypes.end();
-    TypeNode* oldListType =
-        hadOldListType ? oldListIt->second : nullptr;
+    TypeNode* oldListType = hadOldListType ? oldListIt->second : nullptr;
     auto oldMapIt = mapKeyValueTypes.find(node->varName);
     bool hadOldMapType = oldMapIt != mapKeyValueTypes.end();
     std::pair<TypeNode*, TypeNode*> oldMapType =
-        hadOldMapType ? oldMapIt->second
-                      : std::make_pair(nullptr, nullptr);
+        hadOldMapType ? oldMapIt->second : std::make_pair(nullptr, nullptr);
     auto oldPointerIt = pointerElementTypes.find(node->varName);
     bool hadOldPointerType = oldPointerIt != pointerElementTypes.end();
     TypeNode* oldPointerType =
@@ -2735,7 +2876,7 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
 
     namedValues[node->varName] = loopVar;
 
-    debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
+    debugDeclareVariable(node->varName, loopVar, nullptr, node); // mlang -g
     variableTypes[node->varName] = elemTypeNode->kind;
     if(auto* structRef = dynamic_cast<StructTypeRefNode*>(elemTypeNode))
     {
@@ -2754,12 +2895,13 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
             enumVariableTypes.erase(node->varName);
         }
     }
-    else if(auto* genRef =
-                dynamic_cast<GenericStructTypeRefNode*>(elemTypeNode))
+    else if(
+        auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(elemTypeNode))
     {
         variableTypes[node->varName] = TypeNode::TYPE_STRUCT;
         structVariableTypes[node->varName] = getOrCreateMonomorphizedStruct(
-            genRef->structName, genRef->typeArgs);
+            genRef->structName,
+            genRef->typeArgs);
         enumVariableTypes.erase(node->varName);
     }
     else if(auto* listType = dynamic_cast<GenericListTypeNode*>(elemTypeNode))
@@ -2820,7 +2962,8 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         hadOldIdxDepth = oldIdxDepthIt != variableScopeDepth.end();
         oldIdxDepth = hadOldIdxDepth ? oldIdxDepthIt->second : 0;
         namedValues[node->indexVarName] = indexVar;
-        debugDeclareVariable(node->indexVarName, indexVar, nullptr, node);  // mlang -g
+        debugDeclareVariable(node->indexVarName, indexVar, nullptr, node); // mlang
+                                                                           // -g
         variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
         recordVariableScopeDepth(node->indexVarName);
     }
@@ -2865,8 +3008,10 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
             generateStatement(stmt);
             if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
-            expireUnusedLocalBorrows(node->body->statements, index,
-                                     bodyScopeDepth);
+            expireUnusedLocalBorrows(
+                node->body->statements,
+                index,
+                bodyScopeDepth);
         }
         exitCleanupScope();
     }
@@ -2879,9 +3024,10 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     // Increment
     incBB->insertInto(function);
     builder.SetInsertPoint(incBB);
-    llvm::Value* nextIdx =
-        builder.CreateAdd(builder.CreateLoad(i64Type, indexVar, ""),
-                          llvm::ConstantInt::get(i64Type, 1), "nextidx");
+    llvm::Value* nextIdx = builder.CreateAdd(
+        builder.CreateLoad(i64Type, indexVar, ""),
+        llvm::ConstantInt::get(i64Type, 1),
+        "nextidx");
     builder.CreateStore(nextIdx, indexVar);
     builder.CreateBr(condBB);
 
@@ -2895,9 +3041,10 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     loopBreakBorrowStates.pop_back();
     auto continueBorrowStates = std::move(loopContinueBorrowStates.back());
     loopContinueBorrowStates.pop_back();
-    breakBorrowStates.insert(breakBorrowStates.end(),
-                             continueBorrowStates.begin(),
-                             continueBorrowStates.end());
+    breakBorrowStates.insert(
+        breakBorrowStates.end(),
+        continueBorrowStates.begin(),
+        continueBorrowStates.end());
 
     // Restore index var if used
     if(hasIdxVar)
@@ -2967,12 +3114,14 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     else
         clearMovedVariable(node->varName);
     mergeLoopExitBorrowStates(
-        breakBorrowStates, loopScopeDepth,
+        breakBorrowStates,
+        loopScopeDepth,
         {node->varName, node->indexVarName});
 }
 
-void CodeGenerator::generateForEnumIteration(ForNode* node,
-                                             const std::string& enumName)
+void CodeGenerator::generateForEnumIteration(
+    ForNode* node,
+    const std::string& enumName)
 {
     const int loopScopeDepth = currentScopeDepth();
     auto orderIt = enumVariantOrder.find(enumName);
@@ -3015,7 +3164,7 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
 
     namedValues[node->varName] = loopVar;
 
-    debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
+    debugDeclareVariable(node->varName, loopVar, nullptr, node); // mlang -g
     variableTypes[node->varName] = baseKind;
     enumVariableTypes[node->varName] = enumName;
     clearMovedVariable(node->varName);
@@ -3040,7 +3189,8 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
         hadOldIdxDepth = oldIdxDepthIt != variableScopeDepth.end();
         oldIdxDepth = hadOldIdxDepth ? oldIdxDepthIt->second : 0;
         namedValues[node->indexVarName] = indexVar;
-        debugDeclareVariable(node->indexVarName, indexVar, nullptr, node);  // mlang -g
+        debugDeclareVariable(node->indexVarName, indexVar, nullptr, node); // mlang
+                                                                           // -g
         variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
         recordVariableScopeDepth(node->indexVarName);
     }
@@ -3064,7 +3214,8 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
     builder.SetInsertPoint(condBB);
     llvm::Value* currentIdx = builder.CreateLoad(indexType, indexVar, "idx");
     llvm::Value* cond = builder.CreateICmpSLT(
-        currentIdx, llvm::ConstantInt::get(indexType, variantCount),
+        currentIdx,
+        llvm::ConstantInt::get(indexType, variantCount),
         "loopcond");
     builder.CreateCondBr(cond, bodyBB, endBB);
 
@@ -3086,8 +3237,11 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
             llvm::Value* variantConst =
                 builder.CreateGlobalStringPtr(strOrderIt->second[i].second);
 #endif
-            enumVal = enumVal ? builder.CreateSelect(isThis, variantConst,
-                                                     enumVal, "selectenumstr")
+            enumVal = enumVal ? builder.CreateSelect(
+                                    isThis,
+                                    variantConst,
+                                    enumVal,
+                                    "selectenumstr")
                               : variantConst;
         }
         builder.CreateStore(enumVal, loopVar);
@@ -3095,16 +3249,21 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
     else
     {
         llvm::Value* enumVal = llvm::ConstantInt::get(
-            enumTy, orderIt->second.front().second, !Helpers::enumIsUnsigned(baseKind));
+            enumTy,
+            orderIt->second.front().second,
+            !Helpers::enumIsUnsigned(baseKind));
         for(size_t i = 0; i < orderIt->second.size(); ++i)
         {
             llvm::Value* idxConst = llvm::ConstantInt::get(indexType, i);
             llvm::Value* isThis =
                 builder.CreateICmpEQ(currentIdx, idxConst, "iseq");
             llvm::Value* variantConst = llvm::ConstantInt::get(
-                enumTy, orderIt->second[i].second, !Helpers::enumIsUnsigned(baseKind));
-            enumVal = builder.CreateSelect(isThis, variantConst, enumVal,
-                                           "selectenum");
+                enumTy,
+                orderIt->second[i].second,
+                !Helpers::enumIsUnsigned(baseKind));
+            enumVal =
+                builder
+                    .CreateSelect(isThis, variantConst, enumVal, "selectenum");
         }
         builder.CreateStore(enumVal, loopVar);
     }
@@ -3119,8 +3278,10 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
             generateStatement(stmt);
             if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
-            expireUnusedLocalBorrows(node->body->statements, index,
-                                     bodyScopeDepth);
+            expireUnusedLocalBorrows(
+                node->body->statements,
+                index,
+                bodyScopeDepth);
         }
         exitCleanupScope();
     }
@@ -3130,9 +3291,10 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
 
     incBB->insertInto(function);
     builder.SetInsertPoint(incBB);
-    llvm::Value* nextIdx =
-        builder.CreateAdd(builder.CreateLoad(indexType, indexVar, ""),
-                          llvm::ConstantInt::get(indexType, 1), "nextidx");
+    llvm::Value* nextIdx = builder.CreateAdd(
+        builder.CreateLoad(indexType, indexVar, ""),
+        llvm::ConstantInt::get(indexType, 1),
+        "nextidx");
     builder.CreateStore(nextIdx, indexVar);
     builder.CreateBr(condBB);
 
@@ -3145,9 +3307,10 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
     loopBreakBorrowStates.pop_back();
     auto continueBorrowStates = std::move(loopContinueBorrowStates.back());
     loopContinueBorrowStates.pop_back();
-    breakBorrowStates.insert(breakBorrowStates.end(),
-                             continueBorrowStates.begin(),
-                             continueBorrowStates.end());
+    breakBorrowStates.insert(
+        breakBorrowStates.end(),
+        continueBorrowStates.begin(),
+        continueBorrowStates.end());
 
     if(hasIdxVar)
     {
@@ -3190,12 +3353,14 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
     else
         clearMovedVariable(node->varName);
     mergeLoopExitBorrowStates(
-        breakBorrowStates, loopScopeDepth,
+        breakBorrowStates,
+        loopScopeDepth,
         {node->varName, node->indexVarName});
 }
 
-void CodeGenerator::generateForMapIteration(ForNode* node,
-                                            MapIteratorNode* mapIter)
+void CodeGenerator::generateForMapIteration(
+    ForNode* node,
+    MapIteratorNode* mapIter)
 {
     llvm::Function* function = builder.GetInsertBlock()->getParent();
     const int loopScopeDepth = currentScopeDepth();
@@ -3219,8 +3384,9 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
     auto it = mapKeyValueTypes.find(mapId->name);
     if(it == mapKeyValueTypes.end())
     {
-        reportError(node->line,
-                    "cannot iterate: '" + mapId->name + "' is not a map");
+        reportError(
+            node->line,
+            "cannot iterate: '" + mapId->name + "' is not a map");
         return;
     }
 
@@ -3273,7 +3439,7 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
         loopVarType = keyType;
         loopVar = builder.CreateAlloca(keyType, nullptr, node->varName);
         namedValues[node->varName] = loopVar;
-        debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
+        debugDeclareVariable(node->varName, loopVar, nullptr, node); // mlang -g
         variableTypes[node->varName] = keyTypeNode->kind;
         clearMovedVariable(node->varName);
         recordVariableScopeDepth(node->varName);
@@ -3283,7 +3449,7 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
         loopVarType = valueType;
         loopVar = builder.CreateAlloca(valueType, nullptr, node->varName);
         namedValues[node->varName] = loopVar;
-        debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
+        debugDeclareVariable(node->varName, loopVar, nullptr, node); // mlang -g
         variableTypes[node->varName] = valTypeNode->kind;
         clearMovedVariable(node->varName);
         recordVariableScopeDepth(node->varName);
@@ -3298,7 +3464,8 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
             loopVar =
                 builder.CreateAlloca(entryStructType, nullptr, node->varName);
             namedValues[node->varName] = loopVar;
-            debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
+            debugDeclareVariable(node->varName, loopVar, nullptr, node); // mlang
+                                                                         // -g
             variableTypes[node->varName] = TypeNode::TYPE_TUPLE;
             clearMovedVariable(node->varName);
             recordVariableScopeDepth(node->varName);
@@ -3388,8 +3555,10 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
             generateStatement(stmt);
             if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
-            expireUnusedLocalBorrows(node->body->statements, index,
-                                     bodyScopeDepth);
+            expireUnusedLocalBorrows(
+                node->body->statements,
+                index,
+                bodyScopeDepth);
         }
         exitCleanupScope();
     }
@@ -3402,9 +3571,10 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
     // Increment
     incBB->insertInto(function);
     builder.SetInsertPoint(incBB);
-    llvm::Value* nextIdx =
-        builder.CreateAdd(builder.CreateLoad(i64Type, indexVar, ""),
-                          llvm::ConstantInt::get(i64Type, 1), "nextidx");
+    llvm::Value* nextIdx = builder.CreateAdd(
+        builder.CreateLoad(i64Type, indexVar, ""),
+        llvm::ConstantInt::get(i64Type, 1),
+        "nextidx");
     builder.CreateStore(nextIdx, indexVar);
     builder.CreateBr(condBB);
 
@@ -3418,9 +3588,10 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
     loopBreakBorrowStates.pop_back();
     auto continueBorrowStates = std::move(loopContinueBorrowStates.back());
     loopContinueBorrowStates.pop_back();
-    breakBorrowStates.insert(breakBorrowStates.end(),
-                             continueBorrowStates.begin(),
-                             continueBorrowStates.end());
+    breakBorrowStates.insert(
+        breakBorrowStates.end(),
+        continueBorrowStates.begin(),
+        continueBorrowStates.end());
 
     // Restore
     if(oldVal)
@@ -3448,6 +3619,8 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
     {
         tupleElementTypes.erase(node->varName);
     }
-    mergeLoopExitBorrowStates(breakBorrowStates, loopScopeDepth,
-                               {node->varName, node->indexVarName});
+    mergeLoopExitBorrowStates(
+        breakBorrowStates,
+        loopScopeDepth,
+        {node->varName, node->indexVarName});
 }

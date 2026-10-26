@@ -12,9 +12,22 @@ void CodeGenerator::buildConceptTable(ProgramNode* program)
     conceptProgram = program;
     conceptDefinitions.clear();
     conceptEvaluationStack.clear();
-    conceptKnownTypes = {"void", "bool", "bit", "i8",   "i16",
-                         "i32",  "i64",  "u8",  "u16",  "u32",
-                         "u64",  "f32",  "f64", "str8", "str16"};
+    conceptKnownTypes =
+        {"void",
+         "bool",
+         "bit",
+         "i8",
+         "i16",
+         "i32",
+         "i64",
+         "u8",
+         "u16",
+         "u32",
+         "u64",
+         "f32",
+         "f64",
+         "str8",
+         "str16"};
     if(program->structList)
         for(auto* definition : program->structList->structs)
             if(definition)
@@ -34,26 +47,29 @@ void CodeGenerator::buildConceptTable(ProgramNode* program)
         if(existing != conceptDefinitions.end() &&
            existing->second != definition)
         {
-            reportError(definition->line,
-                        "duplicate concept '" + definition->name + "'");
+            reportError(
+                definition->line,
+                "duplicate concept '" + definition->name + "'");
             continue;
         }
         if(conceptKnownTypes.count(definition->name) ||
            traitDefinitions.count(definition->name))
-            reportError(definition->line,
-                        "concept '" + definition->name +
-                            "' conflicts with an existing type or trait");
+            reportError(
+                definition->line,
+                "concept '" + definition->name +
+                    "' conflicts with an existing type or trait");
         std::set<std::string> parameters;
         for(const auto& parameter : definition->typeParams)
             if(!parameters.insert(parameter).second)
-                reportError(definition->line,
-                            "duplicate concept type parameter '" + parameter +
-                                "'");
+                reportError(
+                    definition->line,
+                    "duplicate concept type parameter '" + parameter + "'");
         conceptDefinitions[definition->name] = definition;
     }
     std::function<void(ExpressionNode*, const std::string&, const std::string&)>
         checkNames;
-    checkNames = [&](ExpressionNode* expression, const std::string& scope,
+    checkNames = [&](ExpressionNode* expression,
+                     const std::string& scope,
                      const std::string& source)
     {
         if(!expression)
@@ -63,22 +79,27 @@ void CodeGenerator::buildConceptTable(ProgramNode* program)
         {
             auto* definition = findConcept(application->name, scope);
             if(!definition)
-                reportError(application->line,
-                            "unknown concept '" + application->name + "'");
-            else if(definition->typeParams.size() !=
-                    application->typeArguments.size())
-                reportError(application->line,
-                            "concept '" + application->name + "' expects " +
-                                std::to_string(definition->typeParams.size()) +
-                                " type argument(s)");
-            else if(!definition->sourceModule.empty() &&
-                    !definition->isPublic &&
-                    !Helpers::is_same_module_family(definition->sourceModule,
-                                                    source))
-                reportError(application->line, "concept '" + definition->name +
-                                                   "' is private in module '" +
-                                                   definition->sourceModule +
-                                                   "'");
+                reportError(
+                    application->line,
+                    "unknown concept '" + application->name + "'");
+            else if(
+                definition->typeParams.size() !=
+                application->typeArguments.size())
+                reportError(
+                    application->line,
+                    "concept '" + application->name + "' expects " +
+                        std::to_string(definition->typeParams.size()) +
+                        " type argument(s)");
+            else if(
+                !definition->sourceModule.empty() && !definition->isPublic &&
+                !Helpers::is_same_module_family(
+                    definition->sourceModule,
+                    source))
+                reportError(
+                    application->line,
+                    "concept '" + definition->name +
+                        "' is private in module '" + definition->sourceModule +
+                        "'");
         }
         else if(auto* binary = dynamic_cast<BinaryOpNode*>(expression))
         {
@@ -102,17 +123,19 @@ void CodeGenerator::buildConceptTable(ProgramNode* program)
         if(!definition)
             continue;
         const size_t separator = definition->name.rfind("::");
-        checkNames(definition->predicate,
-                   separator == std::string::npos
-                       ? ""
-                       : definition->name.substr(0, separator),
-                   definition->sourceModule);
+        checkNames(
+            definition->predicate,
+            separator == std::string::npos
+                ? ""
+                : definition->name.substr(0, separator),
+            definition->sourceModule);
         if(dynamic_cast<IntLiteralNode*>(definition->predicate) ||
            dynamic_cast<FloatLiteralNode*>(definition->predicate) ||
            dynamic_cast<DoubleLiteralNode*>(definition->predicate) ||
            dynamic_cast<StringLiteralNode*>(definition->predicate))
-            reportError(definition->line, "concept '" + definition->name +
-                                              "' must evaluate to bool");
+            reportError(
+                definition->line,
+                "concept '" + definition->name + "' must evaluate to bool");
     }
     if(program->functionList)
         for(auto* function : program->functionList->functions)
@@ -120,16 +143,18 @@ void CodeGenerator::buildConceptTable(ProgramNode* program)
             if(!function || !function->requiresClause)
                 continue;
             const size_t separator = function->name.rfind("::");
-            checkNames(function->requiresClause,
-                       separator == std::string::npos
-                           ? ""
-                           : function->name.substr(0, separator),
-                       function->sourceModule);
+            checkNames(
+                function->requiresClause,
+                separator == std::string::npos
+                    ? ""
+                    : function->name.substr(0, separator),
+                function->sourceModule);
         }
 }
 
-ConceptDefNode* CodeGenerator::findConcept(const std::string& name,
-                                           const std::string& scope)
+ConceptDefNode* CodeGenerator::findConcept(
+    const std::string& name,
+    const std::string& scope)
 {
     std::string enclosing = scope;
     if(name.find("::") == std::string::npos)
@@ -172,9 +197,12 @@ ConceptDefNode* CodeGenerator::findConcept(const std::string& name,
     return nullptr;
 }
 
-bool CodeGenerator::evalConcept(ConceptApplicationNode* application,
-                                ConstexprValue& out, std::string* error,
-                                ConstexprEnv* env, int depth)
+bool CodeGenerator::evalConcept(
+    ConceptApplicationNode* application,
+    ConstexprValue& out,
+    std::string* error,
+    ConstexprEnv* env,
+    int depth)
 {
     auto fail = [&](const std::string& reason)
     {
@@ -208,13 +236,14 @@ bool CodeGenerator::evalConcept(ConceptApplicationNode* application,
         return fail("unknown concept '" + application->name + "'");
     if(!definition->sourceModule.empty() && !definition->isPublic &&
        !Helpers::is_same_module_family(definition->sourceModule, currentModule))
-        return fail("concept '" + definition->name +
-                    "' is private in module '" + definition->sourceModule +
-                    "'");
+        return fail(
+            "concept '" + definition->name + "' is private in module '" +
+            definition->sourceModule + "'");
     if(definition->typeParams.size() != application->typeArguments.size())
-        return fail("concept '" + definition->name + "' expects " +
-                    std::to_string(definition->typeParams.size()) +
-                    " type argument(s)");
+        return fail(
+            "concept '" + definition->name + "' expects " +
+            std::to_string(definition->typeParams.size()) +
+            " type argument(s)");
 
     std::map<std::string, TypeNode*> bindings;
     if(!env)
@@ -245,8 +274,9 @@ bool CodeGenerator::evalConcept(ConceptApplicationNode* application,
         std::vector<std::string> aliases;
         type = resolveTypeAliasNode(type, {}, aliases);
         if(!isKnownRequirementType(type))
-            return fail("unknown or unbound type argument in concept '" +
-                        application->name + "'");
+            return fail(
+                "unknown or unbound type argument in concept '" +
+                application->name + "'");
         ConstexprValue value;
         value.kind = ConstexprValue::Kind::Type;
         value.typeName = canonicalConstexprTypeName(type);
@@ -255,8 +285,10 @@ bool CodeGenerator::evalConcept(ConceptApplicationNode* application,
     }
     key += ">";
     if(conceptEvaluationStack.size() >= 128 ||
-       std::find(conceptEvaluationStack.begin(), conceptEvaluationStack.end(),
-                 key) != conceptEvaluationStack.end())
+       std::find(
+           conceptEvaluationStack.begin(),
+           conceptEvaluationStack.end(),
+           key) != conceptEvaluationStack.end())
         return fail("recursive concept evaluation: '" + key + "'");
     conceptEvaluationStack.push_back(key);
     const size_t separator = definition->name.rfind("::");
@@ -270,7 +302,11 @@ bool CodeGenerator::evalConcept(ConceptApplicationNode* application,
     currentModule = definition->sourceModule;
     ConstexprValue result;
     const bool evaluated = evalConstexprExpression(
-        definition->predicate, result, error, &local, depth + 1);
+        definition->predicate,
+        result,
+        error,
+        &local,
+        depth + 1);
     currentModule = callerModule;
     conceptEvaluationStack.pop_back();
     if(!evaluated)
@@ -287,20 +323,25 @@ bool CodeGenerator::evalConcept(ConceptApplicationNode* application,
 }
 
 bool CodeGenerator::satisfiesFunctionConstraints(
-    FunctionDefNode* function, const std::map<std::string, TypeNode*>& bindings,
-    std::string* error, std::vector<std::set<std::string>>* normalized)
+    FunctionDefNode* function,
+    const std::map<std::string, TypeNode*>& bindings,
+    std::string* error,
+    std::vector<std::set<std::string>>* normalized)
 {
     if(function->genericOrigin)
         function = function->genericOrigin;
+
     struct ModuleRestore
     {
         std::string& slot;
         std::string previous;
+
         ~ModuleRestore()
         {
             slot = previous;
         }
     } restore{currentModule, currentModule};
+
     currentModule = function->sourceModule;
     auto fail = [&](const std::string& reason)
     {
@@ -340,12 +381,18 @@ bool CodeGenerator::satisfiesFunctionConstraints(
             }
         return true;
     };
-    std::function<bool(ExpressionNode*, const std::map<std::string, TypeNode*>&,
-                       const std::string&, Terms&, int)>
+    std::function<bool(
+        ExpressionNode*,
+        const std::map<std::string, TypeNode*>&,
+        const std::string&,
+        Terms&,
+        int)>
         normalize;
     normalize = [&](ExpressionNode* expression,
                     const std::map<std::string, TypeNode*>& concrete,
-                    const std::string& currentScope, Terms& result, int depth)
+                    const std::string& currentScope,
+                    Terms& result,
+                    int depth)
     {
         if(depth > 128)
             return false;
@@ -354,10 +401,18 @@ bool CodeGenerator::satisfiesFunctionConstraints(
                binary->op == BinaryOpNode::OP_OR)
             {
                 Terms left, right;
-                if(!normalize(binary->left, concrete, currentScope, left,
-                              depth + 1) ||
-                   !normalize(binary->right, concrete, currentScope, right,
-                              depth + 1))
+                if(!normalize(
+                       binary->left,
+                       concrete,
+                       currentScope,
+                       left,
+                       depth + 1) ||
+                   !normalize(
+                       binary->right,
+                       concrete,
+                       currentScope,
+                       right,
+                       depth + 1))
                     return false;
                 if(binary->op == BinaryOpNode::OP_AND)
                     return conjunction(left, right, result);
@@ -382,13 +437,18 @@ bool CodeGenerator::satisfiesFunctionConstraints(
                 std::map<std::string, TypeNode*> local;
                 for(size_t i = 0; i < definition->typeParams.size(); ++i)
                     local[definition->typeParams[i]] = substituteTypeParams(
-                        application->typeArguments[i], names, arguments);
+                        application->typeArguments[i],
+                        names,
+                        arguments);
                 const size_t scopeEnd = definition->name.rfind("::");
-                return normalize(definition->predicate, local,
-                                 scopeEnd == std::string::npos
-                                     ? ""
-                                     : definition->name.substr(0, scopeEnd),
-                                 result, depth + 1);
+                return normalize(
+                    definition->predicate,
+                    local,
+                    scopeEnd == std::string::npos
+                        ? ""
+                        : definition->name.substr(0, scopeEnd),
+                    result,
+                    depth + 1);
             }
         }
         std::string atom =
@@ -410,15 +470,16 @@ bool CodeGenerator::satisfiesFunctionConstraints(
         {
             if(auto* definition = findConcept(name, scope))
             {
-                ConceptApplicationNode application(definition->name,
-                                                   {concrete->second});
+                ConceptApplicationNode
+                    application(definition->name, {concrete->second});
                 ConstexprValue value;
                 if(!evalConcept(&application, value, error, &env, 0))
                     return false;
                 if(!value.boolValue)
-                    return fail("concept '" + name + "' is not satisfied for " +
-                                bound.first + " = " +
-                                canonicalConstexprTypeName(concrete->second));
+                    return fail(
+                        "concept '" + name + "' is not satisfied for " +
+                        bound.first + " = " +
+                        canonicalConstexprTypeName(concrete->second));
                 Terms condition, combined;
                 if(!normalize(&application, bindings, scope, condition, 0) ||
                    !conjunction(terms, condition, combined))
@@ -429,13 +490,21 @@ bool CodeGenerator::satisfiesFunctionConstraints(
             else
             {
                 if(!validateTypeArgumentTraitBounds(
-                       {bound.first}, {{bound.first, name}}, {concrete->second},
-                       {}, function->line, "function", function->name, false))
-                    return fail("trait bound '" + name +
-                                "' is not satisfied for " + bound.first);
+                       {bound.first},
+                       {{bound.first, name}},
+                       {concrete->second},
+                       {},
+                       function->line,
+                       "function",
+                       function->name,
+                       false))
+                    return fail(
+                        "trait bound '" + name + "' is not satisfied for " +
+                        bound.first);
                 for(auto& term : terms)
-                    term.insert("trait:" + name + ":" +
-                                canonicalConstexprTypeName(concrete->second));
+                    term.insert(
+                        "trait:" + name + ":" +
+                        canonicalConstexprTypeName(concrete->second));
             }
         }
     }
@@ -444,8 +513,12 @@ bool CodeGenerator::satisfiesFunctionConstraints(
         ConstexprValue result;
         const std::string callerModule = currentModule;
         currentModule = function->sourceModule;
-        const bool evaluated = evalConstexprExpression(function->requiresClause,
-                                                       result, error, &env, 0);
+        const bool evaluated = evalConstexprExpression(
+            function->requiresClause,
+            result,
+            error,
+            &env,
+            0);
         currentModule = callerModule;
         if(!evaluated)
             return false;
@@ -458,14 +531,18 @@ bool CodeGenerator::satisfiesFunctionConstraints(
             for(const auto& binding : bindings)
                 arguments += (arguments.empty() ? "" : ", ") + binding.first +
                              " = " + canonicalConstexprTypeName(binding.second);
-            return fail("constraint clause '" +
-                        function->requiresClause->toString() +
-                        "' is not satisfied" +
-                        (arguments.empty() ? "" : " for " + arguments));
+            return fail(
+                "constraint clause '" + function->requiresClause->toString() +
+                "' is not satisfied" +
+                (arguments.empty() ? "" : " for " + arguments));
         }
         Terms condition, combined;
-        if(!normalize(function->requiresClause, bindings, scope, condition,
-                      0) ||
+        if(!normalize(
+               function->requiresClause,
+               bindings,
+               scope,
+               condition,
+               0) ||
            !conjunction(terms, condition, combined))
             return fail("concept constraint normalization is too complex");
         terms = std::move(combined);

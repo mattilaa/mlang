@@ -27,10 +27,12 @@ extern "C" int ml_vst3_print_bridge_summary()
 {
     std::printf("[c++] Steinberg VST3 SDK bridge is active.\n");
     std::printf("[c++] kVstVersionString: %s\n", ml_vst3_sdk_version());
-    std::printf("[c++] kVstAudioEffectClass: %s\n",
-                ml_vst3_audio_effect_class());
+    std::printf(
+        "[c++] kVstAudioEffectClass: %s\n",
+        ml_vst3_audio_effect_class());
     std::printf("[c++] PlugType::kFx: %s\n", ml_vst3_fx_subcategory());
-    std::printf("[c++] SpeakerArr::kStereo: %lld\n",
-                ml_vst3_stereo_speaker_arrangement());
+    std::printf(
+        "[c++] SpeakerArr::kStereo: %lld\n",
+        ml_vst3_stereo_speaker_arrangement());
     return 0;
 }

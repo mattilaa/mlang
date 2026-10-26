@@ -34,50 +34,55 @@ enum class CanonicalTargetArch
 };
 
 template <typename Enum, size_t N>
-std::optional<Enum>
-find_enum_key(std::string_view key,
-              const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+std::optional<Enum> find_enum_key(
+    std::string_view key,
+    const std::array<std::pair<Enum, std::string_view>, N>& mappings)
 {
-    const auto it =
-        std::find_if(mappings.begin(), mappings.end(),
-                     [&](const auto& entry) { return entry.second == key; });
+    const auto it = std::find_if(
+        mappings.begin(),
+        mappings.end(),
+        [&](const auto& entry) { return entry.second == key; });
     if(it == mappings.end())
         return std::nullopt;
     return it->first;
 }
 
 template <typename Enum, size_t N>
-std::optional<std::string_view>
-find_enum_text(Enum key,
-               const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+std::optional<std::string_view> find_enum_text(
+    Enum key,
+    const std::array<std::pair<Enum, std::string_view>, N>& mappings)
 {
-    const auto it =
-        std::find_if(mappings.begin(), mappings.end(),
-                     [&](const auto& entry) { return entry.first == key; });
+    const auto it = std::find_if(
+        mappings.begin(),
+        mappings.end(),
+        [&](const auto& entry) { return entry.first == key; });
     if(it == mappings.end())
         return std::nullopt;
     return it->second;
 }
 
 constexpr std::array<std::pair<TargetArchAlias, std::string_view>, 8>
-    kTargetArchAliases{{{TargetArchAlias::X86, "x86"},
-                        {TargetArchAlias::I386, "i386"},
-                        {TargetArchAlias::I686, "i686"},
-                        {TargetArchAlias::X64, "x64"},
-                        {TargetArchAlias::X86_64, "x86_64"},
-                        {TargetArchAlias::Amd64, "amd64"},
-                        {TargetArchAlias::Aarch64, "aarch64"},
-                        {TargetArchAlias::Arm64, "arm64"}}};
+    kTargetArchAliases{
+        {{TargetArchAlias::X86, "x86"},
+         {TargetArchAlias::I386, "i386"},
+         {TargetArchAlias::I686, "i686"},
+         {TargetArchAlias::X64, "x64"},
+         {TargetArchAlias::X86_64, "x86_64"},
+         {TargetArchAlias::Amd64, "amd64"},
+         {TargetArchAlias::Aarch64, "aarch64"},
+         {TargetArchAlias::Arm64, "arm64"}}};
 
 constexpr std::array<std::pair<CanonicalTargetArch, std::string_view>, 3>
-    kCanonicalTargetArchNames{{{CanonicalTargetArch::X86, "x86"},
-                               {CanonicalTargetArch::X64, "x64"},
-                               {CanonicalTargetArch::Aarch64, "aarch64"}}};
+    kCanonicalTargetArchNames{
+        {{CanonicalTargetArch::X86, "x86"},
+         {CanonicalTargetArch::X64, "x64"},
+         {CanonicalTargetArch::Aarch64, "aarch64"}}};
 
 constexpr std::array<std::pair<CanonicalTargetArch, std::string_view>, 3>
-    kLlvmTargetArchNames{{{CanonicalTargetArch::X86, "i386"},
-                          {CanonicalTargetArch::X64, "x86_64"},
-                          {CanonicalTargetArch::Aarch64, "aarch64"}}};
+    kLlvmTargetArchNames{
+        {{CanonicalTargetArch::X86, "i386"},
+         {CanonicalTargetArch::X64, "x86_64"},
+         {CanonicalTargetArch::Aarch64, "aarch64"}}};
 
 } // namespace
 

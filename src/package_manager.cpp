@@ -65,30 +65,36 @@ static std::string shell_quote(const std::string& s);
 static std::string unquote(std::string_view v);
 static std::string unquote_preserve(std::string_view v);
 static std::string unescape_toml_basic_string(std::string_view v);
-static void append_toml_command_value(const std::string& value,
-                                      std::vector<std::string>& out);
-static void append_toml_commands_value(const std::string& value,
-                                       std::vector<std::string>& out);
+static void append_toml_command_value(
+    const std::string& value,
+    std::vector<std::string>& out);
+static void append_toml_commands_value(
+    const std::string& value,
+    std::vector<std::string>& out);
 static std::string format_task_elapsed(std::chrono::milliseconds elapsed);
 static std::string shorten_progress_description(const std::string& description);
 static std::string sanitize_progress_output(std::string text);
 static std::string shorten_progress_output(const std::string& text);
-static std::vector<std::string>
-parse_workspace_members(const std::string& content);
+static std::vector<std::string> parse_workspace_members(
+    const std::string& content);
 static std::string current_host_name();
-static void append_toml_string_list_value(const std::string& value,
-                                          std::vector<std::string>& out);
+static void append_toml_string_list_value(
+    const std::string& value,
+    std::vector<std::string>& out);
 static bool parse_toml_bool_value(const std::string& value);
-static int run_task_for_manifest(const PackageManifest& pkg,
-                                 const std::string& taskName);
-static int run_task_for_manifest(const PackageManifest& pkg,
-                                 const std::string& taskName,
-                                 const BuildConfig& buildConfig);
-static bool task_list_contains_name(const std::vector<TaskSpec>& tasks,
-                                    const std::string& name);
-static void
-append_toml_string_list_value_preserve(const std::string& value,
-                                       std::vector<std::string>& out);
+static int run_task_for_manifest(
+    const PackageManifest& pkg,
+    const std::string& taskName);
+static int run_task_for_manifest(
+    const PackageManifest& pkg,
+    const std::string& taskName,
+    const BuildConfig& buildConfig);
+static bool task_list_contains_name(
+    const std::vector<TaskSpec>& tasks,
+    const std::string& name);
+static void append_toml_string_list_value_preserve(
+    const std::string& value,
+    std::vector<std::string>& out);
 
 enum class TaskTomlKey
 {
@@ -165,26 +171,28 @@ enum class OptLevelAlias
 };
 
 template <typename Enum, size_t N>
-static std::optional<Enum>
-find_enum_key(std::string_view key,
-              const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+static std::optional<Enum> find_enum_key(
+    std::string_view key,
+    const std::array<std::pair<Enum, std::string_view>, N>& mappings)
 {
-    const auto it =
-        std::find_if(mappings.begin(), mappings.end(),
-                     [&](const auto& entry) { return entry.second == key; });
+    const auto it = std::find_if(
+        mappings.begin(),
+        mappings.end(),
+        [&](const auto& entry) { return entry.second == key; });
     if(it == mappings.end())
         return std::nullopt;
     return it->first;
 }
 
 template <typename Enum, size_t N>
-static std::optional<std::string_view>
-find_enum_text(Enum key,
-               const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+static std::optional<std::string_view> find_enum_text(
+    Enum key,
+    const std::array<std::pair<Enum, std::string_view>, N>& mappings)
 {
-    const auto it =
-        std::find_if(mappings.begin(), mappings.end(),
-                     [&](const auto& entry) { return entry.first == key; });
+    const auto it = std::find_if(
+        mappings.begin(),
+        mappings.end(),
+        [&](const auto& entry) { return entry.first == key; });
     if(it == mappings.end())
         return std::nullopt;
     return it->second;
@@ -208,83 +216,89 @@ enum class TaskLanguage
 };
 
 static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 39>
-    kTaskTomlKeys{{{TaskTomlKey::Name, "name"},
-                   {TaskTomlKey::Message, "message"},
-                   {TaskTomlKey::Print, "print"},
-                   {TaskTomlKey::SupportedHosts, "supported_hosts"},
-                   {TaskTomlKey::UnsupportedMessage, "unsupported_message"},
-                   {TaskTomlKey::Phase, "phase"},
-                   {TaskTomlKey::Workdir, "workdir"},
-                   {TaskTomlKey::Language, "language"},
-                   {TaskTomlKey::Source, "source"},
-                   {TaskTomlKey::Output, "output"},
-                   {TaskTomlKey::Inputs, "inputs"},
-                   {TaskTomlKey::CompileOnly, "compile_only"},
-                   {TaskTomlKey::Parallel, "parallel"},
-                   {TaskTomlKey::LogOutput, "log_output"},
-                   {TaskTomlKey::InlineOutput, "inline_output"},
-                   {TaskTomlKey::DependsOn, "depends_on"},
-                   {TaskTomlKey::PhaseDependsOn, "phase_depends_on"},
-                   {TaskTomlKey::JoinOn, "join_on"},
-                   {TaskTomlKey::PhaseJoinOn, "phase_join_on"},
-                   {TaskTomlKey::Next, "next"},
-                   {TaskTomlKey::NextPhases, "next_phases"},
-                   {TaskTomlKey::Command, "command"},
-                   {TaskTomlKey::Env, "env"},
-                   {TaskTomlKey::Script, "script"},
-                   {TaskTomlKey::Shell, "shell"},
-                   {TaskTomlKey::Commands, "commands"},
-                   {TaskTomlKey::Chmod, "chmod"},
-                   {TaskTomlKey::ChmodPath, "chmod_path"},
-                   {TaskTomlKey::ChmodPaths, "chmod_paths"},
-                   {TaskTomlKey::OptLevel, "opt_level"},
-                   {TaskTomlKey::TargetArch, "target_arch"},
-                   {TaskTomlKey::PathEntries, "path_entries"},
-                   {TaskTomlKey::CompilerFlags, "compiler_flags"},
-                   {TaskTomlKey::LinkerFlags, "linker_flags"},
-                   {TaskTomlKey::LibPaths, "lib_paths"},
-                   {TaskTomlKey::Libs, "libs"},
-                   {TaskTomlKey::StaticDeps, "static_deps"},
-                   {TaskTomlKey::StaticCppRuntime, "static_cpp_runtime"},
-                   {TaskTomlKey::Sign, "sign"}}};
+    kTaskTomlKeys{
+        {{TaskTomlKey::Name, "name"},
+         {TaskTomlKey::Message, "message"},
+         {TaskTomlKey::Print, "print"},
+         {TaskTomlKey::SupportedHosts, "supported_hosts"},
+         {TaskTomlKey::UnsupportedMessage, "unsupported_message"},
+         {TaskTomlKey::Phase, "phase"},
+         {TaskTomlKey::Workdir, "workdir"},
+         {TaskTomlKey::Language, "language"},
+         {TaskTomlKey::Source, "source"},
+         {TaskTomlKey::Output, "output"},
+         {TaskTomlKey::Inputs, "inputs"},
+         {TaskTomlKey::CompileOnly, "compile_only"},
+         {TaskTomlKey::Parallel, "parallel"},
+         {TaskTomlKey::LogOutput, "log_output"},
+         {TaskTomlKey::InlineOutput, "inline_output"},
+         {TaskTomlKey::DependsOn, "depends_on"},
+         {TaskTomlKey::PhaseDependsOn, "phase_depends_on"},
+         {TaskTomlKey::JoinOn, "join_on"},
+         {TaskTomlKey::PhaseJoinOn, "phase_join_on"},
+         {TaskTomlKey::Next, "next"},
+         {TaskTomlKey::NextPhases, "next_phases"},
+         {TaskTomlKey::Command, "command"},
+         {TaskTomlKey::Env, "env"},
+         {TaskTomlKey::Script, "script"},
+         {TaskTomlKey::Shell, "shell"},
+         {TaskTomlKey::Commands, "commands"},
+         {TaskTomlKey::Chmod, "chmod"},
+         {TaskTomlKey::ChmodPath, "chmod_path"},
+         {TaskTomlKey::ChmodPaths, "chmod_paths"},
+         {TaskTomlKey::OptLevel, "opt_level"},
+         {TaskTomlKey::TargetArch, "target_arch"},
+         {TaskTomlKey::PathEntries, "path_entries"},
+         {TaskTomlKey::CompilerFlags, "compiler_flags"},
+         {TaskTomlKey::LinkerFlags, "linker_flags"},
+         {TaskTomlKey::LibPaths, "lib_paths"},
+         {TaskTomlKey::Libs, "libs"},
+         {TaskTomlKey::StaticDeps, "static_deps"},
+         {TaskTomlKey::StaticCppRuntime, "static_cpp_runtime"},
+         {TaskTomlKey::Sign, "sign"}}};
 
 static constexpr std::array<std::pair<TaskLanguageAlias, std::string_view>, 6>
-    kTaskLanguageAliases{{{TaskLanguageAlias::Mlang, "mlang"},
-                          {TaskLanguageAlias::C, "c"},
-                          {TaskLanguageAlias::Cpp, "cpp"},
-                          {TaskLanguageAlias::Cxx, "cxx"},
-                          {TaskLanguageAlias::CPlusPlus, "c++"},
-                          {TaskLanguageAlias::CC, "cc"}}};
+    kTaskLanguageAliases{
+        {{TaskLanguageAlias::Mlang, "mlang"},
+         {TaskLanguageAlias::C, "c"},
+         {TaskLanguageAlias::Cpp, "cpp"},
+         {TaskLanguageAlias::Cxx, "cxx"},
+         {TaskLanguageAlias::CPlusPlus, "c++"},
+         {TaskLanguageAlias::CC, "cc"}}};
 
 static constexpr std::array<std::pair<TaskLanguage, std::string_view>, 3>
-    kTaskLanguageNames{{{TaskLanguage::Mlang, "mlang"},
-                        {TaskLanguage::C, "c"},
-                        {TaskLanguage::Cpp, "c++"}}};
+    kTaskLanguageNames{
+        {{TaskLanguage::Mlang, "mlang"},
+         {TaskLanguage::C, "c"},
+         {TaskLanguage::Cpp, "c++"}}};
 
 static constexpr std::array<std::pair<TargetArchAlias, std::string_view>, 9>
-    kTargetArchAliases{{{TargetArchAlias::X86, "x86"},
-                        {TargetArchAlias::I386, "i386"},
-                        {TargetArchAlias::I686, "i686"},
-                        {TargetArchAlias::X64, "x64"},
-                        {TargetArchAlias::X86_64, "x86_64"},
-                        {TargetArchAlias::Amd64, "amd64"},
-                        {TargetArchAlias::X86Dash64, "x86-64"},
-                        {TargetArchAlias::Aarch64, "aarch64"},
-                        {TargetArchAlias::Arm64, "arm64"}}};
+    kTargetArchAliases{
+        {{TargetArchAlias::X86, "x86"},
+         {TargetArchAlias::I386, "i386"},
+         {TargetArchAlias::I686, "i686"},
+         {TargetArchAlias::X64, "x64"},
+         {TargetArchAlias::X86_64, "x86_64"},
+         {TargetArchAlias::Amd64, "amd64"},
+         {TargetArchAlias::X86Dash64, "x86-64"},
+         {TargetArchAlias::Aarch64, "aarch64"},
+         {TargetArchAlias::Arm64, "arm64"}}};
 
 static constexpr std::array<std::pair<TargetArchValue, std::string_view>, 3>
-    kTargetArchNames{{{TargetArchValue::X86, "x86"},
-                      {TargetArchValue::X64, "x64"},
-                      {TargetArchValue::Aarch64, "aarch64"}}};
+    kTargetArchNames{
+        {{TargetArchValue::X86, "x86"},
+         {TargetArchValue::X64, "x64"},
+         {TargetArchValue::Aarch64, "aarch64"}}};
 
 static constexpr std::array<std::pair<OptLevelAlias, std::string_view>, 7>
-    kOptLevelAliases{{{OptLevelAlias::O0, "-O0"},
-                      {OptLevelAlias::Og, "-Og"},
-                      {OptLevelAlias::O1, "-O1"},
-                      {OptLevelAlias::O2, "-O2"},
-                      {OptLevelAlias::O3, "-O3"},
-                      {OptLevelAlias::Os, "-Os"},
-                      {OptLevelAlias::Oz, "-Oz"}}};
+    kOptLevelAliases{
+        {{OptLevelAlias::O0, "-O0"},
+         {OptLevelAlias::Og, "-Og"},
+         {OptLevelAlias::O1, "-O1"},
+         {OptLevelAlias::O2, "-O2"},
+         {OptLevelAlias::O3, "-O3"},
+         {OptLevelAlias::Os, "-Os"},
+         {OptLevelAlias::Oz, "-Oz"}}};
 
 static std::string trim(std::string_view s)
 {
@@ -361,8 +375,11 @@ static bool line_has_dep(const std::string& line, const std::string& name)
     return pos != std::string::npos;
 }
 
-static bool add_dep_to_section(std::string& content, const std::string& section,
-                               const std::string& name, const std::string& line)
+static bool add_dep_to_section(
+    std::string& content,
+    const std::string& section,
+    const std::string& name,
+    const std::string& line)
 {
     std::istringstream in(content);
     std::vector<std::string> lines;
@@ -417,10 +434,11 @@ static bool add_dep_to_section(std::string& content, const std::string& section,
     return true;
 }
 
-static bool append_unique_quoted_list_entry(std::string& content,
-                                            const std::string& section,
-                                            const std::string& key,
-                                            const std::string& value)
+static bool append_unique_quoted_list_entry(
+    std::string& content,
+    const std::string& section,
+    const std::string& key,
+    const std::string& value)
 {
     std::istringstream in(content);
     std::vector<std::string> lines;
@@ -518,8 +536,9 @@ static bool append_unique_quoted_list_entry(std::string& content,
     return true;
 }
 
-static std::optional<std::string> find_toml_string(const std::string& content,
-                                                   const std::string& key)
+static std::optional<std::string> find_toml_string(
+    const std::string& content,
+    const std::string& key)
 {
     std::string needle = key + " = \"";
     size_t pos = content.find(needle);
@@ -532,9 +551,10 @@ static std::optional<std::string> find_toml_string(const std::string& content,
     return content.substr(pos, end - pos);
 }
 
-static std::optional<std::string>
-find_section_toml_string(const std::string& content, const std::string& section,
-                         const std::string& key)
+static std::optional<std::string> find_section_toml_string(
+    const std::string& content,
+    const std::string& section,
+    const std::string& key)
 {
     std::istringstream in(content);
     std::string line;
@@ -737,8 +757,9 @@ static bool toml_value_is_complete(std::string_view input)
     return true;
 }
 
-static std::string collect_multiline_toml_value(std::string value,
-                                                std::istream& in)
+static std::string collect_multiline_toml_value(
+    std::string value,
+    std::istream& in)
 {
     if(toml_value_is_complete(value))
     {
@@ -763,8 +784,9 @@ struct ParsedTomlAssignment
     bool append = false;
 };
 
-static std::optional<ParsedTomlAssignment>
-parse_toml_assignment(const std::string& line, std::istream& in)
+static std::optional<ParsedTomlAssignment> parse_toml_assignment(
+    const std::string& line,
+    std::istream& in)
 {
     bool inDoubleQuotes = false;
     bool inSingleQuotes = false;
@@ -874,9 +896,11 @@ static std::string normalize_task_language(std::string language)
     language = trim(language);
     if(language.empty())
         return "";
-    std::transform(language.begin(), language.end(), language.begin(),
-                   [](unsigned char c)
-                   { return static_cast<char>(std::tolower(c)); });
+    std::transform(
+        language.begin(),
+        language.end(),
+        language.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     const auto languageKey = find_enum_key(language, kTaskLanguageAliases);
     if(!languageKey.has_value())
         return "";
@@ -1005,6 +1029,7 @@ struct TaskSpec
     std::vector<std::string> commands;
     std::vector<std::string> signOutputs;
     BuildConfig buildConfig;
+
     struct HostOverride
     {
         std::string message;
@@ -1035,26 +1060,29 @@ struct TaskSpec
         std::vector<std::string> signOutputs;
         BuildConfig buildConfig;
     };
+
     std::map<std::string, HostOverride> hostOverrides;
 };
 
-static void parse_build_config_key_value(BuildConfig& cfg,
-                                         const std::string& key,
-                                         const std::string& value);
+static void parse_build_config_key_value(
+    BuildConfig& cfg,
+    const std::string& key,
+    const std::string& value);
 static void pkg_warn_line(const std::string& text);
 static void pkg_error_line(const std::string& text);
-static bool has_section(const std::string& content,
-                        const std::string& wanted);
-static std::string expand_task_text(const std::string& text,
-                                    const PackageManifest& pkg,
-                                    const BuildConfig& buildConfig);
-static BuildConfig
-materialize_build_config_for_package(const PackageManifest& pkg,
-                                     BuildConfig buildConfig);
+static bool has_section(const std::string& content, const std::string& wanted);
+static std::string expand_task_text(
+    const std::string& text,
+    const PackageManifest& pkg,
+    const BuildConfig& buildConfig);
+static BuildConfig materialize_build_config_for_package(
+    const PackageManifest& pkg,
+    BuildConfig buildConfig);
 
-static bool apply_task_build_config_key_value(BuildConfig& cfg,
-                                              TaskTomlKey taskKeyKind,
-                                              const std::string& value)
+static bool apply_task_build_config_key_value(
+    BuildConfig& cfg,
+    TaskTomlKey taskKeyKind,
+    const std::string& value)
 {
     switch(taskKeyKind)
     {
@@ -1090,8 +1118,9 @@ static bool apply_task_build_config_key_value(BuildConfig& cfg,
     }
 }
 
-static void append_toml_string_list_value(const std::string& value,
-                                          std::vector<std::string>& out)
+static void append_toml_string_list_value(
+    const std::string& value,
+    std::vector<std::string>& out)
 {
     std::string t = trim(value);
     if(t.empty())
@@ -1115,13 +1144,16 @@ static void append_toml_string_list_value(const std::string& value,
 static bool parse_toml_bool_value(const std::string& value)
 {
     std::string t = trim(value);
-    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c)
-                   { return static_cast<char>(std::tolower(c)); });
+    std::transform(
+        t.begin(),
+        t.end(),
+        t.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return t == "true" || t == "1" || t == "\"true\"";
 }
 
-static std::optional<unsigned int>
-parse_octal_permission_bits(const std::string& value)
+static std::optional<unsigned int> parse_octal_permission_bits(
+    const std::string& value)
 {
     const std::string text = trim(unquote(value));
     if(text.empty())
@@ -1164,8 +1196,8 @@ static std::string build_config_cmake_build_type(const BuildConfig& buildConfig)
     return "Release";
 }
 
-static std::string
-build_config_asan_compile_flags(const BuildConfig& buildConfig)
+static std::string build_config_asan_compile_flags(
+    const BuildConfig& buildConfig)
 {
     if(!build_config_asan_enabled(buildConfig))
         return "";
@@ -1179,8 +1211,8 @@ static std::string build_config_asan_link_flags(const BuildConfig& buildConfig)
     return "-fsanitize=address -fno-omit-frame-pointer";
 }
 
-static std::optional<std::string>
-find_opt_flag_in_fragments(const std::vector<std::string>& flags)
+static std::optional<std::string> find_opt_flag_in_fragments(
+    const std::vector<std::string>& flags)
 {
     for(const auto& flag : flags)
     {
@@ -1193,21 +1225,25 @@ find_opt_flag_in_fragments(const std::vector<std::string>& flags)
 
 static void remove_opt_flags(std::vector<std::string>& flags)
 {
-    flags.erase(std::remove_if(flags.begin(), flags.end(),
-                               [](const std::string& flag)
-                               { return is_opt_flag(trim(flag)); }),
-                flags.end());
+    flags.erase(
+        std::remove_if(
+            flags.begin(),
+            flags.end(),
+            [](const std::string& flag) { return is_opt_flag(trim(flag)); }),
+        flags.end());
 }
 
-static void append_unique_flag(std::vector<std::string>& flags,
-                               const std::string& flag)
+static void append_unique_flag(
+    std::vector<std::string>& flags,
+    const std::string& flag)
 {
     if(std::find(flags.begin(), flags.end(), flag) == flags.end())
         flags.push_back(flag);
 }
 
 static void apply_asan_overrides(
-    BuildConfig& buildConfig, const std::string& contextLabel,
+    BuildConfig& buildConfig,
+    const std::string& contextLabel,
     const std::optional<std::string>& cliOptFlag = std::nullopt)
 {
     if(!buildConfig.asan.value_or(false))
@@ -1221,15 +1257,16 @@ static void apply_asan_overrides(
     std::string warnedOpt;
     if(is_release_opt_flag(explicitOpt))
         warnedOpt = explicitOpt;
-    else if(existingCompilerOpt.has_value() &&
-            is_release_opt_flag(*existingCompilerOpt))
+    else if(
+        existingCompilerOpt.has_value() &&
+        is_release_opt_flag(*existingCompilerOpt))
         warnedOpt = *existingCompilerOpt;
 
     if(!warnedOpt.empty())
     {
-        pkg_warn_line("warning: " + contextLabel +
-                      " requested release optimization " + warnedOpt +
-                      ", but --asan forces a debug-friendly build (-O0).");
+        pkg_warn_line(
+            "warning: " + contextLabel + " requested release optimization " +
+            warnedOpt + ", but --asan forces a debug-friendly build (-O0).");
     }
 
     buildConfig.optLevel = "-O0";
@@ -1292,8 +1329,10 @@ static std::filesystem::perms file_perms_from_mode(unsigned int mode)
     return perms;
 }
 
-static bool apply_recursive_permissions(const std::filesystem::path& path,
-                                        unsigned int mode, std::string& error)
+static bool apply_recursive_permissions(
+    const std::filesystem::path& path,
+    unsigned int mode,
+    std::string& error)
 {
     namespace fs = std::filesystem;
     std::error_code ec;
@@ -1349,8 +1388,9 @@ static bool apply_recursive_permissions(const std::filesystem::path& path,
     return true;
 }
 
-static void append_unique_strings(std::vector<std::string>& dst,
-                                  const std::vector<std::string>& src)
+static void append_unique_strings(
+    std::vector<std::string>& dst,
+    const std::vector<std::string>& src)
 {
     for(const auto& value : src)
     {
@@ -1361,10 +1401,10 @@ static void append_unique_strings(std::vector<std::string>& dst,
     }
 }
 
-static std::vector<std::string>
-task_names_for_phases(const std::vector<TaskSpec>& tasks,
-                      const std::vector<std::string>& phases,
-                      const std::string& hostName)
+static std::vector<std::string> task_names_for_phases(
+    const std::vector<TaskSpec>& tasks,
+    const std::vector<std::string>& phases,
+    const std::string& hostName)
 {
     std::vector<std::string> names;
     for(const auto& task : tasks)
@@ -1388,10 +1428,11 @@ task_names_for_phases(const std::vector<TaskSpec>& tasks,
     return names;
 }
 
-static std::vector<std::string>
-task_roots_for_phase(const std::vector<TaskSpec>& tasks,
-                     const std::string& hostName, const std::string& phase,
-                     const std::vector<std::string>& fallbackNames = {})
+static std::vector<std::string> task_roots_for_phase(
+    const std::vector<TaskSpec>& tasks,
+    const std::string& hostName,
+    const std::string& phase,
+    const std::vector<std::string>& fallbackNames = {})
 {
     std::vector<std::string> roots =
         task_names_for_phases(tasks, std::vector<std::string>{phase}, hostName);
@@ -1414,7 +1455,9 @@ static void print_pkg_usage(const std::string& programName)
     const std::string tool = programName.empty() ? "mlang" : programName;
     std::cerr
         << "Usage: " << tool
-        << " pkg [--config FILE] <init|help|add|lock|verify|vendor|tree|why|fetch|build|run|clean|package|publish|install|audit|sbom|sign|verify-signature> "
+        << " pkg [--config FILE] "
+           "<init|help|add|lock|verify|vendor|tree|why|fetch|build|run|clean|"
+           "package|publish|install|audit|sbom|sign|verify-signature> "
            "[options...]\n"
         << "       " << tool
         << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
@@ -1427,22 +1470,28 @@ static void print_pkg_usage(const std::string& programName)
         << "  --features A,B                Enable package features.\n"
         << "  --all-features                Enable every declared feature.\n"
         << "  --no-default-features         Do not enable [features].default.\n"
-        << "  --package NAME, -p NAME       Select a workspace package (repeatable).\n"
+        << "  --package NAME, -p NAME       Select a workspace package "
+           "(repeatable).\n"
         << "  --workspace                   Select the complete workspace.\n"
-        << "  --exclude NAME                Exclude a workspace package (repeatable).\n"
-        << "  --cache-dir DIR               Override the global package cache.\n"
-        << "  --no-global-cache             Disable global artifact/source caching.\n"
-        << "  --vendor-dir DIR              Build dependencies from a vendor tree.\n"
+        << "  --exclude NAME                Exclude a workspace package "
+           "(repeatable).\n"
+        << "  --cache-dir DIR               Override the global package "
+           "cache.\n"
+        << "  --no-global-cache             Disable global artifact/source "
+           "caching.\n"
+        << "  --vendor-dir DIR              Build dependencies from a vendor "
+           "tree.\n"
         << "\nCommands:\n"
         << "  " << tool << " pkg init [--no-readme]\n"
-        << "      Scaffold mlang.toml, src/main.mla, and README.md in the current dir.\n"
+        << "      Scaffold mlang.toml, src/main.mla, and README.md in the "
+           "current dir.\n"
         << "  " << tool << " pkg help <build|run>\n"
-        << "      Print the 'Build and run' README.md section (any heading level).\n"
+        << "      Print the 'Build and run' README.md section (any heading "
+           "level).\n"
         << "  " << tool
         << " pkg add <name> [--git URL] [--rev REV] [--tag TAG] "
            "[--submodules] [--version REQ]\n"
-        << "  " << tool
-        << " pkg add <name> --path DIR [--version REQ]\n"
+        << "  " << tool << " pkg add <name> --path DIR [--version REQ]\n"
         << "  " << tool
         << " pkg add <name> --url URL [--archive tar.gz] [--strip-components "
            "N] [--subdir DIR]\n"
@@ -1460,7 +1509,8 @@ static void print_pkg_usage(const std::string& programName)
         << "  " << tool << " pkg package [--output FILE] [--sign-key KEY]\n"
         << "      Create a checksummed source package archive.\n"
         << "  " << tool << " pkg publish --registry LOCATION [--sign-key KEY]\n"
-        << "      Package and publish a version to a local or HTTP v1 registry.\n"
+        << "      Package and publish a version to a local or HTTP v1 "
+           "registry.\n"
         << "  " << tool << " pkg install NAME[@REQ] --registry LOCATION\n"
         << "      Resolve, verify, build, and install a registry package.\n"
         << "  " << tool << " pkg audit [--database FILE] [--deny LEVEL]\n"
@@ -1520,8 +1570,7 @@ static void print_pkg_usage(const std::string& programName)
         << "  " << tool
         << " pkg add cjson --git https://github.com/DaveGamble/cJSON.git\n"
         << "  " << tool << " pkg add local-lib --path ../local-lib\n"
-        << "  " << tool
-        << " pkg add zlib --pkg-config zlib --system\n"
+        << "  " << tool << " pkg add zlib --pkg-config zlib --system\n"
         << "  " << tool << " pkg lock --offline\n"
         << "  " << tool << " pkg verify\n"
         << "  " << tool << " pkg vendor vendor\n"
@@ -1538,8 +1587,7 @@ static void print_pkg_usage(const std::string& programName)
         << "  " << tool << " pkg audit --deny high\n"
         << "  " << tool << " pkg sbom --output build/app.cdx.json\n"
         << "  " << tool << " pkg sign app.tar.gz --key private.pem\n"
-        << "  " << tool
-        << " pkg verify-signature app.tar.gz --key public.pem\n"
+        << "  " << tool << " pkg verify-signature app.tar.gz --key public.pem\n"
         << "  " << tool << " pkg --tests tests/mlang.toml\n"
         << "  " << tool << " pkg mlang.toml --tasks --color\n"
         << "  " << tool
@@ -1547,8 +1595,9 @@ static void print_pkg_usage(const std::string& programName)
            "install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin\n";
 }
 
-static BuildConfig merge_build_config(const BuildConfig& base,
-                                      const BuildConfig& overrideCfg)
+static BuildConfig merge_build_config(
+    const BuildConfig& base,
+    const BuildConfig& overrideCfg)
 {
     BuildConfig out = base;
     if(!overrideCfg.profileName.empty())
@@ -1573,19 +1622,26 @@ static BuildConfig merge_build_config(const BuildConfig& base,
         out.buildDir = overrideCfg.buildDir;
     if(!overrideCfg.depsDir.empty())
         out.depsDir = overrideCfg.depsDir;
-    out.pathEntries.insert(out.pathEntries.end(),
-                           overrideCfg.pathEntries.begin(),
-                           overrideCfg.pathEntries.end());
-    out.compilerFlags.insert(out.compilerFlags.end(),
-                             overrideCfg.compilerFlags.begin(),
-                             overrideCfg.compilerFlags.end());
-    out.linkerFlags.insert(out.linkerFlags.end(),
-                           overrideCfg.linkerFlags.begin(),
-                           overrideCfg.linkerFlags.end());
-    out.libPaths.insert(out.libPaths.end(), overrideCfg.libPaths.begin(),
-                        overrideCfg.libPaths.end());
-    out.libs.insert(out.libs.end(), overrideCfg.libs.begin(),
-                    overrideCfg.libs.end());
+    out.pathEntries.insert(
+        out.pathEntries.end(),
+        overrideCfg.pathEntries.begin(),
+        overrideCfg.pathEntries.end());
+    out.compilerFlags.insert(
+        out.compilerFlags.end(),
+        overrideCfg.compilerFlags.begin(),
+        overrideCfg.compilerFlags.end());
+    out.linkerFlags.insert(
+        out.linkerFlags.end(),
+        overrideCfg.linkerFlags.begin(),
+        overrideCfg.linkerFlags.end());
+    out.libPaths.insert(
+        out.libPaths.end(),
+        overrideCfg.libPaths.begin(),
+        overrideCfg.libPaths.end());
+    out.libs.insert(
+        out.libs.end(),
+        overrideCfg.libs.begin(),
+        overrideCfg.libs.end());
     for(const auto& [key, value] : overrideCfg.optionValues)
         out.optionValues[key] = value;
     if(overrideCfg.useNinja.has_value())
@@ -1599,8 +1655,8 @@ static BuildConfig merge_build_config(const BuildConfig& base,
     return out;
 }
 
-static std::optional<std::vector<int>>
-parse_semver_components(const std::string& versionText)
+static std::optional<std::vector<int>> parse_semver_components(
+    const std::string& versionText)
 {
     std::string text = trim(versionText);
     if(text.empty())
@@ -1698,10 +1754,12 @@ static std::optional<SemanticVersion> parse_semantic_version(std::string text)
     {
         const size_t end = text.find('.', start);
         const std::string part = text.substr(
-            start, end == std::string::npos ? std::string::npos : end - start);
-        if(part.empty() ||
-           !std::all_of(part.begin(), part.end(), [](unsigned char c)
-                        { return std::isdigit(c); }))
+            start,
+            end == std::string::npos ? std::string::npos : end - start);
+        if(part.empty() || !std::all_of(
+                               part.begin(),
+                               part.end(),
+                               [](unsigned char c) { return std::isdigit(c); }))
             return std::nullopt;
         if(part.size() > 1 && part.front() == '0')
             return std::nullopt;
@@ -1737,8 +1795,10 @@ static std::optional<SemanticVersion> parse_semantic_version(std::string text)
             if(part.empty())
                 return std::nullopt;
             if(part.size() > 1 && part.front() == '0' &&
-               std::all_of(part.begin(), part.end(), [](unsigned char c)
-                           { return std::isdigit(c); }))
+               std::all_of(
+                   part.begin(),
+                   part.end(),
+                   [](unsigned char c) { return std::isdigit(c); }))
                 return std::nullopt;
             result.prerelease.push_back(part);
             if(end == std::string::npos)
@@ -1749,8 +1809,9 @@ static std::optional<SemanticVersion> parse_semantic_version(std::string text)
     return result;
 }
 
-static int compare_semantic_versions(const SemanticVersion& lhs,
-                                     const SemanticVersion& rhs)
+static int compare_semantic_versions(
+    const SemanticVersion& lhs,
+    const SemanticVersion& rhs)
 {
     if(lhs.major != rhs.major)
         return lhs.major < rhs.major ? -1 : 1;
@@ -1760,18 +1821,20 @@ static int compare_semantic_versions(const SemanticVersion& lhs,
         return lhs.patch < rhs.patch ? -1 : 1;
     if(lhs.prerelease.empty() != rhs.prerelease.empty())
         return lhs.prerelease.empty() ? 1 : -1;
-    for(size_t i = 0; i < std::min(lhs.prerelease.size(),
-                                  rhs.prerelease.size());
+    for(size_t i = 0;
+        i < std::min(lhs.prerelease.size(), rhs.prerelease.size());
         ++i)
     {
         if(lhs.prerelease[i] == rhs.prerelease[i])
             continue;
-        const bool lhsNumeric =
-            std::all_of(lhs.prerelease[i].begin(), lhs.prerelease[i].end(),
-                        [](unsigned char c) { return std::isdigit(c); });
-        const bool rhsNumeric =
-            std::all_of(rhs.prerelease[i].begin(), rhs.prerelease[i].end(),
-                        [](unsigned char c) { return std::isdigit(c); });
+        const bool lhsNumeric = std::all_of(
+            lhs.prerelease[i].begin(),
+            lhs.prerelease[i].end(),
+            [](unsigned char c) { return std::isdigit(c); });
+        const bool rhsNumeric = std::all_of(
+            rhs.prerelease[i].begin(),
+            rhs.prerelease[i].end(),
+            [](unsigned char c) { return std::isdigit(c); });
         if(lhsNumeric && rhsNumeric)
         {
             const std::string& a = lhs.prerelease[i];
@@ -1795,15 +1858,16 @@ static int compare_semantic_versions(const SemanticVersion& lhs,
     return lhs.prerelease.size() < rhs.prerelease.size() ? -1 : 1;
 }
 
-static bool semantic_version_satisfies_one(const SemanticVersion& version,
-                                           std::string requirement)
+static bool semantic_version_satisfies_one(
+    const SemanticVersion& version,
+    std::string requirement)
 {
     requirement = trim(requirement);
     if(requirement.empty() || requirement == "*" || requirement == "x" ||
        requirement == "X")
         return version.prerelease.empty();
-    const bool requirementAllowsPrerelease = requirement.find('-') !=
-                                             std::string::npos;
+    const bool requirementAllowsPrerelease =
+        requirement.find('-') != std::string::npos;
     if(!version.prerelease.empty() && !requirementAllowsPrerelease)
         return false;
     std::string op;
@@ -1869,7 +1933,9 @@ static bool semantic_version_satisfies_one(const SemanticVersion& version,
     if(op.empty() && normalizedRequirement.find('-') == std::string::npos)
     {
         const size_t dots = static_cast<size_t>(std::count(
-            normalizedRequirement.begin(), normalizedRequirement.end(), '.'));
+            normalizedRequirement.begin(),
+            normalizedRequirement.end(),
+            '.'));
         if(dots == 0)
             return version.major == wanted->major;
         if(dots == 1)
@@ -1879,8 +1945,9 @@ static bool semantic_version_satisfies_one(const SemanticVersion& version,
     return comparison == 0;
 }
 
-static bool semantic_version_satisfies(const std::string& versionText,
-                                       const std::string& requirementText)
+static bool semantic_version_satisfies(
+    const std::string& versionText,
+    const std::string& requirementText)
 {
     const auto version = parse_semantic_version(versionText);
     if(!version.has_value())
@@ -1948,8 +2015,10 @@ static BuildConfig parse_build_config(const std::string& content)
             continue;
         if(section == "tool.mlang")
         {
-            parse_build_config_key_value(cfg, assignment->key,
-                                         assignment->value);
+            parse_build_config_key_value(
+                cfg,
+                assignment->key,
+                assignment->value);
         }
         else if(section == "tool.mlang.options")
         {
@@ -1982,16 +2051,18 @@ parse_feature_definitions(const std::string& content)
         const auto assignment = parse_toml_assignment(text, in);
         if(!assignment.has_value())
             continue;
-        append_toml_string_list_value(assignment->value,
-                                      definitions[assignment->key]);
+        append_toml_string_list_value(
+            assignment->value,
+            definitions[assignment->key]);
     }
     return definitions;
 }
 
-static bool parse_profile_recursive(const std::string& content,
-                                    const std::string& profileName,
-                                    std::unordered_set<std::string>& active,
-                                    BuildConfig& result)
+static bool parse_profile_recursive(
+    const std::string& content,
+    const std::string& profileName,
+    std::unordered_set<std::string>& active,
+    BuildConfig& result)
 {
     const std::string sectionName = "profile." + profileName;
     if(!has_section(content, sectionName))
@@ -2025,8 +2096,10 @@ static bool parse_profile_recursive(const std::string& content,
             continue;
         const auto assignment = parse_toml_assignment(text, in);
         if(assignment.has_value() && assignment->key != "inherits")
-            parse_build_config_key_value(profile, assignment->key,
-                                         assignment->value);
+            parse_build_config_key_value(
+                profile,
+                assignment->key,
+                assignment->value);
     }
     result = merge_build_config(result, profile);
     active.erase(profileName);
@@ -2034,9 +2107,11 @@ static bool parse_profile_recursive(const std::string& content,
 }
 
 static bool configure_profile_and_features(
-    const std::string& manifestContent, BuildConfig& config,
+    const std::string& manifestContent,
+    BuildConfig& config,
     const std::string& profileName,
-    const std::vector<std::string>& requestedFeatures, bool noDefaultFeatures,
+    const std::vector<std::string>& requestedFeatures,
+    bool noDefaultFeatures,
     bool allFeatures)
 {
     if(!profileName.empty())
@@ -2052,8 +2127,11 @@ static bool configure_profile_and_features(
             profile.optLevel = "-O3";
         }
         std::unordered_set<std::string> active;
-        if(!parse_profile_recursive(manifestContent, profileName, active,
-                                    profile))
+        if(!parse_profile_recursive(
+               manifestContent,
+               profileName,
+               active,
+               profile))
             return false;
         config = merge_build_config(config, profile);
         std::vector<std::string> uniqueCompilerFlags;
@@ -2071,8 +2149,10 @@ static bool configure_profile_and_features(
     {
         const auto defaults = definitions.find("default");
         if(defaults != definitions.end())
-            pending.insert(pending.end(), defaults->second.begin(),
-                           defaults->second.end());
+            pending.insert(
+                pending.end(),
+                defaults->second.begin(),
+                defaults->second.end());
     }
     if(allFeatures)
     {
@@ -2095,8 +2175,10 @@ static bool configure_profile_and_features(
             continue;
         const auto found = definitions.find(lookup);
         if(found != definitions.end())
-            pending.insert(pending.end(), found->second.begin(),
-                           found->second.end());
+            pending.insert(
+                pending.end(),
+                found->second.begin(),
+                found->second.end());
     }
     config.enabledFeatures.assign(enabled.begin(), enabled.end());
     std::sort(config.enabledFeatures.begin(), config.enabledFeatures.end());
@@ -2114,10 +2196,10 @@ static bool configure_profile_and_features(
     return true;
 }
 
-static std::filesystem::path
-resolve_package_path(const std::filesystem::path& packageDir,
-                     const std::string& configured,
-                     const std::filesystem::path& fallback)
+static std::filesystem::path resolve_package_path(
+    const std::filesystem::path& packageDir,
+    const std::string& configured,
+    const std::filesystem::path& fallback)
 {
     std::filesystem::path path =
         configured.empty() ? fallback : std::filesystem::path(configured);
@@ -2126,9 +2208,9 @@ resolve_package_path(const std::filesystem::path& packageDir,
     return path.lexically_normal();
 }
 
-static std::filesystem::path
-package_build_dir(const std::filesystem::path& packageDir,
-                  const BuildConfig& config)
+static std::filesystem::path package_build_dir(
+    const std::filesystem::path& packageDir,
+    const BuildConfig& config)
 {
     if(!config.includedBuildDir.empty())
         return std::filesystem::path(config.includedBuildDir)
@@ -2136,9 +2218,9 @@ package_build_dir(const std::filesystem::path& packageDir,
     return resolve_package_path(packageDir, config.buildDir, "build");
 }
 
-static std::filesystem::path
-package_deps_dir(const std::filesystem::path& packageDir,
-                 const BuildConfig& config)
+static std::filesystem::path package_deps_dir(
+    const std::filesystem::path& packageDir,
+    const BuildConfig& config)
 {
     if(!config.includedDepsDir.empty())
         return std::filesystem::path(config.includedDepsDir).lexically_normal();
@@ -2162,10 +2244,11 @@ static PackageLogState& current_package_log_state()
     return state;
 }
 
-static std::optional<std::filesystem::path>
-resolve_log_path(const std::filesystem::path& packageDir,
-                 const BuildConfig& config, const std::string& configured,
-                 const char* defaultName = nullptr)
+static std::optional<std::filesystem::path> resolve_log_path(
+    const std::filesystem::path& packageDir,
+    const BuildConfig& config,
+    const std::string& configured,
+    const char* defaultName = nullptr)
 {
     if(configured.empty() && defaultName == nullptr)
         return std::nullopt;
@@ -2181,9 +2264,9 @@ resolve_log_path(const std::filesystem::path& packageDir,
     return (packageDir / path).lexically_normal();
 }
 
-static PackageLogState
-make_package_log_state(const std::filesystem::path& packageDir,
-                       const BuildConfig& config)
+static PackageLogState make_package_log_state(
+    const std::filesystem::path& packageDir,
+    const BuildConfig& config)
 {
     PackageLogState state;
     if(!config.enableLogs)
@@ -2195,10 +2278,16 @@ make_package_log_state(const std::filesystem::path& packageDir,
         config.logDir.empty() ? nullptr : "pkg.stderr.log";
     const char* defaultWarnLog =
         config.logDir.empty() ? nullptr : "pkg.warn.log";
-    state.stdoutLog = resolve_log_path(packageDir, config, config.stdoutLog,
-                                       defaultStdoutLog);
-    state.stderrLog = resolve_log_path(packageDir, config, config.stderrLog,
-                                       defaultStderrLog);
+    state.stdoutLog = resolve_log_path(
+        packageDir,
+        config,
+        config.stdoutLog,
+        defaultStdoutLog);
+    state.stderrLog = resolve_log_path(
+        packageDir,
+        config,
+        config.stderrLog,
+        defaultStderrLog);
     state.warnLog =
         resolve_log_path(packageDir, config, config.warnLog, defaultWarnLog);
     state.taskPrintToStdoutLog = config.taskPrintToStdoutLog.value_or(false);
@@ -2211,8 +2300,9 @@ static bool pkg_logs_active()
     return current_package_log_state().logsEnabled;
 }
 
-static void append_log_line(const std::optional<std::filesystem::path>& path,
-                            const std::string& text)
+static void append_log_line(
+    const std::optional<std::filesystem::path>& path,
+    const std::string& text)
 {
     if(!path.has_value())
         return;
@@ -2293,7 +2383,7 @@ static std::vector<BuildTarget> parse_build_targets(const std::string& content)
             flush_current();
             current = BuildTarget{};
             current->kind = t == "[[lib]]" ? BuildTarget::dynamic_library
-                                            : BuildTarget::executable;
+                                           : BuildTarget::executable;
             continue;
         }
         if(t.front() == '[' && t.back() == ']')
@@ -2343,9 +2433,9 @@ static std::vector<BuildTarget> parse_build_targets(const std::string& content)
     return targets;
 }
 
-static std::optional<std::vector<BuildTarget>>
-order_build_targets(const std::vector<BuildTarget>& targets,
-                    const std::filesystem::path& manifestPath)
+static std::optional<std::vector<BuildTarget>> order_build_targets(
+    const std::vector<BuildTarget>& targets,
+    const std::filesystem::path& manifestPath)
 {
     std::map<std::string, size_t> byName;
     for(size_t i = 0; i < targets.size(); ++i)
@@ -2354,8 +2444,9 @@ order_build_targets(const std::vector<BuildTarget>& targets,
             continue;
         if(!byName.emplace(targets[i].name, i).second)
         {
-            pkg_error_line("Duplicate package target name '" +
-                           targets[i].name + "' in " + manifestPath.string());
+            pkg_error_line(
+                "Duplicate package target name '" + targets[i].name + "' in " +
+                manifestPath.string());
             return std::nullopt;
         }
     }
@@ -2368,9 +2459,9 @@ order_build_targets(const std::vector<BuildTarget>& targets,
             return true;
         if(state[index] == 1)
         {
-            pkg_error_line("Package target dependency cycle involving '" +
-                           targets[index].name + "' in " +
-                           manifestPath.string());
+            pkg_error_line(
+                "Package target dependency cycle involving '" +
+                targets[index].name + "' in " + manifestPath.string());
             return false;
         }
         state[index] = 1;
@@ -2379,16 +2470,17 @@ order_build_targets(const std::vector<BuildTarget>& targets,
             const auto dependency = byName.find(dependencyName);
             if(dependency == byName.end())
             {
-                pkg_error_line("Unknown package target '" + dependencyName +
-                               "' in depends_on for target '" +
-                               targets[index].name + "'");
+                pkg_error_line(
+                    "Unknown package target '" + dependencyName +
+                    "' in depends_on for target '" + targets[index].name + "'");
                 return false;
             }
             if(targets[dependency->second].kind == BuildTarget::executable)
             {
-                pkg_error_line("Package target '" + targets[index].name +
-                               "' can only depend_on [[lib]] targets; '" +
-                               dependencyName + "' is not a library");
+                pkg_error_line(
+                    "Package target '" + targets[index].name +
+                    "' can only depend_on [[lib]] targets; '" + dependencyName +
+                    "' is not a library");
                 return false;
             }
             if(!visit(dependency->second))
@@ -2437,8 +2529,11 @@ static void collect_target_link_dependencies(
         if(dependency == targetsByName.end())
             continue;
         dependencies.push_back(dependency->second);
-        collect_target_link_dependencies(*dependency->second, targetsByName,
-                                         dependencies, seen);
+        collect_target_link_dependencies(
+            *dependency->second,
+            targetsByName,
+            dependencies,
+            seen);
     }
 }
 
@@ -2507,7 +2602,8 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
         const std::string& key = assignment->key;
         const std::string& value = assignment->value;
 
-        auto apply_common_task_kv = [&](auto& target, TaskTomlKey taskKeyKind,
+        auto apply_common_task_kv = [&](auto& target,
+                                        TaskTomlKey taskKeyKind,
                                         const std::string& taskValue)
         {
             switch(taskKeyKind)
@@ -2582,8 +2678,9 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
                 break;
             case TaskTomlKey::Script:
             case TaskTomlKey::Shell:
-                append_toml_string_list_value_preserve(taskValue,
-                                                       target.shellLines);
+                append_toml_string_list_value_preserve(
+                    taskValue,
+                    target.shellLines);
                 break;
             case TaskTomlKey::Commands:
                 append_toml_commands_value(taskValue, target.commands);
@@ -2607,15 +2704,18 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             case TaskTomlKey::Libs:
             case TaskTomlKey::StaticDeps:
             case TaskTomlKey::StaticCppRuntime:
-                apply_task_build_config_key_value(target.buildConfig,
-                                                  taskKeyKind, taskValue);
+                apply_task_build_config_key_value(
+                    target.buildConfig,
+                    taskKeyKind,
+                    taskValue);
                 break;
             case TaskTomlKey::Name:
                 break;
             }
         };
 
-        auto apply_task_kv = [&](TaskSpec& task, const std::string& taskKey,
+        auto apply_task_kv = [&](TaskSpec& task,
+                                 const std::string& taskKey,
                                  const std::string& taskValue)
         {
             const auto taskKeyKind = find_enum_key(taskKey, kTaskTomlKeys);
@@ -2641,8 +2741,10 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
 
         if(!currentHostSection.empty())
         {
-            apply_override_kv(current->hostOverrides[currentHostSection], key,
-                              value);
+            apply_override_kv(
+                current->hostOverrides[currentHostSection],
+                key,
+                value);
         }
         else
         {
@@ -2653,9 +2755,10 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
     return tasks;
 }
 
-static void parse_build_config_key_value(BuildConfig& cfg,
-                                         const std::string& key,
-                                         const std::string& value)
+static void parse_build_config_key_value(
+    BuildConfig& cfg,
+    const std::string& key,
+    const std::string& value)
 {
     if(key == "opt_level")
     {
@@ -2768,26 +2871,31 @@ struct DepSpec
     bool defaultFeatures = true;
 };
 
-static bool dependency_enabled(const DepSpec& dep,
-                               const BuildConfig& config)
+static bool dependency_enabled(const DepSpec& dep, const BuildConfig& config)
 {
     if(!dep.optional || config.allFeatures)
         return true;
-    return std::find(config.enabledFeatures.begin(),
-                     config.enabledFeatures.end(), dep.name) !=
-               config.enabledFeatures.end() ||
-           std::find(config.enabledFeatures.begin(),
-                     config.enabledFeatures.end(), "dep:" + dep.name) !=
-               config.enabledFeatures.end();
+    return std::find(
+               config.enabledFeatures.begin(),
+               config.enabledFeatures.end(),
+               dep.name) != config.enabledFeatures.end() ||
+           std::find(
+               config.enabledFeatures.begin(),
+               config.enabledFeatures.end(),
+               "dep:" + dep.name) != config.enabledFeatures.end();
 }
 
-static void filter_disabled_dependencies(std::vector<DepSpec>& deps,
-                                         const BuildConfig& config)
+static void filter_disabled_dependencies(
+    std::vector<DepSpec>& deps,
+    const BuildConfig& config)
 {
-    deps.erase(std::remove_if(deps.begin(), deps.end(),
-                              [&](const DepSpec& dep)
-                              { return !dependency_enabled(dep, config); }),
-               deps.end());
+    deps.erase(
+        std::remove_if(
+            deps.begin(),
+            deps.end(),
+            [&](const DepSpec& dep)
+            { return !dependency_enabled(dep, config); }),
+        deps.end());
 }
 
 struct ManifestInclude
@@ -2803,9 +2911,10 @@ struct LinkFlags
     std::vector<std::string> staticArchives;
 };
 
-static std::filesystem::path
-dep_source_dir(const PackageManifest& pkg,
-               const std::filesystem::path& depsDir, const DepSpec& dep);
+static std::filesystem::path dep_source_dir(
+    const PackageManifest& pkg,
+    const std::filesystem::path& depsDir,
+    const DepSpec& dep);
 
 static std::vector<std::string> split_csv(std::string_view input)
 {
@@ -3052,8 +3161,8 @@ static std::string unquote_preserve(std::string_view v)
     return t;
 }
 
-static std::optional<std::string>
-parse_toml_command_tokens(const std::string& value)
+static std::optional<std::string> parse_toml_command_tokens(
+    const std::string& value)
 {
     std::string t = trim(value);
     if(t.empty() || t.front() != '[' || t.back() != ']')
@@ -3076,8 +3185,9 @@ parse_toml_command_tokens(const std::string& value)
     return command;
 }
 
-static void append_toml_command_value(const std::string& value,
-                                      std::vector<std::string>& out)
+static void append_toml_command_value(
+    const std::string& value,
+    std::vector<std::string>& out)
 {
     std::string t = trim(value);
     if(t.empty())
@@ -3095,8 +3205,9 @@ static void append_toml_command_value(const std::string& value,
         out.push_back(v);
 }
 
-static void append_toml_commands_value(const std::string& value,
-                                       std::vector<std::string>& out)
+static void append_toml_commands_value(
+    const std::string& value,
+    std::vector<std::string>& out)
 {
     std::string t = trim(value);
     if(t.empty())
@@ -3115,9 +3226,9 @@ static void append_toml_commands_value(const std::string& value,
     append_toml_command_value(t, out);
 }
 
-static void
-append_toml_string_list_value_preserve(const std::string& value,
-                                       std::vector<std::string>& out)
+static void append_toml_string_list_value_preserve(
+    const std::string& value,
+    std::vector<std::string>& out)
 {
     std::string t = trim(value);
     if(t.empty())
@@ -3138,8 +3249,8 @@ append_toml_string_list_value_preserve(const std::string& value,
         out.push_back(v);
 }
 
-static std::map<std::string, std::string>
-parse_inline_table(const std::string& line)
+static std::map<std::string, std::string> parse_inline_table(
+    const std::string& line)
 {
     std::map<std::string, std::string> kv;
     size_t l = line.find('{');
@@ -3161,8 +3272,8 @@ parse_inline_table(const std::string& line)
     return kv;
 }
 
-static std::vector<ToolchainRequirement>
-parse_toolchain_requirements(const std::string& content)
+static std::vector<ToolchainRequirement> parse_toolchain_requirements(
+    const std::string& content)
 {
     std::istringstream in(content);
     std::string line;
@@ -3248,8 +3359,8 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
         auto gitIt = kv.find("git");
         auto urlIt = kv.find("url");
         auto pathIt = kv.find("path");
-        const bool hasSource = gitIt != kv.end() || urlIt != kv.end() ||
-                               pathIt != kv.end();
+        const bool hasSource =
+            gitIt != kv.end() || urlIt != kv.end() || pathIt != kv.end();
         if(!hasSource && section == "c-dependencies")
             continue;
         DepSpec dep;
@@ -3291,8 +3402,9 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
             if(dep.url.size() >= 7 &&
                dep.url.substr(dep.url.size() - 7) == ".tar.gz")
                 dep.archiveType = "tar.gz";
-            else if(dep.url.size() >= 4 &&
-                    dep.url.substr(dep.url.size() - 4) == ".tgz")
+            else if(
+                dep.url.size() >= 4 &&
+                dep.url.substr(dep.url.size() - 4) == ".tgz")
                 dep.archiveType = "tar.gz";
         }
         if(dep.build.empty())
@@ -3302,8 +3414,8 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
     return deps;
 }
 
-static std::vector<std::string>
-parse_workspace_members(const std::string& content)
+static std::vector<std::string> parse_workspace_members(
+    const std::string& content)
 {
     std::istringstream in(content);
     std::string line;
@@ -3349,8 +3461,8 @@ parse_workspace_members(const std::string& content)
     return out;
 }
 
-static std::vector<ManifestInclude>
-parse_manifest_includes(const std::string& content)
+static std::vector<ManifestInclude> parse_manifest_includes(
+    const std::string& content)
 {
     std::istringstream in(content);
     std::string line;
@@ -3426,8 +3538,9 @@ static std::filesystem::path default_added_package_dir(const std::string& name)
     return std::filesystem::path("packages") / sanitize_package_name(name);
 }
 
-static bool write_text_file_if_missing(const std::filesystem::path& path,
-                                       const std::string& content)
+static bool write_text_file_if_missing(
+    const std::filesystem::path& path,
+    const std::string& content)
 {
     if(std::filesystem::exists(path))
         return true;
@@ -3441,10 +3554,15 @@ static bool write_text_file_if_missing(const std::filesystem::path& path,
 }
 
 static std::string make_dependency_manifest_line(
-    const std::string& name, const std::string& gitUrl,
-    const std::string& archiveUrl, const std::string& archiveType,
-    const std::string& rev, const std::string& tag, bool gitSubmodules,
-    const std::string& depSubdir, int stripComponents)
+    const std::string& name,
+    const std::string& gitUrl,
+    const std::string& archiveUrl,
+    const std::string& archiveType,
+    const std::string& rev,
+    const std::string& tag,
+    bool gitSubmodules,
+    const std::string& depSubdir,
+    int stripComponents)
 {
     std::string line;
     if(!archiveUrl.empty())
@@ -3479,8 +3597,9 @@ static std::string make_dependency_manifest_line(
     return line;
 }
 
-static std::string relative_path_string(const std::filesystem::path& fromDir,
-                                        const std::filesystem::path& toPath)
+static std::string relative_path_string(
+    const std::filesystem::path& fromDir,
+    const std::filesystem::path& toPath)
 {
     std::error_code ec;
     std::filesystem::path rel = std::filesystem::relative(toPath, fromDir, ec);
@@ -3504,8 +3623,8 @@ static std::string package_readme_template(const std::string& name)
            "\n\n# Build and run\n\n"
            "```sh\n"
            "mlang pkg build\n"
-           "./build/" + name +
-           "\n```\n";
+           "./build/" +
+           name + "\n```\n";
 }
 
 static bool print_package_readme_instructions(
@@ -3521,8 +3640,10 @@ static bool print_package_readme_instructions(
         return false;
     }
 
-    // ATX heading level (1-6) of `line`, or 0; `title` receives the trimmed text.
-    auto heading_level = [](const std::string& line, std::string& title) {
+    // ATX heading level (1-6) of `line`, or 0; `title` receives the trimmed
+    // text.
+    auto heading_level = [](const std::string& line, std::string& title)
+    {
         size_t level = 0;
         while(level < line.size() && line[level] == '#')
             ++level;
@@ -3536,7 +3657,8 @@ static bool print_package_readme_instructions(
                     : line.substr(begin, end - begin + 1);
         return static_cast<int>(level);
     };
-    auto is_build_and_run = [](const std::string& title) {
+    auto is_build_and_run = [](const std::string& title)
+    {
         static const std::string wanted = "build and run";
         if(title.size() != wanted.size())
             return false;
@@ -3594,10 +3716,11 @@ static bool print_package_readme_instructions(
     return true;
 }
 
-static bool ensure_package_entry_stub(const std::filesystem::path& manifestPath,
-                                      const std::string& manifestContent,
-                                      const std::string& label,
-                                      std::string& error)
+static bool ensure_package_entry_stub(
+    const std::filesystem::path& manifestPath,
+    const std::string& manifestContent,
+    const std::string& label,
+    std::string& error)
 {
     if(!has_section(manifestContent, "package"))
         return true;
@@ -3626,8 +3749,9 @@ static bool manifest_declares_tasks(const std::string& manifestContent)
     return manifestContent.find("[[task]]") != std::string::npos;
 }
 
-static bool task_list_contains_name(const std::vector<TaskSpec>& tasks,
-                                    const std::string& taskName)
+static bool task_list_contains_name(
+    const std::vector<TaskSpec>& tasks,
+    const std::string& taskName)
 {
     for(const auto& task : tasks)
     {
@@ -3639,8 +3763,11 @@ static bool task_list_contains_name(const std::vector<TaskSpec>& tasks,
 
 static bool scaffold_added_package(
     const std::filesystem::path& rootManifestPath,
-    const std::filesystem::path& packageDir, const std::string& packageName,
-    const std::string& depLine, const std::string& depName, std::string& error)
+    const std::filesystem::path& packageDir,
+    const std::string& packageName,
+    const std::string& depLine,
+    const std::string& depName,
+    std::string& error)
 {
     namespace fs = std::filesystem;
     std::error_code ec;
@@ -3656,8 +3783,9 @@ static bool scaffold_added_package(
     if(fs::exists(packageManifest))
     {
         std::ifstream in(packageManifest, std::ios::binary);
-        packageContent.assign((std::istreambuf_iterator<char>(in)),
-                              std::istreambuf_iterator<char>());
+        packageContent.assign(
+            (std::istreambuf_iterator<char>(in)),
+            std::istreambuf_iterator<char>());
         if(packageContent.empty())
         {
             error = "Failed to read existing subproject manifest: " +
@@ -3694,8 +3822,9 @@ static bool scaffold_added_package(
     }
     out << packageContent;
 
-    if(!write_text_file_if_missing(packageDir / "src" / "main.mla",
-                                   package_stub_source(depName)))
+    if(!write_text_file_if_missing(
+           packageDir / "src" / "main.mla",
+           package_stub_source(depName)))
     {
         error = "Failed to write subproject entry source: " +
                 (packageDir / "src" / "main.mla").string();
@@ -3718,8 +3847,9 @@ static std::string shell_quote(const std::string& s)
     return out;
 }
 
-static bool extract_lib_name(const std::filesystem::path& path,
-                             std::string& out)
+static bool extract_lib_name(
+    const std::filesystem::path& path,
+    std::string& out)
 {
     std::string name = path.filename().string();
     if(name.rfind("lib", 0) != 0)
@@ -3742,10 +3872,11 @@ static bool extract_lib_name(const std::filesystem::path& path,
     return false;
 }
 
-static void scan_lib_dir(const std::filesystem::path& dir,
-                         std::unordered_set<std::string>& libDirs,
-                         std::unordered_set<std::string>& libs,
-                         std::unordered_set<std::string>& staticArchives)
+static void scan_lib_dir(
+    const std::filesystem::path& dir,
+    std::unordered_set<std::string>& libDirs,
+    std::unordered_set<std::string>& libs,
+    std::unordered_set<std::string>& staticArchives)
 {
     if(!std::filesystem::exists(dir))
         return;
@@ -3777,12 +3908,16 @@ static bool valid_include_target(const std::string& target)
 {
     if(target.empty() || target == "." || target == "..")
         return false;
-    return std::all_of(target.begin(), target.end(), [](unsigned char c)
-                       { return std::isalnum(c) || c == '-' || c == '_'; });
+    return std::all_of(
+        target.begin(),
+        target.end(),
+        [](unsigned char c)
+        { return std::isalnum(c) || c == '-' || c == '_'; });
 }
 
-static void apply_include_output_paths(const PackageManifest& pkg,
-                                       BuildConfig& buildConfig)
+static void apply_include_output_paths(
+    const PackageManifest& pkg,
+    BuildConfig& buildConfig)
 {
     if(pkg.includeTarget.empty())
         return;
@@ -3821,8 +3956,9 @@ static bool validate_package_features(
     {
         if(!valid_reference(feature))
         {
-            pkg_error_line("Unknown feature '" + feature + "' for package '" +
-                           package_name(pkg) + "'");
+            pkg_error_line(
+                "Unknown feature '" + feature + "' for package '" +
+                package_name(pkg) + "'");
             return false;
         }
     }
@@ -3832,10 +3968,12 @@ static bool validate_package_features(
         {
             if(!valid_reference(member))
             {
-                pkg_error_line("Feature '" + feature + "' in package '" +
-                               package_name(pkg) +
-                               "' refers to unknown feature or optional "
-                               "dependency '" + member + "'");
+                pkg_error_line(
+                    "Feature '" + feature + "' in package '" +
+                    package_name(pkg) +
+                    "' refers to unknown feature or optional "
+                    "dependency '" +
+                    member + "'");
                 return false;
             }
         }
@@ -3843,17 +3981,21 @@ static bool validate_package_features(
     return true;
 }
 
-static std::optional<BuildConfig>
-dependency_build_config(const PackageManifest& child, const DepSpec& dep,
-                        const BuildConfig& parent)
+static std::optional<BuildConfig> dependency_build_config(
+    const PackageManifest& child,
+    const DepSpec& dep,
+    const BuildConfig& parent)
 {
     if(!validate_package_features(child, dep.features))
         return std::nullopt;
     BuildConfig config = parse_manifest_build_config(child);
-    if(!configure_profile_and_features(child.content, config,
-                                       parent.profileName, dep.features,
-                                       !dep.defaultFeatures,
-                                       parent.allFeatures))
+    if(!configure_profile_and_features(
+           child.content,
+           config,
+           parent.profileName,
+           dep.features,
+           !dep.defaultFeatures,
+           parent.allFeatures))
         return std::nullopt;
     if(!parent.profileName.empty() &&
        !has_section(child.content, "profile." + parent.profileName) &&
@@ -3935,33 +4077,37 @@ private:
     DependencyLockContext* previous_;
 };
 
-static std::string lock_manifest_name(const DependencyLockContext& context,
-                                      const PackageManifest& pkg)
+static std::string lock_manifest_name(
+    const DependencyLockContext& context,
+    const PackageManifest& pkg)
 {
     std::error_code ec;
     std::filesystem::path relative = std::filesystem::relative(
-        pkg.manifestPath, context.rootManifest.parent_path(), ec);
+        pkg.manifestPath,
+        context.rootManifest.parent_path(),
+        ec);
     if(ec)
         return pkg.manifestPath.lexically_normal().generic_string();
     return relative.lexically_normal().generic_string();
 }
 
-static std::string dependency_lock_key(const std::string& manifest,
-                                       const std::string& name)
+static std::string dependency_lock_key(
+    const std::string& manifest,
+    const std::string& name)
 {
     return manifest + "\n" + name;
 }
 
 static DependencyLockEntry make_dependency_lock_entry(
-    const DependencyLockContext& context, const PackageManifest& pkg,
+    const DependencyLockContext& context,
+    const PackageManifest& pkg,
     const DepSpec& dep)
 {
     DependencyLockEntry entry;
     entry.manifest = lock_manifest_name(context, pkg);
     entry.name = dep.name;
-    entry.source = !dep.path.empty()
-                       ? "path"
-                       : (!dep.git.empty() ? "git" : "archive");
+    entry.source =
+        !dep.path.empty() ? "path" : (!dep.git.empty() ? "git" : "archive");
     entry.url = !dep.git.empty() ? dep.git : dep.url;
     entry.path = dep.path;
     entry.versionRequirement = dep.versionRequirement;
@@ -3986,8 +4132,9 @@ static DependencyLockEntry make_dependency_lock_entry(
     return entry;
 }
 
-static bool lock_entry_matches_dependency(const DependencyLockEntry& entry,
-                                          const DependencyLockEntry& expected)
+static bool lock_entry_matches_dependency(
+    const DependencyLockEntry& entry,
+    const DependencyLockEntry& expected)
 {
     return entry.manifest == expected.manifest && entry.name == expected.name &&
            entry.source == expected.source && entry.url == expected.url &&
@@ -4004,8 +4151,7 @@ static bool lock_entry_matches_dependency(const DependencyLockEntry& entry,
            entry.defaultFeatures == expected.defaultFeatures;
 }
 
-static std::optional<std::string>
-sha256_file(const std::filesystem::path& path)
+static std::optional<std::string> sha256_file(const std::filesystem::path& path)
 {
     std::ifstream in(path, std::ios::binary);
     if(!in)
@@ -4017,8 +4163,8 @@ sha256_file(const std::filesystem::path& path)
         in.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
         const std::streamsize count = in.gcount();
         if(count > 0)
-            sha.update(llvm::StringRef(buffer.data(),
-                                       static_cast<size_t>(count)));
+            sha.update(
+                llvm::StringRef(buffer.data(), static_cast<size_t>(count)));
     }
     if(in.bad())
         return std::nullopt;
@@ -4066,9 +4212,10 @@ static std::string lock_quote(const std::string& value)
     return out;
 }
 
-static bool read_dependency_lock(const std::filesystem::path& path,
-                                 DependencyLockContext& context,
-                                 std::string& error)
+static bool read_dependency_lock(
+    const std::filesystem::path& path,
+    DependencyLockContext& context,
+    std::string& error)
 {
     std::ifstream in(path, std::ios::binary);
     if(!in)
@@ -4129,8 +4276,8 @@ static bool read_dependency_lock(const std::filesystem::path& path,
             {
                 if(unquote(assignment->value) != "1")
                 {
-                    error = "Unsupported mlang.lock version in " +
-                            path.string();
+                    error =
+                        "Unsupported mlang.lock version in " + path.string();
                     return false;
                 }
                 versionSeen = true;
@@ -4161,9 +4308,8 @@ static bool read_dependency_lock(const std::filesystem::path& path,
         else if(assignment->key == "revision")
             current->revision = value;
         else if(assignment->key == "checksum")
-            current->checksum = value.rfind("sha256:", 0) == 0
-                                    ? value.substr(7)
-                                    : value;
+            current->checksum =
+                value.rfind("sha256:", 0) == 0 ? value.substr(7) : value;
         else if(assignment->key == "archive")
             current->archiveType = value;
         else if(assignment->key == "subdir")
@@ -4187,16 +4333,16 @@ static bool read_dependency_lock(const std::filesystem::path& path,
     return true;
 }
 
-static bool write_dependency_lock(const DependencyLockContext& context,
-                                  std::string& error)
+static bool write_dependency_lock(
+    const DependencyLockContext& context,
+    std::string& error)
 {
     const std::filesystem::path temporaryPath =
         context.lockPath.string() + ".tmp";
     std::ofstream out(temporaryPath, std::ios::binary | std::ios::trunc);
     if(!out)
     {
-        error = "Failed to write temporary lockfile: " +
-                temporaryPath.string();
+        error = "Failed to write temporary lockfile: " + temporaryPath.string();
         return false;
     }
     out << "# Generated by mlang pkg. Do not edit manually.\n";
@@ -4254,8 +4400,9 @@ static bool write_dependency_lock(const DependencyLockContext& context,
         std::filesystem::remove(context.lockPath, ec);
     }
 #endif
-    if(std::rename(temporaryPath.string().c_str(),
-                   context.lockPath.string().c_str()) != 0)
+    if(std::rename(
+           temporaryPath.string().c_str(),
+           context.lockPath.string().c_str()) != 0)
     {
         std::error_code ec;
         std::filesystem::remove(temporaryPath, ec);
@@ -4266,9 +4413,9 @@ static bool write_dependency_lock(const DependencyLockContext& context,
     return true;
 }
 
-static std::vector<std::filesystem::path>
-discover_workspace_manifests(const std::filesystem::path& manifestPath,
-                             const std::string& content)
+static std::vector<std::filesystem::path> discover_workspace_manifests(
+    const std::filesystem::path& manifestPath,
+    const std::string& content)
 {
     namespace fs = std::filesystem;
     std::vector<std::filesystem::path> out;
@@ -4319,8 +4466,8 @@ discover_workspace_manifests(const std::filesystem::path& manifestPath,
     return out;
 }
 
-static std::vector<PackageManifest>
-collect_target_manifests(const std::filesystem::path& manifestPath)
+static std::vector<PackageManifest> collect_target_manifests(
+    const std::filesystem::path& manifestPath)
 {
     namespace fs = std::filesystem;
     std::vector<PackageManifest> out;
@@ -4328,8 +4475,9 @@ collect_target_manifests(const std::filesystem::path& manifestPath)
     std::ifstream in(manifestAbs, std::ios::binary);
     if(!in)
         return out;
-    std::string content((std::istreambuf_iterator<char>(in)),
-                        std::istreambuf_iterator<char>());
+    std::string content(
+        (std::istreambuf_iterator<char>(in)),
+        std::istreambuf_iterator<char>());
     if(content.empty())
         return out;
 
@@ -4338,8 +4486,13 @@ collect_target_manifests(const std::filesystem::path& manifestPath)
 
     if(has_section(content, "package"))
     {
-        out.push_back(PackageManifest{
-            manifestAbs, manifestAbs.parent_path(), content, "", {}});
+        out.push_back(
+            PackageManifest{
+                manifestAbs,
+                manifestAbs.parent_path(),
+                content,
+                "",
+                {}});
     }
 
     std::unordered_set<std::string> includeTargets;
@@ -4347,22 +4500,24 @@ collect_target_manifests(const std::filesystem::path& manifestPath)
     {
         if(include.path.empty())
         {
-            pkg_error_line("Missing path in [[include]] entry in " +
-                           manifestAbs.string());
+            pkg_error_line(
+                "Missing path in [[include]] entry in " + manifestAbs.string());
             return {};
         }
         if(!valid_include_target(include.target))
         {
-            pkg_error_line("Invalid or missing target in [[include]] for '" +
-                           include.path + "' in " + manifestAbs.string() +
-                           "; use a unique name containing only letters, "
-                           "digits, '-' or '_'");
+            pkg_error_line(
+                "Invalid or missing target in [[include]] for '" +
+                include.path + "' in " + manifestAbs.string() +
+                "; use a unique name containing only letters, "
+                "digits, '-' or '_'");
             return {};
         }
         if(!includeTargets.insert(include.target).second)
         {
-            pkg_error_line("Duplicate [[include]] target '" + include.target +
-                           "' in " + manifestAbs.string());
+            pkg_error_line(
+                "Duplicate [[include]] target '" + include.target + "' in " +
+                manifestAbs.string());
             return {};
         }
 
@@ -4373,30 +4528,37 @@ collect_target_manifests(const std::filesystem::path& manifestPath)
         childPath = fs::absolute(childPath).lexically_normal();
         if(!fs::is_regular_file(childPath, ec))
         {
-            pkg_error_line("Included package manifest not found: " +
-                           childPath.string());
+            pkg_error_line(
+                "Included package manifest not found: " + childPath.string());
             return {};
         }
         const std::string childKey = childPath.string();
         if(!seen.insert(childKey).second)
         {
-            pkg_error_line("Package manifest included more than once: " +
-                           childPath.string());
+            pkg_error_line(
+                "Package manifest included more than once: " +
+                childPath.string());
             return {};
         }
 
         std::ifstream childIn(childPath, std::ios::binary);
-        std::string childContent((std::istreambuf_iterator<char>(childIn)),
-                                 std::istreambuf_iterator<char>());
+        std::string childContent(
+            (std::istreambuf_iterator<char>(childIn)),
+            std::istreambuf_iterator<char>());
         if(childContent.empty() || !has_section(childContent, "package"))
         {
-            pkg_error_line("Included manifest must declare [package]: " +
-                           childPath.string());
+            pkg_error_line(
+                "Included manifest must declare [package]: " +
+                childPath.string());
             return {};
         }
-        out.push_back(PackageManifest{childPath, childPath.parent_path(),
-                                      childContent, include.target,
-                                      manifestAbs.parent_path()});
+        out.push_back(
+            PackageManifest{
+                childPath,
+                childPath.parent_path(),
+                childContent,
+                include.target,
+                manifestAbs.parent_path()});
     }
     for(const auto& child : discover_workspace_manifests(manifestAbs, content))
     {
@@ -4407,19 +4569,27 @@ collect_target_manifests(const std::filesystem::path& manifestPath)
         std::ifstream childIn(childAbs, std::ios::binary);
         if(!childIn)
             continue;
-        std::string childContent((std::istreambuf_iterator<char>(childIn)),
-                                 std::istreambuf_iterator<char>());
+        std::string childContent(
+            (std::istreambuf_iterator<char>(childIn)),
+            std::istreambuf_iterator<char>());
         if(childContent.empty() || !has_section(childContent, "package"))
             continue;
-        out.push_back(PackageManifest{
-            childAbs, childAbs.parent_path(), childContent, "", {}});
+        out.push_back(
+            PackageManifest{
+                childAbs,
+                childAbs.parent_path(),
+                childContent,
+                "",
+                {}});
     }
     return out;
 }
 
 static bool prepare_dependency_lock_context(
     const std::filesystem::path& rootManifest,
-    const std::vector<PackageManifest>& manifests, bool locked, bool offline,
+    const std::vector<PackageManifest>& manifests,
+    bool locked,
+    bool offline,
     DependencyLockContext& context)
 {
     context.rootManifest = std::filesystem::absolute(rootManifest);
@@ -4439,9 +4609,10 @@ static bool prepare_dependency_lock_context(
     }
     else if(locked || offline)
     {
-        pkg_error_line("mlang.lock not found at " + context.lockPath.string() +
-                       (locked ? "; --locked requires an existing lockfile"
-                               : "; --offline requires an existing lockfile"));
+        pkg_error_line(
+            "mlang.lock not found at " + context.lockPath.string() +
+            (locked ? "; --locked requires an existing lockfile"
+                    : "; --offline requires an existing lockfile"));
         return false;
     }
 
@@ -4456,16 +4627,19 @@ static bool prepare_dependency_lock_context(
            !declaredVersion.has_value() ||
            !is_complete_semantic_version(*declaredVersion))
         {
-            pkg_error_line("Package manifest requires a name and complete "
-                           "semantic version: " + pkg.manifestPath.string());
+            pkg_error_line(
+                "Package manifest requires a name and complete "
+                "semantic version: " +
+                pkg.manifestPath.string());
             return false;
         }
         for(const auto& dep : parse_source_deps(pkg.content))
         {
             DependencyLockEntry entry =
                 make_dependency_lock_entry(context, pkg, dep);
-            expected.emplace(dependency_lock_key(entry.manifest, entry.name),
-                             std::move(entry));
+            expected.emplace(
+                dependency_lock_key(entry.manifest, entry.name),
+                std::move(entry));
         }
     }
 
@@ -4494,15 +4668,17 @@ static bool prepare_dependency_lock_context(
     {
         if(locked || offline)
         {
-            pkg_error_line("mlang.lock is out of date for " +
-                           context.rootManifest.string() +
-                           (locked ? "; rerun 'mlang pkg lock'"
-                                   : "; update it before using --offline"));
+            pkg_error_line(
+                "mlang.lock is out of date for " +
+                context.rootManifest.string() +
+                (locked ? "; rerun 'mlang pkg lock'"
+                        : "; update it before using --offline"));
             return false;
         }
         if(lockExists)
-            pkg_info_line("Dependency declarations changed; regenerating " +
-                          context.lockPath.string());
+            pkg_info_line(
+                "Dependency declarations changed; regenerating " +
+                context.lockPath.string());
         context.entries.clear();
         context.dirty = true;
     }
@@ -4513,8 +4689,9 @@ static bool prepare_dependency_lock_context(
     return true;
 }
 
-static DependencyLockEntry* dependency_lock_entry(const PackageManifest& pkg,
-                                                  const DepSpec& dep)
+static DependencyLockEntry* dependency_lock_entry(
+    const PackageManifest& pkg,
+    const DepSpec& dep)
 {
     DependencyLockContext* context = current_dependency_lock_context();
     if(context == nullptr)
@@ -4526,11 +4703,12 @@ static DependencyLockEntry* dependency_lock_entry(const PackageManifest& pkg,
     return found == context->entries.end() ? nullptr : &found->second;
 }
 
-static void record_dependency_lock_entry(const PackageManifest& pkg,
-                                         const DepSpec& dep,
-                                         const std::string& revision,
-                                         const std::string& checksum,
-                                         const std::string& resolvedVersion = "")
+static void record_dependency_lock_entry(
+    const PackageManifest& pkg,
+    const DepSpec& dep,
+    const std::string& revision,
+    const std::string& checksum,
+    const std::string& resolvedVersion = "")
 {
     DependencyLockContext* context = current_dependency_lock_context();
     if(context == nullptr)
@@ -4568,9 +4746,10 @@ static bool finish_dependency_lock_context(DependencyLockContext& context)
     {
         if(context.locked || context.offline)
         {
-            pkg_error_line("mlang.lock contains dependencies no longer "
-                           "reachable from " + context.rootManifest.string() +
-                           "; rerun 'mlang pkg lock'");
+            pkg_error_line(
+                "mlang.lock contains dependencies no longer "
+                "reachable from " +
+                context.rootManifest.string() + "; rerun 'mlang pkg lock'");
             return false;
         }
         for(const auto& key : obsolete)
@@ -4581,8 +4760,9 @@ static bool finish_dependency_lock_context(DependencyLockContext& context)
         return true;
     if(context.locked || context.offline)
     {
-        pkg_error_line("Refusing to modify " + context.lockPath.string() +
-                       " in locked/offline mode");
+        pkg_error_line(
+            "Refusing to modify " + context.lockPath.string() +
+            " in locked/offline mode");
         return false;
     }
     std::string error;
@@ -4591,14 +4771,15 @@ static bool finish_dependency_lock_context(DependencyLockContext& context)
         pkg_error_line(error);
         return false;
     }
-    pkg_info_line("Wrote reproducible dependency lockfile " +
-                  context.lockPath.string());
+    pkg_info_line(
+        "Wrote reproducible dependency lockfile " + context.lockPath.string());
     context.dirty = false;
     return true;
 }
 
-static std::string command_with_log_redirection(const std::string& cmd,
-                                                bool logChildOutput)
+static std::string command_with_log_redirection(
+    const std::string& cmd,
+    bool logChildOutput)
 {
     if(!logChildOutput)
         return cmd;
@@ -4617,8 +4798,10 @@ static std::string command_with_log_redirection(const std::string& cmd,
     return full;
 }
 
-static int run_command(const std::string& cmd, bool logCommand = true,
-                       bool logChildOutput = true)
+static int run_command(
+    const std::string& cmd,
+    bool logCommand = true,
+    bool logChildOutput = true)
 {
     pkg_info_line(cmd, logCommand);
     return std::system(
@@ -4719,9 +4902,11 @@ private:
     bool hideCursor_ = false;
 };
 
-static int run_progress_command(const std::string& label,
-                                const std::string& cmd, bool logCommand = true,
-                                bool logChildOutput = true)
+static int run_progress_command(
+    const std::string& label,
+    const std::string& cmd,
+    bool logCommand = true,
+    bool logChildOutput = true)
 {
     const auto start = std::chrono::steady_clock::now();
     ProgressSpinner spinner(shorten_progress_description(label));
@@ -4752,9 +4937,12 @@ static int run_progress_command(const std::string& label,
     return rc;
 }
 
-static int run_status_command(const std::string& label, const std::string& cmd,
-                              bool useSpinner, bool logCommand = true,
-                              bool logChildOutput = true)
+static int run_status_command(
+    const std::string& label,
+    const std::string& cmd,
+    bool useSpinner,
+    bool logCommand = true,
+    bool logChildOutput = true)
 {
     if(useSpinner && !pkg_logs_active())
         return run_progress_command(label, cmd, logCommand, logChildOutput);
@@ -4779,10 +4967,11 @@ static int run_status_command(const std::string& label, const std::string& cmd,
     return rc;
 }
 
-static int stream_inline_output_command(ProgressSpinner& spinner,
-                                        const std::string& cmd,
-                                        bool logCommand = true,
-                                        bool logChildOutput = true)
+static int stream_inline_output_command(
+    ProgressSpinner& spinner,
+    const std::string& cmd,
+    bool logCommand = true,
+    bool logChildOutput = true)
 {
     pkg_info_line(cmd, logCommand);
     std::string fullCmd = cmd + " 2>&1";
@@ -4833,9 +5022,9 @@ static std::string join_path_entries(const std::vector<std::string>& entries)
     return out;
 }
 
-static std::string
-command_with_path_entries(const std::string& cmd,
-                          const std::vector<std::string>& entries)
+static std::string command_with_path_entries(
+    const std::string& cmd,
+    const std::vector<std::string>& entries)
 {
     const std::string joined = join_path_entries(entries);
     if(joined.empty())
@@ -4854,64 +5043,86 @@ command_with_path_entries(const std::string& cmd,
     return "env PATH=" + shell_quote(fullPath) + " " + cmd;
 }
 
-static int run_command_with_paths(const std::string& cmd,
-                                  const std::vector<std::string>& entries)
+static int run_command_with_paths(
+    const std::string& cmd,
+    const std::vector<std::string>& entries)
 {
     return run_command(command_with_path_entries(cmd, entries));
 }
 
-static int
-run_progress_command_with_paths(const std::string& label,
-                                const std::string& cmd,
-                                const std::vector<std::string>& entries)
+static int run_progress_command_with_paths(
+    const std::string& label,
+    const std::string& cmd,
+    const std::vector<std::string>& entries)
 {
     return run_progress_command(label, command_with_path_entries(cmd, entries));
 }
 
-static int
-run_status_command_with_paths(const std::string& label, const std::string& cmd,
-                              const std::vector<std::string>& entries,
-                              bool useSpinner, bool logCommand = true,
-                              bool logChildOutput = true)
+static int run_status_command_with_paths(
+    const std::string& label,
+    const std::string& cmd,
+    const std::vector<std::string>& entries,
+    bool useSpinner,
+    bool logCommand = true,
+    bool logChildOutput = true)
 {
-    return run_status_command(label, command_with_path_entries(cmd, entries),
-                              useSpinner, logCommand, logChildOutput);
+    return run_status_command(
+        label,
+        command_with_path_entries(cmd, entries),
+        useSpinner,
+        logCommand,
+        logChildOutput);
 }
 
-static int run_command_in_dir(const std::filesystem::path& dir,
-                              const std::string& cmd)
+static int run_command_in_dir(
+    const std::filesystem::path& dir,
+    const std::string& cmd)
 {
     return run_command("cd " + shell_quote(dir.string()) + " && " + cmd);
 }
 
 static int run_command_in_dir_with_paths(
-    const std::filesystem::path& dir, const std::string& cmd,
-    const std::vector<std::string>& entries, bool logCommand = true,
+    const std::filesystem::path& dir,
+    const std::string& cmd,
+    const std::vector<std::string>& entries,
+    bool logCommand = true,
     bool logChildOutput = true)
 {
-    return run_command("cd " + shell_quote(dir.string()) + " && " +
-                           command_with_path_entries(cmd, entries),
-                       logCommand, logChildOutput);
+    return run_command(
+        "cd " + shell_quote(dir.string()) + " && " +
+            command_with_path_entries(cmd, entries),
+        logCommand,
+        logChildOutput);
 }
 
 static int run_progress_command_in_dir_with_paths(
-    const std::string& label, const std::filesystem::path& dir,
-    const std::string& cmd, const std::vector<std::string>& entries)
+    const std::string& label,
+    const std::filesystem::path& dir,
+    const std::string& cmd,
+    const std::vector<std::string>& entries)
 {
-    return run_progress_command(label,
-                                "cd " + shell_quote(dir.string()) + " && " +
-                                    command_with_path_entries(cmd, entries));
+    return run_progress_command(
+        label,
+        "cd " + shell_quote(dir.string()) + " && " +
+            command_with_path_entries(cmd, entries));
 }
 
 static int run_status_command_in_dir_with_paths(
-    const std::string& label, const std::filesystem::path& dir,
-    const std::string& cmd, const std::vector<std::string>& entries,
-    bool useSpinner, bool logCommand = true, bool logChildOutput = true)
+    const std::string& label,
+    const std::filesystem::path& dir,
+    const std::string& cmd,
+    const std::vector<std::string>& entries,
+    bool useSpinner,
+    bool logCommand = true,
+    bool logChildOutput = true)
 {
-    return run_status_command(label,
-                              "cd " + shell_quote(dir.string()) + " && " +
-                                  command_with_path_entries(cmd, entries),
-                              useSpinner, logCommand, logChildOutput);
+    return run_status_command(
+        label,
+        "cd " + shell_quote(dir.string()) + " && " +
+            command_with_path_entries(cmd, entries),
+        useSpinner,
+        logCommand,
+        logChildOutput);
 }
 
 static std::optional<std::string> run_command_capture(const std::string& cmd)
@@ -4930,8 +5141,8 @@ static std::optional<std::string> run_command_capture(const std::string& cmd)
     return out;
 }
 
-static std::optional<std::string>
-run_command_capture_with_stderr(const std::string& cmd)
+static std::optional<std::string> run_command_capture_with_stderr(
+    const std::string& cmd)
 {
     FILE* pipe = popen((cmd + " 2>&1").c_str(), "r");
     if(!pipe)
@@ -4946,9 +5157,9 @@ run_command_capture_with_stderr(const std::string& cmd)
     return out;
 }
 
-static std::optional<std::string>
-run_command_capture_with_paths(const std::string& cmd,
-                               const std::vector<std::string>& entries)
+static std::optional<std::string> run_command_capture_with_paths(
+    const std::string& cmd,
+    const std::vector<std::string>& entries)
 {
     return run_command_capture(command_with_path_entries(cmd, entries));
 }
@@ -5005,8 +5216,8 @@ static void append_shell_fragment(std::string& cmd, const std::string& fragment)
         cmd += " " + shell_quote(token);
 }
 
-static std::optional<std::string>
-extract_toolchain_version(const std::string& output)
+static std::optional<std::string> extract_toolchain_version(
+    const std::string& output)
 {
     for(size_t start = 0; start < output.size(); ++start)
     {
@@ -5042,8 +5253,9 @@ extract_toolchain_version(const std::string& output)
     return std::nullopt;
 }
 
-static int validate_toolchain_requirements(const PackageManifest& pkg,
-                                           const BuildConfig& buildConfig)
+static int validate_toolchain_requirements(
+    const PackageManifest& pkg,
+    const BuildConfig& buildConfig)
 {
     const auto requirements = parse_toolchain_requirements(pkg.content);
     if(requirements.empty())
@@ -5051,8 +5263,8 @@ static int validate_toolchain_requirements(const PackageManifest& pkg,
 
     const std::string hostName = current_host_name();
     bool failed = false;
-    pkg_info_line("-- Checking dependency toolchains for " +
-                  pkg.manifestPath.string());
+    pkg_info_line(
+        "-- Checking dependency toolchains for " + pkg.manifestPath.string());
     for(const auto& requirement : requirements)
     {
         if(!requirement.host.empty() && requirement.host != hostName)
@@ -5062,16 +5274,17 @@ static int validate_toolchain_requirements(const PackageManifest& pkg,
             requirement.name.empty() ? requirement.command : requirement.name;
         if(requirement.command.empty())
         {
-            pkg_error_line("-- Invalid toolchain " + displayName +
-                           ": missing command");
+            pkg_error_line(
+                "-- Invalid toolchain " + displayName + ": missing command");
             failed = true;
             continue;
         }
         if(!requirement.minVersion.empty() &&
            !parse_semver_components(requirement.minVersion).has_value())
         {
-            pkg_error_line("-- Invalid minimum version for " + displayName +
-                           ": " + requirement.minVersion);
+            pkg_error_line(
+                "-- Invalid minimum version for " + displayName + ": " +
+                requirement.minVersion);
             failed = true;
             continue;
         }
@@ -5081,8 +5294,9 @@ static int validate_toolchain_requirements(const PackageManifest& pkg,
             buildConfig.pathEntries);
         if(!executable.has_value() || trim(*executable).empty())
         {
-            pkg_error_line("-- Missing " + displayName + ": command '" +
-                           requirement.command + "' was not found in PATH");
+            pkg_error_line(
+                "-- Missing " + displayName + ": command '" +
+                requirement.command + "' was not found in PATH");
             if(!requirement.install.empty())
                 pkg_error_line("   Install: " + requirement.install);
             failed = true;
@@ -5105,8 +5319,9 @@ static int validate_toolchain_requirements(const PackageManifest& pkg,
                                  : std::nullopt;
         if(!version.has_value())
         {
-            pkg_error_line("-- Found " + displayName + ": " + executablePath +
-                           ", but its version could not be determined");
+            pkg_error_line(
+                "-- Found " + displayName + ": " + executablePath +
+                ", but its version could not be determined");
             if(!requirement.install.empty())
                 pkg_error_line("   Install: " + requirement.install);
             failed = true;
@@ -5115,39 +5330,42 @@ static int validate_toolchain_requirements(const PackageManifest& pkg,
 
         if(compare_semver(*version, requirement.minVersion) < 0)
         {
-            pkg_error_line("-- Found " + displayName + ": " + executablePath +
-                           " (version " + *version + ", requires >= " +
-                           requirement.minVersion + ")");
+            pkg_error_line(
+                "-- Found " + displayName + ": " + executablePath +
+                " (version " + *version +
+                ", requires >= " + requirement.minVersion + ")");
             if(!requirement.install.empty())
-                pkg_error_line("   Install or upgrade: " +
-                               requirement.install);
+                pkg_error_line("   Install or upgrade: " + requirement.install);
             failed = true;
             continue;
         }
-        pkg_info_line("-- Found " + displayName + ": " + executablePath +
-                      " (version " + *version + ", requires >= " +
-                      requirement.minVersion + ")");
+        pkg_info_line(
+            "-- Found " + displayName + ": " + executablePath + " (version " +
+            *version + ", requires >= " + requirement.minVersion + ")");
     }
 
     if(failed)
     {
-        pkg_error_line("Required dependency toolchains are missing or too old. "
-                       "Install or upgrade them before continuing.");
+        pkg_error_line(
+            "Required dependency toolchains are missing or too old. "
+            "Install or upgrade them before continuing.");
         return 1;
     }
     pkg_info_line("-- Dependency toolchain check completed");
     return 0;
 }
 
-static std::filesystem::path
-dep_checkout_dir(const std::filesystem::path& depsDir, const DepSpec& dep)
+static std::filesystem::path dep_checkout_dir(
+    const std::filesystem::path& depsDir,
+    const DepSpec& dep)
 {
     return depsDir / dep.name;
 }
 
-static std::filesystem::path
-dep_source_dir(const PackageManifest& pkg,
-               const std::filesystem::path& depsDir, const DepSpec& dep)
+static std::filesystem::path dep_source_dir(
+    const PackageManifest& pkg,
+    const std::filesystem::path& depsDir,
+    const DepSpec& dep)
 {
     std::filesystem::path path;
     if(auto* context = current_dependency_lock_context();
@@ -5174,10 +5392,11 @@ dep_source_dir(const PackageManifest& pkg,
     return path;
 }
 
-static std::optional<PackageManifest>
-load_dependency_manifest(const PackageManifest& owner, const DepSpec& dep,
-                         const std::filesystem::path& depsDir,
-                         bool required)
+static std::optional<PackageManifest> load_dependency_manifest(
+    const PackageManifest& owner,
+    const DepSpec& dep,
+    const std::filesystem::path& depsDir,
+    bool required)
 {
     namespace fs = std::filesystem;
     fs::path manifestPath = dep_source_dir(owner, depsDir, dep) / "mlang.toml";
@@ -5185,18 +5404,21 @@ load_dependency_manifest(const PackageManifest& owner, const DepSpec& dep,
     if(!fs::is_regular_file(manifestPath, ec))
     {
         if(required)
-            pkg_error_line("MLang dependency '" + dep.name +
-                           "' has no manifest at " + manifestPath.string());
+            pkg_error_line(
+                "MLang dependency '" + dep.name + "' has no manifest at " +
+                manifestPath.string());
         return std::nullopt;
     }
     manifestPath = fs::absolute(manifestPath).lexically_normal();
     std::ifstream in(manifestPath, std::ios::binary);
-    std::string content((std::istreambuf_iterator<char>(in)),
-                        std::istreambuf_iterator<char>());
+    std::string content(
+        (std::istreambuf_iterator<char>(in)),
+        std::istreambuf_iterator<char>());
     if(content.empty() || !has_section(content, "package"))
     {
-        pkg_error_line("Dependency manifest must declare [package]: " +
-                       manifestPath.string());
+        pkg_error_line(
+            "Dependency manifest must declare [package]: " +
+            manifestPath.string());
         return std::nullopt;
     }
     const auto packageName =
@@ -5206,38 +5428,48 @@ load_dependency_manifest(const PackageManifest& owner, const DepSpec& dep,
     if(!packageName.has_value() || packageName->empty() ||
        !packageVersion.has_value() || packageVersion->empty())
     {
-        pkg_error_line("MLang dependency manifest requires package name and "
-                       "version: " + manifestPath.string());
+        pkg_error_line(
+            "MLang dependency manifest requires package name and "
+            "version: " +
+            manifestPath.string());
         return std::nullopt;
     }
     if(*packageName != dep.name)
     {
-        pkg_error_line("Dependency key '" + dep.name +
-                       "' does not match package name '" + *packageName +
-                       "' in " + manifestPath.string());
+        pkg_error_line(
+            "Dependency key '" + dep.name + "' does not match package name '" +
+            *packageName + "' in " + manifestPath.string());
         return std::nullopt;
     }
     if(!is_complete_semantic_version(*packageVersion))
     {
-        pkg_error_line("Package '" + dep.name + "' has invalid semantic "
-                       "version '" + *packageVersion + "'");
+        pkg_error_line(
+            "Package '" + dep.name +
+            "' has invalid semantic "
+            "version '" +
+            *packageVersion + "'");
         return std::nullopt;
     }
     if(!dep.versionRequirement.empty() &&
        !semantic_version_satisfies(*packageVersion, dep.versionRequirement))
     {
-        pkg_error_line("Package '" + dep.name + "' version " +
-                       *packageVersion + " does not satisfy '" +
-                       dep.versionRequirement + "' required by " +
-                       owner.manifestPath.string());
+        pkg_error_line(
+            "Package '" + dep.name + "' version " + *packageVersion +
+            " does not satisfy '" + dep.versionRequirement + "' required by " +
+            owner.manifestPath.string());
         return std::nullopt;
     }
-    return PackageManifest{manifestPath, manifestPath.parent_path(), content,
-                           "", {}};
+    return PackageManifest{
+        manifestPath,
+        manifestPath.parent_path(),
+        content,
+        "",
+        {}};
 }
 
 static void collect_transitive_link_flags_impl(
-    const PackageManifest& pkg, const BuildConfig& packageConfig,
+    const PackageManifest& pkg,
+    const BuildConfig& packageConfig,
     const std::filesystem::path& depsDir,
     std::unordered_set<std::string>& visited,
     std::unordered_set<std::string>& libDirs,
@@ -5267,14 +5499,19 @@ static void collect_transitive_link_flags_impl(
         if(!visited.insert(key).second)
             continue;
         collect_transitive_link_flags_impl(
-            *child, *childConfig,
-            package_deps_dir(child->packageDir, *childConfig), visited, libDirs,
-            libs, staticArchives);
+            *child,
+            *childConfig,
+            package_deps_dir(child->packageDir, *childConfig),
+            visited,
+            libDirs,
+            libs,
+            staticArchives);
     }
 }
 
 static LinkFlags collect_transitive_dep_link_flags(
-    const PackageManifest& pkg, const BuildConfig& packageConfig,
+    const PackageManifest& pkg,
+    const BuildConfig& packageConfig,
     const std::filesystem::path& depsDir)
 {
     std::unordered_set<std::string> visited;
@@ -5282,8 +5519,14 @@ static LinkFlags collect_transitive_dep_link_flags(
     std::unordered_set<std::string> libs;
     std::unordered_set<std::string> staticArchives;
     visited.insert(pkg.manifestPath.string());
-    collect_transitive_link_flags_impl(pkg, packageConfig, depsDir, visited,
-                                       libDirs, libs, staticArchives);
+    collect_transitive_link_flags_impl(
+        pkg,
+        packageConfig,
+        depsDir,
+        visited,
+        libDirs,
+        libs,
+        staticArchives);
     LinkFlags flags;
     flags.libDirs.assign(libDirs.begin(), libDirs.end());
     flags.libs.assign(libs.begin(), libs.end());
@@ -5379,20 +5622,25 @@ static std::string shorten_progress_output(const std::string& text)
     return text.substr(0, maxLen - 3) + "...";
 }
 
-static size_t count_fetch_dep_steps(const DepSpec& dep,
-                                    const std::filesystem::path& depsDir,
-                                    bool updateExisting);
-static size_t count_build_dep_steps(const PackageManifest& pkg,
-                                    const DepSpec& dep,
-                                    const std::filesystem::path& depsDir);
-static size_t count_reachable_task_steps(const std::vector<TaskSpec>& tasks,
-                                         const std::string& hostName,
-                                         const std::vector<std::string>& roots);
+static size_t count_fetch_dep_steps(
+    const DepSpec& dep,
+    const std::filesystem::path& depsDir,
+    bool updateExisting);
+static size_t count_build_dep_steps(
+    const PackageManifest& pkg,
+    const DepSpec& dep,
+    const std::filesystem::path& depsDir);
+static size_t count_reachable_task_steps(
+    const std::vector<TaskSpec>& tasks,
+    const std::string& hostName,
+    const std::vector<std::string>& roots);
 
-static int fetch_git_dep(const PackageManifest& pkg, const DepSpec& dep,
-                         const std::filesystem::path& depsDir,
-                         bool updateExisting,
-                         const std::vector<std::string>& pathEntries)
+static int fetch_git_dep(
+    const PackageManifest& pkg,
+    const DepSpec& dep,
+    const std::filesystem::path& depsDir,
+    bool updateExisting,
+    const std::vector<std::string>& pathEntries)
 {
     DependencyLockContext* lockContext = current_dependency_lock_context();
     DependencyLockEntry* lockEntry = dependency_lock_entry(pkg, dep);
@@ -5408,8 +5656,8 @@ static int fetch_git_dep(const PackageManifest& pkg, const DepSpec& dep,
                                   std::filesystem::is_directory(sharedMirror);
         if(offline && !mirrorExists)
         {
-            pkg_error_line("Offline dependency missing from cache: " +
-                           path.string());
+            pkg_error_line(
+                "Offline dependency missing from cache: " + path.string());
             return 1;
         }
         if(!sharedMirror.empty() && !mirrorExists)
@@ -5422,23 +5670,31 @@ static int fetch_git_dep(const PackageManifest& pkg, const DepSpec& dep,
                     "git clone --mirror " + shell_quote(dep.git) + " " +
                     shell_quote(sharedMirror.string());
                 if(run_status_command_with_paths(
-                       execution_step_label("Caching git dependency '" +
-                                            dep.name + "' globally"),
-                       mirrorCmd, pathEntries, dep.spinner, dep.spinner,
+                       execution_step_label(
+                           "Caching git dependency '" + dep.name +
+                           "' globally"),
+                       mirrorCmd,
+                       pathEntries,
+                       dep.spinner,
+                       dep.spinner,
                        dep.spinner) != 0)
                     return 1;
             }
         }
-        else if(!sharedMirror.empty() && mirrorExists && !offline &&
-                lockEntry == nullptr)
+        else if(
+            !sharedMirror.empty() && mirrorExists && !offline &&
+            lockEntry == nullptr)
         {
             const std::string updateMirror =
                 "git -C " + shell_quote(sharedMirror.string()) +
                 " fetch --all --tags";
             if(run_status_command_with_paths(
-                   execution_step_label("Updating global git cache for '" +
-                                        dep.name + "'"),
-                   updateMirror, pathEntries, dep.spinner, dep.spinner,
+                   execution_step_label(
+                       "Updating global git cache for '" + dep.name + "'"),
+                   updateMirror,
+                   pathEntries,
+                   dep.spinner,
+                   dep.spinner,
                    dep.spinner) != 0)
                 return 1;
         }
@@ -5449,9 +5705,13 @@ static int fetch_git_dep(const PackageManifest& pkg, const DepSpec& dep,
         std::string cloneCmd = "git clone " + shell_quote(cloneSource) + " " +
                                shell_quote(path.string());
         if(run_status_command_with_paths(
-               execution_step_label("Fetching git dependency '" + dep.name +
-                                    "' from " + dep.git),
-               cloneCmd, pathEntries, dep.spinner, dep.spinner,
+               execution_step_label(
+                   "Fetching git dependency '" + dep.name + "' from " +
+                   dep.git),
+               cloneCmd,
+               pathEntries,
+               dep.spinner,
+               dep.spinner,
                dep.spinner) != 0)
             return 1;
         if(cloneSource != dep.git)
@@ -5461,19 +5721,23 @@ static int fetch_git_dep(const PackageManifest& pkg, const DepSpec& dep,
                 " remote set-url origin " + shell_quote(dep.git);
             if(run_command(setOrigin) != 0)
                 return 1;
-            pkg_info_line("Global cache hit for git dependency '" + dep.name +
-                          "'");
+            pkg_info_line(
+                "Global cache hit for git dependency '" + dep.name + "'");
         }
     }
-    else if(lockEntry == nullptr && !offline &&
-            (updateExisting || (lockContext != nullptr && lockContext->dirty)))
+    else if(
+        lockEntry == nullptr && !offline &&
+        (updateExisting || (lockContext != nullptr && lockContext->dirty)))
     {
         std::string fetchCmd =
             "git -C " + shell_quote(path.string()) + " fetch --all --tags";
         if(run_status_command_with_paths(
-               execution_step_label("Updating git dependency '" + dep.name +
-                                    "'"),
-               fetchCmd, pathEntries, dep.spinner, dep.spinner,
+               execution_step_label(
+                   "Updating git dependency '" + dep.name + "'"),
+               fetchCmd,
+               pathEntries,
+               dep.spinner,
+               dep.spinner,
                dep.spinner) != 0)
             return 1;
     }
@@ -5484,25 +5748,28 @@ static int fetch_git_dep(const PackageManifest& pkg, const DepSpec& dep,
         pathEntries);
     if(!origin.has_value() || trim(*origin) != dep.git)
     {
-        pkg_error_line("Git dependency '" + dep.name +
-                       "' has a different origin URL in " + path.string() +
-                       "; clean its dependency cache before continuing");
+        pkg_error_line(
+            "Git dependency '" + dep.name + "' has a different origin URL in " +
+            path.string() + "; clean its dependency cache before continuing");
         return 1;
     }
 
     const std::string requestedRevision =
         lockEntry != nullptr ? lockEntry->revision : dep.rev;
-    const std::string requestedTag =
-        lockEntry != nullptr ? "" : dep.tag;
+    const std::string requestedTag = lockEntry != nullptr ? "" : dep.tag;
     if(!requestedRevision.empty())
     {
         std::string checkout = "git -C " + shell_quote(path.string()) +
                                " checkout --detach " +
                                shell_quote(requestedRevision);
         if(run_status_command_with_paths(
-               execution_step_label("Checking out '" + dep.name +
-                                    "' revision " + requestedRevision),
-               checkout, pathEntries, dep.spinner, dep.spinner,
+               execution_step_label(
+                   "Checking out '" + dep.name + "' revision " +
+                   requestedRevision),
+               checkout,
+               pathEntries,
+               dep.spinner,
+               dep.spinner,
                dep.spinner) != 0)
             return 1;
     }
@@ -5512,9 +5779,12 @@ static int fetch_git_dep(const PackageManifest& pkg, const DepSpec& dep,
                                " checkout --detach " +
                                shell_quote("tags/" + requestedTag);
         if(run_status_command_with_paths(
-               execution_step_label("Checking out '" + dep.name + "' tag " +
-                                    requestedTag),
-               checkout, pathEntries, dep.spinner, dep.spinner,
+               execution_step_label(
+                   "Checking out '" + dep.name + "' tag " + requestedTag),
+               checkout,
+               pathEntries,
+               dep.spinner,
+               dep.spinner,
                dep.spinner) != 0)
             return 1;
     }
@@ -5523,9 +5793,12 @@ static int fetch_git_dep(const PackageManifest& pkg, const DepSpec& dep,
         std::string checkout = "git -C " + shell_quote(path.string()) +
                                " checkout --detach origin/HEAD";
         if(run_status_command_with_paths(
-               execution_step_label("Pinning '" + dep.name +
-                                    "' to the remote default revision"),
-               checkout, pathEntries, dep.spinner, dep.spinner,
+               execution_step_label(
+                   "Pinning '" + dep.name + "' to the remote default revision"),
+               checkout,
+               pathEntries,
+               dep.spinner,
+               dep.spinner,
                dep.spinner) != 0)
             return 1;
     }
@@ -5538,9 +5811,12 @@ static int fetch_git_dep(const PackageManifest& pkg, const DepSpec& dep,
         if(offline)
             updateSubmodulesCmd += " --no-fetch";
         if(run_status_command_with_paths(
-               execution_step_label("Initializing submodules for '" + dep.name +
-                                    "'"),
-               updateSubmodulesCmd, pathEntries, dep.spinner, dep.spinner,
+               execution_step_label(
+                   "Initializing submodules for '" + dep.name + "'"),
+               updateSubmodulesCmd,
+               pathEntries,
+               dep.spinner,
+               dep.spinner,
                dep.spinner) != 0)
         {
             return 1;
@@ -5552,32 +5828,36 @@ static int fetch_git_dep(const PackageManifest& pkg, const DepSpec& dep,
         pathEntries);
     if(!resolved.has_value() || trim(*resolved).empty())
     {
-        pkg_error_line("Failed to resolve exact Git revision for dependency '" +
-                       dep.name + "'");
+        pkg_error_line(
+            "Failed to resolve exact Git revision for dependency '" + dep.name +
+            "'");
         return 1;
     }
     const std::string revision = trim(*resolved);
     if(lockEntry != nullptr && revision != lockEntry->revision)
     {
-        pkg_error_line("Git dependency '" + dep.name + "' resolved to " +
-                       revision + ", expected locked revision " +
-                       lockEntry->revision);
+        pkg_error_line(
+            "Git dependency '" + dep.name + "' resolved to " + revision +
+            ", expected locked revision " + lockEntry->revision);
         return 1;
     }
     record_dependency_lock_entry(pkg, dep, revision, "");
     return 0;
 }
 
-static int fetch_archive_dep(const PackageManifest& pkg, const DepSpec& dep,
-                             const std::filesystem::path& depsDir,
-                             const std::vector<std::string>& pathEntries)
+static int fetch_archive_dep(
+    const PackageManifest& pkg,
+    const DepSpec& dep,
+    const std::filesystem::path& depsDir,
+    const std::vector<std::string>& pathEntries)
 {
     if(dep.url.empty())
         return 1;
     if(dep.archiveType != "tar.gz")
     {
-        pkg_error_line("Unsupported archive type for dependency '" + dep.name +
-                       "': " + dep.archiveType);
+        pkg_error_line(
+            "Unsupported archive type for dependency '" + dep.name +
+            "': " + dep.archiveType);
         return 1;
     }
 
@@ -5601,11 +5881,14 @@ static int fetch_archive_dep(const PackageManifest& pkg, const DepSpec& dep,
         {
             std::filesystem::create_directories(archiveDir, ec);
             std::filesystem::copy_file(
-                sharedArchive, archivePath,
-                std::filesystem::copy_options::overwrite_existing, ec);
+                sharedArchive,
+                archivePath,
+                std::filesystem::copy_options::overwrite_existing,
+                ec);
             if(!ec)
-                pkg_info_line("Global cache hit for archive dependency '" +
-                              dep.name + "'");
+                pkg_info_line(
+                    "Global cache hit for archive dependency '" + dep.name +
+                    "'");
         }
     }
     std::optional<std::string> checksum;
@@ -5621,47 +5904,56 @@ static int fetch_archive_dep(const PackageManifest& pkg, const DepSpec& dep,
     {
         if(offline)
         {
-            pkg_error_line("Offline archive missing or checksum-mismatched for "
-                           "dependency '" +
-                           dep.name + "': " + archivePath.string());
+            pkg_error_line(
+                "Offline archive missing or checksum-mismatched for "
+                "dependency '" +
+                dep.name + "': " + archivePath.string());
             return 1;
         }
         std::filesystem::create_directories(archiveDir, ec);
         std::string downloadCmd = "curl -L --fail " + shell_quote(dep.url) +
                                   " -o " + shell_quote(archivePath.string());
         if(run_status_command_with_paths(
-               execution_step_label("Downloading archive dependency '" +
-                                    dep.name + "' from " + dep.url),
-               downloadCmd, pathEntries, dep.spinner, dep.spinner,
+               execution_step_label(
+                   "Downloading archive dependency '" + dep.name + "' from " +
+                   dep.url),
+               downloadCmd,
+               pathEntries,
+               dep.spinner,
+               dep.spinner,
                dep.spinner) != 0)
             return 1;
         checksum = sha256_file(archivePath);
     }
     if(!checksum.has_value())
     {
-        pkg_error_line("Failed to compute SHA-256 for dependency '" + dep.name +
-                       "'");
+        pkg_error_line(
+            "Failed to compute SHA-256 for dependency '" + dep.name + "'");
         return 1;
     }
     if(lockContext != nullptr && !lockContext->globalCacheDir.empty())
     {
         const std::filesystem::path sharedArchive =
-            lockContext->globalCacheDir / "archives" /
-            (*checksum + ".tar.gz");
+            lockContext->globalCacheDir / "archives" / (*checksum + ".tar.gz");
         if(!std::filesystem::exists(sharedArchive, ec))
         {
-            std::filesystem::create_directories(sharedArchive.parent_path(), ec);
+            std::filesystem::create_directories(
+                sharedArchive.parent_path(),
+                ec);
             if(!ec)
                 std::filesystem::copy_file(
-                    archivePath, sharedArchive,
-                    std::filesystem::copy_options::overwrite_existing, ec);
+                    archivePath,
+                    sharedArchive,
+                    std::filesystem::copy_options::overwrite_existing,
+                    ec);
         }
     }
     if(!expectedChecksum.empty() && *checksum != expectedChecksum)
     {
-        pkg_error_line("Checksum mismatch for dependency '" + dep.name +
-                       "': expected sha256:" + expectedChecksum +
-                       ", got sha256:" + *checksum);
+        pkg_error_line(
+            "Checksum mismatch for dependency '" + dep.name +
+            "': expected sha256:" + expectedChecksum +
+            ", got sha256:" + *checksum);
         return 1;
     }
 
@@ -5693,23 +5985,30 @@ static int fetch_archive_dep(const PackageManifest& pkg, const DepSpec& dep,
             " --strip-components=" + std::to_string(dep.stripComponents);
     }
     if(run_status_command_with_paths(
-           execution_step_label("Unpacking " + archivePath.filename().string() +
-                                " into " + checkoutDir.string()),
-           extractCmd, pathEntries, true, true, true) != 0)
+           execution_step_label(
+               "Unpacking " + archivePath.filename().string() + " into " +
+               checkoutDir.string()),
+           extractCmd,
+           pathEntries,
+           true,
+           true,
+           true) != 0)
         return 1;
     std::filesystem::rename(extractDir, checkoutDir, ec);
     if(ec)
     {
-        pkg_error_line("Failed to finalize archive checkout for '" + dep.name +
-                       "': " + ec.message());
+        pkg_error_line(
+            "Failed to finalize archive checkout for '" + dep.name +
+            "': " + ec.message());
         return 1;
     }
-    std::ofstream markerOut(checkoutDir / ".mlang-source.sha256",
-                            std::ios::binary | std::ios::trunc);
+    std::ofstream markerOut(
+        checkoutDir / ".mlang-source.sha256",
+        std::ios::binary | std::ios::trunc);
     if(!markerOut)
     {
-        pkg_error_line("Failed to write archive checksum marker for '" +
-                       dep.name + "'");
+        pkg_error_line(
+            "Failed to write archive checksum marker for '" + dep.name + "'");
         return 1;
     }
     markerOut << *checksum << "\n";
@@ -5717,30 +6016,33 @@ static int fetch_archive_dep(const PackageManifest& pkg, const DepSpec& dep,
     return 0;
 }
 
-static int fetch_dep(const PackageManifest& pkg, const DepSpec& dep,
-                     const std::filesystem::path& depsDir,
-                     bool updateExisting,
-                     const std::vector<std::string>& pathEntries)
+static int fetch_dep(
+    const PackageManifest& pkg,
+    const DepSpec& dep,
+    const std::filesystem::path& depsDir,
+    bool updateExisting,
+    const std::vector<std::string>& pathEntries)
 {
     const int sourceCount = static_cast<int>(!dep.path.empty()) +
                             static_cast<int>(!dep.git.empty()) +
                             static_cast<int>(!dep.url.empty());
     if(sourceCount != 1)
     {
-        pkg_error_line("Dependency '" + dep.name +
-                       "' must select exactly one of path, git, or url");
+        pkg_error_line(
+            "Dependency '" + dep.name +
+            "' must select exactly one of path, git, or url");
         return 1;
     }
     if(dep.git.empty() && (!dep.rev.empty() || !dep.tag.empty()))
     {
-        pkg_error_line("Dependency '" + dep.name +
-                       "' uses rev/tag without a Git source");
+        pkg_error_line(
+            "Dependency '" + dep.name + "' uses rev/tag without a Git source");
         return 1;
     }
     if(!dep.rev.empty() && !dep.tag.empty())
     {
-        pkg_error_line("Git dependency '" + dep.name +
-                       "' cannot select both rev and tag");
+        pkg_error_line(
+            "Git dependency '" + dep.name + "' cannot select both rev and tag");
         return 1;
     }
     if(auto* context = current_dependency_lock_context();
@@ -5765,29 +6067,31 @@ static int fetch_dep(const PackageManifest& pkg, const DepSpec& dep,
             DependencyLockEntry* lockedEntry = dependency_lock_entry(pkg, dep);
             if(lockedEntry == nullptr && (context->locked || context->offline))
             {
-                pkg_error_line("Vendored dependency '" + dep.name +
-                               "' is missing from mlang.lock");
+                pkg_error_line(
+                    "Vendored dependency '" + dep.name +
+                    "' is missing from mlang.lock");
                 return 1;
             }
-            if(lockedEntry != nullptr &&
-               ((!lockedEntry->revision.empty() &&
-                 lockedEntry->revision != revision) ||
-                (!lockedEntry->checksum.empty() &&
-                 lockedEntry->checksum != checksum)))
+            if(lockedEntry != nullptr && ((!lockedEntry->revision.empty() &&
+                                           lockedEntry->revision != revision) ||
+                                          (!lockedEntry->checksum.empty() &&
+                                           lockedEntry->checksum != checksum)))
             {
-                pkg_error_line("Vendored source does not match mlang.lock for '" +
-                               dep.name + "'");
+                pkg_error_line(
+                    "Vendored source does not match mlang.lock for '" +
+                    dep.name + "'");
                 return 1;
             }
             record_dependency_lock_entry(pkg, dep, revision, checksum, version);
-            pkg_info_line("Using vendored dependency '" + dep.name +
-                          "' from " + vendorPath.string());
+            pkg_info_line(
+                "Using vendored dependency '" + dep.name + "' from " +
+                vendorPath.string());
             return 0;
         }
         if(context->offline)
         {
-            pkg_error_line("Vendored dependency is missing: " +
-                           vendorPath.string());
+            pkg_error_line(
+                "Vendored dependency is missing: " + vendorPath.string());
             return 1;
         }
     }
@@ -5798,23 +6102,24 @@ static int fetch_dep(const PackageManifest& pkg, const DepSpec& dep,
             make_dependency_lock_entry(*context, pkg, dep);
         if(entry == nullptr && (context->locked || context->offline))
         {
-            pkg_error_line("Transitive dependency '" + dep.name +
-                           "' is missing from mlang.lock; rerun 'mlang pkg "
-                           "lock'");
+            pkg_error_line(
+                "Transitive dependency '" + dep.name +
+                "' is missing from mlang.lock; rerun 'mlang pkg "
+                "lock'");
             return 1;
         }
-        if(entry != nullptr &&
-           !lock_entry_matches_dependency(*entry, expected))
+        if(entry != nullptr && !lock_entry_matches_dependency(*entry, expected))
         {
             if(context->locked || context->offline)
             {
-                pkg_error_line("mlang.lock is out of date for transitive "
-                               "dependency '" + dep.name +
-                               "'; rerun 'mlang pkg lock'");
+                pkg_error_line(
+                    "mlang.lock is out of date for transitive "
+                    "dependency '" +
+                    dep.name + "'; rerun 'mlang pkg lock'");
                 return 1;
             }
-            const std::string key = dependency_lock_key(expected.manifest,
-                                                        expected.name);
+            const std::string key =
+                dependency_lock_key(expected.manifest, expected.name);
             context->entries.erase(key);
             context->dirty = true;
         }
@@ -5830,54 +6135,58 @@ static int fetch_dep(const PackageManifest& pkg, const DepSpec& dep,
            lockedEntry != nullptr && !lockedEntry->resolvedVersion.empty() &&
            lockedEntry->resolvedVersion != resolvedVersion)
         {
-            DependencyLockContext* context =
-                current_dependency_lock_context();
+            DependencyLockContext* context = current_dependency_lock_context();
             if(context != nullptr && (context->locked || context->offline))
             {
-                pkg_error_line("Path dependency '" + dep.name +
-                               "' changed version: locked " +
-                               lockedEntry->resolvedVersion + ", found " +
-                               resolvedVersion);
+                pkg_error_line(
+                    "Path dependency '" + dep.name +
+                    "' changed version: locked " +
+                    lockedEntry->resolvedVersion + ", found " +
+                    resolvedVersion);
                 return 1;
             }
         }
         if(auto* context = current_dependency_lock_context())
         {
-            const std::string source =
-                "path:" + child->manifestPath.string();
+            const std::string source = "path:" + child->manifestPath.string();
             const auto found = context->packageSources.find(dep.name);
-            if(found != context->packageSources.end() && found->second != source)
+            if(found != context->packageSources.end() &&
+               found->second != source)
             {
-                pkg_error_line("Dependency source conflict for package '" +
-                               dep.name + "': " + found->second + " and " +
-                               source);
+                pkg_error_line(
+                    "Dependency source conflict for package '" + dep.name +
+                    "': " + found->second + " and " + source);
                 return 1;
             }
             context->packageSources[dep.name] = source;
         }
         record_dependency_lock_entry(pkg, dep, "", "", resolvedVersion);
-        pkg_info_line("Using path dependency " + dep.name + " v" +
-                      resolvedVersion + " from " + child->packageDir.string());
+        pkg_info_line(
+            "Using path dependency " + dep.name + " v" + resolvedVersion +
+            " from " + child->packageDir.string());
         return 0;
     }
     if(!dep.git.empty())
         return fetch_git_dep(pkg, dep, depsDir, updateExisting, pathEntries);
     if(!dep.url.empty())
         return fetch_archive_dep(pkg, dep, depsDir, pathEntries);
-    pkg_error_line("Dependency '" + dep.name +
-                   "' is missing a supported source (path/git/url)");
+    pkg_error_line(
+        "Dependency '" + dep.name +
+        "' is missing a supported source (path/git/url)");
     return 1;
 }
 
-static int verify_dependency(const PackageManifest& pkg, const DepSpec& dep,
-                             const std::filesystem::path& depsDir,
-                             const std::vector<std::string>& pathEntries)
+static int verify_dependency(
+    const PackageManifest& pkg,
+    const DepSpec& dep,
+    const std::filesystem::path& depsDir,
+    const std::vector<std::string>& pathEntries)
 {
     DependencyLockEntry* entry = dependency_lock_entry(pkg, dep);
     if(entry == nullptr)
     {
-        pkg_error_line("Dependency '" + dep.name +
-                       "' is missing from mlang.lock");
+        pkg_error_line(
+            "Dependency '" + dep.name + "' is missing from mlang.lock");
         return 1;
     }
     if(auto* context = current_dependency_lock_context())
@@ -5886,8 +6195,8 @@ static int verify_dependency(const PackageManifest& pkg, const DepSpec& dep,
             make_dependency_lock_entry(*context, pkg, dep);
         if(!lock_entry_matches_dependency(*entry, expected))
         {
-            pkg_error_line("mlang.lock is out of date for dependency '" +
-                           dep.name + "'");
+            pkg_error_line(
+                "mlang.lock is out of date for dependency '" + dep.name + "'");
             return 1;
         }
         if(!context->vendorDir.empty())
@@ -5896,8 +6205,7 @@ static int verify_dependency(const PackageManifest& pkg, const DepSpec& dep,
                 context->vendorDir / dep.name;
             if(std::filesystem::is_directory(vendorPath))
             {
-                std::ifstream metadataIn(vendorPath /
-                                         ".mlang-vendor-source");
+                std::ifstream metadataIn(vendorPath / ".mlang-vendor-source");
                 std::string line;
                 std::map<std::string, std::string> metadata;
                 while(std::getline(metadataIn, line))
@@ -5912,8 +6220,10 @@ static int verify_dependency(const PackageManifest& pkg, const DepSpec& dep,
                    (!entry->checksum.empty() &&
                     metadata["checksum"] != entry->checksum))
                 {
-                    pkg_error_line("Vendored dependency verification failed "
-                                   "for '" + dep.name + "'");
+                    pkg_error_line(
+                        "Vendored dependency verification failed "
+                        "for '" +
+                        dep.name + "'");
                     return 1;
                 }
                 pkg_info_line("Verified vendored dependency " + dep.name);
@@ -5930,20 +6240,20 @@ static int verify_dependency(const PackageManifest& pkg, const DepSpec& dep,
             *find_section_toml_string(child->content, "package", "version");
         if(version != entry->resolvedVersion)
         {
-            pkg_error_line("Path dependency '" + dep.name +
-                           "' changed version: expected " +
-                           entry->resolvedVersion + ", got " + version);
+            pkg_error_line(
+                "Path dependency '" + dep.name +
+                "' changed version: expected " + entry->resolvedVersion +
+                ", got " + version);
             return 1;
         }
-        pkg_info_line("Verified path dependency " + dep.name + " v" +
-                      version);
+        pkg_info_line("Verified path dependency " + dep.name + " v" + version);
         return 0;
     }
     const std::filesystem::path checkoutDir = dep_checkout_dir(depsDir, dep);
     if(!std::filesystem::exists(checkoutDir))
     {
-        pkg_error_line("Fetched dependency is missing: " +
-                       checkoutDir.string());
+        pkg_error_line(
+            "Fetched dependency is missing: " + checkoutDir.string());
         return 1;
     }
 
@@ -5955,20 +6265,21 @@ static int verify_dependency(const PackageManifest& pkg, const DepSpec& dep,
             pathEntries);
         if(!origin.has_value() || trim(*origin) != entry->url)
         {
-            pkg_error_line("Git verification failed for '" + dep.name +
-                           "': origin URL does not match mlang.lock");
+            pkg_error_line(
+                "Git verification failed for '" + dep.name +
+                "': origin URL does not match mlang.lock");
             return 1;
         }
         auto head = run_command_capture_with_paths(
-            "git -C " + shell_quote(checkoutDir.string()) +
-                " rev-parse HEAD",
+            "git -C " + shell_quote(checkoutDir.string()) + " rev-parse HEAD",
             pathEntries);
         if(!head.has_value() || trim(*head) != entry->revision)
         {
-            pkg_error_line("Git verification failed for '" + dep.name +
-                           "': expected revision " + entry->revision +
-                           (head.has_value() ? ", got " + trim(*head)
-                                             : ", checkout is unreadable"));
+            pkg_error_line(
+                "Git verification failed for '" + dep.name +
+                "': expected revision " + entry->revision +
+                (head.has_value() ? ", got " + trim(*head)
+                                  : ", checkout is unreadable"));
             return 1;
         }
         if(entry->submodules)
@@ -5979,8 +6290,8 @@ static int verify_dependency(const PackageManifest& pkg, const DepSpec& dep,
                 pathEntries);
             if(!status.has_value())
             {
-                pkg_error_line("Git submodule verification failed for '" +
-                               dep.name + "'");
+                pkg_error_line(
+                    "Git submodule verification failed for '" + dep.name + "'");
                 return 1;
             }
             std::istringstream lines(*status);
@@ -5989,28 +6300,29 @@ static int verify_dependency(const PackageManifest& pkg, const DepSpec& dep,
             {
                 if(!line.empty() && line.front() != ' ')
                 {
-                    pkg_error_line("Git submodule is missing or does not match "
-                                   "the locked tree for '" +
-                                   dep.name + "': " + trim(line));
+                    pkg_error_line(
+                        "Git submodule is missing or does not match "
+                        "the locked tree for '" +
+                        dep.name + "': " + trim(line));
                     return 1;
                 }
             }
         }
-        pkg_info_line("Verified " + dep.name + " at Git revision " +
-                      entry->revision);
+        pkg_info_line(
+            "Verified " + dep.name + " at Git revision " + entry->revision);
         return 0;
     }
 
     const std::filesystem::path archivePath =
-        depsDir / ".archives" /
-        (sanitize_package_name(dep.name) + ".tar.gz");
+        depsDir / ".archives" / (sanitize_package_name(dep.name) + ".tar.gz");
     const auto checksum = sha256_file(archivePath);
     if(!checksum.has_value() || *checksum != entry->checksum)
     {
-        pkg_error_line("Archive verification failed for '" + dep.name +
-                       "': expected sha256:" + entry->checksum +
-                       (checksum.has_value() ? ", got sha256:" + *checksum
-                                             : ", cached archive is missing"));
+        pkg_error_line(
+            "Archive verification failed for '" + dep.name +
+            "': expected sha256:" + entry->checksum +
+            (checksum.has_value() ? ", got sha256:" + *checksum
+                                  : ", cached archive is missing"));
         return 1;
     }
     std::ifstream markerIn(checkoutDir / ".mlang-source.sha256");
@@ -6018,18 +6330,20 @@ static int verify_dependency(const PackageManifest& pkg, const DepSpec& dep,
     std::getline(markerIn, marker);
     if(trim(marker) != entry->checksum)
     {
-        pkg_error_line("Extracted archive verification marker is missing or "
-                       "stale for '" +
-                       dep.name + "'");
+        pkg_error_line(
+            "Extracted archive verification marker is missing or "
+            "stale for '" +
+            dep.name + "'");
         return 1;
     }
-    pkg_info_line("Verified " + dep.name + " archive sha256:" +
-                  entry->checksum);
+    pkg_info_line(
+        "Verified " + dep.name + " archive sha256:" + entry->checksum);
     return 0;
 }
 
-static int verify_manifest_dependencies(const PackageManifest& pkg,
-                                        const BuildConfig& buildConfig)
+static int verify_manifest_dependencies(
+    const PackageManifest& pkg,
+    const BuildConfig& buildConfig)
 {
     DependencyLockContext* traversal = current_dependency_lock_context();
     const std::string manifestKey =
@@ -6040,8 +6354,9 @@ static int verify_manifest_dependencies(const PackageManifest& pkg,
             return 0;
         if(!traversal->activeVerifyManifests.insert(manifestKey).second)
         {
-            pkg_error_line("Transitive dependency cycle reaches " +
-                           pkg.manifestPath.string());
+            pkg_error_line(
+                "Transitive dependency cycle reaches " +
+                pkg.manifestPath.string());
             return 1;
         }
     }
@@ -6060,7 +6375,8 @@ static int verify_manifest_dependencies(const PackageManifest& pkg,
         if(context->globalCacheDir.empty() &&
            !effectiveBuildConfig.globalCacheDir.empty())
             context->globalCacheDir = effectiveBuildConfig.globalCacheDir;
-        if(context->vendorDir.empty() && !effectiveBuildConfig.vendorDir.empty())
+        if(context->vendorDir.empty() &&
+           !effectiveBuildConfig.vendorDir.empty())
             context->vendorDir = effectiveBuildConfig.vendorDir;
     }
     const std::filesystem::path depsDir =
@@ -6069,8 +6385,11 @@ static int verify_manifest_dependencies(const PackageManifest& pkg,
     filter_disabled_dependencies(dependencies, effectiveBuildConfig);
     for(const auto& dep : dependencies)
     {
-        if(verify_dependency(pkg, dep, depsDir,
-                             effectiveBuildConfig.pathEntries) != 0)
+        if(verify_dependency(
+               pkg,
+               dep,
+               depsDir,
+               effectiveBuildConfig.pathEntries) != 0)
         {
             finishTraversal(false);
             return 1;
@@ -6092,11 +6411,12 @@ static int verify_manifest_dependencies(const PackageManifest& pkg,
         DependencyLockEntry* entry = dependency_lock_entry(pkg, dep);
         if(entry == nullptr || entry->resolvedVersion != version)
         {
-            pkg_error_line("Resolved version verification failed for '" +
-                           dep.name + "': expected " +
-                           (entry == nullptr ? std::string("<missing>")
-                                             : entry->resolvedVersion) +
-                           ", got " + version);
+            pkg_error_line(
+                "Resolved version verification failed for '" + dep.name +
+                "': expected " +
+                (entry == nullptr ? std::string("<missing>")
+                                  : entry->resolvedVersion) +
+                ", got " + version);
             finishTraversal(false);
             return 1;
         }
@@ -6135,7 +6455,8 @@ static std::string dependency_source_label(const DepSpec& dep)
 }
 
 static int print_dependency_tree_recursive(
-    const PackageManifest& pkg, const std::string& prefix,
+    const PackageManifest& pkg,
+    const std::string& prefix,
     std::unordered_set<std::string>& expanded,
     std::unordered_set<std::string>& active)
 {
@@ -6157,7 +6478,10 @@ static int print_dependency_tree_recursive(
         if(dep.optional)
             std::cout << " [optional]";
         const auto child = load_dependency_manifest(
-            pkg, dep, depsDir, !dep.path.empty() || dep.build == "mlang");
+            pkg,
+            dep,
+            depsDir,
+            !dep.path.empty() || dep.build == "mlang");
         if(!child.has_value())
         {
             if(!dep.path.empty() || dep.build == "mlang")
@@ -6170,10 +6494,10 @@ static int print_dependency_tree_recursive(
             continue;
         }
         std::cout << " => v" << package_version(*child);
-        const std::string childKey = std::filesystem::absolute(
-                                         child->manifestPath)
-                                         .lexically_normal()
-                                         .string();
+        const std::string childKey =
+            std::filesystem::absolute(child->manifestPath)
+                .lexically_normal()
+                .string();
         if(active.count(childKey) != 0)
         {
             std::cout << " [cycle]\n";
@@ -6188,7 +6512,9 @@ static int print_dependency_tree_recursive(
         std::cout << "\n";
         expanded.insert(childKey);
         if(print_dependency_tree_recursive(
-               *child, prefix + (last ? "    " : "|   "), expanded,
+               *child,
+               prefix + (last ? "    " : "|   "),
+               expanded,
                active) != 0)
         {
             active.erase(key);
@@ -6200,7 +6526,8 @@ static int print_dependency_tree_recursive(
 }
 
 static bool find_dependency_paths_recursive(
-    const PackageManifest& pkg, const std::string& wanted,
+    const PackageManifest& pkg,
+    const std::string& wanted,
     std::vector<std::string>& chain,
     std::unordered_set<std::string>& active,
     std::vector<std::vector<std::string>>& matches)
@@ -6222,10 +6549,16 @@ static bool find_dependency_paths_recursive(
             foundAny = true;
         }
         const auto child = load_dependency_manifest(
-            pkg, dep, depsDir, !dep.path.empty() || dep.build == "mlang");
-        if(child.has_value() &&
-           find_dependency_paths_recursive(*child, wanted, chain, active,
-                                           matches))
+            pkg,
+            dep,
+            depsDir,
+            !dep.path.empty() || dep.build == "mlang");
+        if(child.has_value() && find_dependency_paths_recursive(
+                                    *child,
+                                    wanted,
+                                    chain,
+                                    active,
+                                    matches))
             foundAny = true;
         chain.pop_back();
     }
@@ -6243,17 +6576,19 @@ static int print_dependency_tree(const std::vector<PackageManifest>& manifests)
         std::cout << package_name(pkg) << " v" << package_version(pkg) << "\n";
         std::unordered_set<std::string> expanded;
         std::unordered_set<std::string> active;
-        expanded.insert(std::filesystem::absolute(pkg.manifestPath)
-                            .lexically_normal()
-                            .string());
+        expanded.insert(
+            std::filesystem::absolute(pkg.manifestPath)
+                .lexically_normal()
+                .string());
         if(print_dependency_tree_recursive(pkg, "", expanded, active) != 0)
             return 1;
     }
     return 0;
 }
 
-static int print_dependency_why(const std::vector<PackageManifest>& manifests,
-                                const std::string& wanted)
+static int print_dependency_why(
+    const std::vector<PackageManifest>& manifests,
+    const std::string& wanted)
 {
     bool found = false;
     for(const auto& pkg : manifests)
@@ -6276,16 +6611,18 @@ static int print_dependency_why(const std::vector<PackageManifest>& manifests,
     }
     if(!found)
     {
-        pkg_error_line("Package '" + wanted +
-                       "' is not reachable from the selected manifest");
+        pkg_error_line(
+            "Package '" + wanted +
+            "' is not reachable from the selected manifest");
         return 1;
     }
     return 0;
 }
 
-static bool copy_vendor_tree(const std::filesystem::path& source,
-                             const std::filesystem::path& destination,
-                             std::string& error)
+static bool copy_vendor_tree(
+    const std::filesystem::path& source,
+    const std::filesystem::path& destination,
+    std::string& error)
 {
     namespace fs = std::filesystem;
     std::error_code ec;
@@ -6298,8 +6635,8 @@ static bool copy_vendor_tree(const std::filesystem::path& source,
                 ": " + ec.message();
         return false;
     }
-    for(fs::recursive_directory_iterator it(source, ec), end;
-        !ec && it != end; it.increment(ec))
+    for(fs::recursive_directory_iterator it(source, ec), end; !ec && it != end;
+        it.increment(ec))
     {
         const fs::path relative = fs::relative(it->path(), source, ec);
         if(ec)
@@ -6318,8 +6655,11 @@ static bool copy_vendor_tree(const std::filesystem::path& source,
         {
             fs::create_directories((destination / relative).parent_path(), ec);
             if(!ec)
-                fs::copy_file(it->path(), destination / relative,
-                              fs::copy_options::overwrite_existing, ec);
+                fs::copy_file(
+                    it->path(),
+                    destination / relative,
+                    fs::copy_options::overwrite_existing,
+                    ec);
         }
         if(ec)
             break;
@@ -6333,7 +6673,8 @@ static bool copy_vendor_tree(const std::filesystem::path& source,
 }
 
 static int vendor_manifest_dependencies(
-    const PackageManifest& pkg, const BuildConfig& packageConfig,
+    const PackageManifest& pkg,
+    const BuildConfig& packageConfig,
     const std::filesystem::path& vendorDir,
     std::unordered_set<std::string>& vendored)
 {
@@ -6343,19 +6684,18 @@ static int vendor_manifest_dependencies(
         package_deps_dir(pkg.packageDir, packageConfig);
     for(const auto& dep : deps)
     {
-        const std::filesystem::path source =
-            dep_source_dir(pkg, depsDir, dep);
+        const std::filesystem::path source = dep_source_dir(pkg, depsDir, dep);
         if(!std::filesystem::is_directory(source))
         {
-            pkg_error_line("Cannot vendor missing dependency source: " +
-                           source.string());
+            pkg_error_line(
+                "Cannot vendor missing dependency source: " + source.string());
             return 1;
         }
         const auto entry = dependency_lock_entry(pkg, dep);
         if(entry == nullptr)
         {
-            pkg_error_line("Cannot vendor unlocked dependency '" + dep.name +
-                           "'");
+            pkg_error_line(
+                "Cannot vendor unlocked dependency '" + dep.name + "'");
             return 1;
         }
         const std::filesystem::path destination = vendorDir / dep.name;
@@ -6367,38 +6707,44 @@ static int vendor_manifest_dependencies(
                 pkg_error_line(error);
                 return 1;
             }
-            std::ofstream metadata(destination / ".mlang-vendor-source",
-                                   std::ios::binary | std::ios::trunc);
+            std::ofstream metadata(
+                destination / ".mlang-vendor-source",
+                std::ios::binary | std::ios::trunc);
             if(!metadata)
             {
-                pkg_error_line("Failed to write vendor metadata for '" +
-                               dep.name + "'");
+                pkg_error_line(
+                    "Failed to write vendor metadata for '" + dep.name + "'");
                 return 1;
             }
             metadata << "source=" << entry->source << "\n"
                      << "revision=" << entry->revision << "\n"
                      << "checksum=" << entry->checksum << "\n"
                      << "version=" << entry->resolvedVersion << "\n";
-            pkg_info_line("Vendored " + dep.name + " into " +
-                          destination.string());
+            pkg_info_line(
+                "Vendored " + dep.name + " into " + destination.string());
         }
         const auto child = load_dependency_manifest(pkg, dep, depsDir, false);
         if(!child.has_value())
             continue;
         const auto childConfig =
             dependency_build_config(*child, dep, packageConfig);
-        if(!childConfig.has_value() ||
-           vendor_manifest_dependencies(*child, *childConfig, vendorDir,
-                                        vendored) != 0)
+        if(!childConfig.has_value() || vendor_manifest_dependencies(
+                                           *child,
+                                           *childConfig,
+                                           vendorDir,
+                                           vendored) != 0)
             return 1;
     }
     return 0;
 }
 
-static int build_git_dep(const PackageManifest& pkg, const DepSpec& dep,
-                         const std::filesystem::path& depsDir, bool useNinja,
-                         const std::string& makeProgram,
-                         const std::vector<std::string>& pathEntries)
+static int build_git_dep(
+    const PackageManifest& pkg,
+    const DepSpec& dep,
+    const std::filesystem::path& depsDir,
+    bool useNinja,
+    const std::string& makeProgram,
+    const std::vector<std::string>& pathEntries)
 {
     std::filesystem::path path = dep_source_dir(pkg, depsDir, dep);
     if(!std::filesystem::exists(path))
@@ -6429,15 +6775,24 @@ static int build_git_dep(const PackageManifest& pkg, const DepSpec& dep,
             }
         }
         if(run_status_command_with_paths(
-               execution_step_label("Configuring CMake dependency '" +
-                                    dep.name + "' in " + buildDir.string()),
-               cfg, pathEntries, dep.spinner, dep.spinner, dep.spinner) != 0)
+               execution_step_label(
+                   "Configuring CMake dependency '" + dep.name + "' in " +
+                   buildDir.string()),
+               cfg,
+               pathEntries,
+               dep.spinner,
+               dep.spinner,
+               dep.spinner) != 0)
             return 1;
         std::string build = "cmake --build " + shell_quote(buildDir.string());
         return run_status_command_with_paths(
-            execution_step_label("Building CMake dependency '" + dep.name +
-                                 "'"),
-            build, pathEntries, dep.spinner, dep.spinner, dep.spinner);
+            execution_step_label(
+                "Building CMake dependency '" + dep.name + "'"),
+            build,
+            pathEntries,
+            dep.spinner,
+            dep.spinner,
+            dep.spinner);
     }
     if(dep.build == "meson")
     {
@@ -6448,18 +6803,26 @@ static int build_git_dep(const PackageManifest& pkg, const DepSpec& dep,
                                 shell_quote(buildDir.string()) + " " +
                                 shell_quote(path.string());
             if(run_status_command_with_paths(
-                   execution_step_label("Configuring Meson dependency '" +
-                                        dep.name + "' in " + buildDir.string()),
-                   setup, pathEntries, dep.spinner, dep.spinner,
+                   execution_step_label(
+                       "Configuring Meson dependency '" + dep.name + "' in " +
+                       buildDir.string()),
+                   setup,
+                   pathEntries,
+                   dep.spinner,
+                   dep.spinner,
                    dep.spinner) != 0)
                 return 1;
         }
         std::string compile =
             "meson compile -C " + shell_quote(buildDir.string());
         return run_status_command_with_paths(
-            execution_step_label("Building Meson dependency '" + dep.name +
-                                 "'"),
-            compile, pathEntries, dep.spinner, dep.spinner, dep.spinner);
+            execution_step_label(
+                "Building Meson dependency '" + dep.name + "'"),
+            compile,
+            pathEntries,
+            dep.spinner,
+            dep.spinner,
+            dep.spinner);
     }
     if(dep.build == "make")
     {
@@ -6468,7 +6831,11 @@ static int build_git_dep(const PackageManifest& pkg, const DepSpec& dep,
             shell_quote(effectiveMake) + " -C " + shell_quote(path.string());
         return run_status_command_with_paths(
             execution_step_label("Building make dependency '" + dep.name + "'"),
-            cmd, pathEntries, dep.spinner, dep.spinner, dep.spinner);
+            cmd,
+            pathEntries,
+            dep.spinner,
+            dep.spinner,
+            dep.spinner);
     }
 
     pkg_error_line("Unknown build system: " + dep.build);
@@ -6517,9 +6884,9 @@ static std::vector<CDepSpec> parse_c_deps(const std::string& content)
                 dep.pkgConfig = it->second;
                 dep.usePkgConfig = true;
             }
-            else if(auto it = kv.find("system");
-                    it != kv.end() &&
-                    (it->second == "true" || it->second == "1"))
+            else if(
+                auto it = kv.find("system");
+                it != kv.end() && (it->second == "true" || it->second == "1"))
             {
                 dep.pkgConfig = name;
                 dep.usePkgConfig = true;
@@ -6537,15 +6904,16 @@ static std::vector<CDepSpec> parse_c_deps(const std::string& content)
     return deps;
 }
 
-static bool append_pkg_config_flags(const CDepSpec& dep,
-                                    std::vector<std::string>& outFlags,
-                                    const std::vector<std::string>& pathEntries)
+static bool append_pkg_config_flags(
+    const CDepSpec& dep,
+    std::vector<std::string>& outFlags,
+    const std::vector<std::string>& pathEntries)
 {
     if(!dep.usePkgConfig || dep.pkgConfig.empty())
         return true;
 
-    auto pkgConfigPath = run_command_capture_with_paths(
-        "command -v pkg-config", pathEntries);
+    auto pkgConfigPath =
+        run_command_capture_with_paths("command -v pkg-config", pathEntries);
     if(!pkgConfigPath.has_value() || trim(*pkgConfigPath).empty())
     {
         std::cerr << "pkg-config executable not found while resolving: "
@@ -6572,7 +6940,8 @@ static bool append_pkg_config_flags(const CDepSpec& dep,
 static bool ensure_ninja_available(const std::vector<std::string>& pathEntries)
 {
     auto ninjaPath = run_command_capture_with_paths(
-        "command -v ninja || command -v ninja-build", pathEntries);
+        "command -v ninja || command -v ninja-build",
+        pathEntries);
     if(ninjaPath.has_value() && !trim(*ninjaPath).empty())
         return true;
     std::cerr << "Ninja build requested, but neither 'ninja' nor 'ninja-build'"
@@ -6581,8 +6950,10 @@ static bool ensure_ninja_available(const std::vector<std::string>& pathEntries)
 }
 
 static bool validate_declared_libraries(
-    const std::filesystem::path& manifestPath, const std::string& targetName,
-    const BuildConfig& buildConfig, const LinkFlags& linkFlags)
+    const std::filesystem::path& manifestPath,
+    const std::string& targetName,
+    const BuildConfig& buildConfig,
+    const LinkFlags& linkFlags)
 {
     if(buildConfig.libs.empty())
         return true;
@@ -6611,8 +6982,10 @@ static bool validate_declared_libraries(
     }
 
     std::vector<std::string> searchDirs = buildConfig.libPaths;
-    searchDirs.insert(searchDirs.end(), linkFlags.libDirs.begin(),
-                      linkFlags.libDirs.end());
+    searchDirs.insert(
+        searchDirs.end(),
+        linkFlags.libDirs.begin(),
+        linkFlags.libDirs.end());
 
     for(const auto& lib : buildConfig.libs)
     {
@@ -6648,10 +7021,10 @@ static bool validate_declared_libraries(
     return true;
 }
 
-static int
-validate_mlang_version_requirement(const std::filesystem::path& manifestPath,
-                                   const BuildConfig& buildConfig,
-                                   const std::string& targetName)
+static int validate_mlang_version_requirement(
+    const std::filesystem::path& manifestPath,
+    const BuildConfig& buildConfig,
+    const std::string& targetName)
 {
     if(buildConfig.minMlangVersion.empty())
         return 0;
@@ -6682,8 +7055,9 @@ validate_mlang_version_requirement(const std::filesystem::path& manifestPath,
     return 0;
 }
 
-static int fetch_for_manifest(const PackageManifest& pkg,
-                              const BuildConfig& buildConfig)
+static int fetch_for_manifest(
+    const PackageManifest& pkg,
+    const BuildConfig& buildConfig)
 {
     DependencyLockContext* traversal = current_dependency_lock_context();
     const std::string manifestKey =
@@ -6694,8 +7068,9 @@ static int fetch_for_manifest(const PackageManifest& pkg,
             return 0;
         if(!traversal->activeFetchManifests.insert(manifestKey).second)
         {
-            pkg_error_line("Transitive dependency cycle reaches " +
-                           pkg.manifestPath.string());
+            pkg_error_line(
+                "Transitive dependency cycle reaches " +
+                pkg.manifestPath.string());
             return 1;
         }
     }
@@ -6714,7 +7089,8 @@ static int fetch_for_manifest(const PackageManifest& pkg,
         if(traversal->globalCacheDir.empty() &&
            !effectiveBuildConfig.globalCacheDir.empty())
             traversal->globalCacheDir = effectiveBuildConfig.globalCacheDir;
-        if(traversal->vendorDir.empty() && !effectiveBuildConfig.vendorDir.empty())
+        if(traversal->vendorDir.empty() &&
+           !effectiveBuildConfig.vendorDir.empty())
             traversal->vendorDir = effectiveBuildConfig.vendorDir;
     }
     if(validate_toolchain_requirements(pkg, effectiveBuildConfig) != 0)
@@ -6744,8 +7120,12 @@ static int fetch_for_manifest(const PackageManifest& pkg,
         scopedProgress.emplace(totalSteps);
     for(const auto& dep : deps)
     {
-        if(fetch_dep(pkg, dep, depsDir, /*updateExisting=*/true,
-                     effectiveBuildConfig.pathEntries) != 0)
+        if(fetch_dep(
+               pkg,
+               dep,
+               depsDir,
+               /*updateExisting=*/true,
+               effectiveBuildConfig.pathEntries) != 0)
         {
             finishTraversal(false);
             return 1;
@@ -6771,19 +7151,22 @@ static int fetch_for_manifest(const PackageManifest& pkg,
             {
                 DependencyLockContext* context =
                     current_dependency_lock_context();
-                if(context != nullptr &&
-                   (context->locked || context->offline))
+                if(context != nullptr && (context->locked || context->offline))
                 {
-                    pkg_error_line("MLang dependency '" + dep.name +
-                                   "' changed version: locked " +
-                                   entry->resolvedVersion + ", found " +
-                                   childVersion);
+                    pkg_error_line(
+                        "MLang dependency '" + dep.name +
+                        "' changed version: locked " + entry->resolvedVersion +
+                        ", found " + childVersion);
                     finishTraversal(false);
                     return 1;
                 }
             }
-            record_dependency_lock_entry(pkg, dep, entry->revision,
-                                         entry->checksum, childVersion);
+            record_dependency_lock_entry(
+                pkg,
+                dep,
+                entry->revision,
+                entry->checksum,
+                childVersion);
         }
         if(traversal != nullptr)
         {
@@ -6798,9 +7181,9 @@ static int fetch_for_manifest(const PackageManifest& pkg,
             if(found != traversal->packageSources.end() &&
                found->second != sourceIdentity)
             {
-                pkg_error_line("Dependency source conflict for package '" +
-                               dep.name + "': " + found->second + " and " +
-                               sourceIdentity);
+                pkg_error_line(
+                    "Dependency source conflict for package '" + dep.name +
+                    "': " + found->second + " and " + sourceIdentity);
                 finishTraversal(false);
                 return 1;
             }
@@ -6820,9 +7203,9 @@ static int fetch_for_manifest(const PackageManifest& pkg,
     return 0;
 }
 
-static std::string
-default_task_compiler_for_language(std::string_view language,
-                                   const BuildConfig& buildConfig)
+static std::string default_task_compiler_for_language(
+    std::string_view language,
+    const BuildConfig& buildConfig)
 {
     if(language == "mlang")
     {
@@ -6838,11 +7221,16 @@ default_task_compiler_for_language(std::string_view language,
 }
 
 static std::optional<std::string> build_task_language_command(
-    const PackageManifest& pkg, const std::string& taskName,
-    const BuildConfig& taskBuildConfig, const std::string& language,
-    const std::string& source, const std::string& output,
-    const std::vector<std::string>& inputs, bool compileOnly,
-    const LinkFlags& linkFlags, const std::vector<std::string>& pkgFlags,
+    const PackageManifest& pkg,
+    const std::string& taskName,
+    const BuildConfig& taskBuildConfig,
+    const std::string& language,
+    const std::string& source,
+    const std::string& output,
+    const std::vector<std::string>& inputs,
+    bool compileOnly,
+    const LinkFlags& linkFlags,
+    const std::vector<std::string>& pkgFlags,
     std::string& error)
 {
     if(language.empty())
@@ -6862,8 +7250,11 @@ static std::optional<std::string> build_task_language_command(
         return std::nullopt;
     }
 
-    if(!compileOnly && !validate_declared_libraries(pkg.manifestPath, taskName,
-                                                    taskBuildConfig, linkFlags))
+    if(!compileOnly && !validate_declared_libraries(
+                           pkg.manifestPath,
+                           taskName,
+                           taskBuildConfig,
+                           linkFlags))
     {
         error = "";
         return std::nullopt;
@@ -6971,7 +7362,8 @@ static std::string package_source_fingerprint(const PackageManifest& pkg)
     std::vector<fs::path> files;
     std::error_code ec;
     for(fs::recursive_directory_iterator it(pkg.packageDir, ec), end;
-        !ec && it != end; it.increment(ec))
+        !ec && it != end;
+        it.increment(ec))
     {
         if(it->is_directory(ec))
         {
@@ -6999,20 +7391,23 @@ static std::string package_source_fingerprint(const PackageManifest& pkg)
 }
 
 static std::optional<std::filesystem::path> artifact_cache_path(
-    const PackageManifest& pkg, const BuildTarget& target,
-    const BuildConfig& config, const LinkFlags& linkFlags,
-    const std::vector<std::string>& pkgFlags, const std::string& optFlag,
+    const PackageManifest& pkg,
+    const BuildTarget& target,
+    const BuildConfig& config,
+    const LinkFlags& linkFlags,
+    const std::vector<std::string>& pkgFlags,
+    const std::string& optFlag,
     const std::filesystem::path& outputPath)
 {
     if(!config.useGlobalCache || config.globalCacheDir.empty())
         return std::nullopt;
     std::ostringstream key;
-    key << "mlang=" << MLANG_VERSION << "\nsource="
-        << package_source_fingerprint(pkg) << "\npackage="
-        << pkg.packageDir.string() << "\ntarget=" << target.name
-        << "\nkind=" << static_cast<int>(target.kind) << "\nprofile="
-        << config.profileName << "\nopt=" << optFlag << "\narch="
-        << config.targetArch << "\n";
+    key << "mlang=" << MLANG_VERSION
+        << "\nsource=" << package_source_fingerprint(pkg)
+        << "\npackage=" << pkg.packageDir.string() << "\ntarget=" << target.name
+        << "\nkind=" << static_cast<int>(target.kind)
+        << "\nprofile=" << config.profileName << "\nopt=" << optFlag
+        << "\narch=" << config.targetArch << "\n";
     for(const auto& feature : config.enabledFeatures)
         key << "feature=" << feature << "\n";
     for(const auto& flag : config.compilerFlags)
@@ -7044,8 +7439,7 @@ static std::optional<std::filesystem::path> artifact_cache_path(
                 const auto path = std::filesystem::path(dir) / candidate;
                 const auto digest = sha256_file(path);
                 if(digest.has_value())
-                    key << "linked-artifact=" << path << ':' << *digest
-                        << "\n";
+                    key << "linked-artifact=" << path << ':' << *digest << "\n";
             }
         }
     }
@@ -7053,9 +7447,10 @@ static std::optional<std::filesystem::path> artifact_cache_path(
            sha256_text(key.str()) / outputPath.filename();
 }
 
-static bool restore_cached_artifact(const std::filesystem::path& cachePath,
-                                    const std::filesystem::path& outputPath,
-                                    const std::string& targetName)
+static bool restore_cached_artifact(
+    const std::filesystem::path& cachePath,
+    const std::filesystem::path& outputPath,
+    const std::string& targetName)
 {
     std::error_code ec;
     if(!std::filesystem::is_regular_file(cachePath, ec))
@@ -7063,69 +7458,83 @@ static bool restore_cached_artifact(const std::filesystem::path& cachePath,
     std::filesystem::create_directories(outputPath.parent_path(), ec);
     if(ec)
         return false;
-    std::filesystem::copy_file(cachePath, outputPath,
-                               std::filesystem::copy_options::overwrite_existing,
-                               ec);
+    std::filesystem::copy_file(
+        cachePath,
+        outputPath,
+        std::filesystem::copy_options::overwrite_existing,
+        ec);
     if(ec)
         return false;
-    const auto permissions = std::filesystem::status(cachePath, ec).permissions();
+    const auto permissions =
+        std::filesystem::status(cachePath, ec).permissions();
     if(!ec)
-        std::filesystem::permissions(outputPath, permissions,
-                                     std::filesystem::perm_options::replace,
-                                     ec);
-    pkg_info_line("Global cache hit for target '" + targetName + "': " +
-                  cachePath.string());
+        std::filesystem::permissions(
+            outputPath,
+            permissions,
+            std::filesystem::perm_options::replace,
+            ec);
+    pkg_info_line(
+        "Global cache hit for target '" + targetName +
+        "': " + cachePath.string());
     return true;
 }
 
-static void store_cached_artifact(const std::filesystem::path& outputPath,
-                                  const std::filesystem::path& cachePath,
-                                  const std::string& targetName,
-                                  bool reportErrors)
+static void store_cached_artifact(
+    const std::filesystem::path& outputPath,
+    const std::filesystem::path& cachePath,
+    const std::string& targetName,
+    bool reportErrors)
 {
     std::error_code ec;
     std::filesystem::create_directories(cachePath.parent_path(), ec);
     if(ec)
     {
         if(reportErrors)
-            pkg_warn_line("Global cache unavailable for target '" +
-                          targetName + "': " + ec.message());
+            pkg_warn_line(
+                "Global cache unavailable for target '" + targetName +
+                "': " + ec.message());
         return;
     }
-    std::filesystem::copy_file(outputPath, cachePath,
-                               std::filesystem::copy_options::overwrite_existing,
-                               ec);
+    std::filesystem::copy_file(
+        outputPath,
+        cachePath,
+        std::filesystem::copy_options::overwrite_existing,
+        ec);
     if(ec && reportErrors)
-        pkg_warn_line("Failed to cache target '" + targetName + "': " +
-                      ec.message());
+        pkg_warn_line(
+            "Failed to cache target '" + targetName + "': " + ec.message());
 }
 
-static int build_for_manifest(const PackageManifest& pkg,
-                              const std::string& argv0,
-                              const std::string& optFlagOverride, bool useNinja,
-                              const BuildConfig& packageBuildConfig)
+static int build_for_manifest(
+    const PackageManifest& pkg,
+    const std::string& argv0,
+    const std::string& optFlagOverride,
+    bool useNinja,
+    const BuildConfig& packageBuildConfig)
 {
-    DependencyLockContext* buildTraversal =
-        current_dependency_lock_context();
+    DependencyLockContext* buildTraversal = current_dependency_lock_context();
     const std::string buildManifestKey =
         std::filesystem::absolute(pkg.manifestPath).lexically_normal().string();
     if(buildTraversal != nullptr &&
        !buildTraversal->activeBuildManifests.insert(buildManifestKey).second)
     {
-        pkg_error_line("Transitive dependency cycle reaches " +
-                       pkg.manifestPath.string());
+        pkg_error_line(
+            "Transitive dependency cycle reaches " + pkg.manifestPath.string());
         return 1;
     }
+
     struct BuildTraversalGuard
     {
         DependencyLockContext* context;
         std::string key;
+
         ~BuildTraversalGuard()
         {
             if(context != nullptr)
                 context->activeBuildManifests.erase(key);
         }
     } buildTraversalGuard{buildTraversal, buildManifestKey};
+
     const BuildConfig effectivePackageBuildConfig =
         materialize_build_config_for_package(pkg, packageBuildConfig);
     if(buildTraversal != nullptr)
@@ -7159,8 +7568,11 @@ static int build_for_manifest(const PackageManifest& pkg,
     }
     std::string entryError;
     if(!taskOnlyPackage && !hasExplicitTargets &&
-       !ensure_package_entry_stub(pkg.manifestPath, pkg.content, packageLabel,
-                                  entryError))
+       !ensure_package_entry_stub(
+           pkg.manifestPath,
+           pkg.content,
+           packageLabel,
+           entryError))
     {
         pkg_error_line(entryError);
         return 1;
@@ -7188,28 +7600,28 @@ static int build_for_manifest(const PackageManifest& pkg,
     }
     for(const auto& target : targets)
     {
-        const char* sectionName = target.kind != BuildTarget::executable
-                                      ? "[[lib]]"
-                                      : "[[bin]]";
+        const char* sectionName =
+            target.kind != BuildTarget::executable ? "[[lib]]" : "[[bin]]";
         if(target.hasInvalidLibraryType)
         {
-            pkg_error_line("Invalid [[lib]] type '" +
-                           target.invalidLibraryType + "' for target '" +
-                           target.name +
-                           "' (expected dynamic, shared, or static)");
+            pkg_error_line(
+                "Invalid [[lib]] type '" + target.invalidLibraryType +
+                "' for target '" + target.name +
+                "' (expected dynamic, shared, or static)");
             return 1;
         }
         if(target.name.empty())
         {
-            pkg_error_line("Missing name in " + std::string(sectionName) +
-                           " target for " + pkg.manifestPath.string());
+            pkg_error_line(
+                "Missing name in " + std::string(sectionName) + " target for " +
+                pkg.manifestPath.string());
             return 1;
         }
         if(target.entry.empty())
         {
-            pkg_error_line("Missing entry in " + std::string(sectionName) +
-                           " target '" + target.name + "' for " +
-                           pkg.manifestPath.string());
+            pkg_error_line(
+                "Missing entry in " + std::string(sectionName) + " target '" +
+                target.name + "' for " + pkg.manifestPath.string());
             return 1;
         }
     }
@@ -7231,7 +7643,9 @@ static int build_for_manifest(const PackageManifest& pkg,
     if(targets.empty())
     {
         buildTaskRoots = task_names_for_phases(
-            tasks, std::vector<std::string>{"build"}, hostName);
+            tasks,
+            std::vector<std::string>{"build"},
+            hostName);
         if(buildTaskRoots.empty() && task_list_contains_name(tasks, "build"))
             buildTaskRoots.push_back("build");
     }
@@ -7239,17 +7653,20 @@ static int build_for_manifest(const PackageManifest& pkg,
     {
         BuildConfig mergedConfig =
             merge_build_config(effectivePackageBuildConfig, target.config);
-        apply_asan_overrides(mergedConfig,
-                             "package target '" + target.name + "' in " +
-                                 pkg.manifestPath.string(),
-                             optFlagOverride.empty()
-                                 ? std::nullopt
-                                 : std::optional<std::string>(optFlagOverride));
+        apply_asan_overrides(
+            mergedConfig,
+            "package target '" + target.name + "' in " +
+                pkg.manifestPath.string(),
+            optFlagOverride.empty()
+                ? std::nullopt
+                : std::optional<std::string>(optFlagOverride));
         mergedConfig = materialize_build_config_for_package(pkg, mergedConfig);
         if(mergedConfig.useNinja.value_or(false))
             effectiveUseNinja = true;
-        if(validate_mlang_version_requirement(pkg.manifestPath, mergedConfig,
-                                              target.name) != 0)
+        if(validate_mlang_version_requirement(
+               pkg.manifestPath,
+               mergedConfig,
+               target.name) != 0)
         {
             return 1;
         }
@@ -7275,8 +7692,12 @@ static int build_for_manifest(const PackageManifest& pkg,
     ScopedExecutionProgressState scopedProgress(totalSteps);
     for(const auto& dep : deps)
     {
-        if(fetch_dep(pkg, dep, depsDir, /*updateExisting=*/false,
-                     effectivePackageBuildConfig.pathEntries) != 0)
+        if(fetch_dep(
+               pkg,
+               dep,
+               depsDir,
+               /*updateExisting=*/false,
+               effectivePackageBuildConfig.pathEntries) != 0)
             return 1;
         const bool requiresManifest = !dep.path.empty() || dep.build == "mlang";
         const auto child =
@@ -7295,18 +7716,21 @@ static int build_for_manifest(const PackageManifest& pkg,
             {
                 DependencyLockContext* context =
                     current_dependency_lock_context();
-                if(context != nullptr &&
-                   (context->locked || context->offline))
+                if(context != nullptr && (context->locked || context->offline))
                 {
-                    pkg_error_line("MLang dependency '" + dep.name +
-                                   "' changed version: locked " +
-                                   entry->resolvedVersion + ", found " +
-                                   version);
+                    pkg_error_line(
+                        "MLang dependency '" + dep.name +
+                        "' changed version: locked " + entry->resolvedVersion +
+                        ", found " + version);
                     return 1;
                 }
             }
-            record_dependency_lock_entry(pkg, dep, entry->revision,
-                                         entry->checksum, version);
+            record_dependency_lock_entry(
+                pkg,
+                dep,
+                entry->revision,
+                entry->checksum,
+                version);
         }
     }
     for(const auto& dep : deps)
@@ -7317,38 +7741,50 @@ static int build_for_manifest(const PackageManifest& pkg,
                 load_dependency_manifest(pkg, dep, depsDir, true);
             if(!child.has_value())
                 return 1;
-            const std::string childKey = std::filesystem::absolute(
-                                             child->manifestPath)
-                                             .lexically_normal()
-                                             .string();
-            DependencyLockContext* context =
-                current_dependency_lock_context();
+            const std::string childKey =
+                std::filesystem::absolute(child->manifestPath)
+                    .lexically_normal()
+                    .string();
+            DependencyLockContext* context = current_dependency_lock_context();
             if(context != nullptr &&
                context->builtManifests.count(childKey) != 0)
                 continue;
             const auto childConfig = dependency_build_config(
-                *child, dep, effectivePackageBuildConfig);
-            if(!childConfig.has_value() ||
-               build_for_manifest(*child, argv0, optFlagOverride, useNinja,
-                                  *childConfig) != 0)
+                *child,
+                dep,
+                effectivePackageBuildConfig);
+            if(!childConfig.has_value() || build_for_manifest(
+                                               *child,
+                                               argv0,
+                                               optFlagOverride,
+                                               useNinja,
+                                               *childConfig) != 0)
                 return 1;
             if(context != nullptr)
                 context->builtManifests.insert(childKey);
             continue;
         }
-        if(build_git_dep(pkg, dep, depsDir, effectiveUseNinja,
-                         effectivePackageBuildConfig.makeProgram,
-                         effectivePackageBuildConfig.pathEntries) != 0)
+        if(build_git_dep(
+               pkg,
+               dep,
+               depsDir,
+               effectiveUseNinja,
+               effectivePackageBuildConfig.makeProgram,
+               effectivePackageBuildConfig.pathEntries) != 0)
             return 1;
     }
 
     LinkFlags linkFlags = collect_transitive_dep_link_flags(
-        pkg, effectivePackageBuildConfig, depsDir);
+        pkg,
+        effectivePackageBuildConfig,
+        depsDir);
     std::vector<std::string> pkgFlags;
     for(const auto& dep : cdeps)
     {
-        if(!append_pkg_config_flags(dep, pkgFlags,
-                                    effectivePackageBuildConfig.pathEntries))
+        if(!append_pkg_config_flags(
+               dep,
+               pkgFlags,
+               effectivePackageBuildConfig.pathEntries))
             return 1;
     }
 
@@ -7358,17 +7794,20 @@ static int build_for_manifest(const PackageManifest& pkg,
         {
             for(const auto& taskName : buildTaskRoots)
             {
-                if(run_task_for_manifest(pkg, taskName,
-                                         effectivePackageBuildConfig) != 0)
+                if(run_task_for_manifest(
+                       pkg,
+                       taskName,
+                       effectivePackageBuildConfig) != 0)
                     return 1;
             }
             return 0;
         }
 
-        pkg_error_line("No package entry, [[bin]]/[[lib]] targets, or "
-                       "phase=\"build\" "
-                       "tasks found for " +
-                       pkg.manifestPath.string());
+        pkg_error_line(
+            "No package entry, [[bin]]/[[lib]] targets, or "
+            "phase=\"build\" "
+            "tasks found for " +
+            pkg.manifestPath.string());
         return 1;
     }
 
@@ -7386,15 +7825,19 @@ static int build_for_manifest(const PackageManifest& pkg,
     {
         BuildConfig buildConfig =
             merge_build_config(effectivePackageBuildConfig, target.config);
-        apply_asan_overrides(buildConfig,
-                             "package target '" + target.name + "' in " +
-                                 pkg.manifestPath.string(),
-                             optFlagOverride.empty()
-                                 ? std::nullopt
-                                 : std::optional<std::string>(optFlagOverride));
+        apply_asan_overrides(
+            buildConfig,
+            "package target '" + target.name + "' in " +
+                pkg.manifestPath.string(),
+            optFlagOverride.empty()
+                ? std::nullopt
+                : std::optional<std::string>(optFlagOverride));
         buildConfig = materialize_build_config_for_package(pkg, buildConfig);
-        if(!validate_declared_libraries(pkg.manifestPath, target.name,
-                                        buildConfig, linkFlags))
+        if(!validate_declared_libraries(
+               pkg.manifestPath,
+               target.name,
+               buildConfig,
+               linkFlags))
             return 1;
 
         std::string optFlag = optFlagOverride;
@@ -7402,12 +7845,11 @@ static int build_for_manifest(const PackageManifest& pkg,
             optFlag = buildConfig.optLevel;
 
         const std::filesystem::path outputPath =
-            buildDir /
-            (target.kind == BuildTarget::dynamic_library
-                 ? dynamic_library_filename(target.name)
-                 : target.kind == BuildTarget::static_library
-                       ? static_library_filename(target.name)
-                       : target.name);
+            buildDir / (target.kind == BuildTarget::dynamic_library
+                            ? dynamic_library_filename(target.name)
+                        : target.kind == BuildTarget::static_library
+                            ? static_library_filename(target.name)
+                            : target.name);
         std::string output = outputPath.string();
         const std::filesystem::path compileWorkDir =
             pkg.includeTarget.empty() ? pkg.packageDir : buildDir;
@@ -7437,17 +7879,20 @@ static int build_for_manifest(const PackageManifest& pkg,
         {
             std::vector<const BuildTarget*> targetDependencies;
             std::unordered_set<std::string> seenDependencies;
-            collect_target_link_dependencies(target, targetsByName,
-                                             targetDependencies,
-                                             seenDependencies);
+            collect_target_link_dependencies(
+                target,
+                targetsByName,
+                targetDependencies,
+                seenDependencies);
             bool hasDynamicDependency = false;
             for(const auto* dependency : targetDependencies)
             {
                 if(dependency->kind == BuildTarget::static_library)
                 {
-                    cmd += " " + shell_quote(
-                        (buildDir / static_library_filename(dependency->name))
-                            .string());
+                    cmd +=
+                        " " + shell_quote((buildDir / static_library_filename(
+                                                          dependency->name))
+                                              .string());
                 }
                 else
                 {
@@ -7486,23 +7931,30 @@ static int build_for_manifest(const PackageManifest& pkg,
             cmd += " " + shell_quote(flag);
 
         const auto cachePath = artifact_cache_path(
-            pkg, target, buildConfig, linkFlags, pkgFlags, optFlag,
+            pkg,
+            target,
+            buildConfig,
+            linkFlags,
+            pkgFlags,
+            optFlag,
             outputPath);
         if(cachePath.has_value() &&
            restore_cached_artifact(*cachePath, outputPath, target.name))
             continue;
 
         int rc = run_status_command_in_dir_with_paths(
-            execution_step_label(std::string(
-                                     target.kind == BuildTarget::dynamic_library
-                                         ? "Building dynamic library target '"
-                                         : target.kind ==
-                                                   BuildTarget::static_library
-                                               ? "Building static library target '"
-                                               : "Compiling target '") +
-                                 target.name +
-                                 "' from " + target.entry + " -> " + output),
-            compileWorkDir, cmd, buildConfig.pathEntries, true);
+            execution_step_label(
+                std::string(
+                    target.kind == BuildTarget::dynamic_library
+                        ? "Building dynamic library target '"
+                    : target.kind == BuildTarget::static_library
+                        ? "Building static library target '"
+                        : "Compiling target '") +
+                target.name + "' from " + target.entry + " -> " + output),
+            compileWorkDir,
+            cmd,
+            buildConfig.pathEntries,
+            true);
         if(rc != 0)
         {
             std::string message =
@@ -7514,14 +7966,18 @@ static int build_for_manifest(const PackageManifest& pkg,
             return 1;
         }
         if(cachePath.has_value())
-            store_cached_artifact(outputPath, *cachePath, target.name,
-                                  buildConfig.globalCacheExplicit);
+            store_cached_artifact(
+                outputPath,
+                *cachePath,
+                target.name,
+                buildConfig.globalCacheExplicit);
     }
     return 0;
 }
 
-static int clean_for_manifest(const PackageManifest& pkg,
-                              const BuildConfig& buildConfig)
+static int clean_for_manifest(
+    const PackageManifest& pkg,
+    const BuildConfig& buildConfig)
 {
     ScopedPackageLogState scopedLogs(
         make_package_log_state(pkg.packageDir, buildConfig));
@@ -7536,16 +7992,18 @@ static int clean_for_manifest(const PackageManifest& pkg,
     std::filesystem::remove_all(buildDir, ec);
     if(ec)
     {
-        pkg_error_line("Failed to clean " + buildDir.string() + ": " +
-                       ec.message());
+        pkg_error_line(
+            "Failed to clean " + buildDir.string() + ": " + ec.message());
         return 1;
     }
     pkg_info_line("Cleaned " + buildDir.string());
     return 0;
 }
 
-static std::string replace_all(std::string text, const std::string& needle,
-                               const std::string& value)
+static std::string replace_all(
+    std::string text,
+    const std::string& needle,
+    const std::string& value)
 {
     if(needle.empty())
         return text;
@@ -7558,9 +8016,10 @@ static std::string replace_all(std::string text, const std::string& needle,
     return text;
 }
 
-static std::string expand_task_text(const std::string& text,
-                                    const PackageManifest& pkg,
-                                    const BuildConfig& buildConfig)
+static std::string expand_task_text(
+    const std::string& text,
+    const PackageManifest& pkg,
+    const BuildConfig& buildConfig)
 {
     const std::filesystem::path buildDir =
         package_build_dir(pkg.packageDir, buildConfig);
@@ -7572,38 +8031,54 @@ static std::string expand_task_text(const std::string& text,
     out = replace_all(out, "{{build_dir}}", buildDir.string());
     out = replace_all(out, "{{deps_dir}}", depsDir.string());
     out = replace_all(
-        out, "{{make}}",
+        out,
+        "{{make}}",
         buildConfig.makeProgram.empty() ? "make" : buildConfig.makeProgram);
-    out = replace_all(out, "{{cmake_build_type}}",
-                      build_config_cmake_build_type(buildConfig));
-    out = replace_all(out, "{{asan_enabled}}",
-                      build_config_asan_enabled(buildConfig) ? "1" : "0");
-    out = replace_all(out, "{{cmake_c_flags}}",
-                      build_config_asan_compile_flags(buildConfig));
-    out = replace_all(out, "{{cmake_cxx_flags}}",
-                      build_config_asan_compile_flags(buildConfig));
-    out = replace_all(out, "{{cmake_exe_linker_flags}}",
-                      build_config_asan_link_flags(buildConfig));
-    out = replace_all(out, "{{cmake_shared_linker_flags}}",
-                      build_config_asan_link_flags(buildConfig));
-    out = replace_all(out, "{{cmake_module_linker_flags}}",
-                      build_config_asan_link_flags(buildConfig));
+    out = replace_all(
+        out,
+        "{{cmake_build_type}}",
+        build_config_cmake_build_type(buildConfig));
+    out = replace_all(
+        out,
+        "{{asan_enabled}}",
+        build_config_asan_enabled(buildConfig) ? "1" : "0");
+    out = replace_all(
+        out,
+        "{{cmake_c_flags}}",
+        build_config_asan_compile_flags(buildConfig));
+    out = replace_all(
+        out,
+        "{{cmake_cxx_flags}}",
+        build_config_asan_compile_flags(buildConfig));
+    out = replace_all(
+        out,
+        "{{cmake_exe_linker_flags}}",
+        build_config_asan_link_flags(buildConfig));
+    out = replace_all(
+        out,
+        "{{cmake_shared_linker_flags}}",
+        build_config_asan_link_flags(buildConfig));
+    out = replace_all(
+        out,
+        "{{cmake_module_linker_flags}}",
+        build_config_asan_link_flags(buildConfig));
     for(const auto& [key, value] : buildConfig.optionValues)
         out = replace_all(out, "{{option." + key + "}}", value);
     return out;
 }
 
-static std::string expand_build_config_fragment(const PackageManifest& pkg,
-                                                const BuildConfig& buildConfig,
-                                                const std::string& text)
+static std::string expand_build_config_fragment(
+    const PackageManifest& pkg,
+    const BuildConfig& buildConfig,
+    const std::string& text)
 {
     return expand_task_text(text, pkg, buildConfig);
 }
 
-static std::string
-resolve_build_config_path_entry(const PackageManifest& pkg,
-                                const BuildConfig& buildConfig,
-                                const std::string& text)
+static std::string resolve_build_config_path_entry(
+    const PackageManifest& pkg,
+    const BuildConfig& buildConfig,
+    const std::string& text)
 {
     const std::string expanded =
         expand_build_config_fragment(pkg, buildConfig, text);
@@ -7615,12 +8090,14 @@ resolve_build_config_path_entry(const PackageManifest& pkg,
     return path.string();
 }
 
-static BuildConfig
-materialize_build_config_for_package(const PackageManifest& pkg,
-                                     BuildConfig buildConfig)
+static BuildConfig materialize_build_config_for_package(
+    const PackageManifest& pkg,
+    BuildConfig buildConfig)
 {
     buildConfig.compilerProgram = expand_build_config_fragment(
-        pkg, buildConfig, buildConfig.compilerProgram);
+        pkg,
+        buildConfig,
+        buildConfig.compilerProgram);
     buildConfig.makeProgram =
         expand_build_config_fragment(pkg, buildConfig, buildConfig.makeProgram);
 
@@ -7666,11 +8143,14 @@ struct TaskRunState
 
 class TaskRunStateGuard
 {
-  public:
-    TaskRunStateGuard(std::map<std::string, TaskRunState>& states,
-                      std::mutex& mutex, std::condition_variable& cv,
-                      std::string taskName)
-        : states_(states), mutex_(mutex), cv_(cv), taskName_(std::move(taskName))
+public:
+    TaskRunStateGuard(
+        std::map<std::string, TaskRunState>& states,
+        std::mutex& mutex,
+        std::condition_variable& cv,
+        std::string taskName)
+        : states_(states), mutex_(mutex), cv_(cv),
+          taskName_(std::move(taskName))
     {
     }
 
@@ -7694,7 +8174,7 @@ class TaskRunStateGuard
     TaskRunStateGuard(const TaskRunStateGuard&) = delete;
     TaskRunStateGuard& operator=(const TaskRunStateGuard&) = delete;
 
-  private:
+private:
     std::map<std::string, TaskRunState>& states_;
     std::mutex& mutex_;
     std::condition_variable& cv_;
@@ -7716,8 +8196,8 @@ static std::string format_task_elapsed(std::chrono::milliseconds elapsed)
     return out.str();
 }
 
-static std::string
-format_task_elapsed_compact(std::chrono::milliseconds elapsed)
+static std::string format_task_elapsed_compact(
+    std::chrono::milliseconds elapsed)
 {
     const auto totalMs = elapsed.count();
     const long long hours = totalMs / (1000LL * 60LL * 60LL);
@@ -7732,8 +8212,9 @@ format_task_elapsed_compact(std::chrono::milliseconds elapsed)
     return out.str();
 }
 
-static std::optional<TaskSpec>
-find_task_spec(const std::vector<TaskSpec>& tasks, const std::string& taskName)
+static std::optional<TaskSpec> find_task_spec(
+    const std::vector<TaskSpec>& tasks,
+    const std::string& taskName)
 {
     for(const auto& task : tasks)
     {
@@ -7743,17 +8224,21 @@ find_task_spec(const std::vector<TaskSpec>& tasks, const std::string& taskName)
     return std::nullopt;
 }
 
-static bool host_supported_by_task(const TaskSpec& task,
-                                   const std::string& hostName)
+static bool host_supported_by_task(
+    const TaskSpec& task,
+    const std::string& hostName)
 {
     if(task.supportedHosts.empty())
         return true;
-    return std::find(task.supportedHosts.begin(), task.supportedHosts.end(),
-                     hostName) != task.supportedHosts.end();
+    return std::find(
+               task.supportedHosts.begin(),
+               task.supportedHosts.end(),
+               hostName) != task.supportedHosts.end();
 }
 
-static std::string task_unsupported_host_message(const TaskSpec& task,
-                                                 const std::string& hostName)
+static std::string task_unsupported_host_message(
+    const TaskSpec& task,
+    const std::string& hostName)
 {
     if(!task.unsupportedMessage.empty())
         return task.unsupportedMessage;
@@ -7771,10 +8256,11 @@ static std::string task_unsupported_host_message(const TaskSpec& task,
     return out.str();
 }
 
-static std::optional<std::filesystem::path>
-write_task_script(const PackageManifest& pkg, const std::string& taskName,
-                  const std::vector<std::string>& shellLines,
-                  const BuildConfig& buildConfig)
+static std::optional<std::filesystem::path> write_task_script(
+    const PackageManifest& pkg,
+    const std::string& taskName,
+    const std::vector<std::string>& shellLines,
+    const BuildConfig& buildConfig)
 {
     if(shellLines.empty())
         return std::nullopt;
@@ -7811,15 +8297,17 @@ write_task_script(const PackageManifest& pkg, const std::string& taskName,
         out << expand_task_text(line, pkg, buildConfig) << "\n";
     out.close();
 
-    std::filesystem::permissions(scriptPath,
-                                 std::filesystem::perms::owner_read |
-                                     std::filesystem::perms::owner_write |
-                                     std::filesystem::perms::owner_exec |
-                                     std::filesystem::perms::group_read |
-                                     std::filesystem::perms::group_exec |
-                                     std::filesystem::perms::others_read |
-                                     std::filesystem::perms::others_exec,
-                                 std::filesystem::perm_options::replace, ec);
+    std::filesystem::permissions(
+        scriptPath,
+        std::filesystem::perms::owner_read |
+            std::filesystem::perms::owner_write |
+            std::filesystem::perms::owner_exec |
+            std::filesystem::perms::group_read |
+            std::filesystem::perms::group_exec |
+            std::filesystem::perms::others_read |
+            std::filesystem::perms::others_exec,
+        std::filesystem::perm_options::replace,
+        ec);
     if(ec)
     {
         std::cerr << "Failed to make task script executable "
@@ -7829,9 +8317,10 @@ write_task_script(const PackageManifest& pkg, const std::string& taskName,
     return scriptPath;
 }
 
-static size_t count_fetch_dep_steps(const DepSpec& dep,
-                                    const std::filesystem::path& depsDir,
-                                    bool updateExisting)
+static size_t count_fetch_dep_steps(
+    const DepSpec& dep,
+    const std::filesystem::path& depsDir,
+    bool updateExisting)
 {
     if(!dep.git.empty())
     {
@@ -7863,7 +8352,8 @@ static size_t count_fetch_dep_steps(const DepSpec& dep,
         {
             bool hasEntries = false;
             for(std::filesystem::directory_iterator it(checkoutDir, ec), end;
-                !ec && it != end; it.increment(ec))
+                !ec && it != end;
+                it.increment(ec))
             {
                 hasEntries = true;
                 break;
@@ -7877,9 +8367,10 @@ static size_t count_fetch_dep_steps(const DepSpec& dep,
     return 0;
 }
 
-static size_t count_build_dep_steps(const PackageManifest& pkg,
-                                    const DepSpec& dep,
-                                    const std::filesystem::path& depsDir)
+static size_t count_build_dep_steps(
+    const PackageManifest& pkg,
+    const DepSpec& dep,
+    const std::filesystem::path& depsDir)
 {
     const std::filesystem::path path = dep_source_dir(pkg, depsDir, dep);
     if(!std::filesystem::exists(path))
@@ -7905,10 +8396,10 @@ struct EffectiveTaskEdges
     bool parallel = false;
 };
 
-static EffectiveTaskEdges
-resolve_effective_task_edges(const TaskSpec& task,
-                             const std::vector<TaskSpec>& tasks,
-                             const std::string& hostName)
+static EffectiveTaskEdges resolve_effective_task_edges(
+    const TaskSpec& task,
+    const std::vector<TaskSpec>& tasks,
+    const std::string& hostName)
 {
     EffectiveTaskEdges edges;
     auto hostIt = task.hostOverrides.find(hostName);
@@ -7918,16 +8409,18 @@ resolve_effective_task_edges(const TaskSpec& task,
     edges.dependsOn = task.dependsOn;
     if(hostOverride)
     {
-        edges.dependsOn.insert(edges.dependsOn.end(),
-                               hostOverride->dependsOn.begin(),
-                               hostOverride->dependsOn.end());
+        edges.dependsOn.insert(
+            edges.dependsOn.end(),
+            hostOverride->dependsOn.begin(),
+            hostOverride->dependsOn.end());
     }
     std::vector<std::string> effectivePhaseDependsOn = task.phaseDependsOn;
     if(hostOverride)
     {
-        effectivePhaseDependsOn.insert(effectivePhaseDependsOn.end(),
-                                       hostOverride->phaseDependsOn.begin(),
-                                       hostOverride->phaseDependsOn.end());
+        effectivePhaseDependsOn.insert(
+            effectivePhaseDependsOn.end(),
+            hostOverride->phaseDependsOn.begin(),
+            hostOverride->phaseDependsOn.end());
     }
     append_unique_strings(
         edges.dependsOn,
@@ -7936,16 +8429,18 @@ resolve_effective_task_edges(const TaskSpec& task,
     std::vector<std::string> effectiveJoinOn = task.joinOn;
     if(hostOverride)
     {
-        effectiveJoinOn.insert(effectiveJoinOn.end(),
-                               hostOverride->joinOn.begin(),
-                               hostOverride->joinOn.end());
+        effectiveJoinOn.insert(
+            effectiveJoinOn.end(),
+            hostOverride->joinOn.begin(),
+            hostOverride->joinOn.end());
     }
     std::vector<std::string> effectivePhaseJoinOn = task.phaseJoinOn;
     if(hostOverride)
     {
-        effectivePhaseJoinOn.insert(effectivePhaseJoinOn.end(),
-                                    hostOverride->phaseJoinOn.begin(),
-                                    hostOverride->phaseJoinOn.end());
+        effectivePhaseJoinOn.insert(
+            effectivePhaseJoinOn.end(),
+            hostOverride->phaseJoinOn.begin(),
+            hostOverride->phaseJoinOn.end());
     }
     append_unique_strings(
         effectiveJoinOn,
@@ -7955,15 +8450,18 @@ resolve_effective_task_edges(const TaskSpec& task,
     edges.next = task.nextTasks;
     if(hostOverride)
     {
-        edges.next.insert(edges.next.end(), hostOverride->nextTasks.begin(),
-                          hostOverride->nextTasks.end());
+        edges.next.insert(
+            edges.next.end(),
+            hostOverride->nextTasks.begin(),
+            hostOverride->nextTasks.end());
     }
     std::vector<std::string> effectiveNextPhases = task.nextPhases;
     if(hostOverride)
     {
-        effectiveNextPhases.insert(effectiveNextPhases.end(),
-                                   hostOverride->nextPhases.begin(),
-                                   hostOverride->nextPhases.end());
+        effectiveNextPhases.insert(
+            effectiveNextPhases.end(),
+            hostOverride->nextPhases.begin(),
+            hostOverride->nextPhases.end());
     }
     append_unique_strings(
         edges.next,
@@ -7976,9 +8474,12 @@ resolve_effective_task_edges(const TaskSpec& task,
 }
 
 static bool append_task_execution_order(
-    const std::vector<TaskSpec>& tasks, const std::string& hostName,
-    const std::string& taskName, std::vector<std::string>& stack,
-    std::unordered_set<std::string>& emitted, std::vector<std::string>& order,
+    const std::vector<TaskSpec>& tasks,
+    const std::string& hostName,
+    const std::string& taskName,
+    std::vector<std::string>& stack,
+    std::unordered_set<std::string>& emitted,
+    std::vector<std::string>& order,
     std::string& error)
 {
     if(taskName.empty())
@@ -8007,8 +8508,14 @@ static bool append_task_execution_order(
         resolve_effective_task_edges(*taskOpt, tasks, hostName);
     for(const auto& dep : edges.dependsOn)
     {
-        if(!append_task_execution_order(tasks, hostName, dep, stack, emitted,
-                                        order, error))
+        if(!append_task_execution_order(
+               tasks,
+               hostName,
+               dep,
+               stack,
+               emitted,
+               order,
+               error))
         {
             stack.pop_back();
             return false;
@@ -8018,8 +8525,14 @@ static bool append_task_execution_order(
         order.push_back(taskName);
     for(const auto& nextTask : edges.next)
     {
-        if(!append_task_execution_order(tasks, hostName, nextTask, stack,
-                                        emitted, order, error))
+        if(!append_task_execution_order(
+               tasks,
+               hostName,
+               nextTask,
+               stack,
+               emitted,
+               order,
+               error))
         {
             stack.pop_back();
             return false;
@@ -8039,10 +8552,11 @@ struct BranchColorInfo
     double brightnessScale = 1.0;
 };
 
-static BranchColorInfo
-make_child_branch_color(std::optional<BranchColorInfo> parentColor,
-                        bool isParallelGroup, size_t childIndex,
-                        size_t childCount)
+static BranchColorInfo make_child_branch_color(
+    std::optional<BranchColorInfo> parentColor,
+    bool isParallelGroup,
+    size_t childIndex,
+    size_t childCount)
 {
     const BranchColorInfo parent =
         parentColor.value_or(BranchColorInfo{0, 1, 0, 1, true, 1.0});
@@ -8067,9 +8581,11 @@ static bool terminal_supports_truecolor()
     if(colorTerm == nullptr)
         return false;
     std::string value = colorTerm;
-    std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char ch)
-                   { return static_cast<char>(std::tolower(ch)); });
+    std::transform(
+        value.begin(),
+        value.end(),
+        value.begin(),
+        [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
     return value.find("truecolor") != std::string::npos ||
            value.find("24bit") != std::string::npos;
 }
@@ -8131,8 +8647,10 @@ static std::string branch_color_code(const BranchColorInfo& colorInfo)
     return "\033[38;5;" + std::to_string(paletteIndex) + "m";
 }
 
-static std::string colorize_tree_text(const std::string& text, bool enableColor,
-                                      std::optional<BranchColorInfo> colorInfo)
+static std::string colorize_tree_text(
+    const std::string& text,
+    bool enableColor,
+    std::optional<BranchColorInfo> colorInfo)
 {
     if(!enableColor)
         return text;
@@ -8141,8 +8659,9 @@ static std::string colorize_tree_text(const std::string& text, bool enableColor,
     return branch_color_code(*colorInfo) + text + "\033[0m";
 }
 
-static std::string colorize_host_label(const std::string& hostName,
-                                       bool enableColor)
+static std::string colorize_host_label(
+    const std::string& hostName,
+    bool enableColor)
 {
     if(!enableColor)
         return hostName;
@@ -8151,10 +8670,12 @@ static std::string colorize_host_label(const std::string& hostName,
     return std::string("\033[38;5;208m") + hostName + "\033[0m";
 }
 
-static std::string
-build_task_tree_prefix(const std::vector<bool>& ancestorHasMore, bool isLast,
-                       bool isRoot, bool enableColor,
-                       std::optional<BranchColorInfo> colorInfo)
+static std::string build_task_tree_prefix(
+    const std::vector<bool>& ancestorHasMore,
+    bool isLast,
+    bool isRoot,
+    bool enableColor,
+    std::optional<BranchColorInfo> colorInfo)
 {
     if(isRoot)
         return "";
@@ -8168,8 +8689,11 @@ build_task_tree_prefix(const std::vector<bool>& ancestorHasMore, bool isLast,
 }
 
 static std::string format_task_tree_numbered_label(
-    const std::string& taskName, const std::map<std::string, size_t>& orderMap,
-    bool parallel, bool unpredictableParallelOrder, bool enableColor)
+    const std::string& taskName,
+    const std::map<std::string, size_t>& orderMap,
+    bool parallel,
+    bool unpredictableParallelOrder,
+    bool enableColor)
 {
     std::ostringstream out;
     out << taskName;
@@ -8192,25 +8716,39 @@ static std::string format_task_tree_numbered_label(
 }
 
 static void print_task_tree_ascii_node(
-    const std::vector<TaskSpec>& tasks, const std::string& hostName,
-    const std::string& taskName, const std::map<std::string, size_t>& orderMap,
-    const std::vector<bool>& ancestorHasMore, bool isLast, bool isRoot,
-    bool enableColor, std::optional<BranchColorInfo> colorInfo,
-    std::vector<std::string>& stack, bool printSelf = true,
+    const std::vector<TaskSpec>& tasks,
+    const std::string& hostName,
+    const std::string& taskName,
+    const std::map<std::string, size_t>& orderMap,
+    const std::vector<bool>& ancestorHasMore,
+    bool isLast,
+    bool isRoot,
+    bool enableColor,
+    std::optional<BranchColorInfo> colorInfo,
+    std::vector<std::string>& stack,
+    bool printSelf = true,
     bool unpredictableParallelOrder = false)
 {
     const auto taskOpt = find_task_spec(tasks, taskName);
     if(!taskOpt.has_value())
     {
         const std::string prefix = build_task_tree_prefix(
-            ancestorHasMore, isLast, isRoot, enableColor, colorInfo);
+            ancestorHasMore,
+            isLast,
+            isRoot,
+            enableColor,
+            colorInfo);
         std::cout << prefix << taskName << " (missing)\n";
         return;
     }
     if(std::find(stack.begin(), stack.end(), taskName) != stack.end())
     {
         const std::string prefix = build_task_tree_prefix(
-            ancestorHasMore, isLast, isRoot, enableColor, colorInfo);
+            ancestorHasMore,
+            isLast,
+            isRoot,
+            enableColor,
+            colorInfo);
         std::cout << prefix << taskName << " (cycle)\n";
         return;
     }
@@ -8220,11 +8758,18 @@ static void print_task_tree_ascii_node(
     if(printSelf)
     {
         const std::string prefix = build_task_tree_prefix(
-            ancestorHasMore, isLast, isRoot, enableColor, colorInfo);
+            ancestorHasMore,
+            isLast,
+            isRoot,
+            enableColor,
+            colorInfo);
         std::cout << prefix
                   << format_task_tree_numbered_label(
-                         taskName, orderMap, edges.parallel,
-                         unpredictableParallelOrder, enableColor)
+                         taskName,
+                         orderMap,
+                         edges.parallel,
+                         unpredictableParallelOrder,
+                         enableColor)
                   << "\n";
     }
 
@@ -8248,12 +8793,18 @@ static void print_task_tree_ascii_node(
         if(enableColor)
         {
             childColorInfo = make_child_branch_color(
-                colorInfo, edges.parallel && children.size() > 1, i,
+                colorInfo,
+                edges.parallel && children.size() > 1,
+                i,
                 children.size());
         }
 
         const std::string edgePrefix = build_task_tree_prefix(
-            childAncestors, childIsLast, false, enableColor, childColorInfo);
+            childAncestors,
+            childIsLast,
+            false,
+            enableColor,
+            childColorInfo);
         std::ostringstream edgeLine;
         edgeLine << edgePrefix;
         if(children[i].second)
@@ -8274,18 +8825,28 @@ static void print_task_tree_ascii_node(
 
         std::vector<bool> nestedAncestors = childAncestors;
         nestedAncestors.push_back(!childIsLast);
-        print_task_tree_ascii_node(tasks, hostName, children[i].first, orderMap,
-                                   nestedAncestors, true, false, enableColor,
-                                   childColorInfo, stack, false,
-                                   children[i].second);
+        print_task_tree_ascii_node(
+            tasks,
+            hostName,
+            children[i].first,
+            orderMap,
+            nestedAncestors,
+            true,
+            false,
+            enableColor,
+            childColorInfo,
+            stack,
+            false,
+            children[i].second);
     }
     stack.pop_back();
 }
 
-static int print_task_plan_for_manifest(const PackageManifest& pkg,
-                                        const std::string& taskName,
-                                        const BuildConfig& buildConfig,
-                                        bool enableColor)
+static int print_task_plan_for_manifest(
+    const PackageManifest& pkg,
+    const std::string& taskName,
+    const BuildConfig& buildConfig,
+    bool enableColor)
 {
     const auto tasks = parse_task_specs(pkg.content);
     const std::string hostName = current_host_name();
@@ -8297,8 +8858,14 @@ static int print_task_plan_for_manifest(const PackageManifest& pkg,
     std::unordered_set<std::string> emitted;
     std::vector<std::string> orderStack;
     std::string error;
-    if(!append_task_execution_order(tasks, hostName, taskName, orderStack,
-                                    emitted, order, error))
+    if(!append_task_execution_order(
+           tasks,
+           hostName,
+           taskName,
+           orderStack,
+           emitted,
+           order,
+           error))
     {
         pkg_error_line(error + " in " + pkg.manifestPath.string());
         return 1;
@@ -8310,11 +8877,21 @@ static int print_task_plan_for_manifest(const PackageManifest& pkg,
 
     ScopedPackageLogState scopedLogs(
         make_package_log_state(pkg.packageDir, buildConfig));
-    pkg_info_line("Task tree for '" + taskName + "' (" +
-                  colorize_host_label(hostName, enableColor) + "):");
+    pkg_info_line(
+        "Task tree for '" + taskName + "' (" +
+        colorize_host_label(hostName, enableColor) + "):");
     std::vector<std::string> treeStack;
-    print_task_tree_ascii_node(tasks, hostName, taskName, orderMap, {}, true,
-                               true, enableColor, std::nullopt, treeStack);
+    print_task_tree_ascii_node(
+        tasks,
+        hostName,
+        taskName,
+        orderMap,
+        {},
+        true,
+        true,
+        enableColor,
+        std::nullopt,
+        treeStack);
 
     pkg_info_line("");
     pkg_info_line("Execution order:");
@@ -8324,18 +8901,24 @@ static int print_task_plan_for_manifest(const PackageManifest& pkg,
         if(enableColor)
         {
             line = colorize_tree_text(
-                line, true,
-                BranchColorInfo{i, std::max<size_t>(order.size(), 1), i,
-                                std::max<size_t>(order.size(), 1), false, 1.0});
+                line,
+                true,
+                BranchColorInfo{
+                    i,
+                    std::max<size_t>(order.size(), 1),
+                    i,
+                    std::max<size_t>(order.size(), 1),
+                    false,
+                    1.0});
         }
         pkg_info_line(line);
     }
     return 0;
 }
 
-static std::vector<std::string>
-find_manifest_task_entrypoints(const std::vector<TaskSpec>& tasks,
-                               const std::string& hostName)
+static std::vector<std::string> find_manifest_task_entrypoints(
+    const std::vector<TaskSpec>& tasks,
+    const std::string& hostName)
 {
     std::vector<std::string> entrypoints;
     std::unordered_set<std::string> referenced;
@@ -8369,29 +8952,34 @@ find_manifest_task_entrypoints(const std::vector<TaskSpec>& tasks,
     return entrypoints;
 }
 
-static int print_task_overview_for_manifest(const PackageManifest& pkg,
-                                            const BuildConfig& buildConfig,
-                                            bool enableColor)
+static int print_task_overview_for_manifest(
+    const PackageManifest& pkg,
+    const BuildConfig& buildConfig,
+    bool enableColor)
 {
     const auto tasks = parse_task_specs(pkg.content);
     const std::string hostName = current_host_name();
     const auto entrypoints = find_manifest_task_entrypoints(tasks, hostName);
     if(entrypoints.empty())
     {
-        pkg_info_line("No runnable tasks for host '" +
-                      colorize_host_label(hostName, enableColor) + "'.");
+        pkg_info_line(
+            "No runnable tasks for host '" +
+            colorize_host_label(hostName, enableColor) + "'.");
         return 0;
     }
 
-    pkg_info_line("Runnable task entrypoints for '" +
-                  pkg.manifestPath.string() + "' (" +
-                  colorize_host_label(hostName, enableColor) + "):");
+    pkg_info_line(
+        "Runnable task entrypoints for '" + pkg.manifestPath.string() + "' (" +
+        colorize_host_label(hostName, enableColor) + "):");
     for(size_t i = 0; i < entrypoints.size(); ++i)
     {
         if(i > 0)
             pkg_info_line("");
-        const int rc = print_task_plan_for_manifest(pkg, entrypoints[i],
-                                                    buildConfig, enableColor);
+        const int rc = print_task_plan_for_manifest(
+            pkg,
+            entrypoints[i],
+            buildConfig,
+            enableColor);
         if(rc != 0)
             return rc;
     }
@@ -8399,8 +8987,10 @@ static int print_task_overview_for_manifest(const PackageManifest& pkg,
 }
 
 static void collect_reachable_task_names(
-    const std::vector<TaskSpec>& tasks, const std::string& hostName,
-    const std::string& taskName, std::unordered_set<std::string>& visited)
+    const std::vector<TaskSpec>& tasks,
+    const std::string& hostName,
+    const std::string& taskName,
+    std::unordered_set<std::string>& visited)
 {
     if(taskName.empty() || !visited.insert(taskName).second)
         return;
@@ -8417,9 +9007,10 @@ static void collect_reachable_task_names(
         collect_reachable_task_names(tasks, hostName, nextTask, visited);
 }
 
-static size_t count_reachable_task_steps(const std::vector<TaskSpec>& tasks,
-                                         const std::string& hostName,
-                                         const std::vector<std::string>& roots)
+static size_t count_reachable_task_steps(
+    const std::vector<TaskSpec>& tasks,
+    const std::string& hostName,
+    const std::vector<std::string>& roots)
 {
     std::unordered_set<std::string> visited;
     for(const auto& root : roots)
@@ -8433,11 +9024,12 @@ static size_t count_reachable_task_steps(const std::vector<TaskSpec>& tasks,
 // `codesign --force --sign -` so an existing (and potentially tainted) adhoc
 // signature is replaced; otherwise plain `codesign --sign -` is used. macOS
 // only — silently skipped on other hosts since `codesign` does not exist.
-static int codesign_task_outputs(const std::vector<std::string>& signOutputs,
-                                 const PackageManifest& pkg,
-                                 const BuildConfig& buildConfig,
-                                 const std::string& taskName,
-                                 const std::string& taskPrefix)
+static int codesign_task_outputs(
+    const std::vector<std::string>& signOutputs,
+    const PackageManifest& pkg,
+    const BuildConfig& buildConfig,
+    const std::string& taskName,
+    const std::string& taskPrefix)
 {
     if(buildConfig.signMode == 0 || signOutputs.empty())
         return 0;
@@ -8451,25 +9043,27 @@ static int codesign_task_outputs(const std::vector<std::string>& signOutputs,
         std::error_code ec;
         if(!std::filesystem::exists(expanded, ec))
         {
-            pkg_warn_line(taskPrefix + " " + taskName +
-                          " sign: skipping missing output " + expanded);
+            pkg_warn_line(
+                taskPrefix + " " + taskName +
+                " sign: skipping missing output " + expanded);
             continue;
         }
         std::string cmd = "codesign ";
         if(force)
             cmd += "--force ";
         cmd += "--sign - " + shell_quote(expanded);
-        pkg_task_print_line(taskPrefix + " " + taskName + " " +
-                            (force ? "force-sign" : "sign") + " " + expanded);
+        pkg_task_print_line(
+            taskPrefix + " " + taskName + " " +
+            (force ? "force-sign" : "sign") + " " + expanded);
         const int sysRc = std::system(cmd.c_str());
         int rc = 1;
         if(sysRc >= 0 && WIFEXITED(sysRc))
             rc = WEXITSTATUS(sysRc);
         if(rc != 0)
         {
-            pkg_error_line(taskPrefix + " " + taskName +
-                           " codesign failed (rc=" + std::to_string(rc) +
-                           ") for " + expanded);
+            pkg_error_line(
+                taskPrefix + " " + taskName + " codesign failed (rc=" +
+                std::to_string(rc) + ") for " + expanded);
             return rc;
         }
     }
@@ -8483,10 +9077,14 @@ static int codesign_task_outputs(const std::vector<std::string>& signOutputs,
 }
 
 static int run_task_for_manifest_impl(
-    const PackageManifest& pkg, const std::vector<TaskSpec>& tasks,
-    const BuildConfig& buildConfig, const std::string& hostName,
-    std::map<std::string, TaskRunState>& taskStates, std::mutex& taskMutex,
-    std::condition_variable& taskCv, const std::string& taskName,
+    const PackageManifest& pkg,
+    const std::vector<TaskSpec>& tasks,
+    const BuildConfig& buildConfig,
+    const std::string& hostName,
+    std::map<std::string, TaskRunState>& taskStates,
+    std::mutex& taskMutex,
+    std::condition_variable& taskCv,
+    const std::string& taskName,
     std::vector<std::string>& taskStack)
 {
     if(std::find(taskStack.begin(), taskStack.end(), taskName) !=
@@ -8529,8 +9127,10 @@ static int run_task_for_manifest_impl(
         std::vector<std::string> effectiveEnv = task.env;
         if(hostOverride)
         {
-            effectiveEnv.insert(effectiveEnv.end(), hostOverride->env.begin(),
-                                hostOverride->env.end());
+            effectiveEnv.insert(
+                effectiveEnv.end(),
+                hostOverride->env.begin(),
+                hostOverride->env.end());
         }
 
         std::vector<std::string> effectiveShell =
@@ -8575,9 +9175,10 @@ static int run_task_for_manifest_impl(
         std::vector<std::string> effectiveInputs = task.inputs;
         if(hostOverride)
         {
-            effectiveInputs.insert(effectiveInputs.end(),
-                                   hostOverride->inputs.begin(),
-                                   hostOverride->inputs.end());
+            effectiveInputs.insert(
+                effectiveInputs.end(),
+                hostOverride->inputs.begin(),
+                hostOverride->inputs.end());
         }
         bool effectiveCompileOnly =
             hostOverride && hostOverride->compileOnly.has_value()
@@ -8599,20 +9200,22 @@ static int run_task_for_manifest_impl(
         std::vector<std::string> effectiveChmodPaths = task.chmodPaths;
         if(hostOverride)
         {
-            effectiveChmodPaths.insert(effectiveChmodPaths.end(),
-                                       hostOverride->chmodPaths.begin(),
-                                       hostOverride->chmodPaths.end());
+            effectiveChmodPaths.insert(
+                effectiveChmodPaths.end(),
+                hostOverride->chmodPaths.begin(),
+                hostOverride->chmodPaths.end());
         }
         BuildConfig effectiveTaskBuildConfig =
             merge_build_config(buildConfig, task.buildConfig);
         if(hostOverride)
         {
             effectiveTaskBuildConfig = merge_build_config(
-                effectiveTaskBuildConfig, hostOverride->buildConfig);
+                effectiveTaskBuildConfig,
+                hostOverride->buildConfig);
         }
-        apply_asan_overrides(effectiveTaskBuildConfig,
-                             "task '" + taskName + "' in " +
-                                 pkg.manifestPath.string());
+        apply_asan_overrides(
+            effectiveTaskBuildConfig,
+            "task '" + taskName + "' in " + pkg.manifestPath.string());
         effectiveTaskBuildConfig =
             materialize_build_config_for_package(pkg, effectiveTaskBuildConfig);
 
@@ -8624,15 +9227,30 @@ static int run_task_for_manifest_impl(
             for(const auto& dep : effectiveDependsOn)
             {
                 std::vector<std::string> childStack = taskStack;
-                futures.push_back(std::async(
-                    std::launch::async,
-                    [&pkg, &tasks, &buildConfig, &hostName, &taskStates,
-                     &taskMutex, &taskCv, dep, childStack]() mutable
-                    {
-                        return run_task_for_manifest_impl(
-                            pkg, tasks, buildConfig, hostName, taskStates,
-                            taskMutex, taskCv, dep, childStack);
-                    }));
+                futures.push_back(
+                    std::async(
+                        std::launch::async,
+                        [&pkg,
+                         &tasks,
+                         &buildConfig,
+                         &hostName,
+                         &taskStates,
+                         &taskMutex,
+                         &taskCv,
+                         dep,
+                         childStack]() mutable
+                        {
+                            return run_task_for_manifest_impl(
+                                pkg,
+                                tasks,
+                                buildConfig,
+                                hostName,
+                                taskStates,
+                                taskMutex,
+                                taskCv,
+                                dep,
+                                childStack);
+                        }));
             }
             for(size_t i = 0; i < effectiveDependsOn.size(); ++i)
             {
@@ -8650,9 +9268,16 @@ static int run_task_for_manifest_impl(
         {
             for(const auto& dep : effectiveDependsOn)
             {
-                if(run_task_for_manifest_impl(pkg, tasks, buildConfig, hostName,
-                                              taskStates, taskMutex, taskCv,
-                                              dep, taskStack) != 0)
+                if(run_task_for_manifest_impl(
+                       pkg,
+                       tasks,
+                       buildConfig,
+                       hostName,
+                       taskStates,
+                       taskMutex,
+                       taskCv,
+                       dep,
+                       taskStack) != 0)
                 {
                     std::cerr << "Task '" << taskName << "' dependency '" << dep
                               << "' failed for " << pkg.manifestPath.string()
@@ -8664,18 +9289,20 @@ static int run_task_for_manifest_impl(
         }
 
         std::filesystem::path workdir =
-            effectiveWorkdir.empty()
-                ? pkg.packageDir
-                : std::filesystem::path(expand_task_text(
-                      effectiveWorkdir, pkg, effectiveTaskBuildConfig));
+            effectiveWorkdir.empty() ? pkg.packageDir
+                                     : std::filesystem::path(expand_task_text(
+                                           effectiveWorkdir,
+                                           pkg,
+                                           effectiveTaskBuildConfig));
         if(!workdir.is_absolute())
             workdir = pkg.packageDir / workdir;
 
-        const std::string taskDescription =
-            effectiveMessage.empty()
-                ? taskName
-                : expand_task_text(effectiveMessage, pkg,
-                                   effectiveTaskBuildConfig);
+        const std::string taskDescription = effectiveMessage.empty()
+                                                ? taskName
+                                                : expand_task_text(
+                                                      effectiveMessage,
+                                                      pkg,
+                                                      effectiveTaskBuildConfig);
         const std::string taskPrefix = reserve_execution_step_prefix();
         pkg_task_print_line(taskPrefix + " " + taskDescription);
         const auto taskStart = std::chrono::steady_clock::now();
@@ -8689,15 +9316,18 @@ static int run_task_for_manifest_impl(
         if(!effectiveShell.empty())
         {
             auto scriptPathOpt = write_task_script(
-                pkg, taskName, effectiveShell, effectiveTaskBuildConfig);
+                pkg,
+                taskName,
+                effectiveShell,
+                effectiveTaskBuildConfig);
             if(!scriptPathOpt.has_value())
             {
                 taskStack.pop_back();
                 return 1;
             }
-            effectiveCommands.insert(effectiveCommands.begin(),
-                                     "sh " +
-                                         shell_quote(scriptPathOpt->string()));
+            effectiveCommands.insert(
+                effectiveCommands.begin(),
+                "sh " + shell_quote(scriptPathOpt->string()));
         }
 
         if(!effectiveLanguage.empty())
@@ -8712,7 +9342,9 @@ static int run_task_for_manifest_impl(
             for(const auto& dep : cdeps)
             {
                 if(!append_pkg_config_flags(
-                       dep, pkgFlags, effectiveTaskBuildConfig.pathEntries))
+                       dep,
+                       pkgFlags,
+                       effectiveTaskBuildConfig.pathEntries))
                 {
                     taskStack.pop_back();
                     return 1;
@@ -8720,11 +9352,18 @@ static int run_task_for_manifest_impl(
             }
             std::string generationError;
             auto generatedCommand = build_task_language_command(
-                pkg, taskName, effectiveTaskBuildConfig, effectiveLanguage,
-                expand_task_text(effectiveSource, pkg,
-                                 effectiveTaskBuildConfig),
-                expand_task_text(effectiveOutput, pkg,
-                                 effectiveTaskBuildConfig),
+                pkg,
+                taskName,
+                effectiveTaskBuildConfig,
+                effectiveLanguage,
+                expand_task_text(
+                    effectiveSource,
+                    pkg,
+                    effectiveTaskBuildConfig),
+                expand_task_text(
+                    effectiveOutput,
+                    pkg,
+                    effectiveTaskBuildConfig),
                 [&]()
                 {
                     std::vector<std::string> expandedInputs;
@@ -8732,11 +9371,16 @@ static int run_task_for_manifest_impl(
                     for(const auto& input : effectiveInputs)
                     {
                         expandedInputs.push_back(expand_task_text(
-                            input, pkg, effectiveTaskBuildConfig));
+                            input,
+                            pkg,
+                            effectiveTaskBuildConfig));
                     }
                     return expandedInputs;
                 }(),
-                effectiveCompileOnly, linkFlags, pkgFlags, generationError);
+                effectiveCompileOnly,
+                linkFlags,
+                pkgFlags,
+                generationError);
             if(!generatedCommand.has_value())
             {
                 if(!generationError.empty())
@@ -8744,8 +9388,8 @@ static int run_task_for_manifest_impl(
                 taskStack.pop_back();
                 return 1;
             }
-            effectiveCommands.insert(effectiveCommands.begin(),
-                                     *generatedCommand);
+            effectiveCommands
+                .insert(effectiveCommands.begin(), *generatedCommand);
         }
 
         if(effectiveCommands.empty() && effectiveShell.empty())
@@ -8775,12 +9419,16 @@ static int run_task_for_manifest_impl(
                 expanded = "env" + envPrefix + " " + expanded;
             const std::string fullCommand =
                 "cd " + shell_quote(workdir.string()) + " && " +
-                command_with_path_entries(expanded,
-                                          effectiveTaskBuildConfig.pathEntries);
+                command_with_path_entries(
+                    expanded,
+                    effectiveTaskBuildConfig.pathEntries);
             const int rc =
                 inlineSpinner
-                    ? stream_inline_output_command(*inlineSpinner, fullCommand,
-                                                   false, effectiveLogOutput)
+                    ? stream_inline_output_command(
+                          *inlineSpinner,
+                          fullCommand,
+                          false,
+                          effectiveLogOutput)
                     : run_command(fullCommand, true, effectiveLogOutput);
             if(rc != 0)
             {
@@ -8831,7 +9479,9 @@ static int run_task_for_manifest_impl(
             for(const auto& chmodPathText : effectiveChmodPaths)
             {
                 const std::filesystem::path chmodPath = expand_task_text(
-                    chmodPathText, pkg, effectiveTaskBuildConfig);
+                    chmodPathText,
+                    pkg,
+                    effectiveTaskBuildConfig);
                 std::string chmodError;
                 if(!apply_recursive_permissions(chmodPath, *mode, chmodError))
                 {
@@ -8856,15 +9506,30 @@ static int run_task_for_manifest_impl(
             for(const auto& nextTask : effectiveNext)
             {
                 std::vector<std::string> childStack = taskStack;
-                futures.push_back(std::async(
-                    std::launch::async,
-                    [&pkg, &tasks, &buildConfig, &hostName, &taskStates,
-                     &taskMutex, &taskCv, nextTask, childStack]() mutable
-                    {
-                        return run_task_for_manifest_impl(
-                            pkg, tasks, buildConfig, hostName, taskStates,
-                            taskMutex, taskCv, nextTask, childStack);
-                    }));
+                futures.push_back(
+                    std::async(
+                        std::launch::async,
+                        [&pkg,
+                         &tasks,
+                         &buildConfig,
+                         &hostName,
+                         &taskStates,
+                         &taskMutex,
+                         &taskCv,
+                         nextTask,
+                         childStack]() mutable
+                        {
+                            return run_task_for_manifest_impl(
+                                pkg,
+                                tasks,
+                                buildConfig,
+                                hostName,
+                                taskStates,
+                                taskMutex,
+                                taskCv,
+                                nextTask,
+                                childStack);
+                        }));
             }
             for(size_t i = 0; i < effectiveNext.size(); ++i)
             {
@@ -8887,9 +9552,16 @@ static int run_task_for_manifest_impl(
         {
             for(const auto& nextTask : effectiveNext)
             {
-                if(run_task_for_manifest_impl(pkg, tasks, buildConfig, hostName,
-                                              taskStates, taskMutex, taskCv,
-                                              nextTask, taskStack) != 0)
+                if(run_task_for_manifest_impl(
+                       pkg,
+                       tasks,
+                       buildConfig,
+                       hostName,
+                       taskStates,
+                       taskMutex,
+                       taskCv,
+                       nextTask,
+                       taskStack) != 0)
                 {
                     std::cerr << "Task '" << taskName << "' next task '"
                               << nextTask << "' failed for "
@@ -8911,7 +9583,11 @@ static int run_task_for_manifest_impl(
         if(inlineSpinner)
             inlineSpinner->stop("");
         if(const int signRc = codesign_task_outputs(
-               task.signOutputs, pkg, buildConfig, taskName, taskPrefix);
+               task.signOutputs,
+               pkg,
+               buildConfig,
+               taskName,
+               taskPrefix);
            signRc != 0)
         {
             {
@@ -8921,9 +9597,9 @@ static int run_task_for_manifest_impl(
             taskCv.notify_all();
             return signRc;
         }
-        pkg_task_print_line(taskPrefix + " " + taskName + " Completed, time " +
-                            format_task_elapsed_compact(taskElapsed) + " - " +
-                            taskDescription);
+        pkg_task_print_line(
+            taskPrefix + " " + taskName + " Completed, time " +
+            format_task_elapsed_compact(taskElapsed) + " - " + taskDescription);
         {
             std::lock_guard<std::mutex> lock(taskMutex);
             taskStates[taskName].status = TaskRunState::succeeded;
@@ -8939,9 +9615,10 @@ static int run_task_for_manifest_impl(
     return -1;
 }
 
-static int run_task_for_manifest(const PackageManifest& pkg,
-                                 const std::string& taskName,
-                                 const BuildConfig& buildConfig)
+static int run_task_for_manifest(
+    const PackageManifest& pkg,
+    const std::string& taskName,
+    const BuildConfig& buildConfig)
 {
     const auto tasks = parse_task_specs(pkg.content);
     ScopedPackageLogState scopedLogs(
@@ -8952,22 +9629,34 @@ static int run_task_for_manifest(const PackageManifest& pkg,
     if(ownProgress)
     {
         scopedProgress.emplace(count_reachable_task_steps(
-            tasks, hostName, std::vector<std::string>{taskName}));
+            tasks,
+            hostName,
+            std::vector<std::string>{taskName}));
     }
     std::map<std::string, TaskRunState> taskStates;
     std::mutex taskMutex;
     std::condition_variable taskCv;
     std::vector<std::string> taskStack;
-    return run_task_for_manifest_impl(pkg, tasks, buildConfig, hostName,
-                                      taskStates, taskMutex, taskCv, taskName,
-                                      taskStack);
+    return run_task_for_manifest_impl(
+        pkg,
+        tasks,
+        buildConfig,
+        hostName,
+        taskStates,
+        taskMutex,
+        taskCv,
+        taskName,
+        taskStack);
 }
 
-static int run_task_for_manifest(const PackageManifest& pkg,
-                                 const std::string& taskName)
+static int run_task_for_manifest(
+    const PackageManifest& pkg,
+    const std::string& taskName)
 {
-    return run_task_for_manifest(pkg, taskName,
-                                 parse_manifest_build_config(pkg));
+    return run_task_for_manifest(
+        pkg,
+        taskName,
+        parse_manifest_build_config(pkg));
 }
 
 struct PkgCliOverrides
@@ -8996,8 +9685,9 @@ struct PkgCliOverrides
     std::optional<bool> useGlobalCache;
 };
 
-static void apply_cli_overrides(BuildConfig& buildConfig,
-                                const PkgCliOverrides& overrides)
+static void apply_cli_overrides(
+    BuildConfig& buildConfig,
+    const PkgCliOverrides& overrides)
 {
     if(overrides.cacheDir.has_value())
     {
@@ -9065,8 +9755,10 @@ static void apply_cli_overrides(BuildConfig& buildConfig,
         buildConfig.enableLogs = true;
 }
 
-static bool parse_pkg_option_argument(const std::string& text, std::string& key,
-                                      std::string& value)
+static bool parse_pkg_option_argument(
+    const std::string& text,
+    std::string& key,
+    std::string& value)
 {
     const size_t eq = text.find('=');
     if(eq == std::string::npos)
@@ -9087,10 +9779,10 @@ static std::optional<std::vector<PackageManifest>> select_package_manifests(
     }
     if(overrides.packages.empty() && overrides.excludes.empty())
         return manifests;
-    std::unordered_set<std::string> requested(overrides.packages.begin(),
-                                              overrides.packages.end());
-    std::unordered_set<std::string> excluded(overrides.excludes.begin(),
-                                             overrides.excludes.end());
+    std::unordered_set<std::string>
+        requested(overrides.packages.begin(), overrides.packages.end());
+    std::unordered_set<std::string>
+        excluded(overrides.excludes.begin(), overrides.excludes.end());
     std::unordered_set<std::string> found;
     std::vector<PackageManifest> selected;
     for(const auto& pkg : manifests)
@@ -9119,26 +9811,32 @@ static std::optional<std::vector<PackageManifest>> select_package_manifests(
     return selected;
 }
 
-static bool prepare_package_build_config(const PackageManifest& pkg,
-                                         const std::string& compilerProgram,
-                                         const PkgCliOverrides& overrides,
-                                         BuildConfig& config)
+static bool prepare_package_build_config(
+    const PackageManifest& pkg,
+    const std::string& compilerProgram,
+    const PkgCliOverrides& overrides,
+    BuildConfig& config)
 {
     if(!validate_package_features(pkg, overrides.features))
         return false;
     config = parse_manifest_build_config(pkg);
-    bool cacheWasExplicit = overrides.cacheDir.has_value() ||
-                            !config.globalCacheDir.empty();
+    bool cacheWasExplicit =
+        overrides.cacheDir.has_value() || !config.globalCacheDir.empty();
     if(!configure_profile_and_features(
-           pkg.content, config, overrides.profileName, overrides.features,
-           overrides.noDefaultFeatures, overrides.allFeatures))
+           pkg.content,
+           config,
+           overrides.profileName,
+           overrides.features,
+           overrides.noDefaultFeatures,
+           overrides.allFeatures))
         return false;
     config.compilerProgram = compilerProgram;
     apply_cli_overrides(config, overrides);
     if(!config.globalCacheDir.empty() &&
        std::filesystem::path(config.globalCacheDir).is_relative())
-        config.globalCacheDir =
-            (pkg.packageDir / config.globalCacheDir).lexically_normal().string();
+        config.globalCacheDir = (pkg.packageDir / config.globalCacheDir)
+                                    .lexically_normal()
+                                    .string();
     if(!config.vendorDir.empty() &&
        std::filesystem::path(config.vendorDir).is_relative())
         config.vendorDir =
@@ -9168,10 +9866,9 @@ static bool prepare_package_build_config(const PackageManifest& pkg,
             if(const char* userHome = std::getenv("HOME"))
             {
                 if(userHome[0] != '\0')
-                    config.globalCacheDir =
-                        (std::filesystem::path(userHome) / ".cache" / "mlang" /
-                         "pkg")
-                            .string();
+                    config.globalCacheDir = (std::filesystem::path(userHome) /
+                                             ".cache" / "mlang" / "pkg")
+                                                .string();
             }
         }
     }
@@ -9182,8 +9879,9 @@ static bool prepare_package_build_config(const PackageManifest& pkg,
         if(ec)
         {
             if(cacheWasExplicit)
-                pkg_warn_line("Global package cache is unavailable at " +
-                              config.globalCacheDir + ": " + ec.message());
+                pkg_warn_line(
+                    "Global package cache is unavailable at " +
+                    config.globalCacheDir + ": " + ec.message());
             config.useGlobalCache = false;
             config.globalCacheDir.clear();
         }
@@ -9218,9 +9916,10 @@ struct AdvisoryEntry
     std::string url;
 };
 
-static RegistrySettings registry_settings(const PackageManifest* pkg,
-                                          const std::string& overrideLocation,
-                                          const std::string& overrideKey)
+static RegistrySettings registry_settings(
+    const PackageManifest* pkg,
+    const std::string& overrideLocation,
+    const std::string& overrideKey)
 {
     RegistrySettings settings;
     if(pkg != nullptr)
@@ -9237,12 +9936,14 @@ static RegistrySettings registry_settings(const PackageManifest* pkg,
         if(!settings.location.empty() &&
            settings.location.find("://") == std::string::npos &&
            std::filesystem::path(settings.location).is_relative())
-            settings.location =
-                (pkg->packageDir / settings.location).lexically_normal().string();
+            settings.location = (pkg->packageDir / settings.location)
+                                    .lexically_normal()
+                                    .string();
         if(!settings.publicKey.empty() &&
            std::filesystem::path(settings.publicKey).is_relative())
-            settings.publicKey =
-                (pkg->packageDir / settings.publicKey).lexically_normal().string();
+            settings.publicKey = (pkg->packageDir / settings.publicKey)
+                                     .lexically_normal()
+                                     .string();
     }
     if(!overrideLocation.empty())
         settings.location = overrideLocation;
@@ -9251,8 +9952,9 @@ static RegistrySettings registry_settings(const PackageManifest* pkg,
     return settings;
 }
 
-static std::string registry_join(const std::string& root,
-                                 const std::string& relative)
+static std::string registry_join(
+    const std::string& root,
+    const std::string& relative)
 {
     if(relative.find("://") != std::string::npos)
         return relative;
@@ -9262,16 +9964,17 @@ static std::string registry_join(const std::string& root,
     return (std::filesystem::path(root) / relative).lexically_normal().string();
 }
 
-static bool require_ecosystem_tool(const std::string& tool,
-                                   const std::string& installHint)
+static bool require_ecosystem_tool(
+    const std::string& tool,
+    const std::string& installHint)
 {
-    const auto found = run_command_capture_with_paths(
-        "command -v " + shell_quote(tool), {});
+    const auto found =
+        run_command_capture_with_paths("command -v " + shell_quote(tool), {});
     if(found.has_value() && !trim(*found).empty())
         return true;
-    pkg_error_line("Required ecosystem tool '" + tool +
-                   "' was not found in PATH. Install it first: " +
-                   installHint);
+    pkg_error_line(
+        "Required ecosystem tool '" + tool +
+        "' was not found in PATH. Install it first: " + installHint);
     return false;
 }
 
@@ -9290,9 +9993,11 @@ static bool safe_registry_reference(const std::string& reference)
     return true;
 }
 
-static bool copy_or_download_registry_file(const std::string& source,
-                                           const std::filesystem::path& output,
-                                           bool offline, std::string& error)
+static bool copy_or_download_registry_file(
+    const std::string& source,
+    const std::filesystem::path& output,
+    bool offline,
+    std::string& error)
 {
     std::error_code ec;
     std::filesystem::create_directories(output.parent_path(), ec);
@@ -9308,7 +10013,9 @@ static bool copy_or_download_registry_file(const std::string& source,
         const std::filesystem::path input =
             source.rfind("file://", 0) == 0 ? source.substr(7) : source;
         std::filesystem::copy_file(
-            input, output, std::filesystem::copy_options::overwrite_existing,
+            input,
+            output,
+            std::filesystem::copy_options::overwrite_existing,
             ec);
         if(ec)
         {
@@ -9339,9 +10046,10 @@ static bool copy_or_download_registry_file(const std::string& source,
     return true;
 }
 
-static std::vector<RegistryVersionEntry>
-parse_registry_index(const std::string& content, std::string& packageName,
-                     std::string& error)
+static std::vector<RegistryVersionEntry> parse_registry_index(
+    const std::string& content,
+    std::string& packageName,
+    std::string& error)
 {
     std::vector<RegistryVersionEntry> entries;
     std::optional<RegistryVersionEntry> current;
@@ -9388,9 +10096,8 @@ parse_registry_index(const std::string& content, std::string& packageName,
             else if(assignment->key == "archive")
                 current->archive = value;
             else if(assignment->key == "checksum")
-                current->checksum = value.rfind("sha256:", 0) == 0
-                                        ? value.substr(7)
-                                        : value;
+                current->checksum =
+                    value.rfind("sha256:", 0) == 0 ? value.substr(7) : value;
             else if(assignment->key == "signature")
                 current->signature = value;
             else if(assignment->key == "yanked")
@@ -9422,11 +10129,21 @@ static std::string json_escape(const std::string& input)
     {
         switch(c)
         {
-        case '\\': output += "\\\\"; break;
-        case '"': output += "\\\""; break;
-        case '\n': output += "\\n"; break;
-        case '\r': output += "\\r"; break;
-        case '\t': output += "\\t"; break;
+        case '\\':
+            output += "\\\\";
+            break;
+        case '"':
+            output += "\\\"";
+            break;
+        case '\n':
+            output += "\\n";
+            break;
+        case '\r':
+            output += "\\r";
+            break;
+        case '\t':
+            output += "\\t";
+            break;
         default:
             if(c < 0x20)
             {
@@ -9442,29 +10159,30 @@ static std::string json_escape(const std::string& input)
     return output;
 }
 
-static bool sign_archive(const std::filesystem::path& archive,
-                         const std::filesystem::path& privateKey,
-                         const std::filesystem::path& signature)
+static bool sign_archive(
+    const std::filesystem::path& archive,
+    const std::filesystem::path& privateKey,
+    const std::filesystem::path& signature)
 {
     if(!require_ecosystem_tool("openssl", "install OpenSSL"))
         return false;
-    const std::string command =
-        "openssl dgst -sha256 -sign " + shell_quote(privateKey.string()) +
-        " -out " + shell_quote(signature.string()) + " " +
-        shell_quote(archive.string());
+    const std::string command = "openssl dgst -sha256 -sign " +
+                                shell_quote(privateKey.string()) + " -out " +
+                                shell_quote(signature.string()) + " " +
+                                shell_quote(archive.string());
     if(run_command(command) != 0)
     {
         pkg_error_line("Failed to sign package archive with OpenSSL");
         return false;
     }
-    pkg_info_line("Wrote RSA/SHA-256 package signature " +
-                  signature.string());
+    pkg_info_line("Wrote RSA/SHA-256 package signature " + signature.string());
     return true;
 }
 
-static bool verify_archive_signature(const std::filesystem::path& archive,
-                                     const std::filesystem::path& publicKey,
-                                     const std::filesystem::path& signature)
+static bool verify_archive_signature(
+    const std::filesystem::path& archive,
+    const std::filesystem::path& publicKey,
+    const std::filesystem::path& signature)
 {
     if(!require_ecosystem_tool("openssl", "install OpenSSL"))
         return false;
@@ -9474,8 +10192,8 @@ static bool verify_archive_signature(const std::filesystem::path& archive,
         shell_quote(archive.string());
     if(run_command(command) != 0)
     {
-        pkg_error_line("Package signature verification failed for " +
-                       archive.string());
+        pkg_error_line(
+            "Package signature verification failed for " + archive.string());
         return false;
     }
     pkg_info_line("Verified package signature for " + archive.string());
@@ -9488,48 +10206,53 @@ static bool package_manifest_is_publishable(const PackageManifest& pkg)
     const std::string version = package_version(pkg);
     if(name.empty() || !is_complete_semantic_version(version))
     {
-        pkg_error_line("Publishing requires [package].name and a complete "
-                       "semantic [package].version");
+        pkg_error_line(
+            "Publishing requires [package].name and a complete "
+            "semantic [package].version");
         return false;
     }
     const auto dependencies = parse_source_deps(pkg.content);
     if(!dependencies.empty() &&
        !std::filesystem::is_regular_file(pkg.packageDir / "mlang.lock"))
     {
-        pkg_error_line("Package '" + name +
-                       "' has dependencies but no mlang.lock; run 'mlang pkg "
-                       "lock' before packaging");
+        pkg_error_line(
+            "Package '" + name +
+            "' has dependencies but no mlang.lock; run 'mlang pkg "
+            "lock' before packaging");
         return false;
     }
     for(const auto& dependency : dependencies)
     {
         if(!dependency.path.empty())
         {
-            pkg_error_line("Package '" + name +
-                           "' has path dependency '" + dependency.name +
-                           "'; publish immutable Git/archive dependencies or "
-                           "vendor the source first");
+            pkg_error_line(
+                "Package '" + name + "' has path dependency '" +
+                dependency.name +
+                "'; publish immutable Git/archive dependencies or "
+                "vendor the source first");
             return false;
         }
     }
     std::error_code ec;
-    for(std::filesystem::recursive_directory_iterator iterator(pkg.packageDir,
-                                                               ec), end;
-        !ec && iterator != end; iterator.increment(ec))
+    for(std::filesystem::recursive_directory_iterator
+            iterator(pkg.packageDir, ec),
+        end;
+        !ec && iterator != end;
+        iterator.increment(ec))
     {
         const std::string filename = iterator->path().filename().string();
         if(iterator->is_directory(ec) &&
-           (filename == ".git" || filename == "build" ||
-            filename == "vendor" || filename == ".mlang" ||
-            filename == ".demo-cache"))
+           (filename == ".git" || filename == "build" || filename == "vendor" ||
+            filename == ".mlang" || filename == ".demo-cache"))
         {
             iterator.disable_recursion_pending();
             continue;
         }
         if(iterator->is_symlink(ec))
         {
-            pkg_error_line("Package source contains unsupported symbolic link: " +
-                           iterator->path().string());
+            pkg_error_line(
+                "Package source contains unsupported symbolic link: " +
+                iterator->path().string());
             return false;
         }
     }
@@ -9537,7 +10260,8 @@ static bool package_manifest_is_publishable(const PackageManifest& pkg)
 }
 
 static std::optional<std::filesystem::path> create_package_archive(
-    const PackageManifest& pkg, const std::filesystem::path& requestedOutput,
+    const PackageManifest& pkg,
+    const std::filesystem::path& requestedOutput,
     const std::string& signKey)
 {
     if(!package_manifest_is_publishable(pkg))
@@ -9558,43 +10282,48 @@ static std::optional<std::filesystem::path> create_package_archive(
     std::filesystem::create_directories(output.parent_path(), ec);
     if(ec)
     {
-        pkg_error_line("Failed to create package output directory: " +
-                       ec.message());
+        pkg_error_line(
+            "Failed to create package output directory: " + ec.message());
         return std::nullopt;
     }
     const std::filesystem::path staging =
         std::filesystem::temp_directory_path() /
         ("mlang-package-" + sha256_text(pkg.packageDir.string()).substr(0, 12) +
-         "-" + std::to_string(static_cast<unsigned long long>(std::time(nullptr))) +
+         "-" +
+         std::to_string(static_cast<unsigned long long>(std::time(nullptr))) +
          "-" + std::to_string(static_cast<unsigned long long>(std::rand())));
     const std::filesystem::path stagingRoot = staging / "root";
     const std::filesystem::path fileList = staging / "files.txt";
     std::filesystem::create_directories(stagingRoot, ec);
     if(ec)
     {
-        pkg_error_line("Failed to create package staging directory: " +
-                       ec.message());
+        pkg_error_line(
+            "Failed to create package staging directory: " + ec.message());
         return std::nullopt;
     }
+
     struct StagingCleanup
     {
         std::filesystem::path path;
+
         ~StagingCleanup()
         {
             std::error_code ignored;
             std::filesystem::remove_all(path, ignored);
         }
     } stagingCleanup{staging};
+
     std::vector<std::filesystem::path> sourceFiles;
-    for(std::filesystem::recursive_directory_iterator iterator(pkg.packageDir,
-                                                               ec), end;
-        !ec && iterator != end; iterator.increment(ec))
+    for(std::filesystem::recursive_directory_iterator
+            iterator(pkg.packageDir, ec),
+        end;
+        !ec && iterator != end;
+        iterator.increment(ec))
     {
         const std::string filename = iterator->path().filename().string();
         if(iterator->is_directory(ec) &&
-           (filename == ".git" || filename == "build" ||
-            filename == "vendor" || filename == ".mlang" ||
-            filename == ".demo-cache"))
+           (filename == ".git" || filename == "build" || filename == "vendor" ||
+            filename == ".mlang" || filename == ".demo-cache"))
         {
             iterator.disable_recursion_pending();
             continue;
@@ -9607,9 +10336,9 @@ static std::optional<std::filesystem::path> create_package_archive(
     const auto systemNow = std::chrono::system_clock::now();
     const auto fileNow = std::filesystem::file_time_type::clock::now();
     const auto normalizedTime =
-        fileNow - std::chrono::duration_cast<
-                      std::filesystem::file_time_type::duration>(
-                      systemNow.time_since_epoch());
+        fileNow -
+        std::chrono::duration_cast<std::filesystem::file_time_type::duration>(
+            systemNow.time_since_epoch());
     for(const auto& source : sourceFiles)
     {
         const auto relative =
@@ -9624,17 +10353,22 @@ static std::optional<std::filesystem::path> create_package_archive(
         const auto destination = stagingRoot / relative;
         std::filesystem::create_directories(destination.parent_path(), ec);
         std::filesystem::copy_file(
-            source, destination,
-            std::filesystem::copy_options::overwrite_existing, ec);
+            source,
+            destination,
+            std::filesystem::copy_options::overwrite_existing,
+            ec);
         if(ec)
         {
-            pkg_error_line("Failed to stage package file " + source.string() +
-                           ": " + ec.message());
+            pkg_error_line(
+                "Failed to stage package file " + source.string() + ": " +
+                ec.message());
             return std::nullopt;
         }
         std::filesystem::permissions(
-            destination, std::filesystem::status(source, ec).permissions(),
-            std::filesystem::perm_options::replace, ec);
+            destination,
+            std::filesystem::status(source, ec).permissions(),
+            std::filesystem::perm_options::replace,
+            ec);
         std::filesystem::last_write_time(destination, normalizedTime, ec);
         listOutput << listed << "\n";
     }
@@ -9647,7 +10381,8 @@ static std::optional<std::filesystem::path> create_package_archive(
     std::string tarOwnership;
     const auto tarVersion =
         run_command_capture_with_paths("tar --version 2>&1", {});
-    if(tarVersion.has_value() && tarVersion->find("bsdtar") != std::string::npos)
+    if(tarVersion.has_value() &&
+       tarVersion->find("bsdtar") != std::string::npos)
         tarOwnership = " --uid 0 --gid 0 --uname root --gname root";
     else
         tarOwnership = " --owner=0 --group=0 --numeric-owner";
@@ -9667,10 +10402,11 @@ static std::optional<std::filesystem::path> create_package_archive(
         pkg_error_line("Failed to checksum package archive " + output.string());
         return std::nullopt;
     }
-    std::ofstream checksumOut(output.string() + ".sha256",
-                              std::ios::binary | std::ios::trunc);
-    checksumOut << "sha256:" << *checksum << "  "
-                << output.filename().string() << "\n";
+    std::ofstream checksumOut(
+        output.string() + ".sha256",
+        std::ios::binary | std::ios::trunc);
+    checksumOut << "sha256:" << *checksum << "  " << output.filename().string()
+                << "\n";
     if(!checksumOut)
     {
         pkg_error_line("Failed to write package checksum");
@@ -9679,20 +10415,23 @@ static std::optional<std::filesystem::path> create_package_archive(
     if(!signKey.empty() &&
        !sign_archive(output, signKey, output.string() + ".sig"))
         return std::nullopt;
-    pkg_info_line("Packaged " + package_name(pkg) + " v" + version + " at " +
-                  output.string());
+    pkg_info_line(
+        "Packaged " + package_name(pkg) + " v" + version + " at " +
+        output.string());
     pkg_info_line("Package checksum sha256:" + *checksum);
     return output;
 }
 
-static bool read_text_file(const std::filesystem::path& path,
-                           std::string& content)
+static bool read_text_file(
+    const std::filesystem::path& path,
+    std::string& content)
 {
     std::ifstream input(path, std::ios::binary);
     if(!input)
         return false;
-    content.assign(std::istreambuf_iterator<char>(input),
-                   std::istreambuf_iterator<char>());
+    content.assign(
+        std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>());
     return true;
 }
 
@@ -9714,20 +10453,22 @@ static std::filesystem::path ecosystem_cache_dir(
     if(const char* userHome = std::getenv("HOME"))
     {
         if(userHome[0] != '\0')
-            return std::filesystem::path(userHome) / ".cache" / "mlang" /
-                   "pkg";
+            return std::filesystem::path(userHome) / ".cache" / "mlang" / "pkg";
     }
     return std::filesystem::temp_directory_path() / "mlang-pkg-cache";
 }
 
-static int publish_package(const PackageManifest& pkg,
-                           const RegistrySettings& registry,
-                           const std::string& signKey, bool allowExisting)
+static int publish_package(
+    const PackageManifest& pkg,
+    const RegistrySettings& registry,
+    const std::string& signKey,
+    bool allowExisting)
 {
     if(registry.location.empty())
     {
-        pkg_error_line("No registry configured; use --registry LOCATION or "
-                       "[registry].location");
+        pkg_error_line(
+            "No registry configured; use --registry LOCATION or "
+            "[registry].location");
         return 1;
     }
     const auto archive = create_package_archive(pkg, {}, signKey);
@@ -9741,44 +10482,45 @@ static int publish_package(const PackageManifest& pkg,
         if(!require_ecosystem_tool("curl", "install curl"))
             return 1;
         if(registry.tokenEnv.empty() ||
-           !std::all_of(registry.tokenEnv.begin(), registry.tokenEnv.end(),
-                        [](unsigned char c)
-                        { return std::isalnum(c) || c == '_'; }) ||
+           !std::all_of(
+               registry.tokenEnv.begin(),
+               registry.tokenEnv.end(),
+               [](unsigned char c) { return std::isalnum(c) || c == '_'; }) ||
            std::getenv(registry.tokenEnv.c_str()) == nullptr)
         {
-            pkg_error_line("Remote publishing requires [registry].token_env "
-                           "naming a populated environment variable");
+            pkg_error_line(
+                "Remote publishing requires [registry].token_env "
+                "naming a populated environment variable");
             return 1;
         }
         const auto checksum = sha256_file(*archive);
         std::string command =
             "curl --fail --silent --show-error -X PUT -H \"Authorization: "
-            "Bearer ${" + registry.tokenEnv + "}\" -F archive=@" +
-            shell_quote(archive->string()) + " -F checksum=" +
-            shell_quote("sha256:" + checksum.value_or(""));
+            "Bearer ${" +
+            registry.tokenEnv + "}\" -F archive=@" +
+            shell_quote(archive->string()) +
+            " -F checksum=" + shell_quote("sha256:" + checksum.value_or(""));
         const std::filesystem::path signature = archive->string() + ".sig";
         if(std::filesystem::exists(signature))
             command += " -F signature=@" + shell_quote(signature.string()) +
                        " -F signature_algorithm=rsa-sha256";
-        command += " " +
-                   shell_quote(registry_join(
-                       registry.location,
-                       "v1/packages/" + sanitize_package_name(name) + "/" +
-                           version));
+        command +=
+            " " +
+            shell_quote(registry_join(
+                registry.location,
+                "v1/packages/" + sanitize_package_name(name) + "/" + version));
         if(run_command(command) != 0)
         {
-            pkg_error_line("Remote registry rejected " + name + " v" +
-                           version);
+            pkg_error_line("Remote registry rejected " + name + " v" + version);
             return 1;
         }
-        pkg_info_line("Published " + name + " v" + version + " to " +
-                      registry.location);
+        pkg_info_line(
+            "Published " + name + " v" + version + " to " + registry.location);
         return 0;
     }
     const std::filesystem::path registryRoot =
-        registry.location.rfind("file://", 0) == 0
-            ? registry.location.substr(7)
-            : registry.location;
+        registry.location.rfind("file://", 0) == 0 ? registry.location.substr(7)
+                                                   : registry.location;
     const std::filesystem::path indexPath =
         registryRoot / "index" / (sanitize_package_name(name) + ".toml");
     std::string existingContent;
@@ -9789,31 +10531,37 @@ static int publish_package(const PackageManifest& pkg,
     {
         if(!read_text_file(indexPath, existingContent))
         {
-            pkg_error_line("Failed to read registry index " +
-                           indexPath.string());
+            pkg_error_line(
+                "Failed to read registry index " + indexPath.string());
             return 1;
         }
         entries = parse_registry_index(existingContent, indexedName, error);
         if(!error.empty() || (!indexedName.empty() && indexedName != name))
         {
-            pkg_error_line(error.empty() ? "Registry package name mismatch"
-                                         : error);
+            pkg_error_line(
+                error.empty() ? "Registry package name mismatch" : error);
             return 1;
         }
     }
     const auto duplicate = std::find_if(
-        entries.begin(), entries.end(), [&](const RegistryVersionEntry& entry)
+        entries.begin(),
+        entries.end(),
+        [&](const RegistryVersionEntry& entry)
         { return entry.version == version; });
     if(duplicate != entries.end() && !allowExisting)
     {
-        pkg_error_line("Registry already contains " + name + " v" + version +
-                       "; use --allow-existing to replace it");
+        pkg_error_line(
+            "Registry already contains " + name + " v" + version +
+            "; use --allow-existing to replace it");
         return 1;
     }
-    entries.erase(std::remove_if(entries.begin(), entries.end(),
-                                 [&](const RegistryVersionEntry& entry)
-                                 { return entry.version == version; }),
-                  entries.end());
+    entries.erase(
+        std::remove_if(
+            entries.begin(),
+            entries.end(),
+            [&](const RegistryVersionEntry& entry)
+            { return entry.version == version; }),
+        entries.end());
     const std::filesystem::path packageDir =
         registryRoot / "packages" / sanitize_package_name(name) / version;
     std::error_code ec;
@@ -9821,15 +10569,17 @@ static int publish_package(const PackageManifest& pkg,
     std::filesystem::create_directories(indexPath.parent_path(), ec);
     if(ec)
     {
-        pkg_error_line("Failed to create registry directories: " +
-                       ec.message());
+        pkg_error_line(
+            "Failed to create registry directories: " + ec.message());
         return 1;
     }
     const std::filesystem::path publishedArchive =
         packageDir / archive->filename();
     std::filesystem::copy_file(
-        *archive, publishedArchive,
-        std::filesystem::copy_options::overwrite_existing, ec);
+        *archive,
+        publishedArchive,
+        std::filesystem::copy_options::overwrite_existing,
+        ec);
     if(ec)
     {
         pkg_error_line("Failed to publish archive: " + ec.message());
@@ -9837,8 +10587,9 @@ static int publish_package(const PackageManifest& pkg,
     }
     RegistryVersionEntry published;
     published.version = version;
-    published.archive = std::filesystem::relative(publishedArchive, registryRoot)
-                            .generic_string();
+    published.archive =
+        std::filesystem::relative(publishedArchive, registryRoot)
+            .generic_string();
     published.checksum = sha256_file(publishedArchive).value_or("");
     const std::filesystem::path localSignature = archive->string() + ".sig";
     if(std::filesystem::exists(localSignature))
@@ -9846,8 +10597,10 @@ static int publish_package(const PackageManifest& pkg,
         const std::filesystem::path publishedSignature =
             packageDir / (archive->filename().string() + ".sig");
         std::filesystem::copy_file(
-            localSignature, publishedSignature,
-            std::filesystem::copy_options::overwrite_existing, ec);
+            localSignature,
+            publishedSignature,
+            std::filesystem::copy_options::overwrite_existing,
+            ec);
         if(ec)
         {
             pkg_error_line("Failed to publish signature: " + ec.message());
@@ -9858,16 +10611,17 @@ static int publish_package(const PackageManifest& pkg,
                 .generic_string();
     }
     entries.push_back(published);
-    std::sort(entries.begin(), entries.end(),
-              [](const RegistryVersionEntry& lhs,
-                 const RegistryVersionEntry& rhs)
-              {
-                  const auto a = parse_semantic_version(lhs.version);
-                  const auto b = parse_semantic_version(rhs.version);
-                  return a.has_value() && b.has_value()
-                             ? compare_semantic_versions(*a, *b) < 0
-                             : lhs.version < rhs.version;
-              });
+    std::sort(
+        entries.begin(),
+        entries.end(),
+        [](const RegistryVersionEntry& lhs, const RegistryVersionEntry& rhs)
+        {
+            const auto a = parse_semantic_version(lhs.version);
+            const auto b = parse_semantic_version(rhs.version);
+            return a.has_value() && b.has_value()
+                       ? compare_semantic_versions(*a, *b) < 0
+                       : lhs.version < rhs.version;
+        });
     const std::filesystem::path tempIndex = indexPath.string() + ".tmp";
     std::ofstream output(tempIndex, std::ios::binary | std::ios::trunc);
     output << "protocol = 1\nname = " << lock_quote(name) << "\n";
@@ -9875,8 +10629,8 @@ static int publish_package(const PackageManifest& pkg,
     {
         output << "\n[[version]]\nversion = " << lock_quote(entry.version)
                << "\narchive = " << lock_quote(entry.archive)
-               << "\nchecksum = "
-               << lock_quote("sha256:" + entry.checksum) << "\n";
+               << "\nchecksum = " << lock_quote("sha256:" + entry.checksum)
+               << "\n";
         if(!entry.signature.empty())
             output << "signature = " << lock_quote(entry.signature) << "\n";
         if(!entry.yanked.empty())
@@ -9900,11 +10654,12 @@ static int publish_package(const PackageManifest& pkg,
         pkg_error_line("Failed to replace registry index: " + ec.message());
         return 1;
     }
-    std::ofstream protocol(registryRoot / "config.toml",
-                           std::ios::binary | std::ios::trunc);
+    std::ofstream protocol(
+        registryRoot / "config.toml",
+        std::ios::binary | std::ios::trunc);
     protocol << "protocol = 1\n";
-    pkg_info_line("Published " + name + " v" + version + " to " +
-                  registryRoot.string());
+    pkg_info_line(
+        "Published " + name + " v" + version + " to " + registryRoot.string());
     return 0;
 }
 
@@ -9933,9 +10688,12 @@ static std::optional<RegistryVersionEntry> select_registry_version(
 }
 
 static int install_registry_package(
-    const std::string& requested, const RegistrySettings& registry,
-    const PkgCliOverrides& overrides, const std::string& compilerProgram,
-    const std::filesystem::path& installRoot, bool force,
+    const std::string& requested,
+    const RegistrySettings& registry,
+    const PkgCliOverrides& overrides,
+    const std::string& compilerProgram,
+    const std::filesystem::path& installRoot,
+    bool force,
     bool requireSignature)
 {
     if(registry.location.empty())
@@ -9957,13 +10715,16 @@ static int install_registry_package(
         cacheRoot / "registry" / registryId / sanitize_package_name(name);
     const std::filesystem::path indexCache = packageCache / "index.toml";
     std::string error;
-    const std::string indexSource =
-        registry_join(registry.location,
-                      "index/" + sanitize_package_name(name) + ".toml");
+    const std::string indexSource = registry_join(
+        registry.location,
+        "index/" + sanitize_package_name(name) + ".toml");
     if(!overrides.offline || !std::filesystem::exists(indexCache))
     {
-        if(!copy_or_download_registry_file(indexSource, indexCache,
-                                           overrides.offline, error))
+        if(!copy_or_download_registry_file(
+               indexSource,
+               indexCache,
+               overrides.offline,
+               error))
         {
             pkg_error_line(error);
             return 1;
@@ -9979,15 +10740,15 @@ static int install_registry_package(
     auto entries = parse_registry_index(indexContent, indexedName, error);
     if(!error.empty() || indexedName != name)
     {
-        pkg_error_line(error.empty() ? "Registry index package name mismatch"
-                                     : error);
+        pkg_error_line(
+            error.empty() ? "Registry index package name mismatch" : error);
         return 1;
     }
     const auto selected = select_registry_version(entries, requirement);
     if(!selected.has_value())
     {
-        pkg_error_line("No non-yanked version of '" + name + "' satisfies " +
-                       requirement);
+        pkg_error_line(
+            "No non-yanked version of '" + name + "' satisfies " + requirement);
         return 1;
     }
     const std::filesystem::path archiveCache =
@@ -9996,8 +10757,10 @@ static int install_registry_package(
     if(!std::filesystem::exists(archiveCache))
     {
         if(!copy_or_download_registry_file(
-               registry_join(registry.location, selected->archive), archiveCache,
-               overrides.offline, error))
+               registry_join(registry.location, selected->archive),
+               archiveCache,
+               overrides.offline,
+               error))
         {
             pkg_error_line(error);
             return 1;
@@ -10008,25 +10771,28 @@ static int install_registry_package(
        !overrides.offline)
     {
         if(copy_or_download_registry_file(
-               registry_join(registry.location, selected->archive), archiveCache,
-               false, error))
+               registry_join(registry.location, selected->archive),
+               archiveCache,
+               false,
+               error))
             checksum = sha256_file(archiveCache);
     }
     if(!checksum.has_value() || *checksum != selected->checksum)
     {
-        pkg_error_line("Registry checksum mismatch for " + name + " v" +
-                       selected->version + ": expected sha256:" +
-                       selected->checksum +
-                       (checksum.has_value() ? ", got sha256:" + *checksum
-                                             : ", archive unreadable"));
+        pkg_error_line(
+            "Registry checksum mismatch for " + name + " v" +
+            selected->version + ": expected sha256:" + selected->checksum +
+            (checksum.has_value() ? ", got sha256:" + *checksum
+                                  : ", archive unreadable"));
         return 1;
     }
     if(!selected->signature.empty())
     {
         if(registry.publicKey.empty())
         {
-            pkg_error_line("Package is signed but no public key is configured; "
-                           "use --key PUBLIC_KEY");
+            pkg_error_line(
+                "Package is signed but no public key is configured; "
+                "use --key PUBLIC_KEY");
             return 1;
         }
         const std::filesystem::path signatureCache =
@@ -10034,19 +10800,24 @@ static int install_registry_package(
         if(!std::filesystem::exists(signatureCache) &&
            !copy_or_download_registry_file(
                registry_join(registry.location, selected->signature),
-               signatureCache, overrides.offline, error))
+               signatureCache,
+               overrides.offline,
+               error))
         {
             pkg_error_line(error);
             return 1;
         }
-        if(!verify_archive_signature(archiveCache, registry.publicKey,
-                                     signatureCache))
+        if(!verify_archive_signature(
+               archiveCache,
+               registry.publicKey,
+               signatureCache))
             return 1;
     }
     else if(requireSignature)
     {
-        pkg_error_line("Registry package " + name + " v" + selected->version +
-                       " is unsigned");
+        pkg_error_line(
+            "Registry package " + name + " v" + selected->version +
+            " is unsigned");
         return 1;
     }
     const std::filesystem::path sourceDir =
@@ -10057,7 +10828,8 @@ static int install_registry_package(
     std::filesystem::remove_all(sourceDir, ec);
     std::filesystem::create_directories(sourceDir, ec);
     const auto archiveListing = run_command_capture_with_paths(
-        "tar -tzf " + shell_quote(archiveCache.string()), {});
+        "tar -tzf " + shell_quote(archiveCache.string()),
+        {});
     if(!archiveListing.has_value())
     {
         pkg_error_line("Failed to inspect registry package archive");
@@ -10073,13 +10845,14 @@ static int install_registry_package(
            std::find(normalized.begin(), normalized.end(), "..") !=
                normalized.end())
         {
-            pkg_error_line("Unsafe path in registry package archive: " +
-                           archivedPath);
+            pkg_error_line(
+                "Unsafe path in registry package archive: " + archivedPath);
             return 1;
         }
     }
-    const std::string extract = "tar -xzf " + shell_quote(archiveCache.string()) +
-                                " -C " + shell_quote(sourceDir.string());
+    const std::string extract = "tar -xzf " +
+                                shell_quote(archiveCache.string()) + " -C " +
+                                shell_quote(sourceDir.string());
     if(run_command(extract) != 0)
     {
         pkg_error_line("Failed to extract registry package");
@@ -10104,8 +10877,9 @@ static int install_registry_package(
     {
         if(!std::filesystem::exists(sourceDir / "mlang.lock"))
         {
-            pkg_error_line("Offline install requires the published package to "
-                           "contain mlang.lock for its dependencies");
+            pkg_error_line(
+                "Offline install requires the published package to "
+                "contain mlang.lock for its dependencies");
             return 1;
         }
         build += " --offline";
@@ -10117,16 +10891,16 @@ static int install_registry_package(
         pkg_error_line("Failed to build registry package " + name);
         return 1;
     }
-    PackageManifest installed{installedManifest, sourceDir, installedContent,
-                              "", {}};
+    PackageManifest
+        installed{installedManifest, sourceDir, installedContent, "", {}};
     auto targets = parse_build_targets(installed.content);
     if(targets.empty())
     {
         BuildTarget target;
         target.name = package_name(installed);
-        target.entry = find_section_toml_string(installed.content, "package",
-                                                "entry")
-                           .value_or("src/main.mla");
+        target.entry =
+            find_section_toml_string(installed.content, "package", "entry")
+                .value_or("src/main.mla");
         targets.push_back(std::move(target));
     }
     bool copied = false;
@@ -10158,22 +10932,28 @@ static int install_registry_package(
             destinationDir / source.filename();
         if(std::filesystem::exists(destination) && !force)
         {
-            pkg_error_line("Install destination already exists: " +
-                           destination.string() + " (use --force)");
+            pkg_error_line(
+                "Install destination already exists: " + destination.string() +
+                " (use --force)");
             return 1;
         }
         std::filesystem::copy_file(
-            source, destination,
-            std::filesystem::copy_options::overwrite_existing, ec);
+            source,
+            destination,
+            std::filesystem::copy_options::overwrite_existing,
+            ec);
         if(ec)
         {
-            pkg_error_line("Failed to install " + destination.string() + ": " +
-                           ec.message());
+            pkg_error_line(
+                "Failed to install " + destination.string() + ": " +
+                ec.message());
             return 1;
         }
         std::filesystem::permissions(
-            destination, std::filesystem::status(source, ec).permissions(),
-            std::filesystem::perm_options::replace, ec);
+            destination,
+            std::filesystem::status(source, ec).permissions(),
+            std::filesystem::perm_options::replace,
+            ec);
         pkg_info_line("Installed " + destination.string());
         if(target.kind == BuildTarget::dynamic_library)
         {
@@ -10182,12 +10962,15 @@ static int install_registry_package(
             const std::filesystem::path runtimeCopy =
                 runtimeDir / source.filename();
             std::filesystem::copy_file(
-                source, runtimeCopy,
-                std::filesystem::copy_options::overwrite_existing, ec);
+                source,
+                runtimeCopy,
+                std::filesystem::copy_options::overwrite_existing,
+                ec);
             if(ec)
             {
-                pkg_error_line("Failed to install runtime library companion " +
-                               runtimeCopy.string() + ": " + ec.message());
+                pkg_error_line(
+                    "Failed to install runtime library companion " +
+                    runtimeCopy.string() + ": " + ec.message());
                 return 1;
             }
         }
@@ -10195,20 +10978,21 @@ static int install_registry_package(
     }
     if(!copied)
     {
-        pkg_error_line("Package contains no installable binary or library target");
+        pkg_error_line(
+            "Package contains no installable binary or library target");
         return 1;
     }
     const std::filesystem::path receiptDir =
         installRoot / "share" / "mlang" / "packages";
     std::filesystem::create_directories(receiptDir, ec);
-    std::ofstream receipt(receiptDir /
-                          (sanitize_package_name(name) + "-" +
-                           selected->version + ".json"));
+    std::ofstream receipt(
+        receiptDir /
+        (sanitize_package_name(name) + "-" + selected->version + ".json"));
     receipt << "{\n  \"name\": \"" << json_escape(name)
             << "\",\n  \"version\": \"" << json_escape(selected->version)
             << "\",\n  \"checksum\": \"sha256:" << selected->checksum
-            << "\",\n  \"registry\": \""
-            << json_escape(registry.location) << "\"\n}\n";
+            << "\",\n  \"registry\": \"" << json_escape(registry.location)
+            << "\"\n}\n";
     return 0;
 }
 
@@ -10236,8 +11020,7 @@ static std::map<std::string, std::string> ecosystem_components(
     return components;
 }
 
-static std::vector<AdvisoryEntry>
-parse_advisories(const std::string& content)
+static std::vector<AdvisoryEntry> parse_advisories(const std::string& content)
 {
     std::vector<AdvisoryEntry> advisories;
     std::optional<AdvisoryEntry> current;
@@ -10272,12 +11055,18 @@ parse_advisories(const std::string& content)
         if(!assignment.has_value())
             continue;
         const std::string value = unquote(assignment->value);
-        if(assignment->key == "id") current->id = value;
-        else if(assignment->key == "package") current->package = value;
-        else if(assignment->key == "affected") current->affected = value;
-        else if(assignment->key == "severity") current->severity = value;
-        else if(assignment->key == "title") current->title = value;
-        else if(assignment->key == "url") current->url = value;
+        if(assignment->key == "id")
+            current->id = value;
+        else if(assignment->key == "package")
+            current->package = value;
+        else if(assignment->key == "affected")
+            current->affected = value;
+        else if(assignment->key == "severity")
+            current->severity = value;
+        else if(assignment->key == "title")
+            current->title = value;
+        else if(assignment->key == "url")
+            current->url = value;
     }
     flush();
     return advisories;
@@ -10303,39 +11092,51 @@ static bool advisory_protocol_is_v1(const std::string& content)
 
 static int severity_rank(std::string severity)
 {
-    std::transform(severity.begin(), severity.end(), severity.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
-    if(severity == "critical") return 4;
-    if(severity == "high") return 3;
-    if(severity == "medium" || severity == "moderate") return 2;
-    if(severity == "low") return 1;
+    std::transform(
+        severity.begin(),
+        severity.end(),
+        severity.begin(),
+        [](unsigned char c) { return std::tolower(c); });
+    if(severity == "critical")
+        return 4;
+    if(severity == "high")
+        return 3;
+    if(severity == "medium" || severity == "moderate")
+        return 2;
+    if(severity == "low")
+        return 1;
     return 0;
 }
 
-static int audit_packages(const std::filesystem::path& rootManifest,
-                          const std::vector<PackageManifest>& manifests,
-                          const RegistrySettings& registry,
-                          const PkgCliOverrides& overrides,
-                          const std::string& database,
-                          const std::string& denySeverity)
+static int audit_packages(
+    const std::filesystem::path& rootManifest,
+    const std::vector<PackageManifest>& manifests,
+    const RegistrySettings& registry,
+    const PkgCliOverrides& overrides,
+    const std::string& database,
+    const std::string& denySeverity)
 {
     std::string source = database;
     if(source.empty() && !registry.location.empty())
         source = registry_join(registry.location, "advisories.toml");
     if(source.empty())
     {
-        pkg_error_line("No advisory database configured; use --database FILE "
-                       "or configure a registry");
+        pkg_error_line(
+            "No advisory database configured; use --database FILE "
+            "or configure a registry");
         return 1;
     }
-    const std::filesystem::path cached =
-        ecosystem_cache_dir(overrides) / "audit" /
-        (sha256_text(source) + ".toml");
+    const std::filesystem::path cached = ecosystem_cache_dir(overrides) /
+                                         "audit" /
+                                         (sha256_text(source) + ".toml");
     std::string error;
     if(!overrides.offline || !std::filesystem::exists(cached))
     {
-        if(!copy_or_download_registry_file(source, cached, overrides.offline,
-                                           error))
+        if(!copy_or_download_registry_file(
+               source,
+               cached,
+               overrides.offline,
+               error))
         {
             pkg_error_line(error);
             return 1;
@@ -10356,13 +11157,15 @@ static int audit_packages(const std::filesystem::path& rootManifest,
     const auto components = ecosystem_components(rootManifest, manifests);
     if(denySeverity != "any" && severity_rank(denySeverity) == 0)
     {
-        pkg_error_line("Unknown audit severity '" + denySeverity +
-                       "' (expected low, medium, high, critical, or any)");
+        pkg_error_line(
+            "Unknown audit severity '" + denySeverity +
+            "' (expected low, medium, high, critical, or any)");
         return 1;
     }
-    const int threshold = denySeverity == "any" ? 0 :
-                          severity_rank(denySeverity.empty() ? "high"
-                                                            : denySeverity);
+    const int threshold =
+        denySeverity == "any"
+            ? 0
+            : severity_rank(denySeverity.empty() ? "high" : denySeverity);
     size_t findings = 0;
     bool denied = false;
     for(const auto& advisory : advisories)
@@ -10385,17 +11188,20 @@ static int audit_packages(const std::filesystem::path& rootManifest,
         std::cout << "\n";
     }
     if(findings == 0)
-        pkg_info_line("Audit found no known vulnerabilities in " +
-                      std::to_string(components.size()) + " packages.");
+        pkg_info_line(
+            "Audit found no known vulnerabilities in " +
+            std::to_string(components.size()) + " packages.");
     else
-        pkg_info_line("Audit found " + std::to_string(findings) +
-                      " matching advisory(s).");
+        pkg_info_line(
+            "Audit found " + std::to_string(findings) +
+            " matching advisory(s).");
     return denied ? 1 : 0;
 }
 
-static int write_sbom(const std::filesystem::path& rootManifest,
-                      const std::vector<PackageManifest>& manifests,
-                      const std::filesystem::path& outputPath)
+static int write_sbom(
+    const std::filesystem::path& rootManifest,
+    const std::vector<PackageManifest>& manifests,
+    const std::filesystem::path& outputPath)
 {
     const auto components = ecosystem_components(rootManifest, manifests);
     std::ostringstream canonical;
@@ -10406,10 +11212,9 @@ static int write_sbom(const std::filesystem::path& rootManifest,
     json << "{\n"
          << "  \"bomFormat\": \"CycloneDX\",\n"
          << "  \"specVersion\": \"1.5\",\n"
-         << "  \"serialNumber\": \"urn:uuid:"
-         << digest.substr(0, 8) << '-' << digest.substr(8, 4) << '-'
-         << digest.substr(12, 4) << '-' << digest.substr(16, 4) << '-'
-         << digest.substr(20, 12) << "\",\n"
+         << "  \"serialNumber\": \"urn:uuid:" << digest.substr(0, 8) << '-'
+         << digest.substr(8, 4) << '-' << digest.substr(12, 4) << '-'
+         << digest.substr(16, 4) << '-' << digest.substr(20, 12) << "\",\n"
          << "  \"version\": 1,\n"
          << "  \"metadata\": { \"tools\": [{ \"vendor\": \"MLang\", "
             "\"name\": \"mlang pkg\", \"version\": \""
@@ -10420,10 +11225,10 @@ static int write_sbom(const std::filesystem::path& rootManifest,
     {
         if(index++ != 0)
             json << ",\n";
-        json << "    { \"type\": \"library\", \"name\": \""
-             << json_escape(name) << "\", \"version\": \""
-             << json_escape(version) << "\", \"purl\": \"pkg:mlang/"
-             << json_escape(name) << '@' << json_escape(version) << "\" }";
+        json << "    { \"type\": \"library\", \"name\": \"" << json_escape(name)
+             << "\", \"version\": \"" << json_escape(version)
+             << "\", \"purl\": \"pkg:mlang/" << json_escape(name) << '@'
+             << json_escape(version) << "\" }";
     }
     json << "\n  ]\n}\n";
     if(outputPath.empty() || outputPath == "-")
@@ -10593,11 +11398,11 @@ int PackageManager::run(int argc, char** argv)
         return value == "--help" || value == "-h" || value == "help" ||
                value == "--tests" || value == "init" || value == "add" ||
                value == "lock" || value == "verify" || value == "vendor" ||
-               value == "package" || value == "publish" ||
-               value == "install" || value == "audit" || value == "sbom" ||
-               value == "sign" || value == "verify-signature" ||
-               value == "tree" || value == "why" || value == "fetch" ||
-               value == "build" || value == "run" || value == "clean";
+               value == "package" || value == "publish" || value == "install" ||
+               value == "audit" || value == "sbom" || value == "sign" ||
+               value == "verify-signature" || value == "tree" ||
+               value == "why" || value == "fetch" || value == "build" ||
+               value == "run" || value == "clean";
     };
 
     if(!is_pkg_subcommand(sub))
@@ -10645,10 +11450,15 @@ int PackageManager::run(int argc, char** argv)
                 {
                     BuildConfig buildConfig;
                     if(!prepare_package_build_config(
-                           pkg, compilerProgram, commonOverrides, buildConfig))
+                           pkg,
+                           compilerProgram,
+                           commonOverrides,
+                           buildConfig))
                         return 1;
-                    if(print_task_overview_for_manifest(pkg, buildConfig,
-                                                        colorTasks) != 0)
+                    if(print_task_overview_for_manifest(
+                           pkg,
+                           buildConfig,
+                           colorTasks) != 0)
                     {
                         return 1;
                     }
@@ -10735,12 +11545,17 @@ int PackageManager::run(int argc, char** argv)
             {
                 BuildConfig buildConfig;
                 if(!prepare_package_build_config(
-                       pkg, compilerProgram, commonOverrides, buildConfig))
+                       pkg,
+                       compilerProgram,
+                       commonOverrides,
+                       buildConfig))
                     return 1;
                 const auto tasks = parse_task_specs(pkg.content);
                 const std::string hostName = current_host_name();
                 const std::vector<std::string> testRoots = task_roots_for_phase(
-                    tasks, hostName, "test",
+                    tasks,
+                    hostName,
+                    "test",
                     std::vector<std::string>{"tests", "test"});
                 if(testRoots.empty())
                     continue;
@@ -10752,7 +11567,10 @@ int PackageManager::run(int argc, char** argv)
                     for(const auto& taskName : testRoots)
                     {
                         const int rc = print_task_plan_for_manifest(
-                            pkg, taskName, buildConfig, colorTasks);
+                            pkg,
+                            taskName,
+                            buildConfig,
+                            colorTasks);
                         if(rc != 0)
                             return 1;
                     }
@@ -10770,7 +11588,9 @@ int PackageManager::run(int argc, char** argv)
                     for(const auto& dep : deps)
                     {
                         totalSteps += count_fetch_dep_steps(
-                            dep, depsDir, /*updateExisting=*/true);
+                            dep,
+                            depsDir,
+                            /*updateExisting=*/true);
                     }
                     totalSteps +=
                         count_reachable_task_steps(tasks, hostName, testRoots);
@@ -10784,8 +11604,15 @@ int PackageManager::run(int argc, char** argv)
                     for(const auto& taskName : testRoots)
                     {
                         rc = run_task_for_manifest_impl(
-                            pkg, tasks, buildConfig, hostName, taskStates,
-                            taskMutex, taskCv, taskName, taskStack);
+                            pkg,
+                            tasks,
+                            buildConfig,
+                            hostName,
+                            taskStates,
+                            taskMutex,
+                            taskCv,
+                            taskName,
+                            taskStack);
                         if(rc != 0)
                             break;
                     }
@@ -10891,8 +11718,8 @@ int PackageManager::run(int argc, char** argv)
             }
             else
             {
-                auto registry = registry_settings(
-                    &pkg, registryLocation, publicKey);
+                auto registry =
+                    registry_settings(&pkg, registryLocation, publicKey);
                 if(!tokenEnv.empty())
                     registry.tokenEnv = tokenEnv;
                 if(publish_package(pkg, registry, signKey, allowExisting) != 0)
@@ -10945,7 +11772,8 @@ int PackageManager::run(int argc, char** argv)
             configPackage = available.front();
         const auto registry = registry_settings(
             configPackage.has_value() ? &*configPackage : nullptr,
-            registryLocation, publicKey);
+            registryLocation,
+            publicKey);
         if(installRoot.empty())
         {
             if(const char* userHome = std::getenv("HOME"))
@@ -10957,8 +11785,13 @@ int PackageManager::run(int argc, char** argv)
             }
         }
         return install_registry_package(
-            requested, registry, commonOverrides, compilerProgram,
-            std::filesystem::absolute(installRoot), force, requireSignature);
+            requested,
+            registry,
+            commonOverrides,
+            compilerProgram,
+            std::filesystem::absolute(installRoot),
+            force,
+            requireSignature);
     }
 
     if(sub == "audit" || sub == "sbom")
@@ -11008,10 +11841,15 @@ int PackageManager::run(int argc, char** argv)
             return 1;
         if(sub == "sbom")
             return write_sbom(manifestPath, *selected, output);
-        const auto registry = registry_settings(
-            &selected->front(), registryLocation, publicKey);
-        return audit_packages(manifestPath, *selected, registry,
-                              commonOverrides, database, denySeverity);
+        const auto registry =
+            registry_settings(&selected->front(), registryLocation, publicKey);
+        return audit_packages(
+            manifestPath,
+            *selected,
+            registry,
+            commonOverrides,
+            database,
+            denySeverity);
     }
 
     if(sub == "init")
@@ -11052,16 +11890,16 @@ int PackageManager::run(int argc, char** argv)
             << "[dependencies]\n\n"
             << "[c-dependencies]\n";
 
-        if(!write_text_file_if_missing(std::filesystem::path("src") /
-                                           "main.mla",
-                                       package_stub_source(name)))
+        if(!write_text_file_if_missing(
+               std::filesystem::path("src") / "main.mla",
+               package_stub_source(name)))
         {
             std::cerr << "Failed to write src/main.mla\n";
             return 1;
         }
-        if(!noReadme &&
-           !write_text_file_if_missing(manifestPath.parent_path() / "README.md",
-                                       package_readme_template(name)))
+        if(!noReadme && !write_text_file_if_missing(
+                            manifestPath.parent_path() / "README.md",
+                            package_readme_template(name)))
         {
             std::cerr << "Failed to write README.md\n";
             return 1;
@@ -11153,8 +11991,9 @@ int PackageManager::run(int argc, char** argv)
         }
 
         std::ifstream in(manifestPath, std::ios::binary);
-        std::string content((std::istreambuf_iterator<char>(in)),
-                            std::istreambuf_iterator<char>());
+        std::string content(
+            (std::istreambuf_iterator<char>(in)),
+            std::istreambuf_iterator<char>());
         if(content.empty())
         {
             std::cerr << "Failed to read " << manifestLabel << "\n";
@@ -11198,12 +12037,20 @@ int PackageManager::run(int argc, char** argv)
             else
             {
                 line = make_dependency_manifest_line(
-                    name, gitUrl, archiveUrl, archiveType, rev, tag,
-                    gitSubmodules, depSubdir, stripComponents);
+                    name,
+                    gitUrl,
+                    archiveUrl,
+                    archiveType,
+                    rev,
+                    tag,
+                    gitSubmodules,
+                    depSubdir,
+                    stripComponents);
                 if(!versionRequirement.empty() && !line.empty() &&
                    line.back() == '}')
-                    line.insert(line.size() - 1,
-                                ", version = \"" + versionRequirement + "\"");
+                    line.insert(
+                        line.size() - 1,
+                        ", version = \"" + versionRequirement + "\"");
             }
         }
 
@@ -11217,14 +12064,22 @@ int PackageManager::run(int argc, char** argv)
             fs::path projectDirAbs = rootDir / projectDir;
             std::string packageName = sanitize_package_name(name) + "_demo";
             std::string error;
-            if(!scaffold_added_package(manifestPath, projectDirAbs, packageName,
-                                       line, name, error))
+            if(!scaffold_added_package(
+                   manifestPath,
+                   projectDirAbs,
+                   packageName,
+                   line,
+                   name,
+                   error))
             {
                 std::cerr << error << "\n";
                 return 1;
             }
-            if(!ensure_package_entry_stub(manifestPath, content,
-                                          "workspace_root", error))
+            if(!ensure_package_entry_stub(
+                   manifestPath,
+                   content,
+                   "workspace_root",
+                   error))
             {
                 std::cerr << error << "\n";
                 return 1;
@@ -11233,11 +12088,14 @@ int PackageManager::run(int argc, char** argv)
             const fs::path memberRoot = projectDir.begin() == projectDir.end()
                                             ? fs::path(".")
                                             : *projectDir.begin();
-            append_unique_quoted_list_entry(content, "workspace", "members",
-                                            memberRoot.generic_string());
+            append_unique_quoted_list_entry(
+                content,
+                "workspace",
+                "members",
+                memberRoot.generic_string());
 
-            std::ofstream rootOut(manifestPath,
-                                  std::ios::binary | std::ios::trunc);
+            std::ofstream
+                rootOut(manifestPath, std::ios::binary | std::ios::trunc);
             if(!rootOut)
             {
                 std::cerr << "Failed to update root " << manifestLabel << "\n";
@@ -11290,14 +12148,17 @@ int PackageManager::run(int argc, char** argv)
         if(!selected.has_value())
             return 1;
         const std::filesystem::path vendorDir = std::filesystem::absolute(
-            subIndex + 1 < argc
-                ? std::filesystem::path(argv[subIndex + 1])
-                : commonOverrides.vendorDir.has_value()
-                      ? std::filesystem::path(*commonOverrides.vendorDir)
-                      : manifestPath.parent_path() / "vendor");
+            subIndex + 1 < argc ? std::filesystem::path(argv[subIndex + 1])
+            : commonOverrides.vendorDir.has_value()
+                ? std::filesystem::path(*commonOverrides.vendorDir)
+                : manifestPath.parent_path() / "vendor");
         DependencyLockContext lockContext;
-        if(!prepare_dependency_lock_context(manifestPath, manifests, false,
-                                            false, lockContext))
+        if(!prepare_dependency_lock_context(
+               manifestPath,
+               manifests,
+               false,
+               false,
+               lockContext))
             return 1;
         lockContext.partialGraph = selected->size() != manifests.size();
         ScopedDependencyLockContext scopedLock(lockContext);
@@ -11307,8 +12168,11 @@ int PackageManager::run(int argc, char** argv)
         for(const auto& pkg : *selected)
         {
             BuildConfig config;
-            if(!prepare_package_build_config(pkg, compilerProgram,
-                                             vendorOverrides, config) ||
+            if(!prepare_package_build_config(
+                   pkg,
+                   compilerProgram,
+                   vendorOverrides,
+                   config) ||
                fetch_for_manifest(pkg, config) != 0)
                 return 1;
         }
@@ -11318,10 +12182,13 @@ int PackageManager::run(int argc, char** argv)
         for(const auto& pkg : *selected)
         {
             BuildConfig config;
-            if(!prepare_package_build_config(pkg, compilerProgram,
-                                             vendorOverrides, config) ||
-               vendor_manifest_dependencies(pkg, config, vendorDir,
-                                            vendored) != 0)
+            if(!prepare_package_build_config(
+                   pkg,
+                   compilerProgram,
+                   vendorOverrides,
+                   config) ||
+               vendor_manifest_dependencies(pkg, config, vendorDir, vendored) !=
+                   0)
                 return 1;
         }
         pkg_info_line("Vendored dependency graph into " + vendorDir.string());
@@ -11332,8 +12199,7 @@ int PackageManager::run(int argc, char** argv)
     {
         if(sub == "tree" && subIndex + 1 != argc)
         {
-            std::cerr << "Usage: " << argv[0]
-                      << " pkg [--config FILE] tree\n";
+            std::cerr << "Usage: " << argv[0] << " pkg [--config FILE] tree\n";
             return 1;
         }
         if(sub == "why" && subIndex + 2 != argc)
@@ -11406,8 +12272,11 @@ int PackageManager::run(int argc, char** argv)
         DependencyLockContext lockContext;
         const bool verifyOnly = sub == "verify";
         if(!prepare_dependency_lock_context(
-               manifestPath, allManifests, verifyOnly,
-               verifyOnly || overrides.offline, lockContext))
+               manifestPath,
+               allManifests,
+               verifyOnly,
+               verifyOnly || overrides.offline,
+               lockContext))
             return 1;
         lockContext.partialGraph = manifests.size() != allManifests.size();
         ScopedDependencyLockContext scopedLock(lockContext);
@@ -11416,9 +12285,11 @@ int PackageManager::run(int argc, char** argv)
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig;
-            if(!prepare_package_build_config(pkg, compilerProgram,
-                                             operationOverrides,
-                                             buildConfig))
+            if(!prepare_package_build_config(
+                   pkg,
+                   compilerProgram,
+                   operationOverrides,
+                   buildConfig))
                 return 1;
             if(verifyOnly)
             {
@@ -11432,8 +12303,9 @@ int PackageManager::run(int argc, char** argv)
         }
         if(!finish_dependency_lock_context(lockContext))
             return 1;
-        pkg_info_line(verifyOnly ? "mlang.lock and fetched dependencies verified."
-                                 : "mlang.lock is up to date.");
+        pkg_info_line(
+            verifyOnly ? "mlang.lock and fetched dependencies verified."
+                       : "mlang.lock is up to date.");
         return 0;
     }
 
@@ -11499,8 +12371,9 @@ int PackageManager::run(int argc, char** argv)
             return 1;
         }
         std::ifstream in(manifestPath, std::ios::binary);
-        std::string content((std::istreambuf_iterator<char>(in)),
-                            std::istreambuf_iterator<char>());
+        std::string content(
+            (std::istreambuf_iterator<char>(in)),
+            std::istreambuf_iterator<char>());
         if(content.empty())
         {
             std::cerr << "Failed to read " << manifestLabel << "\n";
@@ -11518,17 +12391,23 @@ int PackageManager::run(int argc, char** argv)
             return 1;
         manifests = std::move(*selected);
         DependencyLockContext lockContext;
-        if(!prepare_dependency_lock_context(manifestPath, allManifests,
-                                            overrides.locked,
-                                            overrides.offline, lockContext))
+        if(!prepare_dependency_lock_context(
+               manifestPath,
+               allManifests,
+               overrides.locked,
+               overrides.offline,
+               lockContext))
             return 1;
         lockContext.partialGraph = manifests.size() != allManifests.size();
         ScopedDependencyLockContext scopedLock(lockContext);
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig;
-            if(!prepare_package_build_config(pkg, compilerProgram, overrides,
-                                             buildConfig))
+            if(!prepare_package_build_config(
+                   pkg,
+                   compilerProgram,
+                   overrides,
+                   buildConfig))
                 return 1;
             if(fetch_for_manifest(pkg, buildConfig) != 0)
                 return 1;
@@ -11631,8 +12510,9 @@ int PackageManager::run(int argc, char** argv)
         }
 
         std::ifstream in(manifestPath, std::ios::binary);
-        std::string content((std::istreambuf_iterator<char>(in)),
-                            std::istreambuf_iterator<char>());
+        std::string content(
+            (std::istreambuf_iterator<char>(in)),
+            std::istreambuf_iterator<char>());
         if(content.empty())
         {
             std::cerr << "Failed to read " << manifestLabel << "\n";
@@ -11651,20 +12531,30 @@ int PackageManager::run(int argc, char** argv)
             return 1;
         manifests = std::move(*selected);
         DependencyLockContext lockContext;
-        if(!prepare_dependency_lock_context(manifestPath, allManifests,
-                                            overrides.locked,
-                                            overrides.offline, lockContext))
+        if(!prepare_dependency_lock_context(
+               manifestPath,
+               allManifests,
+               overrides.locked,
+               overrides.offline,
+               lockContext))
             return 1;
         lockContext.partialGraph = manifests.size() != allManifests.size();
         ScopedDependencyLockContext scopedLock(lockContext);
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig;
-            if(!prepare_package_build_config(pkg, compilerProgram, overrides,
-                                             buildConfig))
+            if(!prepare_package_build_config(
+                   pkg,
+                   compilerProgram,
+                   overrides,
+                   buildConfig))
                 return 1;
-            if(build_for_manifest(pkg, argv[0], optFlag, useNinja,
-                                  buildConfig) != 0)
+            if(build_for_manifest(
+                   pkg,
+                   argv[0],
+                   optFlag,
+                   useNinja,
+                   buildConfig) != 0)
                 return 1;
         }
         if(!finish_dependency_lock_context(lockContext))
@@ -11758,7 +12648,9 @@ int PackageManager::run(int argc, char** argv)
                 std::string key;
                 std::string value;
                 if(!parse_pkg_option_argument(
-                       arg.substr(std::string("--option=").size()), key, value))
+                       arg.substr(std::string("--option=").size()),
+                       key,
+                       value))
                 {
                     std::cerr << "--option requires KEY=VALUE\n";
                     return 1;
@@ -11783,26 +12675,33 @@ int PackageManager::run(int argc, char** argv)
         std::optional<ScopedDependencyLockContext> scopedLock;
         if(!printTasks)
         {
-            if(!prepare_dependency_lock_context(manifestPath, allManifests,
-                                                overrides.locked,
-                                                overrides.offline,
-                                                lockContext))
+            if(!prepare_dependency_lock_context(
+                   manifestPath,
+                   allManifests,
+                   overrides.locked,
+                   overrides.offline,
+                   lockContext))
                 return 1;
-            lockContext.partialGraph =
-                manifests.size() != allManifests.size();
+            lockContext.partialGraph = manifests.size() != allManifests.size();
             scopedLock.emplace(lockContext);
         }
         bool found = false;
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig;
-            if(!prepare_package_build_config(pkg, compilerProgram, overrides,
-                                             buildConfig))
+            if(!prepare_package_build_config(
+                   pkg,
+                   compilerProgram,
+                   overrides,
+                   buildConfig))
                 return 1;
             if(printTasks)
             {
                 const int rc = print_task_plan_for_manifest(
-                    pkg, taskName, buildConfig, colorTasks);
+                    pkg,
+                    taskName,
+                    buildConfig,
+                    colorTasks);
                 if(rc == -1)
                     continue;
                 found = true;
@@ -11823,10 +12722,14 @@ int PackageManager::run(int argc, char** argv)
                 for(const auto& dep : deps)
                 {
                     totalSteps += count_fetch_dep_steps(
-                        dep, depsDir, /*updateExisting=*/true);
+                        dep,
+                        depsDir,
+                        /*updateExisting=*/true);
                 }
                 totalSteps += count_reachable_task_steps(
-                    tasks, hostName, std::vector<std::string>{taskName});
+                    tasks,
+                    hostName,
+                    std::vector<std::string>{taskName});
                 ScopedExecutionProgressState scopedProgress(totalSteps);
                 if(fetch_for_manifest(pkg, buildConfig) != 0)
                     return 1;
@@ -11834,9 +12737,16 @@ int PackageManager::run(int argc, char** argv)
                 std::mutex taskMutex;
                 std::condition_variable taskCv;
                 std::vector<std::string> taskStack;
-                rc = run_task_for_manifest_impl(pkg, tasks, buildConfig,
-                                                hostName, taskStates, taskMutex,
-                                                taskCv, taskName, taskStack);
+                rc = run_task_for_manifest_impl(
+                    pkg,
+                    tasks,
+                    buildConfig,
+                    hostName,
+                    taskStates,
+                    taskMutex,
+                    taskCv,
+                    taskName,
+                    taskStack);
             }
             if(rc == -1)
                 continue;
@@ -11911,7 +12821,8 @@ int PackageManager::run(int argc, char** argv)
             BuildConfig buildConfig;
             apply_cli_overrides(buildConfig, overrides);
             ScopedPackageLogState scopedLogs(make_package_log_state(
-                std::filesystem::current_path(), buildConfig));
+                std::filesystem::current_path(),
+                buildConfig));
             const std::filesystem::path buildDir =
                 package_build_dir(std::filesystem::current_path(), buildConfig);
             if(!std::filesystem::exists(buildDir))
@@ -11923,8 +12834,9 @@ int PackageManager::run(int argc, char** argv)
             std::filesystem::remove_all(buildDir, ec);
             if(ec)
             {
-                pkg_error_line("Failed to clean " + buildDir.string() + ": " +
-                               ec.message());
+                pkg_error_line(
+                    "Failed to clean " + buildDir.string() + ": " +
+                    ec.message());
                 return 1;
             }
             pkg_info_line("Cleaned " + buildDir.string());
@@ -11937,8 +12849,11 @@ int PackageManager::run(int argc, char** argv)
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig;
-            if(!prepare_package_build_config(pkg, compilerProgram, overrides,
-                                             buildConfig))
+            if(!prepare_package_build_config(
+                   pkg,
+                   compilerProgram,
+                   overrides,
+                   buildConfig))
                 return 1;
             if(clean_for_manifest(pkg, buildConfig) != 0)
                 return 1;
@@ -11954,16 +12869,18 @@ int PackageManager::run(int argc, char** argv)
                     make_package_log_state(pkg.packageDir, buildConfig));
                 if(!std::filesystem::exists(depsDir))
                 {
-                    pkg_warn_line("No fetched dependencies to clean in " +
-                                  depsDir.string());
+                    pkg_warn_line(
+                        "No fetched dependencies to clean in " +
+                        depsDir.string());
                     continue;
                 }
                 std::error_code ec;
                 std::filesystem::remove_all(depsDir, ec);
                 if(ec)
                 {
-                    pkg_error_line("Failed to clean " + depsDir.string() +
-                                   ": " + ec.message());
+                    pkg_error_line(
+                        "Failed to clean " + depsDir.string() + ": " +
+                        ec.message());
                     return 1;
                 }
                 pkg_info_line("Cleaned " + depsDir.string());

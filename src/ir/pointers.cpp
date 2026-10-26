@@ -23,20 +23,21 @@ bool CodeGenerator::emitRuntimeNullPointerCheck(llvm::Value* ptrValue, int line)
         llvm::BasicBlock::Create(context, "ptr.not_null", function);
     llvm::BasicBlock* failBB =
         llvm::BasicBlock::Create(context, "ptr.null", function);
-    llvm::Value* nullPtr =
-        llvm::ConstantPointerNull::get(
-            llvm::cast<llvm::PointerType>(ptrValue->getType()));
+    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(
+        llvm::cast<llvm::PointerType>(ptrValue->getType()));
     llvm::Value* isNull =
         builder.CreateICmpEQ(ptrValue, nullPtr, "ptr.is_null");
     builder.CreateCondBr(isNull, failBB, okBB);
 
     builder.SetInsertPoint(failBB);
 #if LLVM_VERSION_MAJOR >= 21
-    llvm::Value* formatStr = builder.CreateGlobalString(
-        "null pointer dereference\n", "ptr.null.msg");
+    llvm::Value* formatStr =
+        builder
+            .CreateGlobalString("null pointer dereference\n", "ptr.null.msg");
 #else
     llvm::Value* formatStr = builder.CreateGlobalStringPtr(
-        "null pointer dereference\n", "ptr.null.msg");
+        "null pointer dereference\n",
+        "ptr.null.msg");
 #endif
 #if LLVM_VERSION_MAJOR >= 15
     llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
@@ -54,8 +55,9 @@ bool CodeGenerator::emitRuntimeNullPointerCheck(llvm::Value* ptrValue, int line)
     return true;
 }
 
-bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
-                                               int line)
+bool CodeGenerator::validatePointerDereference(
+    ExpressionNode* pointerExpr,
+    int line)
 {
     // Unevaluated requirements check pointer types without dereferencing a
     // runtime address or needing a surrounding unsafe block.
@@ -82,8 +84,9 @@ bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
     {
         if(unsafeDepth <= 0)
         {
-            reportError(line,
-                        "dereferencing raw pointer requires an unsafe block");
+            reportError(
+                line,
+                "dereferencing raw pointer requires an unsafe block");
             return false;
         }
         return true;
@@ -92,8 +95,9 @@ bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
     if(globalNamedValues.find(ownerName) == globalNamedValues.end() &&
        isVariableMoved(ownerName))
     {
-        reportError(line, "cannot dereference pointer to moved value: '" +
-                              ownerName + "'");
+        reportError(
+            line,
+            "cannot dereference pointer to moved value: '" + ownerName + "'");
         return false;
     }
 

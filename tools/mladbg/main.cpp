@@ -3,8 +3,8 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
-#include <vector>
 #include <unistd.h>
+#include <vector>
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #endif
@@ -25,7 +25,8 @@ int main(int argc, char** argv)
     std::error_code error;
     executable = fs::read_symlink("/proc/self/exe", error);
 #endif
-    fs::path script = executable.parent_path() / "../" MLANG_DEBUGGER_DATA_DIR "/mladbg.py";
+    fs::path script =
+        executable.parent_path() / "../" MLANG_DEBUGGER_DATA_DIR "/mladbg.py";
     if(!fs::is_regular_file(script))
         script = MLANG_DEBUGGER_SOURCE;
     if(!fs::is_regular_file(script))

@@ -6,7 +6,6 @@ using mlang::ir_detail::common::Helpers;
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Constants.h>
 
-
 llvm::Value* CodeGenerator::generateIntLiteral(IntLiteralNode* node)
 {
     return llvm::ConstantInt::get(context, llvm::APInt(64, node->value, true));
@@ -59,8 +58,9 @@ llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
         auto variantIt = enumIt->second.find(node->variantName);
         if(variantIt == enumIt->second.end())
         {
-            reportError(node->line,
-                        "unknown enum variant: '" + node->variantName + "'");
+            reportError(
+                node->line,
+                "unknown enum variant: '" + node->variantName + "'");
             return nullptr;
         }
 #if LLVM_VERSION_MAJOR >= 21
@@ -73,13 +73,16 @@ llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
     auto variantIt = enumIt->second.find(node->variantName);
     if(variantIt == enumIt->second.end())
     {
-        reportError(node->line,
-                    "unknown enum variant: '" + node->variantName + "'");
+        reportError(
+            node->line,
+            "unknown enum variant: '" + node->variantName + "'");
         return nullptr;
     }
     llvm::Type* enumTy = getLLVMType(baseKind);
-    return llvm::ConstantInt::get(enumTy, variantIt->second,
-                                  !Helpers::enumIsUnsigned(baseKind));
+    return llvm::ConstantInt::get(
+        enumTy,
+        variantIt->second,
+        !Helpers::enumIsUnsigned(baseKind));
 }
 
 llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
@@ -89,8 +92,10 @@ llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
 
     auto constexprIt = constexprValues.find(node->name);
     if(constexprIt != constexprValues.end())
-        return buildLLVMConstantFromConstexprValue(constexprIt->second, nullptr,
-                                                   node->line);
+        return buildLLVMConstantFromConstexprValue(
+            constexprIt->second,
+            nullptr,
+            node->line);
 
     if(!validateVariableAccessible(node->name, node->line, node->col))
         return nullptr;
@@ -122,14 +127,14 @@ llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
         llvm::Type* capturedLLVMType = getLLVMTypeFromNode(capturedType);
         if(!capturedLLVMType)
             return nullptr;
-        return builder.CreateLoad(capturedLLVMType, value,
-                                  node->name + ".capture.value");
+        return builder
+            .CreateLoad(capturedLLVMType, value, node->name + ".capture.value");
     }
 
     if(llvm::AllocaInst* alloca = llvm::dyn_cast<llvm::AllocaInst>(value))
     {
-        return builder.CreateLoad(alloca->getAllocatedType(), alloca,
-                                  node->name);
+        return builder
+            .CreateLoad(alloca->getAllocatedType(), alloca, node->name);
     }
     if(llvm::GlobalVariable* global =
            llvm::dyn_cast<llvm::GlobalVariable>(value))

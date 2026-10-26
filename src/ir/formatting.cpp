@@ -4,9 +4,11 @@
 #include <cctype>
 
 std::string CodeGenerator::convertFormatString(
-    const std::string& mlaFormat, const std::vector<ExpressionNode*>& args,
+    const std::string& mlaFormat,
+    const std::vector<ExpressionNode*>& args,
     const std::vector<std::pair<std::string, ExpressionNode*>>& namedArgs,
-    std::vector<llvm::Value*>& argValues, int line)
+    std::vector<llvm::Value*>& argValues,
+    int line)
 {
     std::string cFormat;
     size_t argIndex = 0;
@@ -115,8 +117,9 @@ std::string CodeGenerator::convertFormatString(
                         widthSpec = trim(widthSpec.substr(1));
                         if(widthSpec.empty())
                         {
-                            reportError(line,
-                                        "alignment specifier requires a width");
+                            reportError(
+                                line,
+                                "alignment specifier requires a width");
                         }
                         else if(widthSpec.back() == '$')
                         {
@@ -128,13 +131,12 @@ std::string CodeGenerator::convertFormatString(
                                     line,
                                     "dynamic alignment width name is empty");
                             }
-                            else if(std::all_of(widthSpec.begin(),
-                                                widthSpec.end(),
-                                                [](unsigned char ch)
-                                                {
-                                                    return std::isalnum(ch) ||
-                                                           ch == '_';
-                                                }))
+                            else if(
+                                std::all_of(
+                                    widthSpec.begin(),
+                                    widthSpec.end(),
+                                    [](unsigned char ch)
+                                    { return std::isalnum(ch) || ch == '_'; }))
                             {
                                 widthExpr = findNamedArgument(widthSpec);
                                 if(!widthExpr)
@@ -148,24 +150,28 @@ std::string CodeGenerator::convertFormatString(
                                         spec + "}");
                             }
                         }
-                        else if(std::all_of(widthSpec.begin(), widthSpec.end(),
-                                            [](unsigned char ch)
-                                            { return std::isdigit(ch); }))
+                        else if(
+                            std::all_of(
+                                widthSpec.begin(),
+                                widthSpec.end(),
+                                [](unsigned char ch)
+                                { return std::isdigit(ch); }))
                         {
                             widthExpr =
                                 new IntLiteralNode(std::stoll(widthSpec));
                         }
                         else
                         {
-                            reportError(line,
-                                        "unsupported format specifier: {" +
-                                            spec + "}");
+                            reportError(
+                                line,
+                                "unsupported format specifier: {" + spec + "}");
                         }
                     }
                     else
                     {
-                        reportError(line, "unsupported format specifier: {" +
-                                              spec + "}");
+                        reportError(
+                            line,
+                            "unsupported format specifier: {" + spec + "}");
                     }
                 }
             }
@@ -210,8 +216,15 @@ std::string CodeGenerator::convertFormatString(
                 }
                 else
                 {
-                    appendFormatValue(argExpr, argVal, debug, pretty, json,
-                                      cFormat, argValues, line);
+                    appendFormatValue(
+                        argExpr,
+                        argVal,
+                        debug,
+                        pretty,
+                        json,
+                        cFormat,
+                        argValues,
+                        line);
                 }
             }
 
@@ -226,8 +239,10 @@ std::string CodeGenerator::convertFormatString(
 }
 
 std::string CodeGenerator::convertFormatString(
-    const std::string& mlaFormat, const std::vector<ExpressionNode*>& args,
-    std::vector<llvm::Value*>& argValues, int line)
+    const std::string& mlaFormat,
+    const std::vector<ExpressionNode*>& args,
+    std::vector<llvm::Value*>& argValues,
+    int line)
 {
     static const std::vector<std::pair<std::string, ExpressionNode*>>
         kNoNamedArgs;

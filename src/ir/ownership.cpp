@@ -9,8 +9,8 @@ bool CodeGenerator::isCopyType(TypeNode* typeNode)
     return classifyOwnership(typeNode) == OwnershipClass::Copy;
 }
 
-CodeGenerator::OwnershipClass
-CodeGenerator::classifyOwnership(TypeNode* typeNode)
+CodeGenerator::OwnershipClass CodeGenerator::classifyOwnership(
+    TypeNode* typeNode)
 {
     std::set<std::string> visitingStructs;
     std::function<OwnershipClass(TypeNode*)> classify =
@@ -34,15 +34,17 @@ CodeGenerator::classifyOwnership(TypeNode* typeNode)
         if(dynamic_cast<PointerTypeNode*>(t))
             return OwnershipClass::Copy;
 
-        auto structHasCleanup = [&](const std::string& structName) {
-            static const std::vector<std::string> cleanupNames = {
-                "__drop", "drop", "free", "destroy"};
+        auto structHasCleanup = [&](const std::string& structName)
+        {
+            static const std::vector<std::string> cleanupNames =
+                {"__drop", "drop", "free", "destroy"};
             auto methods = structMethods.find(structName);
             if(methods != structMethods.end())
                 for(const auto& cleanupName : cleanupNames)
                 {
                     auto method = methods->second.find(cleanupName);
-                    if(method == methods->second.end() || !method->second.second)
+                    if(method == methods->second.end() ||
+                       !method->second.second)
                         continue;
                     StructMethodNode* node = method->second.second;
                     if(node->isStatic)
@@ -118,7 +120,8 @@ CodeGenerator::classifyOwnership(TypeNode* typeNode)
         if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(t))
         {
             std::string mangledName = getOrCreateMonomorphizedStruct(
-                genStructRef->structName, genStructRef->typeArgs);
+                genStructRef->structName,
+                genStructRef->typeArgs);
             return classifyStructByName(mangledName);
         }
 
@@ -235,8 +238,10 @@ bool CodeGenerator::isVariableCurrentlyVisible(const std::string& name) const
     return depthIt->second <= currentScopeDepth();
 }
 
-bool CodeGenerator::validateVariableAccessible(const std::string& name,
-                                               int line, int col)
+bool CodeGenerator::validateVariableAccessible(
+    const std::string& name,
+    int line,
+    int col)
 {
     if(globalNamedValues.find(name) == globalNamedValues.end() &&
        isVariableMoved(name))
@@ -314,8 +319,10 @@ void CodeGenerator::clearPointerBorrow(const std::string& pointerVar)
            activeMutBorrower.find(borrow.second) != activeMutBorrower.end())
             continue;
         auto candidate = std::find_if(
-            activeMutBorrower.begin(), activeMutBorrower.end(),
-            [&](const auto& active) {
+            activeMutBorrower.begin(),
+            activeMutBorrower.end(),
+            [&](const auto& active)
+            {
                 auto owner = pointerBorrowTarget.find(active.second);
                 return owner != pointerBorrowTarget.end() &&
                        owner->second == borrow.second;
@@ -338,10 +345,10 @@ void CodeGenerator::clearPointerBorrow(const std::string& pointerVar)
        pointerBorrowTarget.find(owner) != pointerBorrowTarget.end())
     {
         const bool stillBorrowed = std::any_of(
-            pointerBorrowTarget.begin(), pointerBorrowTarget.end(),
-            [&](const auto& borrow) {
-                return borrow.first != owner && borrow.second == owner;
-            });
+            pointerBorrowTarget.begin(),
+            pointerBorrowTarget.end(),
+            [&](const auto& borrow)
+            { return borrow.first != owner && borrow.second == owner; });
         if(!stillBorrowed)
             clearPointerBorrow(owner);
     }
@@ -393,7 +400,8 @@ void CodeGenerator::recordVariableScopeDepth(const std::string& varName)
         entry.previousWasConstant = constantVariables.count(varName) != 0;
         entry.previousWasImmutableReference =
             immutableReferenceVariables.count(varName) != 0;
-        auto capture = [&](auto& mapping, auto& previous) {
+        auto capture = [&](auto& mapping, auto& previous)
+        {
             auto value = mapping.find(varName);
             if(value != mapping.end())
             {
@@ -410,17 +418,20 @@ void CodeGenerator::recordVariableScopeDepth(const std::string& varName)
         capture(pointerKnownNull, entry.previousPointerKnownNull);
         capture(tupleElementTypes, entry.previousTupleElementTypes);
         capture(enumVariableTypes, entry.previousEnumVariableType);
-        capture(traitObjectVariableTypes,
-                entry.previousTraitObjectVariableType);
+        capture(
+            traitObjectVariableTypes,
+            entry.previousTraitObjectVariableType);
         capture(functionTypeVariables, entry.previousFunctionTypeVariable);
         capture(closureVariables, entry.previousClosureVariable);
-        capture(runtimeClosureVariables,
-                entry.previousRuntimeClosureVariable);
-        capture(runtimeClosureReturnTypes,
-                entry.previousRuntimeClosureReturnType);
-        capture(runtimeClosureBorrowOwners,
-                entry.previousRuntimeClosureBorrowOwners);
-        auto belongsToVariable = [&](const std::string& place) {
+        capture(runtimeClosureVariables, entry.previousRuntimeClosureVariable);
+        capture(
+            runtimeClosureReturnTypes,
+            entry.previousRuntimeClosureReturnType);
+        capture(
+            runtimeClosureBorrowOwners,
+            entry.previousRuntimeClosureBorrowOwners);
+        auto belongsToVariable = [&](const std::string& place)
+        {
             return place == varName ||
                    (place.size() > varName.size() &&
                     place.compare(0, varName.size(), varName) == 0 &&
@@ -455,8 +466,7 @@ void CodeGenerator::recordVariableScopeDepth(const std::string& varName)
         if(moved == varName ||
            (moved.size() > varName.size() &&
             moved.compare(0, varName.size(), varName) == 0 &&
-            (moved[varName.size()] == '.' ||
-             moved[varName.size()] == '[')))
+            (moved[varName.size()] == '.' || moved[varName.size()] == '[')))
             entry.previousMovedValues.insert(moved);
     }
     auto aggregate = aggregateBorrowOrigins.find(varName);
@@ -538,8 +548,7 @@ void CodeGenerator::recordScopedPointerVariable(const std::string& pointerVar)
             if(borrower.second == pointerVar)
                 borrower.second = entry.shadowAlias;
         for(auto& parent : pointerBorrowParent)
-            if(parent.first != entry.shadowAlias &&
-               parent.second == pointerVar)
+            if(parent.first != entry.shadowAlias && parent.second == pointerVar)
                 parent.second = entry.shadowAlias;
 
         pointerBorrowTarget.erase(pointerVar);

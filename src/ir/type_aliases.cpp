@@ -9,7 +9,6 @@ using mlang::ir_detail::common::Helpers;
 #include <string>
 #include <vector>
 
-
 std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
 {
     if(!typeNode)
@@ -30,8 +29,9 @@ std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
 
     if(auto* multiarrayType = dynamic_cast<MultiArrayTypeNode*>(typeNode))
     {
-        return std::string(multiarrayType->elementsMutable ? "mutmultiarray_"
-                                                           : "multiarray_") +
+        return std::string(
+                   multiarrayType->elementsMutable ? "mutmultiarray_"
+                                                   : "multiarray_") +
                typeMangle(multiarrayType->elementType) + "_" +
                std::to_string(multiarrayType->capacity);
     }
@@ -149,8 +149,9 @@ TypeNode* CodeGenerator::cloneTypeNode(TypeNode* typeNode)
 
     if(auto* refType = dynamic_cast<ReferenceTypeNode*>(typeNode))
     {
-        return new ReferenceTypeNode(cloneTypeNode(refType->elementType),
-                                     refType->isMutable);
+        return new ReferenceTypeNode(
+            cloneTypeNode(refType->elementType),
+            refType->isMutable);
     }
 
     if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(typeNode))
@@ -160,13 +161,15 @@ TypeNode* CodeGenerator::cloneTypeNode(TypeNode* typeNode)
     {
         return new MultiArrayTypeNode(
             cloneTypeNode(multiarrayType->elementType),
-            multiarrayType->capacity, multiarrayType->elementsMutable);
+            multiarrayType->capacity,
+            multiarrayType->elementsMutable);
     }
 
     if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(typeNode))
     {
-        return new ArrayTypeNode(cloneTypeNode(arrayType->elementType),
-                                 arrayType->capacity);
+        return new ArrayTypeNode(
+            cloneTypeNode(arrayType->elementType),
+            arrayType->capacity);
     }
 
     if(auto* listType = dynamic_cast<GenericListTypeNode*>(typeNode))
@@ -174,8 +177,9 @@ TypeNode* CodeGenerator::cloneTypeNode(TypeNode* typeNode)
 
     if(auto* mapType = dynamic_cast<MapTypeNode*>(typeNode))
     {
-        return new MapTypeNode(cloneTypeNode(mapType->keyType),
-                               cloneTypeNode(mapType->valueType));
+        return new MapTypeNode(
+            cloneTypeNode(mapType->keyType),
+            cloneTypeNode(mapType->valueType));
     }
 
     if(auto* tupleType = dynamic_cast<TupleTypeNode*>(typeNode))
@@ -195,8 +199,9 @@ TypeNode* CodeGenerator::cloneTypeNode(TypeNode* typeNode)
         if(functionType->parameterTypes)
             for(auto* parameter : functionType->parameterTypes->types)
                 params->addType(cloneTypeNode(parameter));
-        return new FunctionTypeNode(params,
-                                    cloneTypeNode(functionType->returnType));
+        return new FunctionTypeNode(
+            params,
+            cloneTypeNode(functionType->returnType));
     }
 
     if(auto* structType = dynamic_cast<StructTypeRefNode*>(typeNode))
@@ -214,7 +219,8 @@ TypeNode* CodeGenerator::cloneTypeNode(TypeNode* typeNode)
 }
 
 TypeNode* CodeGenerator::resolveTypeAliasNode(
-    TypeNode* typeNode, const std::set<std::string>& scopeTypeParams,
+    TypeNode* typeNode,
+    const std::set<std::string>& scopeTypeParams,
     std::vector<std::string>& aliasStack)
 {
     if(!typeNode)
@@ -248,7 +254,9 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
     if(auto* listType = dynamic_cast<GenericListTypeNode*>(typeNode))
     {
         listType->elementType = resolveTypeAliasNode(
-            listType->elementType, scopeTypeParams, aliasStack);
+            listType->elementType,
+            scopeTypeParams,
+            aliasStack);
         return listType;
     }
 
@@ -256,8 +264,10 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
     {
         mapType->keyType =
             resolveTypeAliasNode(mapType->keyType, scopeTypeParams, aliasStack);
-        mapType->valueType = resolveTypeAliasNode(mapType->valueType,
-                                                  scopeTypeParams, aliasStack);
+        mapType->valueType = resolveTypeAliasNode(
+            mapType->valueType,
+            scopeTypeParams,
+            aliasStack);
         return mapType;
     }
 
@@ -267,9 +277,10 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
         {
             for(size_t i = 0; i < tupleType->elementTypes->types.size(); ++i)
             {
-                tupleType->elementTypes->types[i] =
-                    resolveTypeAliasNode(tupleType->elementTypes->types[i],
-                                         scopeTypeParams, aliasStack);
+                tupleType->elementTypes->types[i] = resolveTypeAliasNode(
+                    tupleType->elementTypes->types[i],
+                    scopeTypeParams,
+                    aliasStack);
             }
         }
         return tupleType;
@@ -279,24 +290,32 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
     {
         if(functionType->parameterTypes)
             for(auto*& parameter : functionType->parameterTypes->types)
-                parameter = resolveTypeAliasNode(parameter, scopeTypeParams,
-                                                 aliasStack);
+                parameter = resolveTypeAliasNode(
+                    parameter,
+                    scopeTypeParams,
+                    aliasStack);
         functionType->returnType = resolveTypeAliasNode(
-            functionType->returnType, scopeTypeParams, aliasStack);
+            functionType->returnType,
+            scopeTypeParams,
+            aliasStack);
         return functionType;
     }
 
     if(auto* ptrType = dynamic_cast<PointerTypeNode*>(typeNode))
     {
         ptrType->elementType = resolveTypeAliasNode(
-            ptrType->elementType, scopeTypeParams, aliasStack);
+            ptrType->elementType,
+            scopeTypeParams,
+            aliasStack);
         return ptrType;
     }
 
     if(auto* refType = dynamic_cast<ReferenceTypeNode*>(typeNode))
     {
         refType->elementType = resolveTypeAliasNode(
-            refType->elementType, scopeTypeParams, aliasStack);
+            refType->elementType,
+            scopeTypeParams,
+            aliasStack);
         return refType;
     }
 
@@ -311,16 +330,19 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
 
         if(!it->second.typeParams.empty())
         {
-            reportError(typeNode->line, "generic type alias '" +
-                                            structType->structName +
-                                            "' requires type arguments");
+            reportError(
+                typeNode->line,
+                "generic type alias '" + structType->structName +
+                    "' requires type arguments");
             return typeNode;
         }
 
         if(in_stack(aliasName))
         {
-            reportError(typeNode->line, "cyclic type alias detected for '" +
-                                            structType->structName + "'");
+            reportError(
+                typeNode->line,
+                "cyclic type alias detected for '" + structType->structName +
+                    "'");
             return typeNode;
         }
 
@@ -336,7 +358,9 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
         for(size_t i = 0; i < genStruct->typeArgs.size(); ++i)
         {
             genStruct->typeArgs[i] = resolveTypeAliasNode(
-                genStruct->typeArgs[i], scopeTypeParams, aliasStack);
+                genStruct->typeArgs[i],
+                scopeTypeParams,
+                aliasStack);
         }
 
         if(scopeTypeParams.count(genStruct->structName))
@@ -348,40 +372,51 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
 
         if(it->second.typeParams.empty())
         {
-            reportError(typeNode->line, "type alias '" + genStruct->structName +
-                                            "' does not take type arguments");
+            reportError(
+                typeNode->line,
+                "type alias '" + genStruct->structName +
+                    "' does not take type arguments");
             return typeNode;
         }
 
         if(genStruct->typeArgs.size() != it->second.typeParams.size())
         {
-            reportError(typeNode->line,
-                        "type alias '" + genStruct->structName + "' expects " +
-                            std::to_string(it->second.typeParams.size()) +
-                            " type arguments, got " +
-                            std::to_string(genStruct->typeArgs.size()));
+            reportError(
+                typeNode->line,
+                "type alias '" + genStruct->structName + "' expects " +
+                    std::to_string(it->second.typeParams.size()) +
+                    " type arguments, got " +
+                    std::to_string(genStruct->typeArgs.size()));
             return typeNode;
         }
 
         if(!validateTypeArgumentTraitBounds(
-               it->second.typeParams, it->second.typeParamTraitBounds,
-               genStruct->typeArgs, scopeTypeParams, typeNode->line,
-               "type alias", genStruct->structName))
+               it->second.typeParams,
+               it->second.typeParamTraitBounds,
+               genStruct->typeArgs,
+               scopeTypeParams,
+               typeNode->line,
+               "type alias",
+               genStruct->structName))
         {
             return typeNode;
         }
 
         if(in_stack(aliasName))
         {
-            reportError(typeNode->line, "cyclic type alias detected for '" +
-                                            genStruct->structName + "'");
+            reportError(
+                typeNode->line,
+                "cyclic type alias detected for '" + genStruct->structName +
+                    "'");
             return typeNode;
         }
 
         aliasStack.push_back(aliasName);
         TypeNode* aliasType = cloneTypeNode(it->second.aliasedType);
         TypeNode* expanded = substituteTypeParams(
-            aliasType, it->second.typeParams, genStruct->typeArgs);
+            aliasType,
+            it->second.typeParams,
+            genStruct->typeArgs);
         expanded = resolveTypeAliasNode(expanded, scopeTypeParams, aliasStack);
         aliasStack.pop_back();
         return expanded;
@@ -394,8 +429,10 @@ bool CodeGenerator::validateTypeArgumentTraitBounds(
     const std::vector<std::string>& typeParams,
     const std::map<std::string, std::string>& traitBounds,
     const std::vector<TypeNode*>& typeArgs,
-    const std::set<std::string>& scopeTypeParams, int line,
-    const std::string& ownerKind, const std::string& ownerName,
+    const std::set<std::string>& scopeTypeParams,
+    int line,
+    const std::string& ownerKind,
+    const std::string& ownerName,
     bool reportFailures)
 {
     if(typeParams.size() != typeArgs.size())
@@ -460,7 +497,9 @@ bool CodeGenerator::validateTypeArgumentTraitBounds(
 
         std::vector<std::string> aliasStack;
         TypeNode* resolvedType = resolveTypeAliasNode(
-            cloneTypeNode(typeArg), scopeTypeParams, aliasStack);
+            cloneTypeNode(typeArg),
+            scopeTypeParams,
+            aliasStack);
         if(!resolvedType || containsScopedTypeParam(resolvedType))
             continue;
 
@@ -469,11 +508,13 @@ bool CodeGenerator::validateTypeArgumentTraitBounds(
         {
             concreteTypeName = structRef->structName;
         }
-        else if(auto* genericRef =
-                    dynamic_cast<GenericStructTypeRefNode*>(resolvedType))
+        else if(
+            auto* genericRef =
+                dynamic_cast<GenericStructTypeRefNode*>(resolvedType))
         {
             concreteTypeName = getOrCreateMonomorphizedStruct(
-                genericRef->structName, genericRef->typeArgs);
+                genericRef->structName,
+                genericRef->typeArgs);
         }
 
         // Bound list is stored as a `+`-joined string (e.g. "Foo+Bar") to
@@ -502,8 +543,8 @@ bool CodeGenerator::validateTypeArgumentTraitBounds(
                 scope = ownerName.substr(0, separator);
             if(auto* conceptDefinition = findConcept(requiredTrait, scope))
             {
-                ConceptApplicationNode application(conceptDefinition->name,
-                                                   {resolvedType});
+                ConceptApplicationNode
+                    application(conceptDefinition->name, {resolvedType});
                 ConstexprValue value;
                 std::string error;
                 if(!evalConcept(&application, value, &error, nullptr, 0) ||
@@ -539,13 +580,14 @@ bool CodeGenerator::validateTypeArgumentTraitBounds(
                     const int errorLine =
                         line > 0 ? line
                                  : (typeArg->line > 0 ? typeArg->line : 0);
-                    reportError(errorLine,
-                                "type argument '" +
-                                    Helpers::type_name_for_error(typeArg) + "' for " +
-                                    ownerKind + " '" + ownerName +
-                                    "' must implement trait '" + requiredTrait +
-                                    "' required by type parameter '" +
-                                    typeParams[i] + "'");
+                    reportError(
+                        errorLine,
+                        "type argument '" +
+                            Helpers::type_name_for_error(typeArg) + "' for " +
+                            ownerKind + " '" + ownerName +
+                            "' must implement trait '" + requiredTrait +
+                            "' required by type parameter '" + typeParams[i] +
+                            "'");
                 }
                 return false;
             }
@@ -561,9 +603,25 @@ void CodeGenerator::buildTypeAliasTable(ProgramNode* program)
     if(!program || program->typeAliases.empty())
         return;
 
-    std::set<std::string> knownTypeNames = {
-        "void", "bool", "str8", "str16", "list", "map", "tuple", "ptr", "i8",
-        "i16",  "i32",  "i64",  "u8",    "u16",  "u32", "u64",   "f32", "f64"};
+    std::set<std::string> knownTypeNames =
+        {"void",
+         "bool",
+         "str8",
+         "str16",
+         "list",
+         "map",
+         "tuple",
+         "ptr",
+         "i8",
+         "i16",
+         "i32",
+         "i64",
+         "u8",
+         "u16",
+         "u32",
+         "u64",
+         "f32",
+         "f64"};
     if(program->structList)
     {
         for(auto* st : program->structList->structs)
@@ -672,10 +730,11 @@ void CodeGenerator::buildTypeAliasTable(ProgramNode* program)
                                      ? ("line " + std::to_string(prev.line) +
                                         ", column " + std::to_string(prev.col))
                                      : ("line " + std::to_string(prev.line));
-            reportError(aliasDef->line, aliasDef->col,
-                        "type alias '" + aliasDef->name +
-                            "' overlaps with previous alias declaration at " +
-                            prevAt);
+            reportError(
+                aliasDef->line,
+                aliasDef->col,
+                "type alias '" + aliasDef->name +
+                    "' overlaps with previous alias declaration at " + prevAt);
             continue;
         }
 
@@ -723,7 +782,8 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
                                        ", column " + std::to_string(prevCol))
                                     : ("line " + std::to_string(prevLine));
                     reportError(
-                        aliasStmt->line, aliasStmt->col,
+                        aliasStmt->line,
+                        aliasStmt->col,
                         "type alias '" + aliasStmt->name +
                             "' overlaps with previous alias declaration in "
                             "the same scope at " +
@@ -846,9 +906,12 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
         return true;
     };
 
-    std::function<void(TypeNode*, std::vector<std::string>&,
-                       const std::set<std::string>&)>
-        collect_alias_params = [&](TypeNode* t, std::vector<std::string>& out,
+    std::function<void(
+        TypeNode*,
+        std::vector<std::string>&,
+        const std::set<std::string>&)>
+        collect_alias_params = [&](TypeNode* t,
+                                   std::vector<std::string>& out,
                                    const std::set<std::string>& scope)
     {
         if(!t)
@@ -1196,15 +1259,19 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
                 info.col = aliasStmt->col;
                 info.typeParams = aliasStmt->typeParams;
                 if(info.typeParams.empty())
-                    collect_alias_params(aliasStmt->aliasedType,
-                                         info.typeParams, scope);
+                    collect_alias_params(
+                        aliasStmt->aliasedType,
+                        info.typeParams,
+                        scope);
 
                 std::set<std::string> aliasScope = scope;
                 for(const auto& p : info.typeParams)
                     aliasScope.insert(p);
                 std::vector<std::string> aliasStack;
-                info.aliasedType = resolveTypeAliasNode(info.aliasedType,
-                                                        aliasScope, aliasStack);
+                info.aliasedType = resolveTypeAliasNode(
+                    info.aliasedType,
+                    aliasScope,
+                    aliasStack);
 
                 AliasRestore restore;
                 restore.name = aliasStmt->name;
@@ -1271,8 +1338,8 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
         {
             if(!fn)
                 continue;
-            std::set<std::string> scope(fn->typeParams.begin(),
-                                        fn->typeParams.end());
+            std::set<std::string>
+                scope(fn->typeParams.begin(), fn->typeParams.end());
             resolve_type(fn->returnType, scope);
             if(fn->parameters)
             {

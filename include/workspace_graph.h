@@ -33,12 +33,13 @@ public:
     bool hasDocument(std::string_view uri) const;
     size_t documentCount() const;
 
-    std::vector<std::string> findProviderUris(std::string_view moduleName) const;
-    std::vector<std::string>
-    directDependencyModules(std::string_view uri) const;
+    std::vector<std::string> findProviderUris(
+        std::string_view moduleName) const;
+    std::vector<std::string> directDependencyModules(
+        std::string_view uri) const;
     std::vector<std::string> directDependentUris(std::string_view uri) const;
-    std::vector<std::string>
-    transitiveDependencyModules(std::string_view uri) const;
+    std::vector<std::string> transitiveDependencyModules(
+        std::string_view uri) const;
 
 private:
     void removeDocumentIndexes(const WorkspaceDocumentNode& doc);

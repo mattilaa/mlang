@@ -1,7 +1,7 @@
 #include "ast.h"
 #include "diagnostics.h"
-#include "source_filter.h"
 #include "install_paths.h"
+#include "source_filter.h"
 
 #include <algorithm>
 #include <array>
@@ -103,14 +103,15 @@ struct DocumentSemantic
     bool ast_valid = false;
 };
 
-static std::vector<SyntaxDiagnostic>
-computeSyntaxDiagnostics(std::string_view text);
+static std::vector<SyntaxDiagnostic> computeSyntaxDiagnostics(
+    std::string_view text);
 
 static std::string stableSymbolId(const SemanticSymbol& sym)
 {
     std::string key;
-    key.reserve(sym.uri.size() + sym.name.size() + sym.signature.size() +
-                sym.type_info.size() + 64);
+    key.reserve(
+        sym.uri.size() + sym.name.size() + sym.signature.size() +
+        sym.type_info.size() + 64);
     key += sym.uri;
     key += "|";
     key += std::to_string(sym.kind);
@@ -135,14 +136,20 @@ static std::string stableSymbolId(const SemanticSymbol& sym)
     }
 
     char hex[17];
-    std::snprintf(hex, sizeof(hex), "%016llx",
-                  static_cast<unsigned long long>(hash));
+    std::snprintf(
+        hex,
+        sizeof(hex),
+        "%016llx",
+        static_cast<unsigned long long>(hash));
     return "sym_" + std::string(hex);
 }
 
-static std::string stableFallbackId(std::string_view uri, std::string_view name,
-                                    int line, int column,
-                                    std::string_view category)
+static std::string stableFallbackId(
+    std::string_view uri,
+    std::string_view name,
+    int line,
+    int column,
+    std::string_view category)
 {
     std::string key;
     key.reserve(uri.size() + name.size() + category.size() + 48);
@@ -165,8 +172,11 @@ static std::string stableFallbackId(std::string_view uri, std::string_view name,
     }
 
     char hex[17];
-    std::snprintf(hex, sizeof(hex), "%016llx",
-                  static_cast<unsigned long long>(hash));
+    std::snprintf(
+        hex,
+        sizeof(hex),
+        "%016llx",
+        static_cast<unsigned long long>(hash));
     return "sym_fb_" + std::string(hex);
 }
 
@@ -182,8 +192,10 @@ static bool isIdentContinue(char c)
     return std::isalnum(uc) != 0 || c == '_';
 }
 
-static std::optional<size_t> offsetFromLineColumn(std::string_view text,
-                                                  int line, int column)
+static std::optional<size_t> offsetFromLineColumn(
+    std::string_view text,
+    int line,
+    int column)
 {
     if(line <= 0 || column <= 0)
     {
@@ -223,8 +235,9 @@ struct TokenSpan
     size_t end = 0;
 };
 
-static std::optional<TokenSpan> tokenSpanAtOffset(std::string_view text,
-                                                  size_t offset)
+static std::optional<TokenSpan> tokenSpanAtOffset(
+    std::string_view text,
+    size_t offset)
 {
     if(text.empty())
     {
@@ -381,8 +394,8 @@ static std::string docCommentAboveLine(std::string_view text, int line_no)
         const std::string trimmed = trimTextWs(lines[static_cast<size_t>(idx)]);
         if(startsWith(trimmed, "///") || startsWith(trimmed, "//!"))
         {
-            std::string body =
-                stripDoxygenCommand(std::string(std::string_view(trimmed).substr(3)));
+            std::string body = stripDoxygenCommand(
+                std::string(std::string_view(trimmed).substr(3)));
             if(found)
             {
                 out = body + "\n" + out;
@@ -404,8 +417,8 @@ static std::string docCommentAboveLine(std::string_view text, int line_no)
             {
                 const std::string block_line =
                     trimTextWs(lines[static_cast<size_t>(bidx)]);
-                const bool block_start =
-                    startsWith(block_line, "/**") || startsWith(block_line, "/*!");
+                const bool block_start = startsWith(block_line, "/**") ||
+                                         startsWith(block_line, "/*!");
                 std::string body = cleanBlockDocLine(block_line);
                 if(!body.empty())
                 {
@@ -444,10 +457,11 @@ static std::string docCommentAboveLine(std::string_view text, int line_no)
     return out;
 }
 
-static std::string propertyAccessorDocumentation(std::string_view text,
-                                                 const StructMemberNode* member,
-                                                 bool is_setter,
-                                                 int field_line = 0)
+static std::string propertyAccessorDocumentation(
+    std::string_view text,
+    const StructMemberNode* member,
+    bool is_setter,
+    int field_line = 0)
 {
     if(!member && field_line <= 0)
     {
@@ -502,8 +516,9 @@ static std::uint64_t alignUpText(std::uint64_t value, std::uint64_t align)
     return rem == 0 ? value : (value + (align - rem));
 }
 
-static std::optional<std::string>
-extractStructFieldType(std::string_view line, std::string* out_name = nullptr)
+static std::optional<std::string> extractStructFieldType(
+    std::string_view line,
+    std::string* out_name = nullptr)
 {
     std::string trimmed = trimTextWs(line);
     if(startsWith(trimmed, "@property"))
@@ -540,8 +555,9 @@ extractStructFieldType(std::string_view line, std::string* out_name = nullptr)
     {
         return std::nullopt;
     }
-    const std::string member_name = trimTextWs(std::string_view(trimmed).substr(
-        name_start + 1, colon - name_start - 1));
+    const std::string member_name = trimTextWs(
+        std::string_view(trimmed)
+            .substr(name_start + 1, colon - name_start - 1));
     size_t type_end = trimmed.find(';', colon + 1);
     if(type_end == std::string::npos)
     {
@@ -559,15 +575,15 @@ extractStructFieldType(std::string_view line, std::string* out_name = nullptr)
         std::string_view(trimmed).substr(colon + 1, type_end - colon - 1));
 }
 
-static TextLayoutInfo
-computeTextTypeLayout(std::string_view type_text,
-                      const std::vector<std::string_view>& lines,
-                      std::set<std::string>& visiting_structs);
+static TextLayoutInfo computeTextTypeLayout(
+    std::string_view type_text,
+    const std::vector<std::string_view>& lines,
+    std::set<std::string>& visiting_structs);
 
-static TextLayoutInfo
-computeTextStructLayout(std::string_view struct_name,
-                        const std::vector<std::string_view>& lines,
-                        std::set<std::string>& visiting_structs)
+static TextLayoutInfo computeTextStructLayout(
+    std::string_view struct_name,
+    const std::vector<std::string_view>& lines,
+    std::set<std::string>& visiting_structs)
 {
     const std::string struct_name_s(struct_name);
     if(visiting_structs.find(struct_name_s) != visiting_structs.end())
@@ -619,10 +635,10 @@ computeTextStructLayout(std::string_view struct_name,
     return {};
 }
 
-static TextLayoutInfo
-computeTextTypeLayout(std::string_view type_text,
-                      const std::vector<std::string_view>& lines,
-                      std::set<std::string>& visiting_structs)
+static TextLayoutInfo computeTextTypeLayout(
+    std::string_view type_text,
+    const std::vector<std::string_view>& lines,
+    std::set<std::string>& visiting_structs)
 {
     const std::string ty = trimTextWs(type_text);
     if(ty.empty())
@@ -661,8 +677,9 @@ computeTextTypeLayout(std::string_view type_text,
     return computeTextStructLayout(ty, lines, visiting_structs);
 }
 
-static std::string structLayoutSummaryFromText(std::string_view text,
-                                               std::string_view struct_name)
+static std::string structLayoutSummaryFromText(
+    std::string_view text,
+    std::string_view struct_name)
 {
     const std::vector<std::string_view> lines = splitLines(text);
     std::set<std::string> visiting_structs;
@@ -821,8 +838,8 @@ static std::vector<std::string> splitTomlArray(std::string_view input)
     return out;
 }
 
-static std::vector<std::string>
-parseModulePathsFromToml(const std::filesystem::path& manifest_path)
+static std::vector<std::string> parseModulePathsFromToml(
+    const std::filesystem::path& manifest_path)
 {
     std::ifstream in(manifest_path, std::ios::binary);
     if(!in)
@@ -888,8 +905,8 @@ parseModulePathsFromToml(const std::filesystem::path& manifest_path)
     return out;
 }
 
-static std::optional<std::filesystem::path>
-findManifestPath(std::filesystem::path start_dir)
+static std::optional<std::filesystem::path> findManifestPath(
+    std::filesystem::path start_dir)
 {
     std::error_code ec;
     start_dir = std::filesystem::absolute(start_dir, ec);
@@ -988,8 +1005,8 @@ static std::vector<std::string> defaultStdlibPaths()
 
 static void appendStdlibPaths(std::vector<std::string>& module_paths)
 {
-    std::unordered_set<std::string> seen(module_paths.begin(),
-                                         module_paths.end());
+    std::unordered_set<std::string>
+        seen(module_paths.begin(), module_paths.end());
     for(const auto& p : defaultStdlibPaths())
     {
         if(!p.empty() && seen.insert(p).second)
@@ -1046,9 +1063,9 @@ static std::vector<std::string> moduleSearchPathsForUri(std::string_view uri)
     return out;
 }
 
-static std::optional<std::string>
-resolveModuleFilePath(std::string_view requester_uri,
-                      std::string_view module_name)
+static std::optional<std::string> resolveModuleFilePath(
+    std::string_view requester_uri,
+    std::string_view module_name)
 {
     namespace fs = std::filesystem;
     const std::vector<std::string> roots =
@@ -1101,8 +1118,9 @@ static std::string fileUriFromPath(const std::string& path)
 {
     std::error_code ec;
     std::filesystem::path abs = std::filesystem::absolute(path, ec);
-    const std::string p = (!ec ? abs.lexically_normal().generic_string()
-                               : std::filesystem::path(path).generic_string());
+    const std::string p =
+        (!ec ? abs.lexically_normal().generic_string()
+             : std::filesystem::path(path).generic_string());
     if(!p.empty() && p[0] == '/')
     {
         return "file://" + p;
@@ -1204,8 +1222,9 @@ static std::string functionSignatureFromAst(FunctionDefNode* fn)
     return sig;
 }
 
-static std::string methodSignatureFromAst(const std::string& owner,
-                                          StructMethodNode* method)
+static std::string methodSignatureFromAst(
+    const std::string& owner,
+    StructMethodNode* method)
 {
     if(!method)
     {
@@ -1281,11 +1300,15 @@ static StructDefNode* findStructDef(ProgramNode* program, std::string_view name)
     return nullptr;
 }
 
-static LayoutInfo computeTypeLayout(TypeNode* type, ProgramNode* program,
-                                    std::set<std::string>& visiting);
+static LayoutInfo computeTypeLayout(
+    TypeNode* type,
+    ProgramNode* program,
+    std::set<std::string>& visiting);
 
-static LayoutInfo computeStructLayout(StructDefNode* st, ProgramNode* program,
-                                      std::set<std::string>& visiting)
+static LayoutInfo computeStructLayout(
+    StructDefNode* st,
+    ProgramNode* program,
+    std::set<std::string>& visiting)
 {
     if(!st)
     {
@@ -1361,8 +1384,10 @@ static LayoutInfo computeStructLayout(StructDefNode* st, ProgramNode* program,
     return out;
 }
 
-static LayoutInfo computeTypeLayout(TypeNode* type, ProgramNode* program,
-                                    std::set<std::string>& visiting)
+static LayoutInfo computeTypeLayout(
+    TypeNode* type,
+    ProgramNode* program,
+    std::set<std::string>& visiting)
 {
     if(!type)
     {
@@ -1534,8 +1559,9 @@ static std::string structLayoutSummary(StructDefNode* st, ProgramNode* program)
     return out;
 }
 
-static ProgramNode* parseProgramFromText(std::string_view text,
-                                         int* out_error_line = nullptr)
+static ProgramNode* parseProgramFromText(
+    std::string_view text,
+    int* out_error_line = nullptr)
 {
     ASTNode* saved_root = programRoot;
     programRoot = nullptr;
@@ -1631,12 +1657,16 @@ static std::string closeOpenBracesForRecovery(std::string_view text)
     return out;
 }
 
-static void addSemanticSymbol(DocumentSemantic& out,
-                              const std::vector<std::string_view>& lines,
-                              std::string name, int kind, int line_no,
-                              int depth, std::string type_info,
-                              std::string signature,
-                              std::string documentation = {})
+static void addSemanticSymbol(
+    DocumentSemantic& out,
+    const std::vector<std::string_view>& lines,
+    std::string name,
+    int kind,
+    int line_no,
+    int depth,
+    std::string type_info,
+    std::string signature,
+    std::string documentation = {})
 {
     SemanticSymbol s;
     s.name = std::move(name);
@@ -1742,8 +1772,9 @@ static void addSemanticSymbol(DocumentSemantic& out,
 
     if(s.line > 0 && static_cast<size_t>(s.line - 1) < lines.size())
     {
-        s.column = findIdentifierColumn(lines[static_cast<size_t>(s.line - 1)],
-                                        s.name);
+        s.column = findIdentifierColumn(
+            lines[static_cast<size_t>(s.line - 1)],
+            s.name);
     }
     else
     {
@@ -1757,12 +1788,16 @@ static void addSemanticSymbol(DocumentSemantic& out,
     out.symbols.push_back(std::move(s));
 }
 
-static void addSemanticSymbolAtLine(DocumentSemantic& out,
-                                    const std::vector<std::string_view>& lines,
-                                    std::string name, int kind, int line_no,
-                                    int depth, std::string type_info,
-                                    std::string signature,
-                                    std::string documentation = {})
+static void addSemanticSymbolAtLine(
+    DocumentSemantic& out,
+    const std::vector<std::string_view>& lines,
+    std::string name,
+    int kind,
+    int line_no,
+    int depth,
+    std::string type_info,
+    std::string signature,
+    std::string documentation = {})
 {
     SemanticSymbol s;
     s.name = std::move(name);
@@ -1776,8 +1811,9 @@ static void addSemanticSymbolAtLine(DocumentSemantic& out,
 
     if(s.line > 0 && static_cast<size_t>(s.line - 1) < lines.size())
     {
-        s.column = findIdentifierColumn(lines[static_cast<size_t>(s.line - 1)],
-                                        s.name);
+        s.column = findIdentifierColumn(
+            lines[static_cast<size_t>(s.line - 1)],
+            s.name);
     }
     else
     {
@@ -1831,8 +1867,9 @@ static void addSemanticSymbolAtLine(DocumentSemantic& out,
     out.symbols.push_back(std::move(s));
 }
 
-static int findStructDeclLine(const std::vector<std::string_view>& lines,
-                              std::string_view struct_name)
+static int findStructDeclLine(
+    const std::vector<std::string_view>& lines,
+    std::string_view struct_name)
 {
     const std::string needle = "struct " + std::string(struct_name);
     for(size_t i = 0; i < lines.size(); ++i)
@@ -1845,10 +1882,11 @@ static int findStructDeclLine(const std::vector<std::string_view>& lines,
     return 1;
 }
 
-static int findStructMemberDeclLine(const std::vector<std::string_view>& lines,
-                                    const std::vector<int>& line_depths,
-                                    std::string_view struct_name,
-                                    std::string_view member_name)
+static int findStructMemberDeclLine(
+    const std::vector<std::string_view>& lines,
+    const std::vector<int>& line_depths,
+    std::string_view struct_name,
+    std::string_view member_name)
 {
     if(member_name.empty())
     {
@@ -1880,8 +1918,9 @@ static int findStructMemberDeclLine(const std::vector<std::string_view>& lines,
     return struct_line;
 }
 
-static int findEnumDeclLine(const std::vector<std::string_view>& lines,
-                            std::string_view enum_name)
+static int findEnumDeclLine(
+    const std::vector<std::string_view>& lines,
+    std::string_view enum_name)
 {
     const std::string needle = "enum " + std::string(enum_name);
     const std::string pub_needle = "pub enum " + std::string(enum_name);
@@ -1896,12 +1935,16 @@ static int findEnumDeclLine(const std::vector<std::string_view>& lines,
     return 1;
 }
 
-static void collectStatementSymbols(DocumentSemantic& out,
-                                    const std::vector<std::string_view>& lines,
-                                    StatementListNode* list, int depth);
+static void collectStatementSymbols(
+    DocumentSemantic& out,
+    const std::vector<std::string_view>& lines,
+    StatementListNode* list,
+    int depth);
 
-static int inferIfInitDeclLine(const std::vector<std::string_view>& lines,
-                               std::string_view name, int anchor_line)
+static int inferIfInitDeclLine(
+    const std::vector<std::string_view>& lines,
+    std::string_view name,
+    int anchor_line)
 {
     if(name.empty())
     {
@@ -1947,9 +1990,11 @@ static int inferFirstElseIfLine(const std::vector<std::string_view>& lines)
     return 1;
 }
 
-static void collectIfSymbols(DocumentSemantic& out,
-                             const std::vector<std::string_view>& lines,
-                             IfNode* node, int depth)
+static void collectIfSymbols(
+    DocumentSemantic& out,
+    const std::vector<std::string_view>& lines,
+    IfNode* node,
+    int depth)
 {
     if(!node)
     {
@@ -1977,21 +2022,33 @@ static void collectIfSymbols(DocumentSemantic& out,
                 init_line =
                     inferIfInitDeclLine(lines, let_decl->name, anchor_line);
             }
-            addSemanticSymbolAtLine(out, lines, let_decl->name, 2, init_line,
-                                    depth + 1, typeToString(let_decl->type),
-                                    "__if_init");
+            addSemanticSymbolAtLine(
+                out,
+                lines,
+                let_decl->name,
+                2,
+                init_line,
+                depth + 1,
+                typeToString(let_decl->type),
+                "__if_init");
         }
-        else if(auto* var_decl =
-                    dynamic_cast<VarDeclNode*>(node->conditionInit))
+        else if(
+            auto* var_decl = dynamic_cast<VarDeclNode*>(node->conditionInit))
         {
             if(init_line <= 1)
             {
                 init_line =
                     inferIfInitDeclLine(lines, var_decl->name, anchor_line);
             }
-            addSemanticSymbolAtLine(out, lines, var_decl->name, 2, init_line,
-                                    depth + 1, typeToString(var_decl->type),
-                                    "__if_init");
+            addSemanticSymbolAtLine(
+                out,
+                lines,
+                var_decl->name,
+                2,
+                init_line,
+                depth + 1,
+                typeToString(var_decl->type),
+                "__if_init");
         }
         else if(auto* init = dynamic_cast<StructInitNode*>(node->conditionInit))
         {
@@ -2000,8 +2057,15 @@ static void collectIfSymbols(DocumentSemantic& out,
                 init_line =
                     inferIfInitDeclLine(lines, init->varName, anchor_line);
             }
-            addSemanticSymbolAtLine(out, lines, init->varName, 2, init_line,
-                                    depth + 1, init->typeName, "__if_init");
+            addSemanticSymbolAtLine(
+                out,
+                lines,
+                init->varName,
+                2,
+                init_line,
+                depth + 1,
+                init->typeName,
+                "__if_init");
         }
     }
     collectStatementSymbols(out, lines, node->thenBranch, depth + 1);
@@ -2016,9 +2080,11 @@ static void collectIfSymbols(DocumentSemantic& out,
     }
 }
 
-static void collectStatementSymbols(DocumentSemantic& out,
-                                    const std::vector<std::string_view>& lines,
-                                    StatementListNode* list, int depth)
+static void collectStatementSymbols(
+    DocumentSemantic& out,
+    const std::vector<std::string_view>& lines,
+    StatementListNode* list,
+    int depth)
 {
     if(!list)
     {
@@ -2033,33 +2099,67 @@ static void collectStatementSymbols(DocumentSemantic& out,
         const int line_no = stmt->line > 0 ? stmt->line : 1;
         if(auto* let_decl = dynamic_cast<LetDeclNode*>(stmt))
         {
-            addSemanticSymbolAtLine(out, lines, let_decl->name, 2, line_no,
-                                    depth, typeToString(let_decl->type), {});
+            addSemanticSymbolAtLine(
+                out,
+                lines,
+                let_decl->name,
+                2,
+                line_no,
+                depth,
+                typeToString(let_decl->type),
+                {});
             continue;
         }
         if(auto* var_decl = dynamic_cast<VarDeclNode*>(stmt))
         {
-            addSemanticSymbolAtLine(out, lines, var_decl->name, 2, line_no,
-                                    depth, typeToString(var_decl->type), {});
+            addSemanticSymbolAtLine(
+                out,
+                lines,
+                var_decl->name,
+                2,
+                line_no,
+                depth,
+                typeToString(var_decl->type),
+                {});
             continue;
         }
         if(auto* alias_decl = dynamic_cast<TypeAliasNode*>(stmt))
         {
-            addSemanticSymbolAtLine(out, lines, alias_decl->name, 5, line_no,
-                                    depth,
-                                    typeToString(alias_decl->aliasedType), {});
+            addSemanticSymbolAtLine(
+                out,
+                lines,
+                alias_decl->name,
+                5,
+                line_no,
+                depth,
+                typeToString(alias_decl->aliasedType),
+                {});
             continue;
         }
         if(auto* init = dynamic_cast<StructInitNode*>(stmt))
         {
-            addSemanticSymbolAtLine(out, lines, init->varName, 2, line_no,
-                                    depth, init->typeName, {});
+            addSemanticSymbolAtLine(
+                out,
+                lines,
+                init->varName,
+                2,
+                line_no,
+                depth,
+                init->typeName,
+                {});
             continue;
         }
         if(auto* for_node = dynamic_cast<ForNode*>(stmt))
         {
-            addSemanticSymbolAtLine(out, lines, for_node->varName, 2, line_no,
-                                    depth + 1, {}, {});
+            addSemanticSymbolAtLine(
+                out,
+                lines,
+                for_node->varName,
+                2,
+                line_no,
+                depth + 1,
+                {},
+                {});
             collectStatementSymbols(out, lines, for_node->body, depth + 1);
             continue;
         }
@@ -2076,8 +2176,8 @@ static void collectStatementSymbols(DocumentSemantic& out,
     }
 }
 
-static std::optional<DocumentSemantic>
-buildDocumentSemanticFromAst(const DocumentState& doc)
+static std::optional<DocumentSemantic> buildDocumentSemanticFromAst(
+    const DocumentState& doc)
 {
     int parse_error_line = 0;
     ProgramNode* program = parseProgramFromText(doc.text, &parse_error_line);
@@ -2129,9 +2229,16 @@ buildDocumentSemanticFromAst(const DocumentState& doc)
                 continue;
             }
             out.mods.push_back(mod->moduleName);
-            addSemanticSymbol(out, lines, mod->moduleName, 4,
-                              mod->line > 0 ? mod->line : 1, 0, {}, {},
-                              docCommentAboveLine(doc.text, mod->line));
+            addSemanticSymbol(
+                out,
+                lines,
+                mod->moduleName,
+                4,
+                mod->line > 0 ? mod->line : 1,
+                0,
+                {},
+                {},
+                docCommentAboveLine(doc.text, mod->line));
         }
     }
 
@@ -2159,10 +2266,16 @@ buildDocumentSemanticFromAst(const DocumentState& doc)
             {
                 continue;
             }
-            addSemanticSymbol(out, lines, alias->name, 5,
-                              alias->line > 0 ? alias->line : 1, 0,
-                              typeToString(alias->aliasedType), {},
-                              docCommentAboveLine(doc.text, alias->line));
+            addSemanticSymbol(
+                out,
+                lines,
+                alias->name,
+                5,
+                alias->line > 0 ? alias->line : 1,
+                0,
+                typeToString(alias->aliasedType),
+                {},
+                docCommentAboveLine(doc.text, alias->line));
         }
     }
 
@@ -2175,9 +2288,16 @@ buildDocumentSemanticFromAst(const DocumentState& doc)
                 continue;
             }
             std::string structSummary = structLayoutSummary(st, program);
-            addSemanticSymbol(out, lines, st->name, 3,
-                              st->line > 0 ? st->line : 1, 0, structSummary, {},
-                              docCommentAboveLine(doc.text, st->line));
+            addSemanticSymbol(
+                out,
+                lines,
+                st->name,
+                3,
+                st->line > 0 ? st->line : 1,
+                0,
+                structSummary,
+                {},
+                docCommentAboveLine(doc.text, st->line));
             if(st->members)
             {
                 for(StructMemberNode* member : st->members->members)
@@ -2187,9 +2307,17 @@ buildDocumentSemanticFromAst(const DocumentState& doc)
                         continue;
                     }
                     const int field_line = findStructMemberDeclLine(
-                        lines, out.line_depths, st->name, member->name);
+                        lines,
+                        out.line_depths,
+                        st->name,
+                        member->name);
                     addSemanticSymbolAtLine(
-                        out, lines, member->name, 2, field_line, 1,
+                        out,
+                        lines,
+                        member->name,
+                        2,
+                        field_line,
+                        1,
                         typeToString(member->type),
                         "field " + st->name + "::" + member->name,
                         docCommentAboveLine(doc.text, field_line));
@@ -2218,13 +2346,17 @@ buildDocumentSemanticFromAst(const DocumentState& doc)
                             {
                                 source_member = member;
                                 source_member_line = findStructMemberDeclLine(
-                                    lines, out.line_depths, st->name,
+                                    lines,
+                                    out.line_depths,
+                                    st->name,
                                     member->name);
                                 break;
                             }
                         }
                         method_doc = propertyAccessorDocumentation(
-                            doc.text, source_member, method->isPropertySetter,
+                            doc.text,
+                            source_member,
+                            method->isPropertySetter,
                             source_member_line);
                     }
                     else
@@ -2232,10 +2364,16 @@ buildDocumentSemanticFromAst(const DocumentState& doc)
                         method_doc = docCommentAboveLine(doc.text, method_line);
                     }
                     const size_t method_sym_idx = out.symbols.size();
-                    addSemanticSymbol(out, lines, method->name, 1, method_line,
-                                      1, typeToString(method->returnType),
-                                      methodSignatureFromAst(st->name, method),
-                                      std::move(method_doc));
+                    addSemanticSymbol(
+                        out,
+                        lines,
+                        method->name,
+                        1,
+                        method_line,
+                        1,
+                        typeToString(method->returnType),
+                        methodSignatureFromAst(st->name, method),
+                        std::move(method_doc));
                     int method_decl_line = method_line;
                     if(out.symbols.size() > method_sym_idx)
                     {
@@ -2249,9 +2387,15 @@ buildDocumentSemanticFromAst(const DocumentState& doc)
                             {
                                 continue;
                             }
-                            addSemanticSymbolAtLine(out, lines, p->name, 2,
-                                                    method_decl_line, 2,
-                                                    typeToString(p->type), {});
+                            addSemanticSymbolAtLine(
+                                out,
+                                lines,
+                                p->name,
+                                2,
+                                method_decl_line,
+                                2,
+                                typeToString(p->type),
+                                {});
                         }
                     }
                     collectStatementSymbols(out, lines, method->body, 2);
@@ -2270,8 +2414,16 @@ buildDocumentSemanticFromAst(const DocumentState& doc)
             }
             const int enum_line =
                 en->line > 0 ? en->line : findEnumDeclLine(lines, en->name);
-            addSemanticSymbol(out, lines, en->name, 3, enum_line, 0, {}, {},
-                              docCommentAboveLine(doc.text, enum_line));
+            addSemanticSymbol(
+                out,
+                lines,
+                en->name,
+                3,
+                enum_line,
+                0,
+                {},
+                {},
+                docCommentAboveLine(doc.text, enum_line));
             if(en->variants)
             {
                 for(EnumVariantNode* variant : en->variants->variants)
@@ -2283,7 +2435,13 @@ buildDocumentSemanticFromAst(const DocumentState& doc)
                     const int variant_line =
                         variant->line > 0 ? variant->line : enum_line;
                     addSemanticSymbolAtLine(
-                        out, lines, variant->name, 2, variant_line, 1, {},
+                        out,
+                        lines,
+                        variant->name,
+                        2,
+                        variant_line,
+                        1,
+                        {},
                         "variant " + en->name + "::" + variant->name,
                         docCommentAboveLine(doc.text, variant_line));
                 }
@@ -2310,7 +2468,12 @@ buildDocumentSemanticFromAst(const DocumentState& doc)
                                             : (impl->line > 0 ? impl->line : 1);
                 const size_t method_sym_idx = out.symbols.size();
                 addSemanticSymbol(
-                    out, lines, method->name, 1, method_line, 1,
+                    out,
+                    lines,
+                    method->name,
+                    1,
+                    method_line,
+                    1,
                     typeToString(method->returnType),
                     methodSignatureFromAst(impl->structName, method),
                     docCommentAboveLine(doc.text, method_line));
@@ -2327,9 +2490,15 @@ buildDocumentSemanticFromAst(const DocumentState& doc)
                         {
                             continue;
                         }
-                        addSemanticSymbolAtLine(out, lines, p->name, 2,
-                                                method_decl_line, 2,
-                                                typeToString(p->type), {});
+                        addSemanticSymbolAtLine(
+                            out,
+                            lines,
+                            p->name,
+                            2,
+                            method_decl_line,
+                            2,
+                            typeToString(p->type),
+                            {});
                     }
                 }
                 collectStatementSymbols(out, lines, method->body, 2);
@@ -2347,10 +2516,16 @@ buildDocumentSemanticFromAst(const DocumentState& doc)
             }
             const int fn_line = fn->line > 0 ? fn->line : 1;
             const size_t fn_sym_idx = out.symbols.size();
-            addSemanticSymbol(out, lines, fn->name, 1, fn_line, 0,
-                              typeToString(fn->returnType),
-                              functionSignatureFromAst(fn),
-                              docCommentAboveLine(doc.text, fn_line));
+            addSemanticSymbol(
+                out,
+                lines,
+                fn->name,
+                1,
+                fn_line,
+                0,
+                typeToString(fn->returnType),
+                functionSignatureFromAst(fn),
+                docCommentAboveLine(doc.text, fn_line));
             int fn_decl_line = fn_line;
             if(out.symbols.size() > fn_sym_idx)
             {
@@ -2365,9 +2540,15 @@ buildDocumentSemanticFromAst(const DocumentState& doc)
                     {
                         continue;
                     }
-                    addSemanticSymbolAtLine(out, lines, p->name, 2,
-                                            fn_decl_line, 1,
-                                            typeToString(p->type), {});
+                    addSemanticSymbolAtLine(
+                        out,
+                        lines,
+                        p->name,
+                        2,
+                        fn_decl_line,
+                        1,
+                        typeToString(p->type),
+                        {});
                 }
             }
             collectStatementSymbols(out, lines, fn->body, 1);
@@ -2424,8 +2605,8 @@ static DocumentSemantic buildDocumentSemantic(const DocumentState& doc)
     return out;
 }
 
-static std::vector<DocumentSemantic>
-buildSemanticSnapshot(const std::vector<DocumentState>& docs)
+static std::vector<DocumentSemantic> buildSemanticSnapshot(
+    const std::vector<DocumentState>& docs)
 {
     std::vector<DocumentSemantic> out;
     out.reserve(docs.size());
@@ -2436,8 +2617,9 @@ buildSemanticSnapshot(const std::vector<DocumentState>& docs)
     return out;
 }
 
-static const DocumentSemantic*
-findSemanticDoc(const std::vector<DocumentSemantic>& docs, std::string_view uri)
+static const DocumentSemantic* findSemanticDoc(
+    const std::vector<DocumentSemantic>& docs,
+    std::string_view uri)
 {
     for(const DocumentSemantic& doc : docs)
     {
@@ -2451,8 +2633,9 @@ findSemanticDoc(const std::vector<DocumentSemantic>& docs, std::string_view uri)
 
 static bool uriMatchesModule(std::string_view uri, std::string_view modName);
 
-static bool hasModuleProvider(const std::vector<DocumentSemantic>& docs,
-                              std::string_view module_name)
+static bool hasModuleProvider(
+    const std::vector<DocumentSemantic>& docs,
+    std::string_view module_name)
 {
     for(const auto& doc : docs)
     {
@@ -2464,16 +2647,17 @@ static bool hasModuleProvider(const std::vector<DocumentSemantic>& docs,
     return false;
 }
 
-static std::optional<DocumentSemantic>
-loadFilesystemSemanticDocument(const std::string& file_path)
+static std::optional<DocumentSemantic> loadFilesystemSemanticDocument(
+    const std::string& file_path)
 {
     std::ifstream in(file_path, std::ios::binary);
     if(!in)
     {
         return std::nullopt;
     }
-    std::string text((std::istreambuf_iterator<char>(in)),
-                     std::istreambuf_iterator<char>());
+    std::string text(
+        (std::istreambuf_iterator<char>(in)),
+        std::istreambuf_iterator<char>());
 
     DocumentState doc;
     doc.uri = fileUriFromPath(file_path);
@@ -2489,8 +2673,8 @@ loadFilesystemSemanticDocument(const std::string& file_path)
 // import list otherwise reparses the whole transitive module graph on every
 // keystroke.  The file metadata check still refreshes modules that are edited
 // outside the active LSP session.
-static std::optional<DocumentSemantic>
-loadCachedFilesystemSemanticDocument(const std::string& file_path)
+static std::optional<DocumentSemantic> loadCachedFilesystemSemanticDocument(
+    const std::string& file_path)
 {
     struct CachedDocument
     {
@@ -2498,6 +2682,7 @@ loadCachedFilesystemSemanticDocument(const std::string& file_path)
         std::uintmax_t size = 0;
         DocumentSemantic semantic;
     };
+
     static std::mutex cache_mutex;
     static std::unordered_map<std::string, CachedDocument> cache;
 
@@ -2531,14 +2716,15 @@ loadCachedFilesystemSemanticDocument(const std::string& file_path)
     {
         std::lock_guard<std::mutex> lock(cache_mutex);
         cache.insert_or_assign(
-            file_path, CachedDocument{modified, size, *loaded});
+            file_path,
+            CachedDocument{modified, size, *loaded});
     }
     return loaded;
 }
 
-static void
-enqueueDocModules(const DocumentSemantic& doc,
-                  std::deque<std::pair<std::string, std::string>>& q)
+static void enqueueDocModules(
+    const DocumentSemantic& doc,
+    std::deque<std::pair<std::string, std::string>>& q)
 {
     for(const auto& use : doc.uses)
     {
@@ -2556,8 +2742,9 @@ enqueueDocModules(const DocumentSemantic& doc,
     }
 }
 
-static void hydrateFilesystemModulesFor(std::string_view root_uri,
-                                        std::vector<DocumentSemantic>& docs)
+static void hydrateFilesystemModulesFor(
+    std::string_view root_uri,
+    std::vector<DocumentSemantic>& docs)
 {
     const DocumentSemantic* root = findSemanticDoc(docs, root_uri);
     if(!root || !root->ast_valid)
@@ -2636,8 +2823,9 @@ static int lineDepthAt(const DocumentSemantic& doc, int line)
     return doc.line_depths.back();
 }
 
-static bool isLikelyVarDeclarationSymbol(const DocumentSemantic& current,
-                                         const SemanticSymbol& sym)
+static bool isLikelyVarDeclarationSymbol(
+    const DocumentSemantic& current,
+    const SemanticSymbol& sym)
 {
     if(sym.kind != 2 || sym.line <= 0)
     {
@@ -2676,9 +2864,11 @@ static bool isLikelyVarDeclarationSymbol(const DocumentSemantic& current,
     return false;
 }
 
-static const SemanticSymbol*
-findVisibleVarByName(const DocumentSemantic& current, std::string_view name,
-                     int query_line, int query_depth)
+static const SemanticSymbol* findVisibleVarByName(
+    const DocumentSemantic& current,
+    std::string_view name,
+    int query_line,
+    int query_depth)
 {
     auto symbolDepthForLookup = [&](const SemanticSymbol& sym) -> int
     {
@@ -2733,10 +2923,11 @@ findVisibleVarByName(const DocumentSemantic& current, std::string_view name,
     return best_fallback_var;
 }
 
-static const SemanticSymbol*
-findVisibleTypeAliasByName(const DocumentSemantic& current,
-                           std::string_view name, int query_line,
-                           int query_depth)
+static const SemanticSymbol* findVisibleTypeAliasByName(
+    const DocumentSemantic& current,
+    std::string_view name,
+    int query_line,
+    int query_depth)
 {
     const SemanticSymbol* best_alias = nullptr;
     for(const SemanticSymbol& sym : current.symbols)
@@ -2777,8 +2968,9 @@ static std::string ownerTypeFromMethodSignature(std::string_view signature)
     return std::string(tail.substr(0, sep));
 }
 
-static std::string structContextAtLine(const DocumentSemantic& current,
-                                       int query_line)
+static std::string structContextAtLine(
+    const DocumentSemantic& current,
+    int query_line)
 {
     const SemanticSymbol* best_method = nullptr;
     for(const SemanticSymbol& sym : current.symbols)
@@ -2846,14 +3038,15 @@ static std::string normalizeStructTypeName(std::string_view type_info)
     return core;
 }
 
-static std::vector<SemanticSymbol>
-collectImportedSymbols(const DocumentSemantic& current,
-                       const std::vector<DocumentSemantic>& all_docs)
+static std::vector<SemanticSymbol> collectImportedSymbols(
+    const DocumentSemantic& current,
+    const std::vector<DocumentSemantic>& all_docs)
 {
     std::vector<SemanticSymbol> imported;
 
     auto append_from_module = [&](std::string_view module_name,
-                                  std::string_view specific_name, bool wildcard)
+                                  std::string_view specific_name,
+                                  bool wildcard)
     {
         for(const DocumentSemantic& doc : all_docs)
         {
@@ -2919,8 +3112,8 @@ struct ImportDefinitionFallback
     std::string uri;
 };
 
-static std::optional<std::string>
-resolveBuiltinTypesFilePath(std::string_view requester_uri)
+static std::optional<std::string> resolveBuiltinTypesFilePath(
+    std::string_view requester_uri)
 {
     namespace fs = std::filesystem;
     const std::vector<std::string> roots =
@@ -2943,9 +3136,9 @@ resolveBuiltinTypesFilePath(std::string_view requester_uri)
     return std::nullopt;
 }
 
-static std::optional<ImportDefinitionFallback>
-builtinDefinitionFromTypesFile(std::string_view requester_uri,
-                               std::string_view builtin_name)
+static std::optional<ImportDefinitionFallback> builtinDefinitionFromTypesFile(
+    std::string_view requester_uri,
+    std::string_view builtin_name)
 {
     const std::optional<std::string> file_path =
         resolveBuiltinTypesFilePath(requester_uri);
@@ -2984,8 +3177,9 @@ builtinDefinitionFromTypesFile(std::string_view requester_uri,
     return std::nullopt;
 }
 
-static bool moduleHasSegment(std::string_view module_name,
-                             std::string_view token)
+static bool moduleHasSegment(
+    std::string_view module_name,
+    std::string_view token)
 {
     if(module_name.empty() || token.empty())
     {
@@ -3011,9 +3205,10 @@ static bool moduleHasSegment(std::string_view module_name,
     return false;
 }
 
-static std::optional<ImportDefinitionFallback>
-importDefinitionFromText(const mlang::compiler_api::DocumentSemantic& current,
-                         int line, int column)
+static std::optional<ImportDefinitionFallback> importDefinitionFromText(
+    const mlang::compiler_api::DocumentSemantic& current,
+    int line,
+    int column)
 {
     if(line <= 0 || column <= 0)
     {
@@ -3108,8 +3303,9 @@ importDefinitionFromText(const mlang::compiler_api::DocumentSemantic& current,
     return out;
 }
 
-static bool parseSelfTypeFromSignatureLine(std::string_view line,
-                                           std::string& out_type)
+static bool parseSelfTypeFromSignatureLine(
+    std::string_view line,
+    std::string& out_type)
 {
     const size_t fn_pos = line.find("fn ");
     if(fn_pos == std::string_view::npos)
@@ -3191,9 +3387,11 @@ static bool parseSelfTypeFromSignatureLine(std::string_view line,
     return true;
 }
 
-static bool findTraitDeclaration(std::string_view text,
-                                 std::string_view trait_name, int& out_line,
-                                 int& out_col)
+static bool findTraitDeclaration(
+    std::string_view text,
+    std::string_view trait_name,
+    int& out_line,
+    int& out_col)
 {
     if(trait_name.empty())
     {
@@ -3221,7 +3419,9 @@ static bool findTraitDeclaration(std::string_view text,
 }
 
 static bool fallbackTraitDefinitionFromImplLine(
-    const mlang::compiler_api::DocumentSemantic& current, int line, int column,
+    const mlang::compiler_api::DocumentSemantic& current,
+    int line,
+    int column,
     TextDefinitionFallback& out)
 {
     if(line <= 0 || column <= 0)
@@ -3394,10 +3594,12 @@ static bool parseImplOwnerFromLine(std::string_view line, std::string& out_type)
     return !out_type.empty();
 }
 
-static bool findStructFieldDeclaration(std::string_view text,
-                                       std::string_view struct_name,
-                                       std::string_view field_name,
-                                       int& out_line, int& out_col)
+static bool findStructFieldDeclaration(
+    std::string_view text,
+    std::string_view struct_name,
+    std::string_view field_name,
+    int& out_line,
+    int& out_col)
 {
     const std::vector<std::string_view> lines = splitLines(text);
     bool in_target_struct = false;
@@ -3445,14 +3647,17 @@ static bool findStructFieldDeclaration(std::string_view text,
     return false;
 }
 
-static bool findParameterInNearestFunction(std::string_view text,
-                                           int query_line,
-                                           std::string_view name, int& out_line,
-                                           int& out_col)
+static bool findParameterInNearestFunction(
+    std::string_view text,
+    int query_line,
+    std::string_view name,
+    int& out_line,
+    int& out_col)
 {
     const std::vector<std::string_view> lines = splitLines(text);
     for(int y = std::min(query_line - 1, static_cast<int>(lines.size()) - 1);
-        y >= 0; --y)
+        y >= 0;
+        --y)
     {
         const std::string_view line = lines[static_cast<size_t>(y)];
         const size_t fn_pos = line.find("fn ");
@@ -3495,9 +3700,11 @@ static bool findParameterInNearestFunction(std::string_view text,
     return false;
 }
 
-static bool
-fallbackDefinitionFromText(const mlang::compiler_api::DocumentSemantic& current,
-                           int line, int column, TextDefinitionFallback& out)
+static bool fallbackDefinitionFromText(
+    const mlang::compiler_api::DocumentSemantic& current,
+    int line,
+    int column,
+    TextDefinitionFallback& out)
 {
     const std::optional<size_t> offset =
         offsetFromLineColumn(current.text, line, column);
@@ -3570,16 +3777,18 @@ fallbackDefinitionFromText(const mlang::compiler_api::DocumentSemantic& current,
     if(token_span->start > 0)
     {
         size_t p = token_span->start;
-        while(p > 0 && std::isspace(static_cast<unsigned char>(
-                           current.text[p - 1])) != 0)
+        while(p > 0 &&
+              std::isspace(static_cast<unsigned char>(current.text[p - 1])) !=
+                  0)
         {
             --p;
         }
         if(p > 0 && current.text[p - 1] == '.')
         {
             size_t q = p - 1;
-            while(q > 0 && std::isspace(static_cast<unsigned char>(
-                               current.text[q - 1])) != 0)
+            while(q > 0 &&
+                  std::isspace(
+                      static_cast<unsigned char>(current.text[q - 1])) != 0)
             {
                 --q;
             }
@@ -3600,11 +3809,13 @@ fallbackDefinitionFromText(const mlang::compiler_api::DocumentSemantic& current,
     {
         std::string owner;
         for(int y = std::min(line - 1, static_cast<int>(lines.size()) - 1);
-            y >= 0; --y)
+            y >= 0;
+            --y)
         {
             std::string parsed_owner;
-            if(parseSelfTypeFromSignatureLine(lines[static_cast<size_t>(y)],
-                                              parsed_owner))
+            if(parseSelfTypeFromSignatureLine(
+                   lines[static_cast<size_t>(y)],
+                   parsed_owner))
             {
                 if(parsed_owner == "Self")
                 {
@@ -3622,8 +3833,12 @@ fallbackDefinitionFromText(const mlang::compiler_api::DocumentSemantic& current,
         {
             int def_line = 0;
             int def_col = 0;
-            if(findStructFieldDeclaration(current.text, owner, out.name,
-                                          def_line, def_col))
+            if(findStructFieldDeclaration(
+                   current.text,
+                   owner,
+                   out.name,
+                   def_line,
+                   def_col))
             {
                 out.line = def_line;
                 out.column = def_col;
@@ -3638,8 +3853,12 @@ fallbackDefinitionFromText(const mlang::compiler_api::DocumentSemantic& current,
     {
         return true;
     }
-    if(findParameterInNearestFunction(current.text, line, out.name, def_line,
-                                      def_col))
+    if(findParameterInNearestFunction(
+           current.text,
+           line,
+           out.name,
+           def_line,
+           def_col))
     {
         out.line = def_line;
         out.column = def_col;
@@ -3648,10 +3867,11 @@ fallbackDefinitionFromText(const mlang::compiler_api::DocumentSemantic& current,
     return false;
 }
 
-static std::optional<ResolvedQuerySymbol>
-resolveSymbolAtPosition(const DocumentSemantic& current,
-                        const std::vector<DocumentSemantic>& all_docs, int line,
-                        int column)
+static std::optional<ResolvedQuerySymbol> resolveSymbolAtPosition(
+    const DocumentSemantic& current,
+    const std::vector<DocumentSemantic>& all_docs,
+    int line,
+    int column)
 {
     const std::optional<size_t> offset =
         offsetFromLineColumn(current.text, line, column);
@@ -3675,16 +3895,18 @@ resolveSymbolAtPosition(const DocumentSemantic& current,
     if(token_span->start > 0)
     {
         size_t p = token_span->start;
-        while(p > 0 && std::isspace(static_cast<unsigned char>(
-                           current.text[p - 1])) != 0)
+        while(p > 0 &&
+              std::isspace(static_cast<unsigned char>(current.text[p - 1])) !=
+                  0)
         {
             --p;
         }
         if(p > 0 && current.text[p - 1] == '.')
         {
             size_t q = p - 1;
-            while(q > 0 && std::isspace(static_cast<unsigned char>(
-                               current.text[q - 1])) != 0)
+            while(q > 0 &&
+                  std::isspace(
+                      static_cast<unsigned char>(current.text[q - 1])) != 0)
             {
                 --q;
             }
@@ -3819,9 +4041,9 @@ struct ReferenceLocation
     int column = 0;
 };
 
-static std::vector<ReferenceLocation>
-collectReferencesForSymbol(const SemanticSymbol& target,
-                           const std::vector<DocumentSemantic>& all_docs)
+static std::vector<ReferenceLocation> collectReferencesForSymbol(
+    const SemanticSymbol& target,
+    const std::vector<DocumentSemantic>& all_docs)
 {
     std::vector<ReferenceLocation> refs;
     std::unordered_set<std::string> seen;
@@ -3877,25 +4099,28 @@ collectReferencesForSymbol(const SemanticSymbol& target,
         }
     }
 
-    std::sort(refs.begin(), refs.end(),
-              [](const ReferenceLocation& a, const ReferenceLocation& b)
-              {
-                  if(a.uri != b.uri)
-                  {
-                      return a.uri < b.uri;
-                  }
-                  if(a.line != b.line)
-                  {
-                      return a.line < b.line;
-                  }
-                  return a.column < b.column;
-              });
+    std::sort(
+        refs.begin(),
+        refs.end(),
+        [](const ReferenceLocation& a, const ReferenceLocation& b)
+        {
+            if(a.uri != b.uri)
+            {
+                return a.uri < b.uri;
+            }
+            if(a.line != b.line)
+            {
+                return a.line < b.line;
+            }
+            return a.column < b.column;
+        });
     return refs;
 }
 
-static bool isRenameSafeForSymbol(const SemanticSymbol& target,
-                                  std::string_view new_name,
-                                  const std::vector<DocumentSemantic>& all_docs)
+static bool isRenameSafeForSymbol(
+    const SemanticSymbol& target,
+    std::string_view new_name,
+    const std::vector<DocumentSemantic>& all_docs)
 {
     if(new_name.empty() || !isIdentStart(new_name.front()))
     {
@@ -3953,8 +4178,9 @@ static bool isRenameSafeForSymbol(const SemanticSymbol& target,
     return true;
 }
 
-static std::string completionPrefixAtOffset(std::string_view text,
-                                            size_t offset);
+static std::string completionPrefixAtOffset(
+    std::string_view text,
+    size_t offset);
 
 struct QualifiedCompletionContext
 {
@@ -4027,8 +4253,9 @@ qualifiedCompletionContextAtOffset(std::string_view text, size_t offset)
     return out;
 }
 
-static bool symbolBelongsToOwner(std::string_view owner,
-                                 const SemanticSymbol& sym)
+static bool symbolBelongsToOwner(
+    std::string_view owner,
+    const SemanticSymbol& sym)
 {
     if(owner.empty() || sym.signature.empty())
     {
@@ -4042,9 +4269,10 @@ static bool symbolBelongsToOwner(std::string_view owner,
            startsWith(sym.signature, variant_prefix);
 }
 
-static std::string visibleTypedOwnerFromText(std::string_view text,
-                                             int query_line,
-                                             std::string_view name)
+static std::string visibleTypedOwnerFromText(
+    std::string_view text,
+    int query_line,
+    std::string_view name)
 {
     if(name.empty())
     {
@@ -4052,7 +4280,8 @@ static std::string visibleTypedOwnerFromText(std::string_view text,
     }
     const std::vector<std::string_view> lines = splitLines(text);
     for(int y = std::min(query_line - 1, static_cast<int>(lines.size()) - 1);
-        y >= 0; --y)
+        y >= 0;
+        --y)
     {
         const std::string line = trimTextWs(lines[static_cast<size_t>(y)]);
         if(!(startsWith(line, "let ") || startsWith(line, "var ")))
@@ -4098,8 +4327,9 @@ static std::string visibleTypedOwnerFromText(std::string_view text,
     return {};
 }
 
-static std::vector<std::string> enumVariantsFromText(std::string_view text,
-                                                     std::string_view enum_name)
+static std::vector<std::string> enumVariantsFromText(
+    std::string_view text,
+    std::string_view enum_name)
 {
     std::vector<std::string> out;
     if(enum_name.empty())
@@ -4213,8 +4443,9 @@ static std::vector<std::string> enumVariantsFromText(std::string_view text,
     return out;
 }
 
-static std::vector<std::string> implMethodsFromText(std::string_view text,
-                                                    std::string_view owner_name)
+static std::vector<std::string> implMethodsFromText(
+    std::string_view text,
+    std::string_view owner_name)
 {
     std::vector<std::string> out;
     if(owner_name.empty())
@@ -4348,8 +4579,8 @@ static std::vector<std::string> moduleNamesFromText(std::string_view text)
     return out;
 }
 
-static std::vector<std::string>
-publicModuleSymbolsFromText(std::string_view text)
+static std::vector<std::string> publicModuleSymbolsFromText(
+    std::string_view text)
 {
     std::set<std::string> names;
     for(const std::string_view raw_line : splitLines(text))
@@ -4364,10 +4595,11 @@ publicModuleSymbolsFromText(std::string_view text)
         {
             continue;
         }
-        for(const std::string_view keyword : {std::string_view("fn "),
-                                              std::string_view("struct "),
-                                              std::string_view("enum "),
-                                              std::string_view("alias ")})
+        for(const std::string_view keyword :
+            {std::string_view("fn "),
+             std::string_view("struct "),
+             std::string_view("enum "),
+             std::string_view("alias ")})
         {
             if(!startsWith(line, keyword))
             {
@@ -4394,14 +4626,28 @@ publicModuleSymbolsFromText(std::string_view text)
     return {names.begin(), names.end()};
 }
 
-static const std::vector<std::string>&
-builtinMemberNames(std::string_view owner)
+static const std::vector<std::string>& builtinMemberNames(
+    std::string_view owner)
 {
     static const std::vector<std::string> kEmpty;
     static const std::vector<std::string> kBitSet = {
-        "and_eq",     "capacity", "clear",  "close",  "count_ones", "get",
-        "len",        "new",      "not_eq", "or_eq",  "pop",        "push",
-        "raw_handle", "resize",   "set",    "toggle", "xor_eq",
+        "and_eq",
+        "capacity",
+        "clear",
+        "close",
+        "count_ones",
+        "get",
+        "len",
+        "new",
+        "not_eq",
+        "or_eq",
+        "pop",
+        "push",
+        "raw_handle",
+        "resize",
+        "set",
+        "toggle",
+        "xor_eq",
     };
     static const std::vector<std::string> kResult = {
         "is_err",
@@ -4462,10 +4708,29 @@ static std::string_view constraintKeywordDocumentation(std::string_view token)
 static bool isKeywordToken(std::string_view token)
 {
     static constexpr std::string_view kKeywords[] = {
-        "fn",        "cexpr", "let",      "var",      "struct",   "mod",
-        "namespace", "use",   "alias",    "if",       "else",     "likely",
-        "unlikely",  "while", "for",      "return",   "generic",  "concept",
-        "where",     "req",   "requires", "typename", "noexcept",
+        "fn",
+        "cexpr",
+        "let",
+        "var",
+        "struct",
+        "mod",
+        "namespace",
+        "use",
+        "alias",
+        "if",
+        "else",
+        "likely",
+        "unlikely",
+        "while",
+        "for",
+        "return",
+        "generic",
+        "concept",
+        "where",
+        "req",
+        "requires",
+        "typename",
+        "noexcept",
     };
     for(const auto kw : kKeywords)
     {
@@ -4477,8 +4742,9 @@ static bool isKeywordToken(std::string_view token)
     return false;
 }
 
-static std::vector<std::string>
-lexicalIdentifiersBeforeOffset(std::string_view text, size_t offset)
+static std::vector<std::string> lexicalIdentifiersBeforeOffset(
+    std::string_view text,
+    size_t offset)
 {
     std::vector<std::string> out;
     if(offset > text.size())
@@ -4556,23 +4822,70 @@ lexicalIdentifiersBeforeOffset(std::string_view text, size_t offset)
 }
 
 static constexpr std::string_view kBuiltinCompletionLabels[] = {
-    "void",   "bool",   "bit",    "i8",     "i16",    "i32",
-    "i64",    "u8",     "u16",    "u32",    "u64",    "f32",
-    "f64",    "str8",   "str16",  "list",   "map",    "tuple",
-    "ptr",    "result", "option", "Ok",     "Err",    "Some",   "None",
-    "array",  "size_of", "Vec",   "Span",  "span", "utf8", "utf16",
+    "void",
+    "bool",
+    "bit",
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "f32",
+    "f64",
+    "str8",
+    "str16",
+    "list",
+    "map",
+    "tuple",
+    "ptr",
+    "result",
+    "option",
+    "Ok",
+    "Err",
+    "Some",
+    "None",
+    "array",
+    "size_of",
+    "Vec",
+    "Span",
+    "span",
+    "utf8",
+    "utf16",
 };
 
-static std::vector<std::string>
-computeSemanticCompletions(const DocumentSemantic& current,
-                           const std::vector<DocumentSemantic>& all_docs,
-                           int line, int column)
+static std::vector<std::string> computeSemanticCompletions(
+    const DocumentSemantic& current,
+    const std::vector<DocumentSemantic>& all_docs,
+    int line,
+    int column)
 {
     static constexpr std::string_view kKeywords[] = {
-        "fn",        "cexpr", "let",      "var",      "struct",   "mod",
-        "namespace", "use",   "alias",    "if",       "else",     "likely",
-        "unlikely",  "while", "for",      "return",   "generic",  "concept",
-        "where",     "req",   "requires", "typename", "noexcept",
+        "fn",
+        "cexpr",
+        "let",
+        "var",
+        "struct",
+        "mod",
+        "namespace",
+        "use",
+        "alias",
+        "if",
+        "else",
+        "likely",
+        "unlikely",
+        "while",
+        "for",
+        "return",
+        "generic",
+        "concept",
+        "where",
+        "req",
+        "requires",
+        "typename",
+        "noexcept",
     };
 
     const std::optional<size_t> offset =
@@ -4746,8 +5059,8 @@ computeSemanticCompletions(const DocumentSemantic& current,
             }
         }
 
-        return std::vector<std::string>(scoped_dedup.begin(),
-                                        scoped_dedup.end());
+        return std::vector<
+            std::string>(scoped_dedup.begin(), scoped_dedup.end());
     }
 
     const std::string prefix = completionPrefixAtOffset(current.text, *offset);
@@ -4803,8 +5116,10 @@ computeSemanticCompletions(const DocumentSemantic& current,
     return std::vector<std::string>(dedup.begin(), dedup.end());
 }
 
-static std::optional<std::vector<std::string>>
-fastBuiltinCompletionsFromText(std::string_view text, int line, int column)
+static std::optional<std::vector<std::string>> fastBuiltinCompletionsFromText(
+    std::string_view text,
+    int line,
+    int column)
 {
     const std::optional<size_t> offset =
         offsetFromLineColumn(text, line, column);
@@ -4857,8 +5172,11 @@ fastBuiltinCompletionsFromText(std::string_view text, int line, int column)
 // import graph.  This covers the common `use tui::` -> `table` -> exported
 // symbol workflow in large files.
 static std::optional<std::vector<std::string>>
-fastModulePathCompletionsFromText(std::string_view uri, std::string_view text,
-                                  int line, int column)
+fastModulePathCompletionsFromText(
+    std::string_view uri,
+    std::string_view text,
+    int line,
+    int column)
 {
     const auto offset = offsetFromLineColumn(text, line, column);
     if(!offset.has_value())
@@ -4882,8 +5200,8 @@ fastModulePathCompletionsFromText(std::string_view uri, std::string_view text,
         return std::nullopt;
     }
     size_t path_start = prefix_start - 2;
-    while(path_start > 0 &&
-          (isIdentContinue(text[path_start - 1]) || text[path_start - 1] == ':'))
+    while(path_start > 0 && (isIdentContinue(text[path_start - 1]) ||
+                             text[path_start - 1] == ':'))
     {
         --path_start;
     }
@@ -4918,7 +5236,8 @@ fastModulePathCompletionsFromText(std::string_view uri, std::string_view text,
             {
                 continue;
             }
-            for(const auto& entry : std::filesystem::directory_iterator(dir, ec))
+            for(const auto& entry :
+                std::filesystem::directory_iterator(dir, ec))
             {
                 if(ec || !entry.is_regular_file(ec) ||
                    entry.path().extension() != ".mla")
@@ -4940,28 +5259,31 @@ fastModulePathCompletionsFromText(std::string_view uri, std::string_view text,
         {
             return std::nullopt;
         }
-        const std::string module_text((std::istreambuf_iterator<char>(in)),
-                                      std::istreambuf_iterator<char>());
+        const std::string module_text(
+            (std::istreambuf_iterator<char>(in)),
+            std::istreambuf_iterator<char>());
 
-    const std::string child_prefix = module_name + "::";
-    for(const auto& child : moduleNamesFromText(module_text))
-    {
-        if(!startsWith(child, child_prefix))
+        const std::string child_prefix = module_name + "::";
+        for(const auto& child : moduleNamesFromText(module_text))
         {
-            continue;
+            if(!startsWith(child, child_prefix))
+            {
+                continue;
+            }
+            const std::string_view remainder(
+                child.data() + child_prefix.size(),
+                child.size() - child_prefix.size());
+            const size_t next_scope = remainder.find("::");
+            candidates.insert(std::string(remainder.substr(0, next_scope)));
         }
-        const std::string_view remainder(child.data() + child_prefix.size(),
-                                         child.size() - child_prefix.size());
-        const size_t next_scope = remainder.find("::");
-        candidates.insert(std::string(remainder.substr(0, next_scope)));
-    }
-    // A leaf module has no child modules, so offer its public top-level
-    // declarations after a second `::`.  This deliberately scans text rather
-    // than constructing an AST: it is the latency-sensitive import path.
-    for(const auto& name : publicModuleSymbolsFromText(module_text))
-    {
-        candidates.insert(name);
-    }
+        // A leaf module has no child modules, so offer its public top-level
+        // declarations after a second `::`.  This deliberately scans text
+        // rather than constructing an AST: it is the latency-sensitive import
+        // path.
+        for(const auto& name : publicModuleSymbolsFromText(module_text))
+        {
+            candidates.insert(name);
+        }
     }
 
     std::vector<std::string> out;
@@ -4981,8 +5303,10 @@ fastModulePathCompletionsFromText(std::string_view uri, std::string_view text,
 // module synchronously after each edit makes editing a large file feel stuck.
 // Keep rich semantic completion for qualified access, where it matters most,
 // while making ordinary completion in large files a single lexical pass.
-static std::optional<std::vector<std::string>>
-fastLexicalCompletionsFromText(std::string_view text, int line, int column)
+static std::optional<std::vector<std::string>> fastLexicalCompletionsFromText(
+    std::string_view text,
+    int line,
+    int column)
 {
     constexpr size_t kLargeDocumentThreshold = 64 * 1024;
     if(text.size() < kLargeDocumentThreshold)
@@ -5006,10 +5330,29 @@ fastLexicalCompletionsFromText(std::string_view text, int line, int column)
         }
     };
     static constexpr std::string_view kLargeDocumentKeywords[] = {
-        "fn",        "cexpr", "let",      "var",      "struct",   "mod",
-        "namespace", "use",   "alias",    "if",       "else",     "likely",
-        "unlikely",  "while", "for",      "return",   "generic",  "concept",
-        "where",     "req",   "requires", "typename", "noexcept",
+        "fn",
+        "cexpr",
+        "let",
+        "var",
+        "struct",
+        "mod",
+        "namespace",
+        "use",
+        "alias",
+        "if",
+        "else",
+        "likely",
+        "unlikely",
+        "while",
+        "for",
+        "return",
+        "generic",
+        "concept",
+        "where",
+        "req",
+        "requires",
+        "typename",
+        "noexcept",
     };
     for(const std::string_view kw : kLargeDocumentKeywords)
     {
@@ -5045,8 +5388,9 @@ static const char* symbolKindName(int kind)
     }
 }
 
-static std::string completionPrefixAtOffset(std::string_view text,
-                                            size_t offset)
+static std::string completionPrefixAtOffset(
+    std::string_view text,
+    size_t offset)
 {
     if(offset > text.size())
     {
@@ -5060,8 +5404,8 @@ static std::string completionPrefixAtOffset(std::string_view text,
     return std::string(text.substr(start, offset - start));
 }
 
-static std::vector<SyntaxDiagnostic>
-computeSyntaxDiagnostics(std::string_view text)
+static std::vector<SyntaxDiagnostic> computeSyntaxDiagnostics(
+    std::string_view text)
 {
     std::vector<SyntaxDiagnostic> out;
     std::vector<char> delimiters;
@@ -5078,6 +5422,7 @@ computeSyntaxDiagnostics(std::string_view text)
         int line = 1;
         int column = 1;
     };
+
     std::vector<SyntaxToken> tokens;
     bool token_in_string = false;
     bool token_escape = false;
@@ -5178,16 +5523,19 @@ computeSyntaxDiagnostics(std::string_view text)
         const SyntaxToken& token = tokens[i];
         if(token.text != "likely" && token.text != "unlikely")
             continue;
-        const bool valid_target = i + 1 < tokens.size() &&
+        const bool valid_target =
+            i + 1 < tokens.size() &&
             (tokens[i + 1].text == "if" || tokens[i + 1].text == "let" ||
              tokens[i + 1].text == "var");
         if(valid_target)
             continue;
-        const std::string message = "'" + std::string(token.text) +
+        const std::string message =
+            "'" + std::string(token.text) +
             "' must appear immediately before an if, let, or var statement";
-        push_diag(token.line, token.column,
-                  mlang::diag::format_message_with_code("MLANG-E1018",
-                                                        message));
+        push_diag(
+            token.line,
+            token.column,
+            mlang::diag::format_message_with_code("MLANG-E1018", message));
     }
 
     for(size_t i = 0; i < text.size(); ++i)
@@ -5267,18 +5615,24 @@ computeSyntaxDiagnostics(std::string_view text)
                 parser_diag.line = parse_error_line > 0 ? parse_error_line : 1;
                 parser_diag.column = 1;
                 parser_diag.message = mlang::diag::format_message_with_code(
-                    "MLANG-E1999", "syntax error");
+                    "MLANG-E1999",
+                    "syntax error");
             }
 
-            const bool already_reported =
-                std::any_of(out.begin(), out.end(), [&](const SyntaxDiagnostic& d) {
+            const bool already_reported = std::any_of(
+                out.begin(),
+                out.end(),
+                [&](const SyntaxDiagnostic& d)
+                {
                     return d.line == parser_diag.line &&
                            d.column == parser_diag.column &&
                            d.message == parser_diag.message;
                 });
             if(!already_reported)
-                push_diag(parser_diag.line, parser_diag.column,
-                          std::move(parser_diag.message));
+                push_diag(
+                    parser_diag.line,
+                    parser_diag.column,
+                    std::move(parser_diag.message));
         }
         delete parsed;
     }
@@ -5288,8 +5642,11 @@ computeSyntaxDiagnostics(std::string_view text)
 class SessionStore
 {
 public:
-    bool openDocument(std::string_view uri, std::string_view language_id,
-                      std::string_view text, int version)
+    bool openDocument(
+        std::string_view uri,
+        std::string_view language_id,
+        std::string_view text,
+        int version)
     {
         if(uri.empty())
         {
@@ -5306,8 +5663,10 @@ public:
         return true;
     }
 
-    Status changeDocument(std::string_view uri, std::string_view text,
-                          int version)
+    Status changeDocument(
+        std::string_view uri,
+        std::string_view text,
+        int version)
     {
         if(uri.empty())
         {
@@ -5380,9 +5739,10 @@ public:
         return out;
     }
 
-    Status semanticSnapshotForUri(std::string_view uri,
-                                  std::vector<DocumentSemantic>& out_docs,
-                                  const DocumentSemantic** out_current)
+    Status semanticSnapshotForUri(
+        std::string_view uri,
+        std::vector<DocumentSemantic>& out_docs,
+        const DocumentSemantic** out_current)
     {
         if(uri.empty() || out_current == nullptr)
         {
@@ -5439,9 +5799,11 @@ public:
         return semanticSnapshotForUri(uri, docs, &current);
     }
 
-    Status completionSnapshotForPosition(std::string_view uri, int line,
-                                         int column,
-                                         std::vector<std::string>& out_items)
+    Status completionSnapshotForPosition(
+        std::string_view uri,
+        int line,
+        int column,
+        std::vector<std::string>& out_items)
     {
         if(uri.empty())
         {
@@ -5469,7 +5831,9 @@ public:
             return Status::DocumentNotFound;
         }
         if(const auto quick = fastBuiltinCompletionsFromText(
-               doc_it->second.text, line, column);
+               doc_it->second.text,
+               line,
+               column);
            quick.has_value())
         {
             completion_cache_items_ = *quick;
@@ -5481,7 +5845,10 @@ public:
             return Status::Ok;
         }
         if(const auto quick = fastModulePathCompletionsFromText(
-               key, doc_it->second.text, line, column);
+               key,
+               doc_it->second.text,
+               line,
+               column);
            quick.has_value())
         {
             completion_cache_items_ = *quick;
@@ -5493,7 +5860,9 @@ public:
             return Status::Ok;
         }
         if(const auto quick = fastLexicalCompletionsFromText(
-               doc_it->second.text, line, column);
+               doc_it->second.text,
+               line,
+               column);
            quick.has_value())
         {
             completion_cache_items_ = *quick;
@@ -5643,37 +6012,65 @@ extern "C"
     };
 
     int __mlang_compiler_document_definition_ex(
-        mlang_compiler_session* session, const char* uri, int line, int column,
-        int* out_line, int* out_column, char* out_name, int out_name_capacity,
-        int* out_name_length, char* out_uri, int out_uri_capacity,
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        int* out_line,
+        int* out_column,
+        char* out_name,
+        int out_name_capacity,
+        int* out_name_length,
+        char* out_uri,
+        int out_uri_capacity,
         int* out_uri_length);
-    int __mlang_compiler_document_definition_id(mlang_compiler_session* session,
-                                                const char* uri, int line,
-                                                int column, char* out_id,
-                                                int out_id_capacity,
-                                                int* out_id_length);
-    int __mlang_compiler_document_symbol_id_get(mlang_compiler_session* session,
-                                                const char* uri, int index,
-                                                char* out_id,
-                                                int out_id_capacity,
-                                                int* out_id_length);
-    int
-    __mlang_compiler_document_reference_count(mlang_compiler_session* session,
-                                              const char* uri, int line,
-                                              int column, int* out_count);
+    int __mlang_compiler_document_definition_id(
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        char* out_id,
+        int out_id_capacity,
+        int* out_id_length);
+    int __mlang_compiler_document_symbol_id_get(
+        mlang_compiler_session* session,
+        const char* uri,
+        int index,
+        char* out_id,
+        int out_id_capacity,
+        int* out_id_length);
+    int __mlang_compiler_document_reference_count(
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        int* out_count);
     int __mlang_compiler_document_reference_get(
-        mlang_compiler_session* session, const char* uri, int line, int column,
-        int index, char* out_ref_uri, int out_ref_uri_capacity,
-        int* out_ref_uri_length, int* out_ref_line, int* out_ref_column);
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        int index,
+        char* out_ref_uri,
+        int out_ref_uri_capacity,
+        int* out_ref_uri_length,
+        int* out_ref_line,
+        int* out_ref_column);
     int __mlang_compiler_document_rename_is_safe(
-        mlang_compiler_session* session, const char* uri, int line, int column,
-        const char* new_name, int* out_is_safe);
-    int __mlang_compiler_semantic_cache_warm(mlang_compiler_session* session,
-                                             const char* uri);
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        const char* new_name,
+        int* out_is_safe);
+    int __mlang_compiler_semantic_cache_warm(
+        mlang_compiler_session* session,
+        const char* uri);
     int __mlang_compiler_semantic_cache_clear(mlang_compiler_session* session);
 
     static int prepare_semantic_query(
-        mlang_compiler_session* session, const char* uri,
+        mlang_compiler_session* session,
+        const char* uri,
         std::shared_ptr<mlang::compiler_api::SessionStore>& out_store,
         std::vector<mlang::compiler_api::DocumentSemantic>& out_docs,
         const mlang::compiler_api::DocumentSemantic** out_current)
@@ -5732,9 +6129,12 @@ extern "C"
         return static_cast<int>(mlang::compiler_api::Status::Ok);
     }
 
-    int __mlang_compiler_document_open(mlang_compiler_session* session,
-                                       const char* uri, const char* language_id,
-                                       const char* text, int version)
+    int __mlang_compiler_document_open(
+        mlang_compiler_session* session,
+        const char* uri,
+        const char* language_id,
+        const char* text,
+        int version)
     {
         if(session == nullptr || uri == nullptr || language_id == nullptr ||
            text == nullptr)
@@ -5758,9 +6158,11 @@ extern "C"
                         mlang::compiler_api::Status::InvalidArgument);
     }
 
-    int __mlang_compiler_document_change(mlang_compiler_session* session,
-                                         const char* uri, const char* text,
-                                         int version)
+    int __mlang_compiler_document_change(
+        mlang_compiler_session* session,
+        const char* uri,
+        const char* text,
+        int version)
     {
         if(session == nullptr || uri == nullptr || text == nullptr)
         {
@@ -5782,8 +6184,9 @@ extern "C"
         return static_cast<int>(status);
     }
 
-    int __mlang_compiler_document_close(mlang_compiler_session* session,
-                                        const char* uri)
+    int __mlang_compiler_document_close(
+        mlang_compiler_session* session,
+        const char* uri)
     {
         if(session == nullptr || uri == nullptr)
         {
@@ -5805,7 +6208,9 @@ extern "C"
     }
 
     int __mlang_compiler_document_syntax_diagnostic_count(
-        mlang_compiler_session* session, const char* uri, int* out_count)
+        mlang_compiler_session* session,
+        const char* uri,
+        int* out_count)
     {
         if(session == nullptr || uri == nullptr || out_count == nullptr)
         {
@@ -5835,9 +6240,14 @@ extern "C"
     }
 
     int __mlang_compiler_document_syntax_diagnostic_get(
-        mlang_compiler_session* session, const char* uri, int index,
-        int* out_line, int* out_column, char* out_message,
-        int out_message_capacity, int* out_message_length)
+        mlang_compiler_session* session,
+        const char* uri,
+        int index,
+        int* out_line,
+        int* out_column,
+        char* out_message,
+        int out_message_capacity,
+        int* out_message_length)
     {
         if(session == nullptr || uri == nullptr || out_line == nullptr ||
            out_column == nullptr || out_message == nullptr ||
@@ -5876,7 +6286,8 @@ extern "C"
         *out_message_length = static_cast<int>(diag.message.size());
 
         const size_t copy_len = std::min(
-            static_cast<size_t>(out_message_capacity - 1), diag.message.size());
+            static_cast<size_t>(out_message_capacity - 1),
+            diag.message.size());
         if(copy_len > 0)
         {
             std::memcpy(out_message, diag.message.data(), copy_len);
@@ -5885,11 +6296,14 @@ extern "C"
         return static_cast<int>(mlang::compiler_api::Status::Ok);
     }
 
-    int __mlang_compiler_document_hover(mlang_compiler_session* session,
-                                        const char* uri, int line, int column,
-                                        char* out_message,
-                                        int out_message_capacity,
-                                        int* out_message_length)
+    int __mlang_compiler_document_hover(
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        char* out_message,
+        int out_message_capacity,
+        int* out_message_length)
     {
         if(session == nullptr || uri == nullptr || out_message == nullptr ||
            out_message_capacity <= 0 || out_message_length == nullptr)
@@ -5909,9 +6323,12 @@ extern "C"
         }
 
         if(const auto offset = mlang::compiler_api::offsetFromLineColumn(
-               current->text, line, column))
+               current->text,
+               line,
+               column))
             if(const auto token = mlang::compiler_api::tokenSpanAtOffset(
-                   current->text, *offset))
+                   current->text,
+                   *offset))
             {
                 const auto documentation =
                     mlang::compiler_api::constraintKeywordDocumentation(
@@ -5920,9 +6337,9 @@ extern "C"
                 {
                     *out_message_length =
                         static_cast<int>(documentation.size());
-                    const size_t count =
-                        std::min(static_cast<size_t>(out_message_capacity - 1),
-                                 documentation.size());
+                    const size_t count = std::min(
+                        static_cast<size_t>(out_message_capacity - 1),
+                        documentation.size());
                     std::memcpy(out_message, documentation.data(), count);
                     out_message[count] = '\0';
                     return static_cast<int>(mlang::compiler_api::Status::Ok);
@@ -5930,8 +6347,11 @@ extern "C"
             }
 
         const std::optional<mlang::compiler_api::ResolvedQuerySymbol> resolved =
-            mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs,
-                                                         line, column);
+            mlang::compiler_api::resolveSymbolAtPosition(
+                *current,
+                sem_docs,
+                line,
+                column);
         if(!resolved.has_value())
         {
             return static_cast<int>(
@@ -5939,10 +6359,11 @@ extern "C"
         }
 
         std::string hover = "symbol: " + resolved->symbol.name;
-        hover += " [" +
-                 std::string(mlang::compiler_api::symbolKindName(
-                     resolved->symbol.kind)) +
-                 "]";
+        hover +=
+            " [" +
+            std::string(
+                mlang::compiler_api::symbolKindName(resolved->symbol.kind)) +
+            "]";
         if(!resolved->symbol.type_info.empty())
         {
             hover += " : " + resolved->symbol.type_info;
@@ -5951,7 +6372,8 @@ extern "C"
         {
             const std::string summary =
                 mlang::compiler_api::structLayoutSummaryFromText(
-                    current->text, resolved->symbol.name);
+                    current->text,
+                    resolved->symbol.name);
             if(!summary.empty())
             {
                 hover += " | " + summary;
@@ -5976,7 +6398,8 @@ extern "C"
 
         *out_message_length = static_cast<int>(hover.size());
         const size_t copy_len = std::min(
-            static_cast<size_t>(out_message_capacity - 1), hover.size());
+            static_cast<size_t>(out_message_capacity - 1),
+            hover.size());
         if(copy_len > 0)
         {
             std::memcpy(out_message, hover.data(), copy_len);
@@ -5985,10 +6408,12 @@ extern "C"
         return static_cast<int>(mlang::compiler_api::Status::Ok);
     }
 
-    int
-    __mlang_compiler_document_completion_count(mlang_compiler_session* session,
-                                               const char* uri, int line,
-                                               int column, int* out_count)
+    int __mlang_compiler_document_completion_count(
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        int* out_count)
     {
         if(session == nullptr || uri == nullptr || out_count == nullptr)
         {
@@ -6007,8 +6432,8 @@ extern "C"
 
         std::vector<std::string> completions;
         const mlang::compiler_api::Status st =
-            store->completionSnapshotForPosition(uri, line, column,
-                                                 completions);
+            store
+                ->completionSnapshotForPosition(uri, line, column, completions);
         if(st != mlang::compiler_api::Status::Ok)
         {
             return static_cast<int>(st);
@@ -6018,8 +6443,14 @@ extern "C"
     }
 
     int __mlang_compiler_document_completion_get(
-        mlang_compiler_session* session, const char* uri, int line, int column,
-        int index, char* out_item, int out_item_capacity, int* out_item_length)
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        int index,
+        char* out_item,
+        int out_item_capacity,
+        int* out_item_length)
     {
         if(session == nullptr || uri == nullptr || out_item == nullptr ||
            out_item_capacity <= 0 || out_item_length == nullptr)
@@ -6039,8 +6470,8 @@ extern "C"
 
         std::vector<std::string> completions;
         const mlang::compiler_api::Status st =
-            store->completionSnapshotForPosition(uri, line, column,
-                                                 completions);
+            store
+                ->completionSnapshotForPosition(uri, line, column, completions);
         if(st != mlang::compiler_api::Status::Ok)
         {
             return static_cast<int>(st);
@@ -6062,8 +6493,10 @@ extern "C"
         return static_cast<int>(mlang::compiler_api::Status::Ok);
     }
 
-    int __mlang_compiler_document_symbol_count(mlang_compiler_session* session,
-                                               const char* uri, int* out_count)
+    int __mlang_compiler_document_symbol_count(
+        mlang_compiler_session* session,
+        const char* uri,
+        int* out_count)
     {
         if(session == nullptr || uri == nullptr || out_count == nullptr)
         {
@@ -6086,9 +6519,15 @@ extern "C"
     }
 
     int __mlang_compiler_document_symbol_get(
-        mlang_compiler_session* session, const char* uri, int index,
-        char* out_name, int out_name_capacity, int* out_name_length,
-        int* out_kind, int* out_line, int* out_column)
+        mlang_compiler_session* session,
+        const char* uri,
+        int index,
+        char* out_name,
+        int out_name_capacity,
+        int* out_name_length,
+        int* out_kind,
+        int* out_line,
+        int* out_column)
     {
         if(session == nullptr || uri == nullptr || out_name == nullptr ||
            out_name_capacity <= 0 || out_name_length == nullptr ||
@@ -6121,7 +6560,8 @@ extern "C"
         *out_name_length = static_cast<int>(sym.name.size());
 
         const size_t copy_len = std::min(
-            static_cast<size_t>(out_name_capacity - 1), sym.name.size());
+            static_cast<size_t>(out_name_capacity - 1),
+            sym.name.size());
         if(copy_len > 0)
         {
             std::memcpy(out_name, sym.name.data(), copy_len);
@@ -6130,11 +6570,13 @@ extern "C"
         return static_cast<int>(mlang::compiler_api::Status::Ok);
     }
 
-    int __mlang_compiler_document_symbol_id_get(mlang_compiler_session* session,
-                                                const char* uri, int index,
-                                                char* out_id,
-                                                int out_id_capacity,
-                                                int* out_id_length)
+    int __mlang_compiler_document_symbol_id_get(
+        mlang_compiler_session* session,
+        const char* uri,
+        int index,
+        char* out_id,
+        int out_id_capacity,
+        int* out_id_length)
     {
         if(session == nullptr || uri == nullptr || out_id == nullptr ||
            out_id_capacity <= 0 || out_id_length == nullptr)
@@ -6172,8 +6614,12 @@ extern "C"
     }
 
     int __mlang_compiler_document_symbol_type_get(
-        mlang_compiler_session* session, const char* uri, int index,
-        char* out_type, int out_type_capacity, int* out_type_length)
+        mlang_compiler_session* session,
+        const char* uri,
+        int index,
+        char* out_type,
+        int out_type_capacity,
+        int* out_type_length)
     {
         if(session == nullptr || uri == nullptr || out_type == nullptr ||
            out_type_capacity <= 0 || out_type_length == nullptr)
@@ -6201,7 +6647,8 @@ extern "C"
             current->symbols[static_cast<size_t>(index)].type_info;
         *out_type_length = static_cast<int>(type_info.size());
         const size_t copy_len = std::min(
-            static_cast<size_t>(out_type_capacity - 1), type_info.size());
+            static_cast<size_t>(out_type_capacity - 1),
+            type_info.size());
         if(copy_len > 0)
         {
             std::memcpy(out_type, type_info.data(), copy_len);
@@ -6211,8 +6658,11 @@ extern "C"
     }
 
     int __mlang_compiler_document_symbol_signature_get(
-        mlang_compiler_session* session, const char* uri, int index,
-        char* out_signature, int out_signature_capacity,
+        mlang_compiler_session* session,
+        const char* uri,
+        int index,
+        char* out_signature,
+        int out_signature_capacity,
         int* out_signature_length)
     {
         if(session == nullptr || uri == nullptr || out_signature == nullptr ||
@@ -6241,7 +6691,8 @@ extern "C"
             current->symbols[static_cast<size_t>(index)].signature;
         *out_signature_length = static_cast<int>(signature.size());
         const size_t copy_len = std::min(
-            static_cast<size_t>(out_signature_capacity - 1), signature.size());
+            static_cast<size_t>(out_signature_capacity - 1),
+            signature.size());
         if(copy_len > 0)
         {
             std::memcpy(out_signature, signature.data(), copy_len);
@@ -6251,8 +6702,11 @@ extern "C"
     }
 
     int __mlang_compiler_document_symbol_documentation_get(
-        mlang_compiler_session* session, const char* uri, int index,
-        char* out_documentation, int out_documentation_capacity,
+        mlang_compiler_session* session,
+        const char* uri,
+        int index,
+        char* out_documentation,
+        int out_documentation_capacity,
         int* out_documentation_length)
     {
         if(session == nullptr || uri == nullptr ||
@@ -6281,9 +6735,9 @@ extern "C"
         const std::string& documentation =
             current->symbols[static_cast<size_t>(index)].documentation;
         *out_documentation_length = static_cast<int>(documentation.size());
-        const size_t copy_len =
-            std::min(static_cast<size_t>(out_documentation_capacity - 1),
-                     documentation.size());
+        const size_t copy_len = std::min(
+            static_cast<size_t>(out_documentation_capacity - 1),
+            documentation.size());
         if(copy_len > 0)
         {
             std::memcpy(out_documentation, documentation.data(), copy_len);
@@ -6293,14 +6747,30 @@ extern "C"
     }
 
     int __mlang_compiler_document_resolve_symbol(
-        mlang_compiler_session* session, const char* uri, int line, int column,
-        char* out_name, int out_name_capacity, int* out_name_length,
-        int* out_kind, int* out_line, int* out_column, char* out_uri,
-        int out_uri_capacity, int* out_uri_length, char* out_id,
-        int out_id_capacity, int* out_id_length, char* out_type,
-        int out_type_capacity, int* out_type_length, char* out_signature,
-        int out_signature_capacity, int* out_signature_length,
-        int* out_overload_count, int* out_from_current_document)
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        char* out_name,
+        int out_name_capacity,
+        int* out_name_length,
+        int* out_kind,
+        int* out_line,
+        int* out_column,
+        char* out_uri,
+        int out_uri_capacity,
+        int* out_uri_length,
+        char* out_id,
+        int out_id_capacity,
+        int* out_id_length,
+        char* out_type,
+        int out_type_capacity,
+        int* out_type_length,
+        char* out_signature,
+        int out_signature_capacity,
+        int* out_signature_length,
+        int* out_overload_count,
+        int* out_from_current_document)
     {
         if(session == nullptr || uri == nullptr || out_name == nullptr ||
            out_name_capacity <= 0 || out_name_length == nullptr ||
@@ -6329,7 +6799,10 @@ extern "C"
         }
 
         const auto resolved = mlang::compiler_api::resolveSymbolAtPosition(
-            *current, sem_docs, line, column);
+            *current,
+            sem_docs,
+            line,
+            column);
         if(!resolved.has_value())
         {
             return static_cast<int>(
@@ -6345,7 +6818,8 @@ extern "C"
 
         *out_name_length = static_cast<int>(sym.name.size());
         const size_t name_copy_len = std::min(
-            static_cast<size_t>(out_name_capacity - 1), sym.name.size());
+            static_cast<size_t>(out_name_capacity - 1),
+            sym.name.size());
         if(name_copy_len > 0)
         {
             std::memcpy(out_name, sym.name.data(), name_copy_len);
@@ -6363,7 +6837,8 @@ extern "C"
 
         *out_id_length = static_cast<int>(sym.stable_id.size());
         const size_t id_copy_len = std::min(
-            static_cast<size_t>(out_id_capacity - 1), sym.stable_id.size());
+            static_cast<size_t>(out_id_capacity - 1),
+            sym.stable_id.size());
         if(id_copy_len > 0)
         {
             std::memcpy(out_id, sym.stable_id.data(), id_copy_len);
@@ -6372,7 +6847,8 @@ extern "C"
 
         *out_type_length = static_cast<int>(sym.type_info.size());
         const size_t type_copy_len = std::min(
-            static_cast<size_t>(out_type_capacity - 1), sym.type_info.size());
+            static_cast<size_t>(out_type_capacity - 1),
+            sym.type_info.size());
         if(type_copy_len > 0)
         {
             std::memcpy(out_type, sym.type_info.data(), type_copy_len);
@@ -6380,9 +6856,9 @@ extern "C"
         out_type[type_copy_len] = '\0';
 
         *out_signature_length = static_cast<int>(sym.signature.size());
-        const size_t sig_copy_len =
-            std::min(static_cast<size_t>(out_signature_capacity - 1),
-                     sym.signature.size());
+        const size_t sig_copy_len = std::min(
+            static_cast<size_t>(out_signature_capacity - 1),
+            sym.signature.size());
         if(sig_copy_len > 0)
         {
             std::memcpy(out_signature, sym.signature.data(), sig_copy_len);
@@ -6392,25 +6868,46 @@ extern "C"
         return static_cast<int>(mlang::compiler_api::Status::Ok);
     }
 
-    int __mlang_compiler_document_definition(mlang_compiler_session* session,
-                                             const char* uri, int line,
-                                             int column, int* out_line,
-                                             int* out_column, char* out_name,
-                                             int out_name_capacity,
-                                             int* out_name_length)
+    int __mlang_compiler_document_definition(
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        int* out_line,
+        int* out_column,
+        char* out_name,
+        int out_name_capacity,
+        int* out_name_length)
     {
         char out_uri_dummy[2] = {0, 0};
         int out_uri_length_dummy = 0;
         return __mlang_compiler_document_definition_ex(
-            session, uri, line, column, out_line, out_column, out_name,
-            out_name_capacity, out_name_length, out_uri_dummy, 2,
+            session,
+            uri,
+            line,
+            column,
+            out_line,
+            out_column,
+            out_name,
+            out_name_capacity,
+            out_name_length,
+            out_uri_dummy,
+            2,
             &out_uri_length_dummy);
     }
 
     int __mlang_compiler_document_definition_ex(
-        mlang_compiler_session* session, const char* uri, int line, int column,
-        int* out_line, int* out_column, char* out_name, int out_name_capacity,
-        int* out_name_length, char* out_uri, int out_uri_capacity,
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        int* out_line,
+        int* out_column,
+        char* out_name,
+        int out_name_capacity,
+        int* out_name_length,
+        char* out_uri,
+        int out_uri_capacity,
         int* out_uri_length)
     {
         if(session == nullptr || uri == nullptr || out_line == nullptr ||
@@ -6434,30 +6931,35 @@ extern "C"
         }
 
         const std::optional<mlang::compiler_api::ResolvedQuerySymbol> def =
-            mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs,
-                                                         line, column);
+            mlang::compiler_api::resolveSymbolAtPosition(
+                *current,
+                sem_docs,
+                line,
+                column);
         if(!def.has_value())
         {
             const std::optional<mlang::compiler_api::ImportDefinitionFallback>
                 import_fb = mlang::compiler_api::importDefinitionFromText(
-                    *current, line, column);
+                    *current,
+                    line,
+                    column);
             if(import_fb.has_value())
             {
                 *out_line = import_fb->line;
                 *out_column = import_fb->column;
                 *out_name_length = static_cast<int>(import_fb->name.size());
-                const size_t copy_len =
-                    std::min(static_cast<size_t>(out_name_capacity - 1),
-                             import_fb->name.size());
+                const size_t copy_len = std::min(
+                    static_cast<size_t>(out_name_capacity - 1),
+                    import_fb->name.size());
                 if(copy_len > 0)
                 {
                     std::memcpy(out_name, import_fb->name.data(), copy_len);
                 }
                 out_name[copy_len] = '\0';
                 *out_uri_length = static_cast<int>(import_fb->uri.size());
-                const size_t uri_copy_len =
-                    std::min(static_cast<size_t>(out_uri_capacity - 1),
-                             import_fb->uri.size());
+                const size_t uri_copy_len = std::min(
+                    static_cast<size_t>(out_uri_capacity - 1),
+                    import_fb->uri.size());
                 if(uri_copy_len > 0)
                 {
                     std::memcpy(out_uri, import_fb->uri.data(), uri_copy_len);
@@ -6466,8 +6968,11 @@ extern "C"
                 return static_cast<int>(mlang::compiler_api::Status::Ok);
             }
             mlang::compiler_api::TextDefinitionFallback fb;
-            if(!mlang::compiler_api::fallbackDefinitionFromText(*current, line,
-                                                                column, fb))
+            if(!mlang::compiler_api::fallbackDefinitionFromText(
+                   *current,
+                   line,
+                   column,
+                   fb))
             {
                 return static_cast<int>(
                     mlang::compiler_api::Status::SymbolNotFound);
@@ -6476,7 +6981,8 @@ extern "C"
             *out_column = fb.column;
             *out_name_length = static_cast<int>(fb.name.size());
             const size_t copy_len = std::min(
-                static_cast<size_t>(out_name_capacity - 1), fb.name.size());
+                static_cast<size_t>(out_name_capacity - 1),
+                fb.name.size());
             if(copy_len > 0)
             {
                 std::memcpy(out_name, fb.name.data(), copy_len);
@@ -6484,7 +6990,8 @@ extern "C"
             out_name[copy_len] = '\0';
             *out_uri_length = static_cast<int>(current->uri.size());
             const size_t uri_copy_len = std::min(
-                static_cast<size_t>(out_uri_capacity - 1), current->uri.size());
+                static_cast<size_t>(out_uri_capacity - 1),
+                current->uri.size());
             if(uri_copy_len > 0)
             {
                 std::memcpy(out_uri, current->uri.data(), uri_copy_len);
@@ -6496,9 +7003,9 @@ extern "C"
         *out_line = def->symbol.line;
         *out_column = def->symbol.column;
         *out_name_length = static_cast<int>(def->symbol.name.size());
-        const size_t copy_len =
-            std::min(static_cast<size_t>(out_name_capacity - 1),
-                     def->symbol.name.size());
+        const size_t copy_len = std::min(
+            static_cast<size_t>(out_name_capacity - 1),
+            def->symbol.name.size());
         if(copy_len > 0)
         {
             std::memcpy(out_name, def->symbol.name.data(), copy_len);
@@ -6507,7 +7014,8 @@ extern "C"
 
         *out_uri_length = static_cast<int>(def->symbol.uri.size());
         const size_t uri_copy_len = std::min(
-            static_cast<size_t>(out_uri_capacity - 1), def->symbol.uri.size());
+            static_cast<size_t>(out_uri_capacity - 1),
+            def->symbol.uri.size());
         if(uri_copy_len > 0)
         {
             std::memcpy(out_uri, def->symbol.uri.data(), uri_copy_len);
@@ -6516,11 +7024,14 @@ extern "C"
         return static_cast<int>(mlang::compiler_api::Status::Ok);
     }
 
-    int __mlang_compiler_document_definition_id(mlang_compiler_session* session,
-                                                const char* uri, int line,
-                                                int column, char* out_id,
-                                                int out_id_capacity,
-                                                int* out_id_length)
+    int __mlang_compiler_document_definition_id(
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        char* out_id,
+        int out_id_capacity,
+        int* out_id_length)
     {
         if(session == nullptr || uri == nullptr || out_id == nullptr ||
            out_id_capacity <= 0 || out_id_length == nullptr)
@@ -6540,7 +7051,10 @@ extern "C"
         }
 
         const auto def = mlang::compiler_api::resolveSymbolAtPosition(
-            *current, sem_docs, line, column);
+            *current,
+            sem_docs,
+            line,
+            column);
         std::string id;
         if(def.has_value())
         {
@@ -6550,24 +7064,36 @@ extern "C"
         {
             const std::optional<mlang::compiler_api::ImportDefinitionFallback>
                 import_fb = mlang::compiler_api::importDefinitionFromText(
-                    *current, line, column);
+                    *current,
+                    line,
+                    column);
             if(import_fb.has_value())
             {
                 id = mlang::compiler_api::stableFallbackId(
-                    import_fb->uri, import_fb->name, import_fb->line,
-                    import_fb->column, "import");
+                    import_fb->uri,
+                    import_fb->name,
+                    import_fb->line,
+                    import_fb->column,
+                    "import");
             }
             else
             {
                 mlang::compiler_api::TextDefinitionFallback fb;
                 if(!mlang::compiler_api::fallbackDefinitionFromText(
-                       *current, line, column, fb))
+                       *current,
+                       line,
+                       column,
+                       fb))
                 {
                     return static_cast<int>(
                         mlang::compiler_api::Status::SymbolNotFound);
                 }
                 id = mlang::compiler_api::stableFallbackId(
-                    current->uri, fb.name, fb.line, fb.column, "text");
+                    current->uri,
+                    fb.name,
+                    fb.line,
+                    fb.column,
+                    "text");
             }
         }
 
@@ -6582,10 +7108,12 @@ extern "C"
         return static_cast<int>(mlang::compiler_api::Status::Ok);
     }
 
-    int
-    __mlang_compiler_document_reference_count(mlang_compiler_session* session,
-                                              const char* uri, int line,
-                                              int column, int* out_count)
+    int __mlang_compiler_document_reference_count(
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        int* out_count)
     {
         if(session == nullptr || uri == nullptr || out_count == nullptr)
         {
@@ -6604,7 +7132,10 @@ extern "C"
         }
 
         const auto target = mlang::compiler_api::resolveSymbolAtPosition(
-            *current, sem_docs, line, column);
+            *current,
+            sem_docs,
+            line,
+            column);
         if(!target.has_value())
         {
             return static_cast<int>(
@@ -6612,15 +7143,23 @@ extern "C"
         }
 
         const auto refs = mlang::compiler_api::collectReferencesForSymbol(
-            target->symbol, sem_docs);
+            target->symbol,
+            sem_docs);
         *out_count = static_cast<int>(refs.size());
         return static_cast<int>(mlang::compiler_api::Status::Ok);
     }
 
     int __mlang_compiler_document_reference_get(
-        mlang_compiler_session* session, const char* uri, int line, int column,
-        int index, char* out_ref_uri, int out_ref_uri_capacity,
-        int* out_ref_uri_length, int* out_ref_line, int* out_ref_column)
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        int index,
+        char* out_ref_uri,
+        int out_ref_uri_capacity,
+        int* out_ref_uri_length,
+        int* out_ref_line,
+        int* out_ref_column)
     {
         if(session == nullptr || uri == nullptr || out_ref_uri == nullptr ||
            out_ref_uri_capacity <= 0 || out_ref_uri_length == nullptr ||
@@ -6641,14 +7180,18 @@ extern "C"
         }
 
         const auto target = mlang::compiler_api::resolveSymbolAtPosition(
-            *current, sem_docs, line, column);
+            *current,
+            sem_docs,
+            line,
+            column);
         if(!target.has_value())
         {
             return static_cast<int>(
                 mlang::compiler_api::Status::SymbolNotFound);
         }
         const auto refs = mlang::compiler_api::collectReferencesForSymbol(
-            target->symbol, sem_docs);
+            target->symbol,
+            sem_docs);
         if(index < 0 || static_cast<size_t>(index) >= refs.size())
         {
             return static_cast<int>(mlang::compiler_api::Status::OutOfRange);
@@ -6659,7 +7202,8 @@ extern "C"
         *out_ref_column = ref.column;
         *out_ref_uri_length = static_cast<int>(ref.uri.size());
         const size_t copy_len = std::min(
-            static_cast<size_t>(out_ref_uri_capacity - 1), ref.uri.size());
+            static_cast<size_t>(out_ref_uri_capacity - 1),
+            ref.uri.size());
         if(copy_len > 0)
         {
             std::memcpy(out_ref_uri, ref.uri.data(), copy_len);
@@ -6669,8 +7213,12 @@ extern "C"
     }
 
     int __mlang_compiler_document_rename_is_safe(
-        mlang_compiler_session* session, const char* uri, int line, int column,
-        const char* new_name, int* out_is_safe)
+        mlang_compiler_session* session,
+        const char* uri,
+        int line,
+        int column,
+        const char* new_name,
+        int* out_is_safe)
     {
         if(session == nullptr || uri == nullptr || new_name == nullptr ||
            out_is_safe == nullptr)
@@ -6690,7 +7238,10 @@ extern "C"
         }
 
         const auto target = mlang::compiler_api::resolveSymbolAtPosition(
-            *current, sem_docs, line, column);
+            *current,
+            sem_docs,
+            line,
+            column);
         if(!target.has_value())
         {
             return static_cast<int>(
@@ -6698,14 +7249,17 @@ extern "C"
         }
 
         *out_is_safe = mlang::compiler_api::isRenameSafeForSymbol(
-                           target->symbol, std::string_view(new_name), sem_docs)
+                           target->symbol,
+                           std::string_view(new_name),
+                           sem_docs)
                            ? 1
                            : 0;
         return static_cast<int>(mlang::compiler_api::Status::Ok);
     }
 
-    int __mlang_compiler_semantic_cache_warm(mlang_compiler_session* session,
-                                             const char* uri)
+    int __mlang_compiler_semantic_cache_warm(
+        mlang_compiler_session* session,
+        const char* uri)
     {
         if(session == nullptr || uri == nullptr)
         {

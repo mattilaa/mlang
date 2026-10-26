@@ -50,8 +50,8 @@ class ASTNode
 {
 public:
     int line = 0;
-    int col  = 0;
-    const char* file = g_astSourceFile;  // source file, or null if unknown
+    int col = 0;
+    const char* file = g_astSourceFile; // source file, or null if unknown
     // Where a statement or top-level item starts (its first token), set by
     // the parser's list rules; 0 when unknown. `line` can be later (the
     // parser may have read ahead); debug info uses these when set.
@@ -90,14 +90,15 @@ public:
         TYPE_U16,
         TYPE_U32,
         TYPE_U64,
-        TYPE_REF,      // &T  -- immutable reference
-        TYPE_REF_MUT,  // &mut T -- mutable reference
-        TYPE_FUNCTION  // fn(T1, T2) -> R -- callable closure value
+        TYPE_REF,     // &T  -- immutable reference
+        TYPE_REF_MUT, // &mut T -- mutable reference
+        TYPE_FUNCTION // fn(T1, T2) -> R -- callable closure value
     };
 
     TypeKind kind;
 
     TypeNode(TypeKind k) : kind(k) {}
+
     std::string toString() const override;
 };
 
@@ -106,10 +107,12 @@ class PointerTypeNode : public TypeNode
 {
 public:
     TypeNode* elementType;
+
     PointerTypeNode(TypeNode* elemType)
         : TypeNode(TYPE_PTR), elementType(elemType)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -117,10 +120,12 @@ class TraitObjectTypeNode : public TypeNode
 {
 public:
     std::string traitName;
+
     TraitObjectTypeNode(const std::string& name)
         : TypeNode(TYPE_TRAIT_OBJECT), traitName(name)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -129,12 +134,14 @@ class ReferenceTypeNode : public TypeNode
 {
 public:
     TypeNode* elementType;
-    bool      isMutable;   // true for &mut T
+    bool isMutable; // true for &mut T
+
     ReferenceTypeNode(TypeNode* elemType, bool mut)
-        : TypeNode(mut ? TYPE_REF_MUT : TYPE_REF),
-          elementType(elemType), isMutable(mut)
+        : TypeNode(mut ? TYPE_REF_MUT : TYPE_REF), elementType(elemType),
+          isMutable(mut)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -150,10 +157,12 @@ class GenericListTypeNode : public TypeNode
 {
 public:
     TypeNode* elementType;
+
     GenericListTypeNode(TypeNode* elemType)
         : TypeNode(TYPE_LIST), elementType(elemType)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -162,10 +171,12 @@ class ArrayTypeNode : public GenericListTypeNode
 {
 public:
     int64_t capacity;
+
     ArrayTypeNode(TypeNode* elemType, int64_t cap)
         : GenericListTypeNode(elemType), capacity(cap)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -175,10 +186,12 @@ class MultiArrayTypeNode : public ArrayTypeNode
 {
 public:
     bool elementsMutable;
+
     MultiArrayTypeNode(TypeNode* elemType, int64_t cap, bool isMutable)
         : ArrayTypeNode(elemType, cap), elementsMutable(isMutable)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -188,10 +201,12 @@ class MapTypeNode : public TypeNode
 public:
     TypeNode* keyType;
     TypeNode* valueType;
+
     MapTypeNode(TypeNode* kt, TypeNode* vt)
         : TypeNode(TYPE_MAP), keyType(kt), valueType(vt)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -200,10 +215,12 @@ class TypeListNode : public ASTNode
 {
 public:
     std::vector<TypeNode*> types;
+
     void addType(TypeNode* t)
     {
         types.push_back(t);
     }
+
     std::string toString() const override;
 };
 
@@ -212,10 +229,12 @@ class TupleTypeNode : public TypeNode
 {
 public:
     TypeListNode* elementTypes;
+
     TupleTypeNode(TypeListNode* types)
         : TypeNode(TYPE_TUPLE), elementTypes(types)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -232,6 +251,7 @@ public:
           returnType(result)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -240,10 +260,12 @@ class StructTypeRefNode : public TypeNode
 {
 public:
     std::string structName;
+
     StructTypeRefNode(const std::string& name)
         : TypeNode(TYPE_STRUCT), structName(name)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -288,6 +310,7 @@ public:
     ExpressionNode* value;
 
     FormatArgumentNode(ExpressionNode* v) : value(v) {}
+
     FormatArgumentNode(const std::string& n, ExpressionNode* v)
         : name(n), value(v)
     {
@@ -321,7 +344,9 @@ public:
     // TYPE_U64). TYPE_VOID means "untyped" — the historical default, where
     // the destination context picks the type.
     TypeNode::TypeKind explicitType = TypeNode::TYPE_VOID;
+
     IntLiteralNode(int64_t v) : value(v) {}
+
     std::string toString() const override;
 };
 
@@ -329,7 +354,9 @@ class BoolLiteralNode : public ExpressionNode
 {
 public:
     bool value;
+
     BoolLiteralNode(bool v) : value(v) {}
+
     std::string toString() const override;
 };
 
@@ -337,7 +364,9 @@ class FloatLiteralNode : public ExpressionNode
 {
 public:
     float value;
+
     FloatLiteralNode(float v) : value(v) {}
+
     std::string toString() const override;
 };
 
@@ -345,7 +374,9 @@ class DoubleLiteralNode : public ExpressionNode
 {
 public:
     double value;
+
     DoubleLiteralNode(double v) : value(v) {}
+
     std::string toString() const override;
 };
 
@@ -353,7 +384,9 @@ class StringLiteralNode : public ExpressionNode
 {
 public:
     std::string value;
+
     StringLiteralNode(const std::string& v) : value(v) {}
+
     std::string toString() const override;
 };
 
@@ -361,7 +394,9 @@ class IdentifierNode : public ExpressionNode
 {
 public:
     std::string name;
+
     IdentifierNode(const std::string& n) : name(n) {}
+
     std::string toString() const override;
 };
 
@@ -400,6 +435,7 @@ public:
         : op(o), left(l), right(r)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -412,11 +448,14 @@ public:
     ExpressionNode* packExpr;
     bool isRightFold;
 
-    FoldExpressionNode(BinaryOpNode::OpType o, ExpressionNode* pack,
-                       bool rightFold)
+    FoldExpressionNode(
+        BinaryOpNode::OpType o,
+        ExpressionNode* pack,
+        bool rightFold)
         : op(o), packExpr(pack), isRightFold(rightFold)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -437,6 +476,7 @@ public:
     ExpressionNode* operand;
 
     UnaryOpNode(OpType o, ExpressionNode* value) : op(o), operand(value) {}
+
     std::string toString() const override;
 };
 
@@ -472,6 +512,7 @@ public:
         : condition(cond), trueExpr(t), falseExpr(f)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -481,6 +522,7 @@ public:
     ExpressionNode* expression;
 
     TryExpressionNode(ExpressionNode* expr) : expression(expr) {}
+
     std::string toString() const override;
 };
 
@@ -491,7 +533,9 @@ public:
     ExpressionNode* expressionTarget = nullptr;
 
     explicit SizeofExpressionNode(TypeNode* t) : typeTarget(t) {}
+
     explicit SizeofExpressionNode(ExpressionNode* e) : expressionTarget(e) {}
+
     std::string toString() const override;
 };
 
@@ -501,6 +545,7 @@ public:
     ExpressionNode* expression;
 
     explicit CexprExpressionNode(ExpressionNode* e) : expression(e) {}
+
     std::string toString() const override;
 };
 
@@ -529,12 +574,16 @@ public:
     /// \brief Whether LLVM should treat the asm block as side-effecting.
     bool isVolatile;
 
-    InlineAsmNode(TypeNode* type, const std::string& text,
-                  const std::string& arch, bool isVolatileAsm)
+    InlineAsmNode(
+        TypeNode* type,
+        const std::string& text,
+        const std::string& arch,
+        bool isVolatileAsm)
         : resultType(type), asmTemplate(text), requiredArch(arch),
           isVolatile(isVolatileAsm)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -545,6 +594,7 @@ public:
     std::vector<ExpressionNode*> arguments;
 
     FunctionCallNode(const std::string& n) : name(n) {}
+
     std::string toString() const override;
 };
 
@@ -554,11 +604,14 @@ class ConceptApplicationNode : public ExpressionNode
 public:
     std::string name;
     std::vector<TypeNode*> typeArguments;
-    ConceptApplicationNode(const std::string& n,
-                           const std::vector<TypeNode*>& types)
+
+    ConceptApplicationNode(
+        const std::string& n,
+        const std::vector<TypeNode*>& types)
         : name(n), typeArguments(types)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -575,13 +628,16 @@ public:
         Compound,
         Nested
     };
+
     Kind kind;
     ExpressionNode* expression = nullptr;
     TypeNode* requiredType = nullptr;
     std::string resultConcept;
     std::vector<TypeNode*> resultArguments;
     bool noThrow = false;
+
     explicit RequirementNode(Kind k) : kind(k) {}
+
     std::string toString() const override;
 };
 
@@ -602,6 +658,7 @@ public:
     std::vector<ExpressionNode*> arguments;
 
     explicit CallableInvokeNode(ExpressionNode* value) : callable(value) {}
+
     std::string toString() const override;
 };
 
@@ -617,6 +674,7 @@ public:
         : object(obj), methodName(method)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -637,11 +695,14 @@ public:
     std::string binding;
     ExpressionNode* literal = nullptr;
 
-    MatchPatternNode(PatternKind k, const std::string& b,
-                     ExpressionNode* lit = nullptr)
+    MatchPatternNode(
+        PatternKind k,
+        const std::string& b,
+        ExpressionNode* lit = nullptr)
         : kind(k), binding(b), literal(lit)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -655,6 +716,7 @@ public:
         : pattern(p), expression(e)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -667,6 +729,7 @@ public:
     {
         arms.push_back(arm);
     }
+
     std::string toString() const override;
 };
 
@@ -676,12 +739,12 @@ public:
     ExpressionNode* target;
     std::vector<MatchArmNode*> arms;
 
-    MatchExpressionNode(ExpressionNode* t, MatchArmListNode* list)
-        : target(t)
+    MatchExpressionNode(ExpressionNode* t, MatchArmListNode* list) : target(t)
     {
         if(list)
             arms = list->arms;
     }
+
     std::string toString() const override;
 };
 
@@ -695,6 +758,7 @@ public:
         : enumName(e), variantName(v)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -705,11 +769,14 @@ public:
     ExpressionNode* expression;
     bool checkedNarrow;
 
-    CastExpressionNode(TypeNode::TypeKind t, ExpressionNode* e,
-                       bool narrow = false)
+    CastExpressionNode(
+        TypeNode::TypeKind t,
+        ExpressionNode* e,
+        bool narrow = false)
         : targetType(t), expression(e), checkedNarrow(narrow)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -724,6 +791,7 @@ public:
         : start(s), end(e), inclusive(incl)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -731,10 +799,12 @@ class ListElementsNode : public ASTNode
 {
 public:
     std::vector<ExpressionNode*> elements;
+
     void addElement(ExpressionNode* e)
     {
         elements.push_back(e);
     }
+
     std::string toString() const override;
 };
 
@@ -742,7 +812,9 @@ class ListLiteralNode : public ExpressionNode
 {
 public:
     ListElementsNode* elements;
+
     ListLiteralNode(ListElementsNode* e) : elements(e) {}
+
     std::string toString() const override;
 };
 
@@ -752,7 +824,9 @@ class MapEntryNode : public ASTNode
 public:
     ExpressionNode* key;
     ExpressionNode* value;
+
     MapEntryNode(ExpressionNode* k, ExpressionNode* v) : key(k), value(v) {}
+
     std::string toString() const override;
 };
 
@@ -761,10 +835,12 @@ class MapEntriesNode : public ASTNode
 {
 public:
     std::vector<MapEntryNode*> entries;
+
     void addEntry(MapEntryNode* e)
     {
         entries.push_back(e);
     }
+
     std::string toString() const override;
 };
 
@@ -773,7 +849,9 @@ class MapLiteralNode : public ExpressionNode
 {
 public:
     MapEntriesNode* entries;
+
     MapLiteralNode(MapEntriesNode* e) : entries(e) {}
+
     std::string toString() const override;
 };
 
@@ -782,11 +860,13 @@ class ClosureNode : public ExpressionNode
 {
 public:
     ParameterListNode* parameters; // optional parameters for |x: T| { ... }
-    StatementListNode* body; // may be null for empty body
+    StatementListNode* body;       // may be null for empty body
+
     ClosureNode(ParameterListNode* p, StatementListNode* b)
         : parameters(p), body(b)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -797,7 +877,9 @@ class ArrayFillNode : public ExpressionNode
 public:
     ExpressionNode* value; // the fill value
     ExpressionNode* count; // number of elements
+
     ArrayFillNode(ExpressionNode* v, ExpressionNode* c) : value(v), count(c) {}
+
     std::string toString() const override;
 };
 
@@ -807,10 +889,12 @@ class IndexExpressionNode : public ExpressionNode
 public:
     ExpressionNode* base;
     ExpressionNode* index;
+
     IndexExpressionNode(ExpressionNode* b, ExpressionNode* i)
         : base(b), index(i)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -819,7 +903,9 @@ class TupleLiteralNode : public ExpressionNode
 {
 public:
     ListElementsNode* elements;
+
     TupleLiteralNode(ListElementsNode* e) : elements(e) {}
+
     std::string toString() const override;
 };
 
@@ -829,7 +915,9 @@ class TupleAccessNode : public ExpressionNode
 public:
     ExpressionNode* tuple;
     int index;
+
     TupleAccessNode(ExpressionNode* t, int i) : tuple(t), index(i) {}
+
     std::string toString() const override;
 };
 
@@ -848,6 +936,7 @@ public:
     IteratorKind kind;
 
     MapIteratorNode(ExpressionNode* m, IteratorKind k) : mapExpr(m), kind(k) {}
+
     std::string toString() const override;
 };
 
@@ -868,7 +957,9 @@ class BlockStatementNode : public StatementNode
 public:
     StatementListNode* statements;
     bool isUnsafe = false;
+
     BlockStatementNode(StatementListNode* s) : statements(s) {}
+
     std::string toString() const override;
 };
 
@@ -877,10 +968,12 @@ class DerefAssignmentNode : public StatementNode
 public:
     ExpressionNode* pointerExpr;
     ExpressionNode* value;
+
     DerefAssignmentNode(ExpressionNode* p, ExpressionNode* v)
         : pointerExpr(p), value(v)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -888,7 +981,9 @@ class ExpressionStatementNode : public StatementNode
 {
 public:
     ExpressionNode* expression;
+
     ExpressionStatementNode(ExpressionNode* e) : expression(e) {}
+
     std::string toString() const override;
 };
 
@@ -896,7 +991,9 @@ class ReturnNode : public StatementNode
 {
 public:
     ExpressionNode* expression;
+
     ReturnNode(ExpressionNode* e) : expression(e) {}
+
     std::string toString() const override;
 };
 
@@ -918,7 +1015,9 @@ class ThrowNode : public StatementNode
 {
 public:
     ExpressionNode* expression;
+
     ThrowNode(ExpressionNode* e) : expression(e) {}
+
     std::string toString() const override;
 };
 
@@ -941,6 +1040,7 @@ public:
         : type(t), name(n), expression(e)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -951,6 +1051,7 @@ public:
         : LetDeclNode(t, n, e)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -969,6 +1070,7 @@ public:
         : type(t), name(n), initExpr(e)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -982,6 +1084,7 @@ public:
         : name(n), expression(e)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1018,8 +1121,10 @@ public:
     ExpressionNode*
         target; // For chained assignment (a.b.c = x), nullptr for simple case
 
-    FieldAssignmentNode(const std::string& s, const std::string& f,
-                        ExpressionNode* e)
+    FieldAssignmentNode(
+        const std::string& s,
+        const std::string& f,
+        ExpressionNode* e)
         : structName(s), fieldName(f), expression(e), target(nullptr)
     {
     }
@@ -1044,14 +1149,19 @@ public:
     bool usesColonWithoutGuard;
     BranchPrediction branchPrediction;
 
-    IfNode(StatementNode* ci, ExpressionNode* c, StatementListNode* t,
-           IfNode* ei = nullptr, StatementListNode* e = nullptr,
-           bool usesColonNoGuard = false)
+    IfNode(
+        StatementNode* ci,
+        ExpressionNode* c,
+        StatementListNode* t,
+        IfNode* ei = nullptr,
+        StatementListNode* e = nullptr,
+        bool usesColonNoGuard = false)
         : conditionInit(ci), condition(c), thenBranch(t), elseIfBranch(ei),
           elseBranch(e), usesColonWithoutGuard(usesColonNoGuard),
           branchPrediction(BranchPrediction::None)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1063,11 +1173,15 @@ public:
     CexprIfNode* elseIfBranch;
     StatementListNode* elseBranch;
 
-    CexprIfNode(ExpressionNode* c, StatementListNode* t,
-                CexprIfNode* ei = nullptr, StatementListNode* e = nullptr)
+    CexprIfNode(
+        ExpressionNode* c,
+        StatementListNode* t,
+        CexprIfNode* ei = nullptr,
+        StatementListNode* e = nullptr)
         : condition(c), thenBranch(t), elseIfBranch(ei), elseBranch(e)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1075,15 +1189,20 @@ class ForNode : public StatementNode
 {
 public:
     std::string varName;
-    std::string indexVarName; // non-empty for "for (i, x) in ..." enumerate style
+    std::string
+        indexVarName; // non-empty for "for (i, x) in ..." enumerate style
     ExpressionNode* iterable;
     StatementListNode* body;
 
-    ForNode(const std::string& v, ExpressionNode* it, StatementListNode* b,
-            const std::string& idxVar = "")
+    ForNode(
+        const std::string& v,
+        ExpressionNode* it,
+        StatementListNode* b,
+        const std::string& idxVar = "")
         : varName(v), indexVarName(idxVar), iterable(it), body(b)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1094,11 +1213,14 @@ public:
     StatementListNode* body;
     bool usesColonWithoutGuard;
 
-    WhileNode(ExpressionNode* c, StatementListNode* b,
-              bool usesColonNoGuard = false)
+    WhileNode(
+        ExpressionNode* c,
+        StatementListNode* b,
+        bool usesColonNoGuard = false)
         : condition(c), body(b), usesColonWithoutGuard(usesColonNoGuard)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1110,11 +1232,15 @@ public:
     TypeNode* catchType;
     BlockStatementNode* catchBlock;
 
-    TryCatchNode(BlockStatementNode* t, const std::string& name, TypeNode* type,
-                 BlockStatementNode* c)
+    TryCatchNode(
+        BlockStatementNode* t,
+        const std::string& name,
+        TypeNode* type,
+        BlockStatementNode* c)
         : tryBlock(t), catchName(name), catchType(type), catchBlock(c)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1139,14 +1265,17 @@ public:
         : kind(k), formatString(fmt), debugOnly(debug)
     {
     }
+
     void addArgument(ExpressionNode* arg)
     {
         arguments.push_back(arg);
     }
+
     void addNamedArgument(const std::string& name, ExpressionNode* arg)
     {
         namedArguments.push_back({name, arg});
     }
+
     std::string toString() const override;
 };
 
@@ -1158,14 +1287,17 @@ public:
     std::vector<std::pair<std::string, ExpressionNode*>> namedArguments;
 
     FormatNode(const std::string& fmt) : formatString(fmt) {}
+
     void addArgument(ExpressionNode* arg)
     {
         arguments.push_back(arg);
     }
+
     void addNamedArgument(const std::string& name, ExpressionNode* arg)
     {
         namedArguments.push_back({name, arg});
     }
+
     std::string toString() const override;
 };
 
@@ -1176,6 +1308,7 @@ public:
     ExpressionNode* right;
 
     AssertEqNode(ExpressionNode* l, ExpressionNode* r) : left(l), right(r) {}
+
     std::string toString() const override;
 };
 
@@ -1185,6 +1318,7 @@ public:
     ExpressionNode* condition;
 
     AssertNode(ExpressionNode* c) : condition(c) {}
+
     std::string toString() const override;
 };
 
@@ -1194,6 +1328,7 @@ public:
     ExpressionNode* condition;
 
     StaticAssertNode(ExpressionNode* c) : condition(c) {}
+
     std::string toString() const override;
 };
 
@@ -1215,21 +1350,25 @@ public:
     TypeNode* type;
     std::string name;
     ExpressionNode* initExpr;
-    bool isProperty = false;  // @property
-    bool isReadonly = false;  // #[property(readonly)] — suppress setter
-    bool isAtomicProperty = false; // @property(atomic)
-    bool isMutexProperty = false; // @property(mutex)
+    bool isProperty = false;          // @property
+    bool isReadonly = false;          // #[property(readonly)] — suppress setter
+    bool isAtomicProperty = false;    // @property(atomic)
+    bool isMutexProperty = false;     // @property(mutex)
     bool isRecursiveProperty = false; // @property(mutex, recursive)
-    bool isHiddenProperty = false; // @property(hidden)
+    bool isHiddenProperty = false;    // @property(hidden)
     bool isProtectedProperty = false; // @property(protected)
     bool isSynthesizedPropertyStorage = false;
     std::string propertyLockFieldName;
 
-    StructMemberNode(bool v, TypeNode* t, const std::string& n,
-                     ExpressionNode* e)
+    StructMemberNode(
+        bool v,
+        TypeNode* t,
+        const std::string& n,
+        ExpressionNode* e)
         : isVar(v), type(t), name(n), initExpr(e)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1246,7 +1385,7 @@ public:
     ParameterListNode* parameters;
     StatementListNode* body;
     bool isPublic;
-    bool isStatic; // static methods don't have 'self' parameter
+    bool isStatic;       // static methods don't have 'self' parameter
     bool isTest = false; // method carries #[test] inside #[fixture] impl
     bool isSynthesizedPropertyAccessor = false;
     bool isAtomicPropertyAccessor = false;
@@ -1260,12 +1399,18 @@ public:
     std::string propertyFieldName;
     std::string propertyLockFieldName;
 
-    StructMethodNode(TypeNode* rt, const std::string& n, ParameterListNode* p,
-                     StatementListNode* b, bool pub = false, bool stat = false)
+    StructMethodNode(
+        TypeNode* rt,
+        const std::string& n,
+        ParameterListNode* p,
+        StatementListNode* b,
+        bool pub = false,
+        bool stat = false)
         : returnType(rt), name(n), parameters(p), body(b), isPublic(pub),
           isStatic(stat)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1280,14 +1425,17 @@ public:
     {
         members.push_back(m);
     }
+
     void addMethod(StructMethodNode* m)
     {
         methods.push_back(m);
     }
+
     void addEnum(EnumDefNode* e)
     {
         enums.push_back(e);
     }
+
     std::string toString() const override;
 };
 
@@ -1307,13 +1455,18 @@ public:
         typeParams; // Generic type parameters like T, U, etc.
     std::map<std::string, std::string> typeParamTraitBounds;
 
-    StructDefNode(const std::string& n, const std::string& b,
-                  StructMemberListNode* m, bool pub = false,
-                  bool derive = false, bool deriveJsonFlag = false)
-        : name(n), baseName(b), members(m), isPublic(pub),
-          deriveDebug(derive), deriveJson(deriveJsonFlag)
+    StructDefNode(
+        const std::string& n,
+        const std::string& b,
+        StructMemberListNode* m,
+        bool pub = false,
+        bool derive = false,
+        bool deriveJsonFlag = false)
+        : name(n), baseName(b), members(m), isPublic(pub), deriveDebug(derive),
+          deriveJson(deriveJsonFlag)
     {
     }
+
     std::string toString() const override;
 
     // Get all methods including inherited ones
@@ -1341,6 +1494,7 @@ public:
         : asmTemplate(text), requiredArch(arch)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1356,16 +1510,20 @@ public:
     std::string refEnumName;
     std::string refVariantName;
 
-    EnumVariantNode(const std::string& n, bool hasValue = false,
-                    int64_t value = 0)
+    EnumVariantNode(
+        const std::string& n,
+        bool hasValue = false,
+        int64_t value = 0)
         : name(n), hasExplicitValue(hasValue), explicitValue(value)
     {
     }
+
     EnumVariantNode(const std::string& n, const std::string& stringValue)
         : name(n), hasExplicitStringValue(true),
           explicitStringValue(stringValue)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1378,6 +1536,7 @@ public:
     {
         variants.push_back(v);
     }
+
     std::string toString() const override;
 };
 
@@ -1390,11 +1549,15 @@ public:
     TypeNode::TypeKind backingType;
     std::string sourceModule;
 
-    EnumDefNode(const std::string& n, EnumVariantListNode* v, bool pub = false,
-                TypeNode::TypeKind backing = TypeNode::TYPE_I32)
+    EnumDefNode(
+        const std::string& n,
+        EnumVariantListNode* v,
+        bool pub = false,
+        TypeNode::TypeKind backing = TypeNode::TYPE_I32)
         : name(n), variants(v), isPublic(pub), backingType(backing)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1402,10 +1565,12 @@ class EnumListNode : public ASTNode
 {
 public:
     std::vector<EnumDefNode*> enums;
+
     void addEnum(EnumDefNode* e)
     {
         enums.push_back(e);
     }
+
     std::string toString() const override;
 };
 
@@ -1423,6 +1588,7 @@ public:
         if(!traitBound.empty())
             traitBounds[p] = traitBound;
     }
+
     std::string toString() const override;
 };
 
@@ -1437,10 +1603,12 @@ public:
     std::vector<std::string> superTraits;
 
     TraitDefNode(const std::string& n) : name(n) {}
+
     void addMethod(StructMethodNode* m)
     {
         methods.push_back(m);
     }
+
     std::string toString() const override;
 };
 
@@ -1449,7 +1617,7 @@ class ImplBlockNode : public ASTNode
 {
 public:
     std::string structName;
-    std::string traitName; // Empty when this is an inherent impl
+    std::string traitName;               // Empty when this is an inherent impl
     std::vector<std::string> typeParams; // Generic type parameters
     std::map<std::string, std::string> typeParamTraitBounds;
     std::vector<StructMethodNode*> methods;
@@ -1457,6 +1625,7 @@ public:
                             // stack-allocated instances for #[test] methods
 
     ImplBlockNode(const std::string& name) : structName(name) {}
+
     std::string toString() const override;
 };
 
@@ -1470,6 +1639,7 @@ public:
     {
         impls.push_back(impl);
     }
+
     std::string toString() const override;
 };
 
@@ -1488,6 +1658,7 @@ public:
     {
         fields.push_back({fieldName, value});
     }
+
     std::string toString() const override;
 };
 
@@ -1495,10 +1666,12 @@ class StructListNode : public ASTNode
 {
 public:
     std::vector<StructDefNode*> structs;
+
     void addStruct(StructDefNode* s)
     {
         structs.push_back(s);
     }
+
     std::string toString() const override;
 };
 
@@ -1512,6 +1685,7 @@ public:
         : typeName(t), varName(v)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1525,6 +1699,7 @@ public:
     bool isSharedSelf = false;
 
     ParameterNode(TypeNode* t, const std::string& n) : type(t), name(n) {}
+
     std::string toString() const override;
 };
 
@@ -1563,8 +1738,7 @@ public:
         boundClosureCaptureAliases;
     std::map<std::string, std::map<std::string, TypeNode*>>
         boundClosureCaptureTypes;
-    std::map<std::string, std::set<std::string>>
-        boundClosureConstCaptures;
+    std::map<std::string, std::set<std::string>> boundClosureConstCaptures;
     std::string closureSpecializationKey;
     ExpressionNode* requiresClause = nullptr;
     FunctionDefNode* genericOrigin = nullptr;
@@ -1572,16 +1746,18 @@ public:
     std::string sourceModule; // Module this function was defined in (for
                               // visibility checks)
 
-    FunctionDefNode(TypeNode* rt, const std::string& n, ParameterListNode* p,
-                    StatementListNode* b, bool pub = false, bool ext = false)
-        : returnType(rt),
-          name(n),
-          parameters(p),
-          body(b),
-          isPublic(pub),
+    FunctionDefNode(
+        TypeNode* rt,
+        const std::string& n,
+        ParameterListNode* p,
+        StatementListNode* b,
+        bool pub = false,
+        bool ext = false)
+        : returnType(rt), name(n), parameters(p), body(b), isPublic(pub),
           isExtern(ext)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1600,6 +1776,7 @@ public:
     std::string filePath;
 
     ModDeclNode(const std::string& n) : moduleName(n) {}
+
     std::string toString() const override;
 };
 
@@ -1612,12 +1789,17 @@ public:
     bool importAll;
     bool moduleAlias;
 
-    UseDeclNode(const std::string& m, const std::string& i, bool all,
-                const std::string& alias = "", bool isModuleAlias = false)
+    UseDeclNode(
+        const std::string& m,
+        const std::string& i,
+        bool all,
+        const std::string& alias = "",
+        bool isModuleAlias = false)
         : moduleName(m), itemName(i), aliasName(alias), importAll(all),
           moduleAlias(isModuleAlias)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1627,11 +1809,11 @@ public:
     std::string aliasName;
     std::string targetPath;
 
-    NamespaceAliasDeclNode(const std::string& alias,
-                           const std::string& target)
+    NamespaceAliasDeclNode(const std::string& alias, const std::string& target)
         : aliasName(alias), targetPath(target)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1643,10 +1825,10 @@ public:
     std::map<std::string, std::string> typeParamTraitBounds;
     TypeNode* aliasedType;
 
-    TypeAliasNode(const std::string& n, TypeNode* t)
-        : name(n), aliasedType(t)
+    TypeAliasNode(const std::string& n, TypeNode* t) : name(n), aliasedType(t)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1658,12 +1840,15 @@ public:
     ExpressionNode* predicate;
     bool isPublic = false;
     std::string sourceModule;
-    ConceptDefNode(const std::string& n,
-                   const std::vector<std::string>& parameters,
-                   ExpressionNode* expression)
+
+    ConceptDefNode(
+        const std::string& n,
+        const std::vector<std::string>& parameters,
+        ExpressionNode* expression)
         : name(n), typeParams(parameters), predicate(expression)
     {
     }
+
     std::string toString() const override;
 };
 
@@ -1695,190 +1880,302 @@ public:
 };
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
-// Helper function declarations for parser
-ASTNode* create_program(ASTNode* top_level_list);
-ASTNode* create_top_level_list(ASTNode* item);
-ASTNode* add_to_top_level_list(ASTNode* list, ASTNode* item);
-ASTNode* create_struct_list(ASTNode* struct_def);
-ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def);
-ASTNode* create_function_list(ASTNode* function);
-ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
-ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params,
-                             ASTNode* body, int is_public, int is_extern);
-ASTNode* create_type_node(TypeNode::TypeKind type);
-ASTNode* create_pointer_type(ASTNode* element_type);
-ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
-ASTNode* create_trait_object_type(char* trait_name);
-ASTNode* create_parameter_list(ASTNode* param);
-ASTNode* create_empty_parameter_list();
-ASTNode* set_parameter_list_vararg(ASTNode* list);
-ASTNode* create_parameter(ASTNode* type, char* name);
-ASTNode* add_parameter(ASTNode* list, ASTNode* param);
-ASTNode* create_statement_list(ASTNode* stmt);
-ASTNode* create_empty_statement_list();
-ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
-ASTNode* create_assignment(char* name, ASTNode* expr, int line);
-ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr,
-                                 int line);
-ASTNode* create_return_stmt(ASTNode* expr);
-ASTNode* create_break_stmt(int line);
-ASTNode* create_continue_stmt(int line);
-ASTNode* create_throw_stmt(ASTNode* expr, int line);
-ASTNode* create_int_literal(int64_t value);
-ASTNode* create_bool_literal(int value);
-ASTNode* create_float_literal(float value);
-ASTNode* create_double_literal(double value);
-ASTNode* create_string_literal(char* value);
-ASTNode* create_identifier(char* name);
-ASTNode* create_identifier_line(char* name, int line);
-ASTNode* create_identifier_at(char* name, int line, int col);
-ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
-ASTNode* create_fold_expression(int op, ASTNode* pack_expr, int is_right_fold);
-ASTNode* create_unary_op(int op, ASTNode* operand);
-ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f,
-                                   int line);
-ASTNode* create_try_expression(ASTNode* expr, int line);
-ASTNode* create_sizeof_type_expression(ASTNode* type, int line);
-ASTNode* create_sizeof_value_expression(ASTNode* expr, int line);
-ASTNode* create_cexpr_expression(ASTNode* expr, int line);
-ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2,
-                              int line);
-ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);
-ASTNode* create_result_constructor(char* variant, ASTNode* type_args,
-                                   ASTNode* args, int line);
-ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch,
-                             ASTNode* else_if_branch, ASTNode* else_branch);
-ASTNode* create_if_statement_with_init(ASTNode* condition_init,
-                                       ASTNode* condition,
-                                       ASTNode* then_branch,
-                                       ASTNode* else_if_branch,
-                                       ASTNode* else_branch);
-ASTNode* create_cexpr_if_statement(ASTNode* condition, ASTNode* then_branch,
-                                   ASTNode* else_if_branch,
-                                   ASTNode* else_branch);
-ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
-ASTNode* create_cexpr_declaration(ASTNode* type, char* name, ASTNode* expr);
-ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
-ASTNode* create_cast_expression(int type, ASTNode* expr);
-ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members,
-                           int is_public, int derive_debug,
-                           int derive_json);
-ASTNode* create_struct_member_list(ASTNode* member);
-ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
-ASTNode* create_struct_member(int is_var, ASTNode* type, char* name,
-                              ASTNode* init_expr);
-ASTNode* create_struct_method(ASTNode* type, char* name, ASTNode* params,
-                              ASTNode* body, int is_public, int is_static);
-ASTNode* add_struct_method(ASTNode* list, ASTNode* method);
-ASTNode* create_struct_init(char* type_name, char* var_name);
-ASTNode* create_method_call_expr(ASTNode* object, char* method_name,
-                                 ASTNode* args, int line);
-ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int line);
-ASTNode* create_list_type();
-ASTNode* create_list_literal(ASTNode* elements);
-ASTNode* create_list_element_list(ASTNode* element);
-ASTNode* add_list_element(ASTNode* list, ASTNode* element);
-ASTNode* create_array_fill(ASTNode* value, ASTNode* count);
-ASTNode* create_expression_statement(ASTNode* expr);
-ASTNode* create_block_statement(ASTNode* stmt_list);
-ASTNode* create_else_if(ASTNode* condition, ASTNode* body);
-ASTNode* create_else_if_with_init(ASTNode* condition_init, ASTNode* condition,
-                                  ASTNode* body);
-ASTNode* add_else_if(ASTNode* else_if_list, ASTNode* else_if);
-ASTNode* create_for_range(char* var_name, ASTNode* range, ASTNode* body,
-                          int line);
-ASTNode* create_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body,
-                             int line);
-ASTNode* create_for_enumerate(char* index_var, char* val_var,
-                             ASTNode* iterable, ASTNode* body, int line);
-ASTNode* create_while_statement(ASTNode* condition, ASTNode* body, int line,
-                                int uses_colon_without_guard);
-ASTNode* create_try_catch_stmt(ASTNode* try_block, char* catch_name,
-                               ASTNode* catch_type, ASTNode* catch_block,
-                               int line);
-ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
-ASTNode* create_mod_declaration(char* name, int line);
-ASTNode* create_use_declaration(char* module_name, char* item_name, int line);
-ASTNode* create_use_declaration_alias(char* module_name, char* item_name,
-                                      char* alias_name, int line);
-ASTNode* create_use_module_alias_declaration(char* module_name,
-                                             char* alias_name, int line);
-ASTNode* create_use_all_declaration(char* module_name, int line);
-ASTNode* create_type_alias(char* name, ASTNode* type_params,
-                           ASTNode* aliased_type);
-ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line);
-ASTNode* create_debug_print_stmt(char* format_str, ASTNode* args, int line);
-ASTNode* create_print_expr_stmt(int kind, ASTNode* expr, int line);
-ASTNode* create_argument_list(ASTNode* arg);
-ASTNode* add_argument(ASTNode* list, ASTNode* arg);
-ASTNode* create_format_argument(char* name, ASTNode* value);
-ASTNode* create_format_argument_list(ASTNode* arg);
-ASTNode* add_format_argument(ASTNode* list, ASTNode* arg);
-ASTNode* create_format_expr(char* format_str, ASTNode* args, int line);
-ASTNode* create_assert_eq(ASTNode* left, ASTNode* right, int line);
-ASTNode* create_generic_list_type(ASTNode* element_type);
-ASTNode* create_map_type(ASTNode* key_type, ASTNode* value_type);
-ASTNode* create_map_literal(ASTNode* entries);
-ASTNode* create_map_entry_list(ASTNode* entry);
-ASTNode* add_map_entry(ASTNode* list, ASTNode* entry);
-ASTNode* create_map_entry(ASTNode* key, ASTNode* value);
-ASTNode* create_index_expression(ASTNode* base, ASTNode* index, int line);
-ASTNode* create_tuple_type(ASTNode* type_list);
-ASTNode* create_type_list(ASTNode* type);
-ASTNode* add_type_to_list(ASTNode* list, ASTNode* type);
-ASTNode* create_tuple_literal(ASTNode* elements);
-ASTNode* create_tuple_access(ASTNode* tuple, int index, int line);
-ASTNode* create_map_keys_iterator(ASTNode* map_expr, int line);
-ASTNode* create_map_values_iterator(ASTNode* map_expr, int line);
-ASTNode* create_map_entries_iterator(ASTNode* map_expr, int line);
-ASTNode* create_struct_type_ref(char* name);
-ASTNode* create_field_access(char* struct_name, char* field_name, int line);
-ASTNode* create_field_access_expr(ASTNode* object, char* field_name, int line);
-ASTNode* create_field_assignment(char* struct_name, char* field_name,
-                                 ASTNode* expr, int line);
-ASTNode* create_chained_field_assignment(ASTNode* target, ASTNode* expr,
-                                         int line);
-ASTNode* create_match_pattern(char* name, char* binding, int line);
-ASTNode* create_len_expression(ASTNode* expr, int line);
-ASTNode* create_match_literal_pattern(ASTNode* literal, int line);
-ASTNode* create_match_arm(ASTNode* pattern, ASTNode* expr, int line);
-ASTNode* create_match_arm_list(ASTNode* arm);
-ASTNode* add_match_arm(ASTNode* list, ASTNode* arm);
-ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line);
-ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public,
-                         int backing_type = TypeNode::TYPE_I32);
-ASTNode* create_enum_variant(char* name, int has_explicit_value = 0,
-                             long long explicit_value = 0);
-ASTNode* create_enum_variant_string(char* name, char* explicit_string_value);
-ASTNode* create_enum_variant_ref(char* name, char* ref_enum_name,
-                                 char* ref_variant_name);
-ASTNode* create_enum_variant_list(ASTNode* variant);
-ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
-ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
-ASTNode* create_closure(ASTNode* body);
-ASTNode* create_closure_with_params(ASTNode* params, ASTNode* body);
+    // Helper function declarations for parser
+    ASTNode* create_program(ASTNode* top_level_list);
+    ASTNode* create_top_level_list(ASTNode* item);
+    ASTNode* add_to_top_level_list(ASTNode* list, ASTNode* item);
+    ASTNode* create_struct_list(ASTNode* struct_def);
+    ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def);
+    ASTNode* create_function_list(ASTNode* function);
+    ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
+    ASTNode* create_function_def(
+        ASTNode* type,
+        char* name,
+        ASTNode* params,
+        ASTNode* body,
+        int is_public,
+        int is_extern);
+    ASTNode* create_type_node(TypeNode::TypeKind type);
+    ASTNode* create_pointer_type(ASTNode* element_type);
+    ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
+    ASTNode* create_trait_object_type(char* trait_name);
+    ASTNode* create_parameter_list(ASTNode* param);
+    ASTNode* create_empty_parameter_list();
+    ASTNode* set_parameter_list_vararg(ASTNode* list);
+    ASTNode* create_parameter(ASTNode* type, char* name);
+    ASTNode* add_parameter(ASTNode* list, ASTNode* param);
+    ASTNode* create_statement_list(ASTNode* stmt);
+    ASTNode* create_empty_statement_list();
+    ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
+    ASTNode* create_assignment(char* name, ASTNode* expr, int line);
+    ASTNode* create_deref_assignment(
+        ASTNode* pointer_expr,
+        ASTNode* expr,
+        int line);
+    ASTNode* create_return_stmt(ASTNode* expr);
+    ASTNode* create_break_stmt(int line);
+    ASTNode* create_continue_stmt(int line);
+    ASTNode* create_throw_stmt(ASTNode* expr, int line);
+    ASTNode* create_int_literal(int64_t value);
+    ASTNode* create_bool_literal(int value);
+    ASTNode* create_float_literal(float value);
+    ASTNode* create_double_literal(double value);
+    ASTNode* create_string_literal(char* value);
+    ASTNode* create_identifier(char* name);
+    ASTNode* create_identifier_line(char* name, int line);
+    ASTNode* create_identifier_at(char* name, int line, int col);
+    ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
+    ASTNode* create_fold_expression(
+        int op,
+        ASTNode* pack_expr,
+        int is_right_fold);
+    ASTNode* create_unary_op(int op, ASTNode* operand);
+    ASTNode* create_ternary_expression(
+        ASTNode* cond,
+        ASTNode* t,
+        ASTNode* f,
+        int line);
+    ASTNode* create_try_expression(ASTNode* expr, int line);
+    ASTNode* create_sizeof_type_expression(ASTNode* type, int line);
+    ASTNode* create_sizeof_value_expression(ASTNode* expr, int line);
+    ASTNode* create_cexpr_expression(ASTNode* expr, int line);
+    ASTNode* create_function_call(
+        char* name,
+        ASTNode* arg1,
+        ASTNode* arg2,
+        int line);
+    ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);
+    ASTNode* create_result_constructor(
+        char* variant,
+        ASTNode* type_args,
+        ASTNode* args,
+        int line);
+    ASTNode* create_if_statement(
+        ASTNode* condition,
+        ASTNode* then_branch,
+        ASTNode* else_if_branch,
+        ASTNode* else_branch);
+    ASTNode* create_if_statement_with_init(
+        ASTNode* condition_init,
+        ASTNode* condition,
+        ASTNode* then_branch,
+        ASTNode* else_if_branch,
+        ASTNode* else_branch);
+    ASTNode* create_cexpr_if_statement(
+        ASTNode* condition,
+        ASTNode* then_branch,
+        ASTNode* else_if_branch,
+        ASTNode* else_branch);
+    ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
+    ASTNode* create_cexpr_declaration(ASTNode* type, char* name, ASTNode* expr);
+    ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
+    ASTNode* create_cast_expression(int type, ASTNode* expr);
+    ASTNode* create_struct_def(
+        char* name,
+        char* base_name,
+        ASTNode* members,
+        int is_public,
+        int derive_debug,
+        int derive_json);
+    ASTNode* create_struct_member_list(ASTNode* member);
+    ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
+    ASTNode* create_struct_member(
+        int is_var,
+        ASTNode* type,
+        char* name,
+        ASTNode* init_expr);
+    ASTNode* create_struct_method(
+        ASTNode* type,
+        char* name,
+        ASTNode* params,
+        ASTNode* body,
+        int is_public,
+        int is_static);
+    ASTNode* add_struct_method(ASTNode* list, ASTNode* method);
+    ASTNode* create_struct_init(char* type_name, char* var_name);
+    ASTNode* create_method_call_expr(
+        ASTNode* object,
+        char* method_name,
+        ASTNode* args,
+        int line);
+    ASTNode* create_method_call(
+        ASTNode* object,
+        char* method,
+        ASTNode* args,
+        int line);
+    ASTNode* create_list_type();
+    ASTNode* create_list_literal(ASTNode* elements);
+    ASTNode* create_list_element_list(ASTNode* element);
+    ASTNode* add_list_element(ASTNode* list, ASTNode* element);
+    ASTNode* create_array_fill(ASTNode* value, ASTNode* count);
+    ASTNode* create_expression_statement(ASTNode* expr);
+    ASTNode* create_block_statement(ASTNode* stmt_list);
+    ASTNode* create_else_if(ASTNode* condition, ASTNode* body);
+    ASTNode* create_else_if_with_init(
+        ASTNode* condition_init,
+        ASTNode* condition,
+        ASTNode* body);
+    ASTNode* add_else_if(ASTNode* else_if_list, ASTNode* else_if);
+    ASTNode* create_for_range(
+        char* var_name,
+        ASTNode* range,
+        ASTNode* body,
+        int line);
+    ASTNode* create_for_iterator(
+        char* var_name,
+        ASTNode* iterable,
+        ASTNode* body,
+        int line);
+    ASTNode* create_for_enumerate(
+        char* index_var,
+        char* val_var,
+        ASTNode* iterable,
+        ASTNode* body,
+        int line);
+    ASTNode* create_while_statement(
+        ASTNode* condition,
+        ASTNode* body,
+        int line,
+        int uses_colon_without_guard);
+    ASTNode* create_try_catch_stmt(
+        ASTNode* try_block,
+        char* catch_name,
+        ASTNode* catch_type,
+        ASTNode* catch_block,
+        int line);
+    ASTNode* create_range_expression(
+        ASTNode* start,
+        ASTNode* end,
+        int inclusive);
+    ASTNode* create_mod_declaration(char* name, int line);
+    ASTNode* create_use_declaration(
+        char* module_name,
+        char* item_name,
+        int line);
+    ASTNode* create_use_declaration_alias(
+        char* module_name,
+        char* item_name,
+        char* alias_name,
+        int line);
+    ASTNode* create_use_module_alias_declaration(
+        char* module_name,
+        char* alias_name,
+        int line);
+    ASTNode* create_use_all_declaration(char* module_name, int line);
+    ASTNode* create_type_alias(
+        char* name,
+        ASTNode* type_params,
+        ASTNode* aliased_type);
+    ASTNode* create_print_stmt(
+        int kind,
+        char* format_str,
+        ASTNode* args,
+        int line);
+    ASTNode* create_debug_print_stmt(char* format_str, ASTNode* args, int line);
+    ASTNode* create_print_expr_stmt(int kind, ASTNode* expr, int line);
+    ASTNode* create_argument_list(ASTNode* arg);
+    ASTNode* add_argument(ASTNode* list, ASTNode* arg);
+    ASTNode* create_format_argument(char* name, ASTNode* value);
+    ASTNode* create_format_argument_list(ASTNode* arg);
+    ASTNode* add_format_argument(ASTNode* list, ASTNode* arg);
+    ASTNode* create_format_expr(char* format_str, ASTNode* args, int line);
+    ASTNode* create_assert_eq(ASTNode* left, ASTNode* right, int line);
+    ASTNode* create_generic_list_type(ASTNode* element_type);
+    ASTNode* create_map_type(ASTNode* key_type, ASTNode* value_type);
+    ASTNode* create_map_literal(ASTNode* entries);
+    ASTNode* create_map_entry_list(ASTNode* entry);
+    ASTNode* add_map_entry(ASTNode* list, ASTNode* entry);
+    ASTNode* create_map_entry(ASTNode* key, ASTNode* value);
+    ASTNode* create_index_expression(ASTNode* base, ASTNode* index, int line);
+    ASTNode* create_tuple_type(ASTNode* type_list);
+    ASTNode* create_type_list(ASTNode* type);
+    ASTNode* add_type_to_list(ASTNode* list, ASTNode* type);
+    ASTNode* create_tuple_literal(ASTNode* elements);
+    ASTNode* create_tuple_access(ASTNode* tuple, int index, int line);
+    ASTNode* create_map_keys_iterator(ASTNode* map_expr, int line);
+    ASTNode* create_map_values_iterator(ASTNode* map_expr, int line);
+    ASTNode* create_map_entries_iterator(ASTNode* map_expr, int line);
+    ASTNode* create_struct_type_ref(char* name);
+    ASTNode* create_field_access(char* struct_name, char* field_name, int line);
+    ASTNode* create_field_access_expr(
+        ASTNode* object,
+        char* field_name,
+        int line);
+    ASTNode* create_field_assignment(
+        char* struct_name,
+        char* field_name,
+        ASTNode* expr,
+        int line);
+    ASTNode* create_chained_field_assignment(
+        ASTNode* target,
+        ASTNode* expr,
+        int line);
+    ASTNode* create_match_pattern(char* name, char* binding, int line);
+    ASTNode* create_len_expression(ASTNode* expr, int line);
+    ASTNode* create_match_literal_pattern(ASTNode* literal, int line);
+    ASTNode* create_match_arm(ASTNode* pattern, ASTNode* expr, int line);
+    ASTNode* create_match_arm_list(ASTNode* arm);
+    ASTNode* add_match_arm(ASTNode* list, ASTNode* arm);
+    ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line);
+    ASTNode* create_enum_def(
+        char* name,
+        ASTNode* variants,
+        int is_public,
+        int backing_type = TypeNode::TYPE_I32);
+    ASTNode* create_enum_variant(
+        char* name,
+        int has_explicit_value = 0,
+        long long explicit_value = 0);
+    ASTNode* create_enum_variant_string(
+        char* name,
+        char* explicit_string_value);
+    ASTNode* create_enum_variant_ref(
+        char* name,
+        char* ref_enum_name,
+        char* ref_variant_name);
+    ASTNode* create_enum_variant_list(ASTNode* variant);
+    ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
+    ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
+    ASTNode* create_closure(ASTNode* body);
+    ASTNode* create_closure_with_params(ASTNode* params, ASTNode* body);
 
-// Generic structs and impl blocks
-ASTNode* create_type_param_list(char* param);
-ASTNode* add_type_param(ASTNode* list, char* param);
-ASTNode* create_bounded_type_param_list(char* param, char* trait_name);
-ASTNode* add_bounded_type_param(ASTNode* list, char* param, char* trait_name);
-ASTNode* create_generic_struct_def(char* name, char* base_name,
-                                   ASTNode* type_params, ASTNode* members,
-                                   int is_public, int derive_debug,
-                                   int derive_json);
-ASTNode* create_trait_def(char* name, int line);
-ASTNode* add_trait_method(ASTNode* trait, ASTNode* method);
-ASTNode* create_impl_block(char* struct_name, ASTNode* type_params,
-                           char* trait_name = nullptr);
-ASTNode* add_impl_method(ASTNode* impl, ASTNode* method);
-ASTNode* create_struct_literal(char* struct_name, ASTNode* type_args,
-                               ASTNode* fields, int line);
-ASTNode* create_struct_field_init_list(char* field_name, ASTNode* value);
-ASTNode* add_struct_field_init(ASTNode* list, char* field_name, ASTNode* value);
-ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
+    // Generic structs and impl blocks
+    ASTNode* create_type_param_list(char* param);
+    ASTNode* add_type_param(ASTNode* list, char* param);
+    ASTNode* create_bounded_type_param_list(char* param, char* trait_name);
+    ASTNode* add_bounded_type_param(
+        ASTNode* list,
+        char* param,
+        char* trait_name);
+    ASTNode* create_generic_struct_def(
+        char* name,
+        char* base_name,
+        ASTNode* type_params,
+        ASTNode* members,
+        int is_public,
+        int derive_debug,
+        int derive_json);
+    ASTNode* create_trait_def(char* name, int line);
+    ASTNode* add_trait_method(ASTNode* trait, ASTNode* method);
+    ASTNode* create_impl_block(
+        char* struct_name,
+        ASTNode* type_params,
+        char* trait_name = nullptr);
+    ASTNode* add_impl_method(ASTNode* impl, ASTNode* method);
+    ASTNode* create_struct_literal(
+        char* struct_name,
+        ASTNode* type_args,
+        ASTNode* fields,
+        int line);
+    ASTNode* create_struct_field_init_list(char* field_name, ASTNode* value);
+    ASTNode* add_struct_field_init(
+        ASTNode* list,
+        char* field_name,
+        ASTNode* value);
+    ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
 #ifdef __cplusplus
 }
 #endif

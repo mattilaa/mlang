@@ -2,93 +2,152 @@
 #define MLANG_AUDIO_PROCESSOR_H
 #include <stdint.h>
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
-/* Optional native master processor. No SDK dependency in the runtime.
- * Install the factory on the control thread before creating audio controllers.
- * Load/destroy are control-thread calls; begin/note/process run on realtime
- * render threads and must be bounded, allocation-free and lock-free in the
- * host. begin/note/transport come from the audio thread; process may run on a
- * render worker, but never on two threads at once for one instance, and always
- * after that block's begin/note calls have completed.
- * Third-party processor realtime behavior remains that processor's contract.
- */
-typedef struct mlang_audio_processor {
-    void *context;
-    int32_t instrument; /* suppress reference sine voices, retain PCM mix */
-    void (*begin)(void *context, int32_t reset);
-    void (*note)(void *context, int32_t on, int32_t channel, int32_t pitch,
-                 int32_t velocity, int32_t offset);
-    int32_t (*process)(void *context, float *stereo, int32_t frames, uint64_t clock);
-    void (*destroy)(void *context);
-    const char *(*name)(void *context);
-    /* Optional MIDI CC (0-127) / pitch bend (129, value 0-16383). */
-    void (*control)(void *context, int32_t channel, int32_t controller,
-                    int32_t value, int32_t offset);
-    /* Cached metadata, control-thread queries. key: 0=count, 1=steps,
-     * 2=normalized value, 3=read-only, 4=stable parameter ID.
-     * Names borrowed until destruction. */
-    double (*parameter_info)(void *context, int32_t index, int32_t key);
-    const char *(*parameter_name)(void *context, int32_t index);
-    void (*parameter)(void *context, int32_t index, double value, int32_t offset);
-    /* Control thread: mirror accepted edits into cached/controller state. */
-    void (*parameter_edited)(void *context, int32_t index, double normalized);
-    /* Optional, control thread, audio may be running: copy interleaved PCM
-     * (frames * channels floats, 1-2 channels) into sampler pad `pad`
-     * (mla_sampler_protocol.h). Returns 0, or -1 with a reason in `error`.
-     * The processor owns realtime-safe hand-off to its audio thread. */
-    int32_t (*load_pad)(void *context, int32_t pad, const float *interleaved, int64_t frames,
-                        int32_t channels, double rate, const char *name, char *error, int32_t error_size);
-    /* frames == 0 (interleaved may be NULL) empties the pad instead. */
-    /* Optional, control thread: sampler layout. key 0 = root MIDI key of pad 0,
-     * 1 = pad count, 2 = bitmask of loaded pads. -1 when unsupported. */
-    int64_t (*sampler_info)(void *context, int32_t key);
-    /* Optional, audio thread, before each process in a block: the sequencer
-     * transport at the block's first frame. tempo <= 0 when none was set;
-     * beat counts quarter notes from song start and keeps its last value
-     * (still valid) while stopped. */
-    void (*transport)(void *context, double tempo, double beat, int32_t playing);
-    /* Optional, multi-output instruments. output_count (control thread) is
-     * the number of stereo output buses, main included (1 when absent);
-     * output_name names bus 0..count-1 (borrowed until destruction). `process`
-     * writes bus 0. After each process call, aux_output returns bus 1..count-1
-     * of that block as interleaved stereo (frames * 2 floats), valid until the
-     * next process call, or NULL when the bus rendered nothing. Called from a
-     * render thread after that process call returned, never concurrently
-     * with process. */
-    int32_t (*output_count)(void *context);
-    const char *(*output_name)(void *context, int32_t bus);
-    const float *(*aux_output)(void *context, int32_t bus);
-    /* Optional, control thread, audio may be running: sampler pad `pad`'s
-     * slice markers (frames, ascending, the first 0). pad_markers copies up to
-     * `max` into `out` and returns how many the pad has, or -1 when
-     * unsupported or the pad is empty. set_pad_markers replaces them with
-     * `count` frames, or detects them again when count < 0; 0 or -1. */
-    int32_t (*pad_markers)(void *context, int32_t pad, double *out, int32_t max);
-    int32_t (*set_pad_markers)(void *context, int32_t pad, const double *frames, int32_t count);
-    /* Optional, text-driven instruments such as speech or vocal synths.
-     * set_text (control thread, audio may run) stores UTF-8 `text` as phrase
-     * `index` (0-255), replacing what was there; 0 or -1. The phrase table is
-     * a ring: a sequencer reuses an index only long after the event that used
-     * it played. text (audio thread, like note) attaches phrase `index` to the
-     * next note-on on `channel` in the same block (a VST3 host sends it as a
-     * note-expression text event of that note); without one it is dropped. */
-    int32_t (*set_text)(void *context, int32_t index, const char *text);
-    void (*text)(void *context, int32_t channel, int32_t index, int32_t offset);
-    /* Optional, MIDI system exclusive. set_sysex (control thread, audio may
-     * run) stores the whole message, F0 through F7 (`size` 3-1024 bytes), as
-     * message `index` (0-255), replacing what was there; 0 or -1. Like the
-     * phrase table it is a ring. sysex (audio thread, like note) sends
-     * message `index` at `offset` (a VST3 host as a kMidiSysEx data event). */
-    int32_t (*set_sysex)(void *context, int32_t index, const uint8_t *bytes, int32_t size);
-    void (*sysex)(void *context, int32_t index, int32_t offset);
-} mlang_audio_processor;
-typedef int32_t (*mlang_audio_processor_factory)(const char *path, double rate,
-    int32_t max_frames, mlang_audio_processor *out, char *error, int32_t error_size);
-void mlang_audio_register_processor_factory(mlang_audio_processor_factory factory);
-/* Separate instrument-only factory; loaded slots mix before the master.
- * Must return an instrument processor, rejecting effects/unsupported bundles. */
-void mlang_audio_register_instrument_factory(mlang_audio_processor_factory factory);
+    /* Optional native master processor. No SDK dependency in the runtime.
+     * Install the factory on the control thread before creating audio
+     * controllers. Load/destroy are control-thread calls; begin/note/process
+     * run on realtime render threads and must be bounded, allocation-free and
+     * lock-free in the host. begin/note/transport come from the audio thread;
+     * process may run on a render worker, but never on two threads at once for
+     * one instance, and always after that block's begin/note calls have
+     * completed. Third-party processor realtime behavior remains that
+     * processor's contract.
+     */
+    typedef struct mlang_audio_processor
+    {
+        void* context;
+        int32_t instrument; /* suppress reference sine voices, retain PCM mix */
+        void (*begin)(void* context, int32_t reset);
+        void (*note)(
+            void* context,
+            int32_t on,
+            int32_t channel,
+            int32_t pitch,
+            int32_t velocity,
+            int32_t offset);
+        int32_t (*process)(
+            void* context,
+            float* stereo,
+            int32_t frames,
+            uint64_t clock);
+        void (*destroy)(void* context);
+        const char* (*name)(void* context);
+        /* Optional MIDI CC (0-127) / pitch bend (129, value 0-16383). */
+        void (*control)(
+            void* context,
+            int32_t channel,
+            int32_t controller,
+            int32_t value,
+            int32_t offset);
+        /* Cached metadata, control-thread queries. key: 0=count, 1=steps,
+         * 2=normalized value, 3=read-only, 4=stable parameter ID.
+         * Names borrowed until destruction. */
+        double (*parameter_info)(void* context, int32_t index, int32_t key);
+        const char* (*parameter_name)(void* context, int32_t index);
+        void (*parameter)(
+            void* context,
+            int32_t index,
+            double value,
+            int32_t offset);
+        /* Control thread: mirror accepted edits into cached/controller state.
+         */
+        void (
+            *parameter_edited)(void* context, int32_t index, double normalized);
+        /* Optional, control thread, audio may be running: copy interleaved PCM
+         * (frames * channels floats, 1-2 channels) into sampler pad `pad`
+         * (mla_sampler_protocol.h). Returns 0, or -1 with a reason in `error`.
+         * The processor owns realtime-safe hand-off to its audio thread. */
+        int32_t (*load_pad)(
+            void* context,
+            int32_t pad,
+            const float* interleaved,
+            int64_t frames,
+            int32_t channels,
+            double rate,
+            const char* name,
+            char* error,
+            int32_t error_size);
+        /* frames == 0 (interleaved may be NULL) empties the pad instead. */
+        /* Optional, control thread: sampler layout. key 0 = root MIDI key of
+         * pad 0, 1 = pad count, 2 = bitmask of loaded pads. -1 when
+         * unsupported. */
+        int64_t (*sampler_info)(void* context, int32_t key);
+        /* Optional, audio thread, before each process in a block: the sequencer
+         * transport at the block's first frame. tempo <= 0 when none was set;
+         * beat counts quarter notes from song start and keeps its last value
+         * (still valid) while stopped. */
+        void (*transport)(
+            void* context,
+            double tempo,
+            double beat,
+            int32_t playing);
+        /* Optional, multi-output instruments. output_count (control thread) is
+         * the number of stereo output buses, main included (1 when absent);
+         * output_name names bus 0..count-1 (borrowed until destruction).
+         * `process` writes bus 0. After each process call, aux_output returns
+         * bus 1..count-1 of that block as interleaved stereo (frames * 2
+         * floats), valid until the next process call, or NULL when the bus
+         * rendered nothing. Called from a render thread after that process call
+         * returned, never concurrently with process. */
+        int32_t (*output_count)(void* context);
+        const char* (*output_name)(void* context, int32_t bus);
+        const float* (*aux_output)(void* context, int32_t bus);
+        /* Optional, control thread, audio may be running: sampler pad `pad`'s
+         * slice markers (frames, ascending, the first 0). pad_markers copies up
+         * to `max` into `out` and returns how many the pad has, or -1 when
+         * unsupported or the pad is empty. set_pad_markers replaces them with
+         * `count` frames, or detects them again when count < 0; 0 or -1. */
+        int32_t (
+            *pad_markers)(void* context, int32_t pad, double* out, int32_t max);
+        int32_t (*set_pad_markers)(
+            void* context,
+            int32_t pad,
+            const double* frames,
+            int32_t count);
+        /* Optional, text-driven instruments such as speech or vocal synths.
+         * set_text (control thread, audio may run) stores UTF-8 `text` as
+         * phrase `index` (0-255), replacing what was there; 0 or -1. The phrase
+         * table is a ring: a sequencer reuses an index only long after the
+         * event that used it played. text (audio thread, like note) attaches
+         * phrase `index` to the next note-on on `channel` in the same block (a
+         * VST3 host sends it as a note-expression text event of that note);
+         * without one it is dropped. */
+        int32_t (*set_text)(void* context, int32_t index, const char* text);
+        void (*text)(
+            void* context,
+            int32_t channel,
+            int32_t index,
+            int32_t offset);
+        /* Optional, MIDI system exclusive. set_sysex (control thread, audio may
+         * run) stores the whole message, F0 through F7 (`size` 3-1024 bytes),
+         * as message `index` (0-255), replacing what was there; 0 or -1. Like
+         * the phrase table it is a ring. sysex (audio thread, like note) sends
+         * message `index` at `offset` (a VST3 host as a kMidiSysEx data event).
+         */
+        int32_t (*set_sysex)(
+            void* context,
+            int32_t index,
+            const uint8_t* bytes,
+            int32_t size);
+        void (*sysex)(void* context, int32_t index, int32_t offset);
+    } mlang_audio_processor;
+
+    typedef int32_t (*mlang_audio_processor_factory)(
+        const char* path,
+        double rate,
+        int32_t max_frames,
+        mlang_audio_processor* out,
+        char* error,
+        int32_t error_size);
+    void mlang_audio_register_processor_factory(
+        mlang_audio_processor_factory factory);
+    /* Separate instrument-only factory; loaded slots mix before the master.
+     * Must return an instrument processor, rejecting effects/unsupported
+     * bundles. */
+    void mlang_audio_register_instrument_factory(
+        mlang_audio_processor_factory factory);
 #ifdef __cplusplus
 }
 #endif

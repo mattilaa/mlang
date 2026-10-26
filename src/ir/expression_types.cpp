@@ -9,9 +9,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
         return new TypeNode(TypeNode::TYPE_BOOL);
     if(auto* invoke = dynamic_cast<CallableInvokeNode*>(expr))
     {
-        auto* callableType =
-            dynamic_cast<FunctionTypeNode*>(
-                getLValueType(invoke->callable, line));
+        auto* callableType = dynamic_cast<FunctionTypeNode*>(
+            getLValueType(invoke->callable, line));
         return callableType ? cloneTypeNode(callableType->returnType) : nullptr;
     }
 
@@ -50,8 +49,9 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             auto structIt = structVariableTypes.find(id->name);
             if(structIt == structVariableTypes.end())
             {
-                reportError(line,
-                            "variable '" + id->name + "' is not a struct");
+                reportError(
+                    line,
+                    "variable '" + id->name + "' is not a struct");
                 return nullptr;
             }
             return new StructTypeRefNode(structIt->second);
@@ -73,8 +73,9 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             auto listIt = listElementTypes.find(id->name);
             if(listIt == listElementTypes.end())
             {
-                reportError(line, "list element type not known for '" +
-                                      id->name + "'");
+                reportError(
+                    line,
+                    "list element type not known for '" + id->name + "'");
                 return nullptr;
             }
             auto capIt = arrayCapacities.find(id->name);
@@ -82,11 +83,13 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             {
                 auto multiIt = multiarrayMutability.find(id->name);
                 if(multiIt != multiarrayMutability.end())
-                    return new MultiArrayTypeNode(cloneTypeNode(listIt->second),
-                                                  capIt->second,
-                                                  multiIt->second);
-                return new ArrayTypeNode(cloneTypeNode(listIt->second),
-                                         capIt->second);
+                    return new MultiArrayTypeNode(
+                        cloneTypeNode(listIt->second),
+                        capIt->second,
+                        multiIt->second);
+                return new ArrayTypeNode(
+                    cloneTypeNode(listIt->second),
+                    capIt->second);
             }
             return new GenericListTypeNode(cloneTypeNode(listIt->second));
         }
@@ -95,8 +98,9 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             auto mapIt = mapKeyValueTypes.find(id->name);
             if(mapIt == mapKeyValueTypes.end())
             {
-                reportError(line, "map key/value types not known for '" +
-                                      id->name + "'");
+                reportError(
+                    line,
+                    "map key/value types not known for '" + id->name + "'");
                 return nullptr;
             }
             return new MapTypeNode(mapIt->second.first, mapIt->second.second);
@@ -106,8 +110,9 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             auto tupleIt = tupleElementTypes.find(id->name);
             if(tupleIt == tupleElementTypes.end())
             {
-                reportError(line, "tuple element types not known for '" +
-                                      id->name + "'");
+                reportError(
+                    line,
+                    "tuple element types not known for '" + id->name + "'");
                 return nullptr;
             }
             auto* list = new TypeListNode();
@@ -121,13 +126,15 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             auto ptrIt = pointerElementTypes.find(id->name);
             if(ptrIt == pointerElementTypes.end())
             {
-                reportError(line, "pointer element type not known for '" +
-                                      id->name + "'");
+                reportError(
+                    line,
+                    "pointer element type not known for '" + id->name + "'");
                 return nullptr;
             }
             if(kind != TypeNode::TYPE_PTR)
-                return new ReferenceTypeNode(ptrIt->second,
-                                             kind == TypeNode::TYPE_REF_MUT);
+                return new ReferenceTypeNode(
+                    ptrIt->second,
+                    kind == TypeNode::TYPE_REF_MUT);
             return new PointerTypeNode(ptrIt->second);
         }
         if(kind == TypeNode::TYPE_TRAIT_OBJECT)
@@ -135,8 +142,9 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             auto traitIt = traitObjectVariableTypes.find(id->name);
             if(traitIt == traitObjectVariableTypes.end())
             {
-                reportError(line, "trait object type not known for '" +
-                                      id->name + "'");
+                reportError(
+                    line,
+                    "trait object type not known for '" + id->name + "'");
                 return nullptr;
             }
             return new TraitObjectTypeNode(traitIt->second);
@@ -174,8 +182,10 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
         std::string lookupName = call->name;
         std::string literalSuffix, literalInput;
         if(lookupName.find("::") == std::string::npos &&
-           mlang::literals::decodeOperatorName(lookupName, literalSuffix,
-                                               literalInput) &&
+           mlang::literals::decodeOperatorName(
+               lookupName,
+               literalSuffix,
+               literalInput) &&
            builder.GetInsertBlock())
         {
             const std::string caller =
@@ -183,7 +193,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             const size_t scopeEnd = caller.rfind("::");
             if(scopeEnd != std::string::npos)
                 lookupName = mlang::literals::scopedOperatorName(
-                    lookupName, caller.substr(0, scopeEnd),
+                    lookupName,
+                    caller.substr(0, scopeEnd),
                     [&](const std::string& name)
                     { return functionOverloads.count(name) != 0; });
         }
@@ -202,8 +213,10 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                     continue;
 
                 std::map<std::string, TypeNode*> bindings;
-                if(!inferGenericFunctionTypeBindings(info.node, call->arguments,
-                                                     bindings))
+                if(!inferGenericFunctionTypeBindings(
+                       info.node,
+                       call->arguments,
+                       bindings))
                     continue;
                 std::vector<TypeNode*> typeArgs;
                 bool complete = true;
@@ -217,13 +230,19 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                     }
                     typeArgs.push_back(found->second);
                 }
-                if(complete &&
-                   validateTypeArgumentTraitBounds(
-                       info.node->typeParams, info.node->typeParamTraitBounds,
-                       typeArgs, {}, info.node->line, "function", call->name,
-                       false))
+                if(complete && validateTypeArgumentTraitBounds(
+                                   info.node->typeParams,
+                                   info.node->typeParamTraitBounds,
+                                   typeArgs,
+                                   {},
+                                   info.node->line,
+                                   "function",
+                                   call->name,
+                                   false))
                     return substituteTypeParams(
-                        info.node->returnType, info.node->typeParams, typeArgs);
+                        info.node->returnType,
+                        info.node->typeParams,
+                        typeArgs);
             }
         }
     }
@@ -263,9 +282,11 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                     dynamic_cast<ArrayTypeNode*>(matrixType->elementType);
                 if(columns)
                     return new MultiArrayTypeNode(
-                        new ArrayTypeNode(cloneTypeNode(columns->elementType),
-                                          matrixType->capacity),
-                        columns->capacity, false);
+                        new ArrayTypeNode(
+                            cloneTypeNode(columns->elementType),
+                            matrixType->capacity),
+                        columns->capacity,
+                        false);
             }
             if(methodCall->methodName == "eigenvalues")
             {
@@ -273,8 +294,10 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                 while(auto* dimension =
                           dynamic_cast<ArrayTypeNode*>(scalarType))
                     scalarType = dimension->elementType;
-                return new MultiArrayTypeNode(cloneTypeNode(scalarType),
-                                              matrixType->capacity, false);
+                return new MultiArrayTypeNode(
+                    cloneTypeNode(scalarType),
+                    matrixType->capacity,
+                    false);
             }
             if((methodCall->methodName == "matmul" ||
                 methodCall->methodName == "multiply") &&
@@ -293,7 +316,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                         new ArrayTypeNode(
                             cloneTypeNode(leftColumns->elementType),
                             rightColumns->capacity),
-                        matrixType->capacity, false);
+                        matrixType->capacity,
+                        false);
             }
         }
         if(methodCall->methodName == "get")
@@ -382,12 +406,13 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                     {
                         objStructTypeName = structRef->structName;
                     }
-                    else if(auto* genRef =
-                                dynamic_cast<GenericStructTypeRefNode*>(
-                                    objType))
+                    else if(
+                        auto* genRef =
+                            dynamic_cast<GenericStructTypeRefNode*>(objType))
                     {
                         objStructTypeName = getOrCreateMonomorphizedStruct(
-                            genRef->structName, genRef->typeArgs);
+                            genRef->structName,
+                            genRef->typeArgs);
                     }
                     hasRealNameField =
                         structHasFieldNamed(objStructTypeName, "name");
@@ -398,8 +423,9 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                 auto kindIt = variableTypes.find(fieldAccess->structName);
                 if(kindIt == variableTypes.end())
                 {
-                    reportError(line, "unknown variable: '" +
-                                          fieldAccess->structName + "'");
+                    reportError(
+                        line,
+                        "unknown variable: '" + fieldAccess->structName + "'");
                     return nullptr;
                 }
 
@@ -435,23 +461,28 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             {
                 structTypeName = structRef->structName;
             }
-            else if(auto* genRef =
-                        dynamic_cast<GenericStructTypeRefNode*>(objType))
+            else if(
+                auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(objType))
             {
                 structTypeName = getOrCreateMonomorphizedStruct(
-                    genRef->structName, genRef->typeArgs);
+                    genRef->structName,
+                    genRef->typeArgs);
             }
         }
         else
         {
-            if(!validateVariableAccessible(fieldAccess->structName, line,
-                                           fieldAccess->col))
+            if(!validateVariableAccessible(
+                   fieldAccess->structName,
+                   line,
+                   fieldAccess->col))
                 return nullptr;
             auto typeIt = structVariableTypes.find(fieldAccess->structName);
             if(typeIt == structVariableTypes.end())
             {
-                reportError(line, "variable '" + fieldAccess->structName +
-                                      "' is not a struct");
+                reportError(
+                    line,
+                    "variable '" + fieldAccess->structName +
+                        "' is not a struct");
                 return nullptr;
             }
             structTypeName = typeIt->second;
@@ -470,9 +501,10 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                 return member.second;
         }
 
-        reportError(line, "struct '" + structTypeName +
-                              "' has no field named '" +
-                              fieldAccess->fieldName + "'");
+        reportError(
+            line,
+            "struct '" + structTypeName + "' has no field named '" +
+                fieldAccess->fieldName + "'");
         return nullptr;
     }
 
@@ -533,9 +565,10 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
     if(dynamic_cast<BoolLiteralNode*>(expr))
         return new TypeNode(TypeNode::TYPE_BOOL);
     if(auto* literal = dynamic_cast<IntLiteralNode*>(expr))
-        return new TypeNode(literal->explicitType == TypeNode::TYPE_VOID
-                                ? TypeNode::TYPE_I64
-                                : literal->explicitType);
+        return new TypeNode(
+            literal->explicitType == TypeNode::TYPE_VOID
+                ? TypeNode::TYPE_I64
+                : literal->explicitType);
     if(dynamic_cast<FloatLiteralNode*>(expr))
         return new TypeNode(TypeNode::TYPE_FLOAT);
     if(dynamic_cast<DoubleLiteralNode*>(expr))
@@ -727,9 +760,11 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
                     dynamic_cast<ArrayTypeNode*>(matrixType->elementType);
                 if(columns)
                     return new MultiArrayTypeNode(
-                        new ArrayTypeNode(cloneTypeNode(columns->elementType),
-                                          matrixType->capacity),
-                        columns->capacity, false);
+                        new ArrayTypeNode(
+                            cloneTypeNode(columns->elementType),
+                            matrixType->capacity),
+                        columns->capacity,
+                        false);
             }
             if(methodCall->methodName == "eigenvalues")
             {
@@ -737,8 +772,10 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
                 while(auto* dimension =
                           dynamic_cast<ArrayTypeNode*>(scalarType))
                     scalarType = dimension->elementType;
-                return new MultiArrayTypeNode(cloneTypeNode(scalarType),
-                                              matrixType->capacity, false);
+                return new MultiArrayTypeNode(
+                    cloneTypeNode(scalarType),
+                    matrixType->capacity,
+                    false);
             }
             if((methodCall->methodName == "matmul" ||
                 methodCall->methodName == "multiply") &&
@@ -757,7 +794,8 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
                         new ArrayTypeNode(
                             cloneTypeNode(leftColumns->elementType),
                             rightColumns->capacity),
-                        matrixType->capacity, false);
+                        matrixType->capacity,
+                        false);
             }
         }
         if(methodCall->methodName == "clone")
@@ -780,16 +818,17 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
             if(structName.empty())
                 structName = structRef->structName;
         }
-        else if(auto* genericStruct =
-                    dynamic_cast<GenericStructTypeRefNode*>(objectType))
+        else if(
+            auto* genericStruct =
+                dynamic_cast<GenericStructTypeRefNode*>(objectType))
             structName = getOrCreateMonomorphizedStruct(
-                genericStruct->structName, genericStruct->typeArgs);
+                genericStruct->structName,
+                genericStruct->typeArgs);
         auto methods = structMethods.find(structName);
         if(methods != structMethods.end())
         {
             auto selected = methods->second.find(methodCall->methodName);
-            if(selected != methods->second.end() &&
-               selected->second.second &&
+            if(selected != methods->second.end() && selected->second.second &&
                selected->second.second->returnType)
                 return cloneTypeNode(selected->second.second->returnType);
         }
@@ -804,8 +843,12 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
             return inferred;
         ConstexprValue value;
         std::string errorMessage;
-        if(evalConstexprExpression(cexprExpr->expression, value, &errorMessage,
-                                   nullptr, 0))
+        if(evalConstexprExpression(
+               cexprExpr->expression,
+               value,
+               &errorMessage,
+               nullptr,
+               0))
             return new TypeNode(value.typeKind);
         return nullptr;
     }

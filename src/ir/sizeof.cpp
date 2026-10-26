@@ -42,9 +42,9 @@ llvm::Value* CodeGenerator::generateSizeofExpression(SizeofExpressionNode* node)
                 auto capIt = arrayCapacities.find(id->name);
                 if(capIt != arrayCapacities.end())
                 {
-                    targetType =
-                        new ArrayTypeNode(cloneTypeNode(listType->elementType),
-                                          capIt->second);
+                    targetType = new ArrayTypeNode(
+                        cloneTypeNode(listType->elementType),
+                        capIt->second);
                 }
             }
         }

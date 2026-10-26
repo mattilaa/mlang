@@ -25,16 +25,19 @@ inline const char* inputName(TypeNode::TypeKind kind)
     }
 }
 
-inline std::string operatorName(const std::string& suffix,
-                                TypeNode::TypeKind kind)
+inline std::string operatorName(
+    const std::string& suffix,
+    TypeNode::TypeKind kind)
 {
     const char* input = inputName(kind);
     return "__mlang_literal$" + std::string(input ? input : "invalid") + "$" +
            suffix;
 }
 
-inline bool decodeOperatorName(const std::string& name, std::string& suffix,
-                               std::string& input)
+inline bool decodeOperatorName(
+    const std::string& name,
+    std::string& suffix,
+    std::string& input)
 {
     const std::string prefix = "__mlang_literal$";
     const size_t start = name.rfind(prefix);
@@ -51,8 +54,10 @@ inline bool decodeOperatorName(const std::string& name, std::string& suffix,
 }
 
 template <class Contains>
-inline std::string scopedOperatorName(const std::string& name,
-                                      std::string scope, Contains contains)
+inline std::string scopedOperatorName(
+    const std::string& name,
+    std::string scope,
+    Contains contains)
 {
     while(!scope.empty())
     {

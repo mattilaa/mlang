@@ -7,9 +7,8 @@
 
 using mlang::ir_detail::common::Helpers;
 
-
-std::string
-CodeGenerator::resolveVisibleEnumName(const std::string& enumName) const
+std::string CodeGenerator::resolveVisibleEnumName(
+    const std::string& enumName) const
 {
     auto hasEnumNamed = [&](const std::string& name) -> bool
     {
@@ -33,8 +32,10 @@ CodeGenerator::resolveVisibleEnumName(const std::string& enumName) const
     {
         const std::string& candidate = kv.first;
         if(candidate.size() > shortName.size() &&
-           candidate.compare(candidate.size() - shortName.size(),
-                             shortName.size(), shortName) == 0)
+           candidate.compare(
+               candidate.size() - shortName.size(),
+               shortName.size(),
+               shortName) == 0)
         {
             char sep = candidate[candidate.size() - shortName.size() - 1];
             if(sep == ':' || sep == '.' || sep == '_')
@@ -45,8 +46,10 @@ CodeGenerator::resolveVisibleEnumName(const std::string& enumName) const
     {
         const std::string& candidate = kv.first;
         if(candidate.size() > shortName.size() &&
-           candidate.compare(candidate.size() - shortName.size(),
-                             shortName.size(), shortName) == 0)
+           candidate.compare(
+               candidate.size() - shortName.size(),
+               shortName.size(),
+               shortName) == 0)
         {
             char sep = candidate[candidate.size() - shortName.size() - 1];
             if(sep == ':' || sep == '.' || sep == '_')
@@ -56,8 +59,8 @@ CodeGenerator::resolveVisibleEnumName(const std::string& enumName) const
     return {};
 }
 
-std::string
-CodeGenerator::resolveVisibleStructName(const std::string& structName) const
+std::string CodeGenerator::resolveVisibleStructName(
+    const std::string& structName) const
 {
     auto hasStructNamed = [&](const std::string& name) -> bool
     {
@@ -83,8 +86,10 @@ CodeGenerator::resolveVisibleStructName(const std::string& structName) const
     {
         const std::string& candidate = kv.first;
         if(candidate.size() > shortName.size() &&
-           candidate.compare(candidate.size() - shortName.size(),
-                             shortName.size(), shortName) == 0)
+           candidate.compare(
+               candidate.size() - shortName.size(),
+               shortName.size(),
+               shortName) == 0)
         {
             char sep = candidate[candidate.size() - shortName.size() - 1];
             if(sep == ':' || sep == '.' || sep == '_')
@@ -95,8 +100,10 @@ CodeGenerator::resolveVisibleStructName(const std::string& structName) const
     {
         const std::string& candidate = kv.first;
         if(candidate.size() > shortName.size() &&
-           candidate.compare(candidate.size() - shortName.size(),
-                             shortName.size(), shortName) == 0)
+           candidate.compare(
+               candidate.size() - shortName.size(),
+               shortName.size(),
+               shortName) == 0)
         {
             char sep = candidate[candidate.size() - shortName.size() - 1];
             if(sep == ':' || sep == '.' || sep == '_')
@@ -107,8 +114,10 @@ CodeGenerator::resolveVisibleStructName(const std::string& structName) const
     {
         const std::string& candidate = kv.first;
         if(candidate.size() > shortName.size() &&
-           candidate.compare(candidate.size() - shortName.size(),
-                             shortName.size(), shortName) == 0)
+           candidate.compare(
+               candidate.size() - shortName.size(),
+               shortName.size(),
+               shortName) == 0)
         {
             char sep = candidate[candidate.size() - shortName.size() - 1];
             if(sep == ':' || sep == '.' || sep == '_')
@@ -118,9 +127,10 @@ CodeGenerator::resolveVisibleStructName(const std::string& structName) const
     return {};
 }
 
-llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
-                                            const std::string& enumName,
-                                            int line)
+llvm::Value* CodeGenerator::buildEnumString(
+    llvm::Value* enumVal,
+    const std::string& enumName,
+    int line)
 {
     std::string resolvedEnumName = resolveVisibleEnumName(enumName);
     if(resolvedEnumName.empty())
@@ -156,7 +166,10 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
        enumValNorm->getType()->isIntegerTy())
     {
         enumValNorm = builder.CreateIntCast(
-            enumValNorm, enumTy, !Helpers::enumIsUnsigned(baseKind), "enum.str.cast");
+            enumValNorm,
+            enumTy,
+            !Helpers::enumIsUnsigned(baseKind),
+            "enum.str.cast");
     }
 
     std::string unknownText = "<" + resolvedEnumName + ":unknown>";
@@ -169,10 +182,13 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
     if(orderedIt != enumVariantOrder.end())
     {
         for(auto it = orderedIt->second.rbegin();
-            it != orderedIt->second.rend(); ++it)
+            it != orderedIt->second.rend();
+            ++it)
         {
             llvm::Value* variantConst = llvm::ConstantInt::get(
-                enumTy, it->second, !Helpers::enumIsUnsigned(baseKind));
+                enumTy,
+                it->second,
+                !Helpers::enumIsUnsigned(baseKind));
             llvm::Value* isMatch =
                 builder.CreateICmpEQ(enumValNorm, variantConst, "enum.str.eq");
             std::string text = resolvedEnumName + "::" + it->first;
@@ -198,7 +214,9 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
     for(const auto& kv : enumIt->second)
     {
         llvm::Value* variantConst = llvm::ConstantInt::get(
-            enumTy, kv.second, !Helpers::enumIsUnsigned(baseKind));
+            enumTy,
+            kv.second,
+            !Helpers::enumIsUnsigned(baseKind));
         llvm::Value* isMatch =
             builder.CreateICmpEQ(enumValNorm, variantConst, "enum.str.eq");
         std::string text = resolvedEnumName + "::" + kv.first;
@@ -225,10 +243,12 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
     }
 
     TypeNode::TypeKind baseKind = node->backingType;
-    if(!Helpers::isEnumIntegralType(baseKind) && !Helpers::isEnumStringType(baseKind))
+    if(!Helpers::isEnumIntegralType(baseKind) &&
+       !Helpers::isEnumStringType(baseKind))
     {
-        reportError(node->line,
-                    "enum '" + node->name + "' has unsupported backing type");
+        reportError(
+            node->line,
+            "enum '" + node->name + "' has unsupported backing type");
         return;
     }
 
@@ -244,8 +264,9 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
                     continue;
                 if(variants.find(variant->name) != variants.end())
                 {
-                    reportError(node->line, "duplicate enum variant: '" +
-                                                variant->name + "'");
+                    reportError(
+                        node->line,
+                        "duplicate enum variant: '" + variant->name + "'");
                     return;
                 }
 
@@ -296,9 +317,10 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
                 }
                 else if(variant->hasExplicitValue)
                 {
-                    reportError(variant->line > 0 ? variant->line : node->line,
-                                "string-backed enum '" + node->name +
-                                    "' requires string variant values");
+                    reportError(
+                        variant->line > 0 ? variant->line : node->line,
+                        "string-backed enum '" + node->name +
+                            "' requires string variant values");
                     return;
                 }
 
@@ -325,8 +347,9 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
                 continue;
             if(variants.find(variant->name) != variants.end())
             {
-                reportError(node->line,
-                            "duplicate enum variant: '" + variant->name + "'");
+                reportError(
+                    node->line,
+                    "duplicate enum variant: '" + variant->name + "'");
                 return;
             }
 
@@ -368,11 +391,12 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
 
                 if(!resolved)
                 {
-                    reportError(variant->line > 0 ? variant->line : node->line,
-                                "enum variant '" + variant->name +
-                                    "' references unknown enum value '" +
-                                    refEnumName + "::" + refVariantName +
-                                    "' in enum '" + node->name + "'");
+                    reportError(
+                        variant->line > 0 ? variant->line : node->line,
+                        "enum variant '" + variant->name +
+                            "' references unknown enum value '" + refEnumName +
+                            "::" + refVariantName + "' in enum '" + node->name +
+                            "'");
                     return;
                 }
 
@@ -380,10 +404,11 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
             }
             else if(!nextImplicitValid)
             {
-                reportError(variant->line > 0 ? variant->line : node->line,
-                            "enum implicit value overflows backing type '" +
-                                Helpers::enumBaseTypeName(baseKind) + "' in enum '" +
-                                node->name + "'");
+                reportError(
+                    variant->line > 0 ? variant->line : node->line,
+                    "enum implicit value overflows backing type '" +
+                        Helpers::enumBaseTypeName(baseKind) + "' in enum '" +
+                        node->name + "'");
                 return;
             }
 
@@ -396,23 +421,25 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
                     if(refBkIt != enumBaseTypes.end())
                         refBaseKind = refBkIt->second;
 
-                    reportError(variant->line > 0 ? variant->line : node->line,
-                                "enum types/values are not compatible: '" +
-                                    variant->refEnumName +
-                                    "::" + variant->refVariantName + "' (" +
-                                    Helpers::enumBaseTypeName(refBaseKind) + ", value " +
-                                    std::to_string(value) +
-                                    ") cannot fit in enum '" + node->name +
-                                    "' backing type '" +
-                                    Helpers::enumBaseTypeName(baseKind) + "'");
+                    reportError(
+                        variant->line > 0 ? variant->line : node->line,
+                        "enum types/values are not compatible: '" +
+                            variant->refEnumName +
+                            "::" + variant->refVariantName + "' (" +
+                            Helpers::enumBaseTypeName(refBaseKind) +
+                            ", value " + std::to_string(value) +
+                            ") cannot fit in enum '" + node->name +
+                            "' backing type '" +
+                            Helpers::enumBaseTypeName(baseKind) + "'");
                 }
                 else
                 {
-                    reportError(variant->line > 0 ? variant->line : node->line,
-                                "enum variant value '" + std::to_string(value) +
-                                    "' does not fit backing type '" +
-                                    Helpers::enumBaseTypeName(baseKind) + "' in enum '" +
-                                    node->name + "'");
+                    reportError(
+                        variant->line > 0 ? variant->line : node->line,
+                        "enum variant value '" + std::to_string(value) +
+                            "' does not fit backing type '" +
+                            Helpers::enumBaseTypeName(baseKind) +
+                            "' in enum '" + node->name + "'");
                 }
                 return;
             }
@@ -426,7 +453,8 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
             else
             {
                 nextValue = value + 1;
-                nextImplicitValid = Helpers::fitsInEnumBaseType(baseKind, nextValue);
+                nextImplicitValid =
+                    Helpers::fitsInEnumBaseType(baseKind, nextValue);
             }
         }
     }

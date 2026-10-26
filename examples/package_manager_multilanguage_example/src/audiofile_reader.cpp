@@ -1,15 +1,16 @@
-#include <cstdio>
-#include <cmath>
 #include "AudioFile.h"
+#include <cmath>
+#include <cstdio>
 
 extern "C" int ml_audio_print_analysis(const char* path)
 {
     AudioFile<double> audioFile;
     if(!audioFile.load(path))
     {
-        std::fprintf(stderr,
-                     "[c++] AudioFile failed to load sample: %s\n",
-                     path);
+        std::fprintf(
+            stderr,
+            "[c++] AudioFile failed to load sample: %s\n",
+            path);
         return 1;
     }
 
@@ -32,8 +33,7 @@ extern "C" int ml_audio_print_analysis(const char* path)
     std::printf("[c++] Bit depth: %d-bit\n", audioFile.getBitDepth());
     std::printf("[c++] Channels: %d\n", channels);
     std::printf("[c++] Samples / channel: %d\n", samplesPerChannel);
-    std::printf("[c++] Length: %.3f seconds\n",
-                audioFile.getLengthInSeconds());
+    std::printf("[c++] Length: %.3f seconds\n", audioFile.getLengthInSeconds());
     std::printf("[c++] Peak amplitude: %.6f\n", peak);
     return 0;
 }

@@ -1,6 +1,6 @@
 #include <algorithm>
-#include <cerrno>
 #include <cctype>
+#include <cerrno>
 #include <csignal>
 #include <cstdlib>
 #include <filesystem>
@@ -196,8 +196,8 @@ struct VisibleRow
     size_t item = 0;
 };
 
-const std::vector<std::string> kBuildTypes = {"Release", "Debug",
-                                              "RelWithDebInfo", "MinSizeRel"};
+const std::vector<std::string> kBuildTypes =
+    {"Release", "Debug", "RelWithDebInfo", "MinSizeRel"};
 
 std::string trim(std::string s)
 {
@@ -216,8 +216,11 @@ std::string default_jobs()
 bool truthy(const std::string& value)
 {
     std::string v = value;
-    std::transform(v.begin(), v.end(), v.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
+    std::transform(
+        v.begin(),
+        v.end(),
+        v.begin(),
+        [](unsigned char c) { return std::tolower(c); });
     return v == "1" || v == "on" || v == "true" || v == "yes";
 }
 
@@ -289,8 +292,10 @@ void save_config(const Config& cfg)
         out << "install_prefix=" << normalized.installPrefix << "\n";
         out << "bin_dir=" << normalized.binDir << "\n";
         out << "jobs=" << normalized.jobs << "\n";
-        out << "install_mladbg=" << (normalized.installMladbg ? "ON" : "OFF") << "\n";
-        out << "run_unit_tests=" << (normalized.runUnitTests ? "ON" : "OFF") << "\n";
+        out << "install_mladbg=" << (normalized.installMladbg ? "ON" : "OFF")
+            << "\n";
+        out << "run_unit_tests=" << (normalized.runUnitTests ? "ON" : "OFF")
+            << "\n";
         out << "run_robot_tests=" << (normalized.runRobotTests ? "ON" : "OFF")
             << "\n";
     }
@@ -439,8 +444,9 @@ TerminalSize terminal_size()
     CONSOLE_SCREEN_BUFFER_INFO info{};
     if(GetConsoleScreenBufferInfo(stdout_handle(), &info))
     {
-        return {static_cast<int>(info.srWindow.Bottom - info.srWindow.Top + 1),
-                static_cast<int>(info.srWindow.Right - info.srWindow.Left + 1)};
+        return {
+            static_cast<int>(info.srWindow.Bottom - info.srWindow.Top + 1),
+            static_cast<int>(info.srWindow.Right - info.srWindow.Left + 1)};
     }
     return {};
 #else
@@ -561,16 +567,19 @@ void set_text_value(Config& cfg, const Item& item, const std::string& value)
         cfg.*(item.text) = value;
 }
 
-std::string help_for(const Config&, const std::vector<Section>& sections,
-                     const VisibleRow& row)
+std::string help_for(
+    const Config&,
+    const std::vector<Section>& sections,
+    const VisibleRow& row)
 {
     if(row.kind == RowKind::Section)
         return sections[row.section].help;
     return sections[row.section].items[row.item].help;
 }
 
-int choice_index(const std::string& value,
-                 const std::vector<std::string>& choices)
+int choice_index(
+    const std::string& value,
+    const std::vector<std::string>& choices)
 {
     for(size_t i = 0; i < choices.size(); ++i)
     {
@@ -596,8 +605,9 @@ std::vector<std::string> wrap_text(std::string_view text, int width)
         if(start == pos)
             break;
         std::string word(text.substr(start, pos - start));
-        if(static_cast<int>(current.size() + word.size() +
-                            (current.empty() ? 0 : 1)) > width)
+        if(static_cast<int>(
+               current.size() + word.size() + (current.empty() ? 0 : 1)) >
+           width)
         {
             if(!current.empty())
                 lines.push_back(current);
@@ -671,8 +681,12 @@ std::string pad_ansi_line(std::string line, int cols)
     return line;
 }
 
-std::string row_text(const Config& cfg, const std::vector<Section>& sections,
-                     const VisibleRow& row, bool selected, bool editing)
+std::string row_text(
+    const Config& cfg,
+    const std::vector<Section>& sections,
+    const VisibleRow& row,
+    bool selected,
+    bool editing)
 {
     std::string out = selected ? "> " : "  ";
     if(row.kind == RowKind::Section)
@@ -760,8 +774,11 @@ int clamp_scroll(int scrollOffset, int cursor, int rowCount, int listHeight)
     return scrollOffset;
 }
 
-void append_wrapped_fixed(std::vector<std::string>& out, std::string_view text,
-                          int rows, int cols)
+void append_wrapped_fixed(
+    std::vector<std::string>& out,
+    std::string_view text,
+    int rows,
+    int cols)
 {
     const std::vector<std::string> lines = wrap_text(text, cols);
     for(int i = 0; i < rows; ++i)
@@ -776,16 +793,18 @@ void append_wrapped_fixed(std::vector<std::string>& out, std::string_view text,
 Layout make_layout(TerminalSize screen)
 {
     Layout layout;
-    layout.keyRows = static_cast<int>(
-        wrap_text("j/k/arrows move  h/left close  l/right open  "
-                  "space/enter change  s save  q quit",
-                  screen.cols)
-            .size());
-    layout.outputRows = static_cast<int>(
-        wrap_text("Output: build/mlang-config.conf and "
-                  "build/mlang_config_cache.cmake",
-                  screen.cols)
-            .size());
+    layout.keyRows =
+        static_cast<int>(wrap_text(
+                             "j/k/arrows move  h/left close  l/right open  "
+                             "space/enter change  s save  q quit",
+                             screen.cols)
+                             .size());
+    layout.outputRows =
+        static_cast<int>(wrap_text(
+                             "Output: build/mlang-config.conf and "
+                             "build/mlang_config_cache.cmake",
+                             screen.cols)
+                             .size());
     const int fixed = layout.titleRows + layout.keyRows + layout.spacerRows +
                       layout.docTitleRows + layout.outputRows +
                       layout.messageRows;
@@ -795,9 +814,14 @@ Layout make_layout(TerminalSize screen)
     return layout;
 }
 
-void draw(const Config& cfg, const std::vector<Section>& sections, int cursor,
-          int scrollOffset, TerminalSize screen, std::string_view message,
-          bool editingText)
+void draw(
+    const Config& cfg,
+    const std::vector<Section>& sections,
+    int cursor,
+    int scrollOffset,
+    TerminalSize screen,
+    std::string_view message,
+    bool editingText)
 {
     static std::vector<std::string> previousScreenLines;
     static TerminalSize previousScreen{};
@@ -809,14 +833,15 @@ void draw(const Config& cfg, const std::vector<Section>& sections, int cursor,
     const int rowCount = static_cast<int>(rows.size());
 
     std::vector<std::string> screenLines;
-    screenLines.push_back("\x1b[1;36m" +
-                          truncate_line("mlang build configurator",
-                                        screen.cols) +
-                          "\x1b[0m");
-    append_wrapped_fixed(screenLines,
-                         "j/k/arrows move  h/left close  l/right open  "
-                         "space/enter change  s save  q quit",
-                         layout.keyRows, screen.cols);
+    screenLines.push_back(
+        "\x1b[1;36m" + truncate_line("mlang build configurator", screen.cols) +
+        "\x1b[0m");
+    append_wrapped_fixed(
+        screenLines,
+        "j/k/arrows move  h/left close  l/right open  "
+        "space/enter change  s save  q quit",
+        layout.keyRows,
+        screen.cols);
     screenLines.push_back("");
 
     int listRowsPrinted = 0;
@@ -835,8 +860,12 @@ void draw(const Config& cfg, const std::vector<Section>& sections, int cursor,
         ++i)
     {
         std::string line = truncate_line(
-            row_text(cfg, sections, rows[static_cast<size_t>(i)],
-                     i == safeCursor, editingText && i == safeCursor),
+            row_text(
+                cfg,
+                sections,
+                rows[static_cast<size_t>(i)],
+                i == safeCursor,
+                editingText && i == safeCursor),
             screen.cols);
         if(i == safeCursor)
         {
@@ -857,15 +886,18 @@ void draw(const Config& cfg, const std::vector<Section>& sections, int cursor,
 
     screenLines.push_back("\x1b[1mDocumentation\x1b[0m");
     if(!rows.empty())
-        append_wrapped_fixed(screenLines,
-                             help_for(cfg, sections,
-                                      rows[static_cast<size_t>(safeCursor)]),
-                             layout.docRows, screen.cols);
+        append_wrapped_fixed(
+            screenLines,
+            help_for(cfg, sections, rows[static_cast<size_t>(safeCursor)]),
+            layout.docRows,
+            screen.cols);
 
-    append_wrapped_fixed(screenLines,
-                         "Output: build/mlang-config.conf and "
-                         "build/mlang_config_cache.cmake",
-                         layout.outputRows, screen.cols);
+    append_wrapped_fixed(
+        screenLines,
+        "Output: build/mlang-config.conf and "
+        "build/mlang_config_cache.cmake",
+        layout.outputRows,
+        screen.cols);
     append_wrapped_fixed(screenLines, message, layout.messageRows, screen.cols);
 
     while(static_cast<int>(screenLines.size()) < screen.rows)
@@ -876,10 +908,10 @@ void draw(const Config& cfg, const std::vector<Section>& sections, int cursor,
     auto cursor_position = [](size_t row) -> std::string
     { return "\x1b[" + std::to_string(row + 1) + ";1H"; };
 
-    const bool fullRedraw =
-        previousScreenLines.empty() || previousScreen.rows != screen.rows ||
-        previousScreen.cols != screen.cols ||
-        previousScreenLines.size() != screenLines.size();
+    const bool fullRedraw = previousScreenLines.empty() ||
+                            previousScreen.rows != screen.rows ||
+                            previousScreen.cols != screen.cols ||
+                            previousScreenLines.size() != screenLines.size();
 
     std::string output;
     output += "\x1b[?25l";
@@ -928,7 +960,8 @@ void print_summary(const Config& cfg)
     std::cout << "  install prefix  " << cfg.installPrefix << "\n";
     std::cout << "  bin dir         " << cfg.binDir << "\n";
     std::cout << "  jobs            " << cfg.jobs << "\n";
-    std::cout << "  install mladbg  " << (cfg.installMladbg ? "ON" : "OFF") << "\n";
+    std::cout << "  install mladbg  " << (cfg.installMladbg ? "ON" : "OFF")
+              << "\n";
     std::cout << "  unit tests      " << (cfg.runUnitTests ? "ON" : "OFF")
               << "\n";
     std::cout << "  Robot tests     " << (cfg.runRobotTests ? "ON" : "OFF")
@@ -938,8 +971,8 @@ void print_summary(const Config& cfg)
 
 void choose_build_type(Config& cfg)
 {
-    const std::vector<std::string> values = {"Release", "Debug",
-                                             "RelWithDebInfo", "MinSizeRel"};
+    const std::vector<std::string> values =
+        {"Release", "Debug", "RelWithDebInfo", "MinSizeRel"};
     std::cout << "\nBuild type\n";
     for(size_t i = 0; i < values.size(); ++i)
         std::cout << "  " << (i + 1) << ". " << values[i] << "\n";
@@ -1004,7 +1037,7 @@ void run_menu(Config& cfg)
     }
 
 #ifndef _WIN32
-    struct sigaction sa {};
+    struct sigaction sa{};
     sa.sa_handler = handle_resize;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGWINCH, &sa, nullptr);
@@ -1024,13 +1057,16 @@ void run_menu(Config& cfg)
         const TerminalSize screen = terminal_size();
         const std::vector<VisibleRow> rows = visible_rows(sections);
         const Layout layout = make_layout(screen);
-        cursor = std::clamp(cursor, 0,
-                            std::max(0, static_cast<int>(rows.size()) - 1));
-        scrollOffset = clamp_scroll(scrollOffset, cursor,
-                                    static_cast<int>(rows.size()),
-                                    layout.listRows);
-        draw(cfg, sections, cursor, scrollOffset, screen, message,
-             editingText);
+        cursor = std::clamp(
+            cursor,
+            0,
+            std::max(0, static_cast<int>(rows.size()) - 1));
+        scrollOffset = clamp_scroll(
+            scrollOffset,
+            cursor,
+            static_cast<int>(rows.size()),
+            layout.listRows);
+        draw(cfg, sections, cursor, scrollOffset, screen, message, editingText);
 
         int key = read_key();
         if(key == kKeyResize)
@@ -1124,19 +1160,23 @@ void run_menu(Config& cfg)
 
 void print_help(const char* argv0)
 {
-    std::cout << "Usage: " << argv0 << " [options]\n"
-              << "  --build-dir DIR       Build directory\n"
-              << "  --build-type TYPE     Release, Debug, RelWithDebInfo, MinSizeRel\n"
-              << "  --install-prefix DIR  Install prefix, default ~/.local\n"
-              << "  --bin-dir DIR         Binary install directory, default ~/.local/bin\n"
-              << "  --jobs N              Parallel build jobs\n"
-              << "  --mladbg on|off       Build/install debugger on macOS/Linux, default on\n"
-              << "  --unit-tests on|off   Save unit-test preference, default off\n"
-              << "  --robot-tests on|off  Save Robot-test preference, default off\n"
-              << "  --write               Write config without opening the menu\n"
-              << "  --print               Print current config and exit\n";
+    std::cout
+        << "Usage: " << argv0 << " [options]\n"
+        << "  --build-dir DIR       Build directory\n"
+        << "  --build-type TYPE     Release, Debug, RelWithDebInfo, "
+           "MinSizeRel\n"
+        << "  --install-prefix DIR  Install prefix, default ~/.local\n"
+        << "  --bin-dir DIR         Binary install directory, default "
+           "~/.local/bin\n"
+        << "  --jobs N              Parallel build jobs\n"
+        << "  --mladbg on|off       Build/install debugger on macOS/Linux, "
+           "default on\n"
+        << "  --unit-tests on|off   Save unit-test preference, default off\n"
+        << "  --robot-tests on|off  Save Robot-test preference, default off\n"
+        << "  --write               Write config without opening the menu\n"
+        << "  --print               Print current config and exit\n";
 }
-}
+} // namespace
 
 int main(int argc, char** argv)
 {
@@ -1150,7 +1190,8 @@ int main(int argc, char** argv)
     for(int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];
-        auto needValue = [&](const std::string& name) -> std::string {
+        auto needValue = [&](const std::string& name) -> std::string
+        {
             if(i + 1 >= argc)
             {
                 std::cerr << name << " requires a value\n";
@@ -1201,9 +1242,8 @@ int main(int argc, char** argv)
     for(int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];
-        auto needValue = [&](const std::string&) -> std::string {
-            return (i + 1 < argc) ? argv[++i] : std::string();
-        };
+        auto needValue = [&](const std::string&) -> std::string
+        { return (i + 1 < argc) ? argv[++i] : std::string(); };
         if(arg == "--build-dir")
             cfg.buildDir = needValue(arg);
         else if(arg == "--build-type")

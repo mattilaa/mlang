@@ -33,10 +33,12 @@ using CodeGenOptLevel = llvm::CodeGenOpt::Level;
 #endif
 
 #if LLVM_VERSION_MAJOR >= 16
-template<typename T> using Optional = std::optional<T>;
+template <typename T>
+using Optional = std::optional<T>;
 inline constexpr auto NoValue = std::nullopt;
 #else
-template<typename T> using Optional = llvm::Optional<T>;
+template <typename T>
+using Optional = llvm::Optional<T>;
 inline constexpr auto NoValue = llvm::None;
 #endif
 
@@ -51,8 +53,7 @@ inline llvm::Instruction* terminatorOrNull(llvm::BasicBlock* block)
 #endif
 }
 
-inline const llvm::Instruction*
-terminatorOrNull(const llvm::BasicBlock* block)
+inline const llvm::Instruction* terminatorOrNull(const llvm::BasicBlock* block)
 {
     if(!block)
         return nullptr;
@@ -62,4 +63,4 @@ terminatorOrNull(const llvm::BasicBlock* block)
     return block->getTerminator();
 #endif
 }
-}
+} // namespace mlang::llvm_compat

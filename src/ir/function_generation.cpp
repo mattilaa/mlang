@@ -9,8 +9,8 @@
 using mlang::ir_detail::ast_analysis::contains_exception_control_flow;
 using mlang::ir_detail::common::Helpers;
 
-llvm::Function*
-CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
+llvm::Function* CodeGenerator::generateFunctionDeclaration(
+    FunctionDefNode* node)
 {
     std::string symbolName = functionSymbolName(node);
     std::vector<llvm::Type*> paramTypes;
@@ -21,8 +21,9 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
         llvm::Type* paramType = parameterLLVMType(param->type);
         if(!paramType)
         {
-            reportError(param->line,
-                        "unknown type: " + Helpers::type_name_for_error(param->type));
+            reportError(
+                param->line,
+                "unknown type: " + Helpers::type_name_for_error(param->type));
             paramType = llvm::Type::getInt32Ty(context); // fallback
         }
         paramTypes.push_back(paramType);
@@ -32,8 +33,9 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
     llvm::Type* returnType = parameterLLVMType(node->returnType);
     if(!returnType)
     {
-        reportError(node->line,
-                    "unknown type: " + Helpers::type_name_for_error(node->returnType));
+        reportError(
+            node->line,
+            "unknown type: " + Helpers::type_name_for_error(node->returnType));
         returnType = llvm::Type::getVoidTy(context); // fallback
     }
 
@@ -44,16 +46,22 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
            existing->getReturnType() != returnType ||
            existing->isVarArg() != node->parameters->isVarArg)
         {
-            reportError(node->line, "conflicting declaration for function '" +
-                                        node->name + "'");
+            reportError(
+                node->line,
+                "conflicting declaration for function '" + node->name + "'");
         }
         return existing;
     }
 
     llvm::FunctionType* funcType = llvm::FunctionType::get(
-        returnType, paramTypes, node->parameters->isVarArg);
+        returnType,
+        paramTypes,
+        node->parameters->isVarArg);
     llvm::Function* function = llvm::Function::Create(
-        funcType, llvm::Function::ExternalLinkage, symbolName, module.get());
+        funcType,
+        llvm::Function::ExternalLinkage,
+        symbolName,
+        module.get());
 
     // Set parameter names
     unsigned idx = 0;
@@ -87,7 +95,10 @@ void CodeGenerator::emitInoutWriteBack()
             continue;
         if(auto* local = llvm::dyn_cast<llvm::AllocaInst>(it->second))
         {
-            llvm::Value* value = builder.CreateLoad(local->getAllocatedType(), local, inout.second + ".out");
+            llvm::Value* value = builder.CreateLoad(
+                local->getAllocatedType(),
+                local,
+                inout.second + ".out");
             builder.CreateStore(value, inout.first);
         }
     }
@@ -111,8 +122,9 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         return;
     if(globalNamedValues.find(node->name) != globalNamedValues.end())
     {
-        reportError(node->line,
-                    "duplicate global variable: '" + node->name + "'");
+        reportError(
+            node->line,
+            "duplicate global variable: '" + node->name + "'");
         return;
     }
 
@@ -135,8 +147,9 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         node->type ? getLLVMTypeFromNode(node->type) : getLLVMType(kind);
     if(!llvmTy)
     {
-        reportError(node->line,
-                    "invalid global variable type for '" + node->name + "'");
+        reportError(
+            node->line,
+            "invalid global variable type for '" + node->name + "'");
         return;
     }
 
@@ -147,9 +160,10 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         {
             if(!llvmTy->isIntegerTy())
             {
-                reportError(node->line,
-                            "global integer initializer type mismatch for '" +
-                                node->name + "'");
+                reportError(
+                    node->line,
+                    "global integer initializer type mismatch for '" +
+                        node->name + "'");
                 return;
             }
             init = llvm::ConstantInt::get(llvmTy, i->value, true);
@@ -158,9 +172,10 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         {
             if(!llvmTy->isIntegerTy(1))
             {
-                reportError(node->line,
-                            "global bool initializer type mismatch for '" +
-                                node->name + "'");
+                reportError(
+                    node->line,
+                    "global bool initializer type mismatch for '" + node->name +
+                        "'");
                 return;
             }
             init = llvm::ConstantInt::get(llvmTy, b->value ? 1 : 0, false);
@@ -169,9 +184,10 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         {
             if(!llvmTy->isFloatTy())
             {
-                reportError(node->line,
-                            "global float initializer type mismatch for '" +
-                                node->name + "'");
+                reportError(
+                    node->line,
+                    "global float initializer type mismatch for '" +
+                        node->name + "'");
                 return;
             }
             init = llvm::ConstantFP::get(llvmTy, f->value);
@@ -180,9 +196,10 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         {
             if(!llvmTy->isDoubleTy())
             {
-                reportError(node->line,
-                            "global double initializer type mismatch for '" +
-                                node->name + "'");
+                reportError(
+                    node->line,
+                    "global double initializer type mismatch for '" +
+                        node->name + "'");
                 return;
             }
             init = llvm::ConstantFP::get(llvmTy, d->value);
@@ -191,9 +208,10 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         {
             if(!llvmTy->isPointerTy())
             {
-                reportError(node->line,
-                            "global string initializer type mismatch for '" +
-                                node->name + "'");
+                reportError(
+                    node->line,
+                    "global string initializer type mismatch for '" +
+                        node->name + "'");
                 return;
             }
 #if LLVM_VERSION_MAJOR >= 21
@@ -211,15 +229,20 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         }
         else
         {
-            reportError(node->line,
-                        "global initializer must be a literal constant");
+            reportError(
+                node->line,
+                "global initializer must be a literal constant");
             return;
         }
     }
 
-    auto* gv = new llvm::GlobalVariable(*module, llvmTy, false,
-                                        llvm::GlobalValue::InternalLinkage,
-                                        init, "__mlang_global_" + node->name);
+    auto* gv = new llvm::GlobalVariable(
+        *module,
+        llvmTy,
+        false,
+        llvm::GlobalValue::InternalLinkage,
+        init,
+        "__mlang_global_" + node->name);
     globalNamedValues[node->name] = gv;
     globalVariableTypes[node->name] = kind;
 }
@@ -305,8 +328,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedClosureCaptureAliases = closureCaptureAliases;
     auto savedClosureCaptureTypes = closureCaptureTypes;
     auto savedClosureConstCaptures = closureConstCaptures;
-    auto savedClosureCaptureReferenceAliases =
-        closureCaptureReferenceAliases;
+    auto savedClosureCaptureReferenceAliases = closureCaptureReferenceAliases;
     auto savedActiveInlineClosures = activeInlineClosures;
     auto savedInlineClosureReturnStates = inlineClosureReturnStates;
     auto savedCurrentFunctionExceptionFrame = currentFunctionExceptionFrame;
@@ -373,9 +395,13 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     currentFunctionExceptionFrame =
         builder.CreateCall(exceptionsPushFrameFunc, {}, "fn.exc.frame");
     llvm::Value* functionExceptionEnv = builder.CreateCall(
-        exceptionsFrameEnvFunc, {currentFunctionExceptionFrame}, "fn.exc.env");
+        exceptionsFrameEnvFunc,
+        {currentFunctionExceptionFrame},
+        "fn.exc.env");
     auto* functionSetjmpCall = builder.CreateCall(
-        exceptionsSetjmpFunc, {functionExceptionEnv}, "fn.exc.state");
+        exceptionsSetjmpFunc,
+        {functionExceptionEnv},
+        "fn.exc.state");
     functionSetjmpCall->setCanReturnTwice();
     llvm::Value* functionExceptionState = functionSetjmpCall;
     llvm::Value* enteredNormally = builder.CreateICmpEQ(
@@ -396,17 +422,25 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         // every return, so the body works on a local like any parameter.
         ReferenceTypeNode* inoutType = nullptr;
         if(paramIdx < node->parameters->parameters.size())
-            if(auto* ref = dynamic_cast<ReferenceTypeNode*>(node->parameters->parameters[paramIdx]->type))
+            if(auto* ref = dynamic_cast<ReferenceTypeNode*>(
+                   node->parameters->parameters[paramIdx]->type))
                 if(ref->isMutable)
                     inoutType = ref;
-        llvm::Type* localType = inoutType ? getLLVMTypeFromNode(inoutType->elementType) : arg.getType();
+        llvm::Type* localType =
+            inoutType ? getLLVMTypeFromNode(inoutType->elementType)
+                      : arg.getType();
         // Allocate space for parameters so they can be modified
         llvm::AllocaInst* alloca = builder.CreateAlloca(
-            localType, nullptr, std::string(arg.getName()) + ".addr");
+            localType,
+            nullptr,
+            std::string(arg.getName()) + ".addr");
         llvm::Value* paramValue = &arg;
         if(inoutType)
         {
-            paramValue = builder.CreateLoad(localType, &arg, std::string(arg.getName()) + ".in");
+            paramValue = builder.CreateLoad(
+                localType,
+                &arg,
+                std::string(arg.getName()) + ".in");
             inoutParams.push_back({&arg, std::string(arg.getName())});
         }
         else if(arg.getType()->isStructTy())
@@ -463,7 +497,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                            refType->elementType))
                 {
                     std::string mangled = getOrCreateMonomorphizedStruct(
-                        genStructInner->structName, genStructInner->typeArgs);
+                        genStructInner->structName,
+                        genStructInner->typeArgs);
                     structVariableTypes[std::string(arg.getName())] = mangled;
                 }
                 if(auto* inner =
@@ -513,7 +548,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                    dynamic_cast<GenericStructTypeRefNode*>(paramNode->type))
             {
                 std::string mangled = getOrCreateMonomorphizedStruct(
-                    genStructType->structName, genStructType->typeArgs);
+                    genStructType->structName,
+                    genStructType->typeArgs);
                 structVariableTypes[std::string(arg.getName())] = mangled;
             }
             if(auto* genListType =
@@ -521,8 +557,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             {
                 listElementTypes[std::string(arg.getName())] =
                     genListType->elementType;
-                if(auto* arrayType =
-                       dynamic_cast<ArrayTypeNode*>(genListType))
+                if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(genListType))
                     arrayCapacities[std::string(arg.getName())] =
                         arrayType->capacity;
                 if(auto* multiarrayType =
@@ -566,9 +601,12 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         }
         // mlang -g: the parameter, with its MLang type.
         if(paramIdx < node->parameters->parameters.size())
-            debugDeclareVariable(std::string(arg.getName()), alloca,
-                                 node->parameters->parameters[paramIdx]->type,
-                                 node->parameters->parameters[paramIdx], paramIdx + 1);
+            debugDeclareVariable(
+                std::string(arg.getName()),
+                alloca,
+                node->parameters->parameters[paramIdx]->type,
+                node->parameters->parameters[paramIdx],
+                paramIdx + 1);
         paramIdx++;
     }
 
@@ -600,8 +638,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     if(!mlang::llvm_compat::terminatorOrNull(currentBlock))
     {
         if(currentFunctionExceptionFrame)
-            builder.CreateCall(exceptionsPopFrameFunc,
-                               {currentFunctionExceptionFrame});
+            builder.CreateCall(
+                exceptionsPopFrameFunc,
+                {currentFunctionExceptionFrame});
         if(returnType->isVoidTy())
         {
             builder.CreateRetVoid();
@@ -625,8 +664,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
 
     builder.SetInsertPoint(functionExceptionBB);
     if(currentFunctionExceptionFrame)
-        builder.CreateCall(exceptionsPopFrameFunc,
-                           {currentFunctionExceptionFrame});
+        builder.CreateCall(
+            exceptionsPopFrameFunc,
+            {currentFunctionExceptionFrame});
     namedValues = exceptionNamedValues;
     structVariableTypes = exceptionStructVariableTypes;
     cleanupScopes = exceptionCleanupScopes;
@@ -637,15 +677,13 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
 
     namedValues = std::move(savedNamedValues);
     constantVariables = std::move(savedConstantVariables);
-    immutableReferenceVariables =
-        std::move(savedImmutableReferenceVariables);
+    immutableReferenceVariables = std::move(savedImmutableReferenceVariables);
     movedVariables = std::move(savedMovedVariables);
     pointerBorrowTarget = std::move(savedPointerBorrowTarget);
     pointerBorrowParent = std::move(savedPointerBorrowParent);
     aggregateBorrowOrigins = std::move(savedAggregateBorrowOrigins);
     aggregateBorrowPlaces = std::move(savedAggregateBorrowPlaces);
-    aggregateBorrowFieldPlaces =
-        std::move(savedAggregateBorrowFieldPlaces);
+    aggregateBorrowFieldPlaces = std::move(savedAggregateBorrowFieldPlaces);
     pointerBorrowPlace = std::move(savedPointerBorrowPlace);
     activeBorrowers = std::move(savedActiveBorrowers);
     activeMutBorrower = std::move(savedActiveMutBorrower);
@@ -670,8 +708,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     functionTypeParameters = std::move(savedFunctionTypeParameters);
     pointerParameterBorrowOrigins =
         std::move(savedPointerParameterBorrowOrigins);
-    runtimeClosureBorrowOwners =
-        std::move(savedRuntimeClosureBorrowOwners);
+    runtimeClosureBorrowOwners = std::move(savedRuntimeClosureBorrowOwners);
     closureCaptureAliases = std::move(savedClosureCaptureAliases);
     closureCaptureTypes = std::move(savedClosureCaptureTypes);
     closureConstCaptures = std::move(savedClosureConstCaptures);

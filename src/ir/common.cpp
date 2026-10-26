@@ -36,33 +36,35 @@ enum class PrimitiveTypeAlias
 };
 
 template <typename Enum, size_t N>
-std::optional<Enum>
-find_enum_key(std::string_view key,
-              const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+std::optional<Enum> find_enum_key(
+    std::string_view key,
+    const std::array<std::pair<Enum, std::string_view>, N>& mappings)
 {
-    const auto it =
-        std::find_if(mappings.begin(), mappings.end(),
-                     [&](const auto& entry) { return entry.second == key; });
+    const auto it = std::find_if(
+        mappings.begin(),
+        mappings.end(),
+        [&](const auto& entry) { return entry.second == key; });
     if(it == mappings.end())
         return std::nullopt;
     return it->first;
 }
 
 constexpr std::array<std::pair<PrimitiveTypeAlias, std::string_view>, 14>
-    kPrimitiveTypeAliases{{{PrimitiveTypeAlias::Bool, "bool"},
-                           {PrimitiveTypeAlias::Bit, "bit"},
-                           {PrimitiveTypeAlias::I32, "i32"},
-                           {PrimitiveTypeAlias::I8, "i8"},
-                           {PrimitiveTypeAlias::I16, "i16"},
-                           {PrimitiveTypeAlias::I64, "i64"},
-                           {PrimitiveTypeAlias::U8, "u8"},
-                           {PrimitiveTypeAlias::U16, "u16"},
-                           {PrimitiveTypeAlias::U32, "u32"},
-                           {PrimitiveTypeAlias::U64, "u64"},
-                           {PrimitiveTypeAlias::F32, "f32"},
-                           {PrimitiveTypeAlias::F64, "f64"},
-                           {PrimitiveTypeAlias::Str8, "str8"},
-                           {PrimitiveTypeAlias::Str16, "str16"}}};
+    kPrimitiveTypeAliases{
+        {{PrimitiveTypeAlias::Bool, "bool"},
+         {PrimitiveTypeAlias::Bit, "bit"},
+         {PrimitiveTypeAlias::I32, "i32"},
+         {PrimitiveTypeAlias::I8, "i8"},
+         {PrimitiveTypeAlias::I16, "i16"},
+         {PrimitiveTypeAlias::I64, "i64"},
+         {PrimitiveTypeAlias::U8, "u8"},
+         {PrimitiveTypeAlias::U16, "u16"},
+         {PrimitiveTypeAlias::U32, "u32"},
+         {PrimitiveTypeAlias::U64, "u64"},
+         {PrimitiveTypeAlias::F32, "f32"},
+         {PrimitiveTypeAlias::F64, "f64"},
+         {PrimitiveTypeAlias::Str8, "str8"},
+         {PrimitiveTypeAlias::Str16, "str16"}}};
 
 std::string trim_copy(std::string s)
 {
@@ -92,8 +94,8 @@ std::vector<std::string> split_top_level_commas(const std::string& s)
         char c = s[i];
         if(c == '<' || c == '(' || c == '[')
             ++depth;
-        else if(c == ')' || c == ']' ||
-                (c == '>' && (i == 0 || s[i - 1] != '-')))
+        else if(
+            c == ')' || c == ']' || (c == '>' && (i == 0 || s[i - 1] != '-')))
             --depth;
         else if(c == ',' && depth == 0)
         {
@@ -107,9 +109,10 @@ std::vector<std::string> split_top_level_commas(const std::string& s)
 
 } // namespace
 
-llvm::Value* Helpers::create_global_cstring(llvm::IRBuilder<>& builder,
-                                            llvm::StringRef text,
-                                            const llvm::Twine& name)
+llvm::Value* Helpers::create_global_cstring(
+    llvm::IRBuilder<>& builder,
+    llvm::StringRef text,
+    const llvm::Twine& name)
 {
 #if LLVM_VERSION_MAJOR >= 21
     return builder.CreateGlobalString(text, name);
@@ -118,8 +121,7 @@ llvm::Value* Helpers::create_global_cstring(llvm::IRBuilder<>& builder,
 #endif
 }
 
-bool Helpers::is_same_module_family(const std::string& a,
-                                    const std::string& b)
+bool Helpers::is_same_module_family(const std::string& a, const std::string& b)
 {
     if(a.empty() || b.empty())
         return a == b;
@@ -142,8 +144,9 @@ bool Helpers::isSynthesizedPropertyLockFieldName(const std::string& fieldName)
     return fieldName.compare(0, prefix.size(), prefix) == 0;
 }
 
-bool Helpers::trait_names_equivalent(const std::string& lhs,
-                                     const std::string& rhs)
+bool Helpers::trait_names_equivalent(
+    const std::string& lhs,
+    const std::string& rhs)
 {
     if(lhs == rhs)
         return true;
@@ -155,10 +158,14 @@ bool Helpers::trait_names_equivalent(const std::string& lhs,
             return false;
         if(qualified.size() <= shortName.size() + 2)
             return false;
-        return qualified.compare(qualified.size() - shortName.size(),
-                                 shortName.size(), shortName) == 0 &&
-               qualified.compare(qualified.size() - shortName.size() - 2, 2,
-                                 "::") == 0;
+        return qualified.compare(
+                   qualified.size() - shortName.size(),
+                   shortName.size(),
+                   shortName) == 0 &&
+               qualified.compare(
+                   qualified.size() - shortName.size() - 2,
+                   2,
+                   "::") == 0;
     };
 
     return suffixMatches(lhs, rhs) || suffixMatches(rhs, lhs);
@@ -175,11 +182,13 @@ TypeNode* Helpers::type_from_text(std::string text)
     if(text == "void")
         return new TypeNode(TypeNode::TYPE_VOID);
     if(text.compare(0, 5, "&mut ") == 0)
-        return new ReferenceTypeNode(Helpers::type_from_text(text.substr(5)),
-                                     true);
+        return new ReferenceTypeNode(
+            Helpers::type_from_text(text.substr(5)),
+            true);
     if(!text.empty() && text.front() == '&')
-        return new ReferenceTypeNode(Helpers::type_from_text(text.substr(1)),
-                                     false);
+        return new ReferenceTypeNode(
+            Helpers::type_from_text(text.substr(1)),
+            false);
     if(is_wrapped_generic(text, "ptr"))
         return new PointerTypeNode(
             Helpers::type_from_text(text.substr(4, text.size() - 5)));
@@ -243,7 +252,8 @@ TypeNode* Helpers::type_from_text(std::string text)
                     for(const auto& parameter : split_top_level_commas(body))
                         parameters->addType(Helpers::type_from_text(parameter));
                 return new FunctionTypeNode(
-                    parameters, Helpers::type_from_text(result.substr(2)));
+                    parameters,
+                    Helpers::type_from_text(result.substr(2)));
             }
         }
     }
@@ -251,25 +261,28 @@ TypeNode* Helpers::type_from_text(std::string text)
         if(is_wrapped_generic(text, wrapper.c_str()))
         {
             auto parts = split_top_level_commas(text.substr(
-                wrapper.size() + 1, text.size() - wrapper.size() - 2));
+                wrapper.size() + 1,
+                text.size() - wrapper.size() - 2));
             if(parts.size() < 2)
                 break;
             TypeNode* element = Helpers::type_from_text(parts.front());
             for(size_t i = parts.size(); i-- > 1;)
             {
                 int64_t capacity = 0;
-                auto parsed = std::from_chars(parts[i].data(),
-                                              parts[i].data() + parts[i].size(),
-                                              capacity);
+                auto parsed = std::from_chars(
+                    parts[i].data(),
+                    parts[i].data() + parts[i].size(),
+                    capacity);
                 if(parsed.ec != std::errc{} ||
                    parsed.ptr != parts[i].data() + parts[i].size())
                     return new StructTypeRefNode(text);
-                element =
-                    wrapper == "array"
-                        ? static_cast<TypeNode*>(
-                              new ArrayTypeNode(element, capacity))
-                        : static_cast<TypeNode*>(new MultiArrayTypeNode(
-                              element, capacity, wrapper == "mutmultiarray"));
+                element = wrapper == "array"
+                              ? static_cast<TypeNode*>(
+                                    new ArrayTypeNode(element, capacity))
+                              : static_cast<TypeNode*>(new MultiArrayTypeNode(
+                                    element,
+                                    capacity,
+                                    wrapper == "mutmultiarray"));
             }
             return element;
         }
@@ -285,8 +298,9 @@ TypeNode* Helpers::type_from_text(std::string text)
         auto parts = split_top_level_commas(inner);
         if(parts.size() == 2)
         {
-            return new MapTypeNode(Helpers::type_from_text(parts[0]),
-                                   Helpers::type_from_text(parts[1]));
+            return new MapTypeNode(
+                Helpers::type_from_text(parts[0]),
+                Helpers::type_from_text(parts[1]));
         }
     }
     if(is_wrapped_generic(text, "tuple"))
@@ -318,8 +332,9 @@ TypeNode* Helpers::type_from_text(std::string text)
 std::string Helpers::resolve_visible_struct_base_name(
     const std::string& structName,
     const std::map<std::string, StructDefNode*>& genericStructTemplates,
-    const std::map<std::string,
-                   std::map<std::string, std::pair<bool, StructMethodNode*>>>&
+    const std::map<
+        std::string,
+        std::map<std::string, std::pair<bool, StructMethodNode*>>>&
         structMethods,
     const std::map<std::string, std::pair<bool, std::string>>& structVisibility)
 {
@@ -345,8 +360,10 @@ std::string Helpers::resolve_visible_struct_base_name(
         if(candidate == structName || candidate == tailName)
             return true;
         if(candidate.size() > tailName.size() &&
-           candidate.compare(candidate.size() - tailName.size(),
-                             tailName.size(), tailName) == 0)
+           candidate.compare(
+               candidate.size() - tailName.size(),
+               tailName.size(),
+               tailName) == 0)
         {
             char sep = candidate[candidate.size() - tailName.size() - 1];
             return sep == ':' || sep == '.' || sep == '_';

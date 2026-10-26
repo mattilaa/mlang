@@ -93,7 +93,8 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
     {
         // Get or create the monomorphized struct type
         std::string mangledName = getOrCreateMonomorphizedStruct(
-            genStructRef->structName, genStructRef->typeArgs);
+            genStructRef->structName,
+            genStructRef->typeArgs);
 
         auto it = structTypes.find(mangledName);
         if(it != structTypes.end())

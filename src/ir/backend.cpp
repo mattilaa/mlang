@@ -2,8 +2,8 @@
 #include "ir/backend_utils.h"
 #include "llvm_compat.h"
 
-#include <array>
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -37,39 +37,42 @@ enum class OptLevelAlias
 };
 
 template <typename Enum, size_t N>
-std::optional<Enum>
-find_enum_key(std::string_view key,
-              const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+std::optional<Enum> find_enum_key(
+    std::string_view key,
+    const std::array<std::pair<Enum, std::string_view>, N>& mappings)
 {
-    const auto it =
-        std::find_if(mappings.begin(), mappings.end(),
-                     [&](const auto& entry) { return entry.second == key; });
+    const auto it = std::find_if(
+        mappings.begin(),
+        mappings.end(),
+        [&](const auto& entry) { return entry.second == key; });
     if(it == mappings.end())
         return std::nullopt;
     return it->first;
 }
 
 template <typename Enum, size_t N>
-std::optional<std::string_view>
-find_enum_text(Enum key,
-               const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+std::optional<std::string_view> find_enum_text(
+    Enum key,
+    const std::array<std::pair<Enum, std::string_view>, N>& mappings)
 {
-    const auto it =
-        std::find_if(mappings.begin(), mappings.end(),
-                     [&](const auto& entry) { return entry.first == key; });
+    const auto it = std::find_if(
+        mappings.begin(),
+        mappings.end(),
+        [&](const auto& entry) { return entry.first == key; });
     if(it == mappings.end())
         return std::nullopt;
     return it->second;
 }
 
 constexpr std::array<std::pair<OptLevelAlias, std::string_view>, 7>
-    kOptLevelAliases{{{OptLevelAlias::O0, "-O0"},
-                      {OptLevelAlias::Og, "-Og"},
-                      {OptLevelAlias::O1, "-O1"},
-                      {OptLevelAlias::O2, "-O2"},
-                      {OptLevelAlias::O3, "-O3"},
-                      {OptLevelAlias::Os, "-Os"},
-                      {OptLevelAlias::Oz, "-Oz"}}};
+    kOptLevelAliases{
+        {{OptLevelAlias::O0, "-O0"},
+         {OptLevelAlias::Og, "-Og"},
+         {OptLevelAlias::O1, "-O1"},
+         {OptLevelAlias::O2, "-O2"},
+         {OptLevelAlias::O3, "-O3"},
+         {OptLevelAlias::Os, "-Os"},
+         {OptLevelAlias::Oz, "-Oz"}}};
 
 static std::string shell_quote(const std::string& value)
 {
@@ -87,8 +90,10 @@ static std::string shell_quote(const std::string& value)
 
 } // namespace
 
-Backend::Backend(std::unique_ptr<llvm::Module>& m,
-                 const std::string& archOverride, bool unoptimizedCodegen)
+Backend::Backend(
+    std::unique_ptr<llvm::Module>& m,
+    const std::string& archOverride,
+    bool unoptimizedCodegen)
     : module(m), targetMachine(nullptr), targetArchOverride(archOverride),
       unoptimizedCodegen(unoptimizedCodegen)
 {
@@ -160,11 +165,11 @@ bool Backend::initializeTarget()
     std::string features = "";
 
     llvm::TargetOptions opt;
-    auto relocModel = mlang::llvm_compat::Optional<llvm::Reloc::Model>(
-        llvm::Reloc::PIC_);
+    auto relocModel =
+        mlang::llvm_compat::Optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
     using CodeGenOptLevel = mlang::llvm_compat::CodeGenOptLevel;
-    CodeGenOptLevel codegenOpt = unoptimizedCodegen ? CodeGenOptLevel::None
-                                                   : CodeGenOptLevel::Default;
+    CodeGenOptLevel codegenOpt =
+        unoptimizedCodegen ? CodeGenOptLevel::None : CodeGenOptLevel::Default;
     bool conservativeCodegen = unoptimizedCodegen;
     if(const char* defaultOptEnv = std::getenv("MLANG_DEFAULT_OPT_LEVEL"))
     {
@@ -184,12 +189,22 @@ bool Backend::initializeTarget()
 #if LLVM_VERSION_MAJOR >= 21
     llvm::Triple tripleObj(targetTriple);
     targetMachine = target->createTargetMachine(
-        tripleObj, cpu, features, opt, relocModel,
-        mlang::llvm_compat::NoValue, codegenOpt);
+        tripleObj,
+        cpu,
+        features,
+        opt,
+        relocModel,
+        mlang::llvm_compat::NoValue,
+        codegenOpt);
 #else
     targetMachine = target->createTargetMachine(
-        targetTriple, cpu, features, opt, relocModel,
-        mlang::llvm_compat::NoValue, codegenOpt);
+        targetTriple,
+        cpu,
+        features,
+        opt,
+        relocModel,
+        mlang::llvm_compat::NoValue,
+        codegenOpt);
 #endif
 
     if(!targetMachine)
@@ -249,11 +264,14 @@ bool Backend::emitObjectFile(const std::string& filename)
 
     llvm::legacy::PassManager pass;
 #if LLVM_VERSION_MAJOR >= 18
-    if(targetMachine->addPassesToEmitFile(pass, dest, nullptr,
-                                          llvm::CodeGenFileType::ObjectFile))
+    if(targetMachine->addPassesToEmitFile(
+           pass,
+           dest,
+           nullptr,
+           llvm::CodeGenFileType::ObjectFile))
 #else
-    if(targetMachine->addPassesToEmitFile(pass, dest, nullptr,
-                                          llvm::CGFT_ObjectFile))
+    if(targetMachine
+           ->addPassesToEmitFile(pass, dest, nullptr, llvm::CGFT_ObjectFile))
 #endif
     {
         std::cerr << "Target machine can't emit object file" << std::endl;
@@ -287,11 +305,14 @@ bool Backend::emitAssemblyFile(const std::string& filename)
 
     llvm::legacy::PassManager pass;
 #if LLVM_VERSION_MAJOR >= 18
-    if(targetMachine->addPassesToEmitFile(pass, dest, nullptr,
-                                          llvm::CodeGenFileType::AssemblyFile))
+    if(targetMachine->addPassesToEmitFile(
+           pass,
+           dest,
+           nullptr,
+           llvm::CodeGenFileType::AssemblyFile))
 #else
-    if(targetMachine->addPassesToEmitFile(pass, dest, nullptr,
-                                          llvm::CGFT_AssemblyFile))
+    if(targetMachine
+           ->addPassesToEmitFile(pass, dest, nullptr, llvm::CGFT_AssemblyFile))
 #endif
     {
         std::cerr << "Target machine can't emit assembly file" << std::endl;
@@ -343,9 +364,10 @@ bool Backend::emitBitcode(const std::string& filename)
     return true;
 }
 
-bool Backend::linkExecutable(const std::string& objectFile,
-                             const std::string& outputFile,
-                             const std::vector<std::string>& linkArgs)
+bool Backend::linkExecutable(
+    const std::string& objectFile,
+    const std::string& outputFile,
+    const std::vector<std::string>& linkArgs)
 {
     mlang::ir_detail::ensure_artifact_parent_directory(outputFile);
     std::string command = "c++ -o " + outputFile + " " + objectFile;
@@ -359,7 +381,8 @@ bool Backend::linkExecutable(const std::string& objectFile,
         // capture. Without this usage description, CoreAudio may start an
         // input queue successfully while delivering all-zero buffers.
         infoPlistPath = objectFile + ".mlang-info.plist";
-        std::ofstream infoPlist(infoPlistPath, std::ios::binary | std::ios::trunc);
+        std::ofstream
+            infoPlist(infoPlistPath, std::ios::binary | std::ios::trunc);
         if(!infoPlist)
         {
             std::cerr << "Could not create macOS executable Info.plist: "
@@ -383,7 +406,8 @@ bool Backend::linkExecutable(const std::string& objectFile,
         infoPlist.close();
         removeInfoPlist = true;
         command += " " + shell_quote(
-            "-Wl,-sectcreate,__TEXT,__info_plist," + infoPlistPath.string());
+                             "-Wl,-sectcreate,__TEXT,__info_plist," +
+                             infoPlistPath.string());
     }
     if(const char* extraLinkFlags = std::getenv("MLANG_LINK_FLAGS"))
     {
@@ -416,8 +440,9 @@ bool Backend::linkExecutable(const std::string& objectFile,
     return true;
 }
 
-bool Backend::compileToExecutable(const std::string& outputFile,
-                                  const std::vector<std::string>& linkArgs)
+bool Backend::compileToExecutable(
+    const std::string& outputFile,
+    const std::vector<std::string>& linkArgs)
 {
     std::string objectFile =
         mlang::ir_detail::build_intermediate_object_path(outputFile);
@@ -430,9 +455,10 @@ bool Backend::compileToExecutable(const std::string& outputFile,
     return linkExecutable(objectFile, outputFile, linkArgs);
 }
 
-bool Backend::linkSharedLibrary(const std::string& objectFile,
-                                const std::string& outputFile,
-                                const std::vector<std::string>& linkArgs)
+bool Backend::linkSharedLibrary(
+    const std::string& objectFile,
+    const std::string& outputFile,
+    const std::vector<std::string>& linkArgs)
 {
     mlang::ir_detail::ensure_artifact_parent_directory(outputFile);
     llvm::Triple triple(targetTriple);
@@ -483,7 +509,8 @@ bool Backend::linkSharedLibrary(const std::string& objectFile,
 }
 
 bool Backend::compileToSharedLibrary(
-    const std::string& outputFile, const std::vector<std::string>& linkArgs)
+    const std::string& outputFile,
+    const std::vector<std::string>& linkArgs)
 {
     const std::string objectFile =
         mlang::ir_detail::build_intermediate_object_path(outputFile);
@@ -500,9 +527,8 @@ bool Backend::compileToStaticLibrary(const std::string& outputFile)
     if(!emitObjectFile(objectFile))
         return false;
 
-    const std::string command =
-        "ar rcs " + shell_quote(outputFile) + " " + shell_quote(objectFile) +
-        " 2>&1";
+    const std::string command = "ar rcs " + shell_quote(outputFile) + " " +
+                                shell_quote(objectFile) + " 2>&1";
     std::cout << "Archiving static library: " << command << std::endl;
     const int result = system(command.c_str());
     if(result != 0)

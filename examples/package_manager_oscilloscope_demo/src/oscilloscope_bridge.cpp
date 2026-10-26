@@ -17,7 +17,8 @@
 
 #include "../../../include/mlang_c_types.h"
 
-namespace {
+namespace
+{
 
 struct mlang_list_t
 {
@@ -29,25 +30,25 @@ struct StereoWav
 {
     std::vector<float> left;
     std::vector<float> right;
-    std::uint32_t sampleRate {0};
+    std::uint32_t sampleRate{0};
 };
 
 struct PlaybackState
 {
-    AudioQueueRef queue {nullptr};
+    AudioQueueRef queue{nullptr};
     StereoWav wav;
     std::string outputDeviceName;
-    std::atomic<std::uint64_t> frameCursor {0};
-    std::atomic<std::uint64_t> totalFrames {0};
-    std::atomic<std::uint32_t> sampleRate {0};
-    std::atomic<int> running {0};
-    std::atomic<int> finished {0};
+    std::atomic<std::uint64_t> frameCursor{0};
+    std::atomic<std::uint64_t> totalFrames{0};
+    std::atomic<std::uint32_t> sampleRate{0};
+    std::atomic<int> running{0};
+    std::atomic<int> finished{0};
     std::mutex ringMutex;
     std::vector<float> ringLeft;
     std::vector<float> ringRight;
-    std::uint32_t ringWrite {0};
-    std::atomic<float> levelLeft {0.0f};
-    std::atomic<float> levelRight {0.0f};
+    std::uint32_t ringWrite{0};
+    std::atomic<float> levelLeft{0.0f};
+    std::atomic<float> levelRight{0.0f};
     std::string lastError;
 };
 
@@ -59,12 +60,12 @@ constexpr std::uint32_t kRingCapacity = 32768;
 
 struct OutputDeviceInfo
 {
-    AudioDeviceID id {kAudioObjectUnknown};
+    AudioDeviceID id{kAudioObjectUnknown};
     std::string uid;
     std::string name;
-    std::uint32_t outputChannels {0};
-    Float64 nominalSampleRate {0.0};
-    bool isDefaultOutput {false};
+    std::uint32_t outputChannels{0};
+    Float64 nominalSampleRate{0.0};
+    bool isDefaultOutput{false};
 };
 
 void setLastError(const char* text)
@@ -89,7 +90,12 @@ char* dupString(const std::string& s)
 void setAudioError(const char* stage, OSStatus status)
 {
     char buf[160];
-    std::snprintf(buf, sizeof(buf), "%s failed: %d", stage, static_cast<int>(status));
+    std::snprintf(
+        buf,
+        sizeof(buf),
+        "%s failed: %d",
+        stage,
+        static_cast<int>(status));
     setLastError(buf);
 }
 
@@ -159,11 +165,10 @@ std::string asciiLower(std::string s)
 
 bool hasOutputStreams(AudioDeviceID id)
 {
-    AudioObjectPropertyAddress addr {
+    AudioObjectPropertyAddress addr{
         kAudioDevicePropertyStreams,
         kAudioDevicePropertyScopeOutput,
-        kAudioObjectPropertyElementMain
-    };
+        kAudioObjectPropertyElementMain};
     UInt32 size = 0;
     const OSStatus rc =
         AudioObjectGetPropertyDataSize(id, &addr, 0, nullptr, &size);
@@ -172,18 +177,19 @@ bool hasOutputStreams(AudioDeviceID id)
 
 std::uint32_t outputChannelCount(AudioDeviceID id)
 {
-    AudioObjectPropertyAddress addr {
+    AudioObjectPropertyAddress addr{
         kAudioDevicePropertyStreamConfiguration,
         kAudioDevicePropertyScopeOutput,
-        kAudioObjectPropertyElementMain
-    };
+        kAudioObjectPropertyElementMain};
     UInt32 size = 0;
-    if(AudioObjectGetPropertyDataSize(id, &addr, 0, nullptr, &size) != noErr || size == 0)
+    if(AudioObjectGetPropertyDataSize(id, &addr, 0, nullptr, &size) != noErr ||
+       size == 0)
         return 0;
 
     std::vector<std::uint8_t> bytes(size);
     auto* bufferList = reinterpret_cast<AudioBufferList*>(bytes.data());
-    if(AudioObjectGetPropertyData(id, &addr, 0, nullptr, &size, bufferList) != noErr)
+    if(AudioObjectGetPropertyData(id, &addr, 0, nullptr, &size, bufferList) !=
+       noErr)
         return 0;
 
     std::uint32_t channels = 0;
@@ -194,11 +200,10 @@ std::uint32_t outputChannelCount(AudioDeviceID id)
 
 Float64 deviceNominalSampleRate(AudioDeviceID id)
 {
-    AudioObjectPropertyAddress addr {
+    AudioObjectPropertyAddress addr{
         kAudioDevicePropertyNominalSampleRate,
         kAudioObjectPropertyScopeGlobal,
-        kAudioObjectPropertyElementMain
-    };
+        kAudioObjectPropertyElementMain};
     Float64 rate = 0.0;
     UInt32 size = sizeof(rate);
     if(AudioObjectGetPropertyData(id, &addr, 0, nullptr, &size, &rate) != noErr)
@@ -208,35 +213,47 @@ Float64 deviceNominalSampleRate(AudioDeviceID id)
 
 AudioDeviceID defaultOutputDeviceId()
 {
-    AudioObjectPropertyAddress addr {
+    AudioObjectPropertyAddress addr{
         kAudioHardwarePropertyDefaultOutputDevice,
         kAudioObjectPropertyScopeGlobal,
-        kAudioObjectPropertyElementMain
-    };
+        kAudioObjectPropertyElementMain};
     AudioDeviceID id = kAudioObjectUnknown;
     UInt32 size = sizeof(id);
-    if(AudioObjectGetPropertyData(kAudioObjectSystemObject,
-                                  &addr, 0, nullptr, &size, &id) != noErr)
+    if(AudioObjectGetPropertyData(
+           kAudioObjectSystemObject,
+           &addr,
+           0,
+           nullptr,
+           &size,
+           &id) != noErr)
         return kAudioObjectUnknown;
     return id;
 }
 
 std::vector<OutputDeviceInfo> listOutputDevicesInternal()
 {
-    AudioObjectPropertyAddress devicesAddr {
+    AudioObjectPropertyAddress devicesAddr{
         kAudioHardwarePropertyDevices,
         kAudioObjectPropertyScopeGlobal,
-        kAudioObjectPropertyElementMain
-    };
+        kAudioObjectPropertyElementMain};
     UInt32 size = 0;
-    if(AudioObjectGetPropertyDataSize(kAudioObjectSystemObject,
-                                      &devicesAddr, 0, nullptr, &size) != noErr ||
+    if(AudioObjectGetPropertyDataSize(
+           kAudioObjectSystemObject,
+           &devicesAddr,
+           0,
+           nullptr,
+           &size) != noErr ||
        size == 0)
         return {};
 
     std::vector<AudioDeviceID> ids(size / sizeof(AudioDeviceID));
-    if(AudioObjectGetPropertyData(kAudioObjectSystemObject,
-                                  &devicesAddr, 0, nullptr, &size, ids.data()) != noErr)
+    if(AudioObjectGetPropertyData(
+           kAudioObjectSystemObject,
+           &devicesAddr,
+           0,
+           nullptr,
+           &size,
+           ids.data()) != noErr)
         return {};
 
     const AudioDeviceID defaultOutput = defaultOutputDeviceId();
@@ -247,24 +264,34 @@ std::vector<OutputDeviceInfo> listOutputDevicesInternal()
         if(id == kAudioObjectUnknown || !hasOutputStreams(id))
             continue;
 
-        AudioObjectPropertyAddress nameAddr {
+        AudioObjectPropertyAddress nameAddr{
             kAudioObjectPropertyName,
             kAudioObjectPropertyScopeGlobal,
-            kAudioObjectPropertyElementMain
-        };
-        AudioObjectPropertyAddress uidAddr {
+            kAudioObjectPropertyElementMain};
+        AudioObjectPropertyAddress uidAddr{
             kAudioDevicePropertyDeviceUID,
             kAudioObjectPropertyScopeGlobal,
-            kAudioObjectPropertyElementMain
-        };
+            kAudioObjectPropertyElementMain};
 
         CFStringRef nameRef = nullptr;
         CFStringRef uidRef = nullptr;
         UInt32 nameSize = sizeof(nameRef);
         UInt32 uidSize = sizeof(uidRef);
-        if(AudioObjectGetPropertyData(id, &nameAddr, 0, nullptr, &nameSize, &nameRef) != noErr)
+        if(AudioObjectGetPropertyData(
+               id,
+               &nameAddr,
+               0,
+               nullptr,
+               &nameSize,
+               &nameRef) != noErr)
             continue;
-        if(AudioObjectGetPropertyData(id, &uidAddr, 0, nullptr, &uidSize, &uidRef) != noErr)
+        if(AudioObjectGetPropertyData(
+               id,
+               &uidAddr,
+               0,
+               nullptr,
+               &uidSize,
+               &uidRef) != noErr)
         {
             if(nameRef)
                 CFRelease(nameRef);
@@ -340,7 +367,9 @@ bool setQueueOutputDevice(AudioQueueRef queue, const char* selector)
     }
 
     CFStringRef uid = CFStringCreateWithCString(
-        kCFAllocatorDefault, device.uid.c_str(), kCFStringEncodingUTF8);
+        kCFAllocatorDefault,
+        device.uid.c_str(),
+        kCFStringEncodingUTF8);
     if(!uid)
     {
         setLastError("failed to create audio device UID");
@@ -348,7 +377,10 @@ bool setQueueOutputDevice(AudioQueueRef queue, const char* selector)
     }
 
     const OSStatus rc = AudioQueueSetProperty(
-        queue, kAudioQueueProperty_CurrentDevice, &uid, sizeof(uid));
+        queue,
+        kAudioQueueProperty_CurrentDevice,
+        &uid,
+        sizeof(uid));
     CFRelease(uid);
     if(rc != noErr)
     {
@@ -376,7 +408,8 @@ bool loadWav(const char* path, StereoWav& out)
         setLastError("failed to read wav header");
         return false;
     }
-    if(std::memcmp(header, "RIFF", 4) != 0 || std::memcmp(header + 8, "WAVE", 4) != 0)
+    if(std::memcmp(header, "RIFF", 4) != 0 ||
+       std::memcmp(header + 8, "WAVE", 4) != 0)
     {
         std::fclose(f);
         setLastError("input is not a RIFF/WAVE file");
@@ -396,14 +429,16 @@ bool loadWav(const char* path, StereoWav& out)
     while(!hasData)
     {
         std::uint8_t chunkHeader[8];
-        if(std::fread(chunkHeader, 1, sizeof(chunkHeader), f) != sizeof(chunkHeader))
+        if(std::fread(chunkHeader, 1, sizeof(chunkHeader), f) !=
+           sizeof(chunkHeader))
             break;
 
         const std::uint32_t chunkSize = readU32LE(chunkHeader + 4);
         if(std::memcmp(chunkHeader, "fmt ", 4) == 0)
         {
             std::vector<std::uint8_t> fmt(chunkSize);
-            if(chunkSize < 16 || std::fread(fmt.data(), 1, chunkSize, f) != chunkSize)
+            if(chunkSize < 16 ||
+               std::fread(fmt.data(), 1, chunkSize, f) != chunkSize)
             {
                 std::fclose(f);
                 setLastError("failed to read wav fmt chunk");
@@ -443,10 +478,12 @@ bool loadWav(const char* path, StereoWav& out)
 
     const bool isPcm = (audioFormat == 1);
     const bool isFloat = (audioFormat == 3);
-    const bool supportedBits = (bitsPerSample == 16 || bitsPerSample == 24 ||
-                                bitsPerSample == 32 || bitsPerSample == 64);
-    if(!hasFmt || !hasData || channels == 0 || channels > 2 || sampleRate == 0 ||
-       (!isPcm && !isFloat) || !supportedBits || blockAlign == 0)
+    const bool supportedBits =
+        (bitsPerSample == 16 || bitsPerSample == 24 || bitsPerSample == 32 ||
+         bitsPerSample == 64);
+    if(!hasFmt || !hasData || channels == 0 || channels > 2 ||
+       sampleRate == 0 || (!isPcm && !isFloat) || !supportedBits ||
+       blockAlign == 0)
     {
         std::fclose(f);
         setLastError("unsupported wav format");
@@ -467,7 +504,8 @@ bool loadWav(const char* path, StereoWav& out)
     }
 
     const int bytesPerFrame = static_cast<int>(blockAlign);
-    const int frameCount = bytesPerFrame <= 0 ? 0 : static_cast<int>(dataSize / blockAlign);
+    const int frameCount =
+        bytesPerFrame <= 0 ? 0 : static_cast<int>(dataSize / blockAlign);
     if(frameCount <= 0)
     {
         std::fclose(f);
@@ -490,7 +528,8 @@ bool loadWav(const char* path, StereoWav& out)
 
     for(int i = 0; i < frameCount; ++i)
     {
-        const std::uint8_t* frame = raw.data() + static_cast<std::size_t>(i) * bytesPerFrame;
+        const std::uint8_t* frame =
+            raw.data() + static_cast<std::size_t>(i) * bytesPerFrame;
         for(std::uint16_t channel = 0; channel < channels; ++channel)
         {
             const std::uint8_t* sample = frame + channel * (bitsPerSample / 8);
@@ -507,7 +546,8 @@ bool loadWav(const char* path, StereoWav& out)
                 {
                     std::int64_t x = 0;
                     std::memcpy(&x, sample, sizeof(x));
-                    v = static_cast<float>(static_cast<double>(x) / 9223372036854775808.0);
+                    v = static_cast<float>(
+                        static_cast<double>(x) / 9223372036854775808.0);
                 }
             }
             else
@@ -533,7 +573,8 @@ bool loadWav(const char* path, StereoWav& out)
                 out.right[static_cast<std::size_t>(i)] = v;
         }
         if(channels == 1)
-            out.right[static_cast<std::size_t>(i)] = out.left[static_cast<std::size_t>(i)];
+            out.right[static_cast<std::size_t>(i)] =
+                out.left[static_cast<std::size_t>(i)];
     }
 
     clearLastError();
@@ -560,8 +601,8 @@ void writeRingSample(float left, float right)
     const std::size_t idx = static_cast<std::size_t>(g_state.ringWrite);
     g_state.ringLeft[idx] = clampUnit(left);
     g_state.ringRight[idx] = clampUnit(right);
-    g_state.ringWrite =
-        (g_state.ringWrite + 1u) % static_cast<std::uint32_t>(g_state.ringLeft.size());
+    g_state.ringWrite = (g_state.ringWrite + 1u) %
+                        static_cast<std::uint32_t>(g_state.ringLeft.size());
 }
 
 void clearVisualizationState()
@@ -612,7 +653,8 @@ void fillBuffer(AudioQueueRef queue, AudioQueueBufferRef buffer)
 
     if(renderFrames < kFramesPerBuffer)
     {
-        const std::size_t tail = static_cast<std::size_t>(kFramesPerBuffer - renderFrames) * 2;
+        const std::size_t tail =
+            static_cast<std::size_t>(kFramesPerBuffer - renderFrames) * 2;
         std::memset(samples + renderFrames * 2, 0, tail * sizeof(float));
     }
 
@@ -621,7 +663,10 @@ void fillBuffer(AudioQueueRef queue, AudioQueueBufferRef buffer)
     AudioQueueEnqueueBuffer(queue, buffer, 0, nullptr);
 }
 
-void outputCallback(void* userData, AudioQueueRef queue, AudioQueueBufferRef buffer)
+void outputCallback(
+    void* userData,
+    AudioQueueRef queue,
+    AudioQueueBufferRef buffer)
 {
     (void)userData;
     fillBuffer(queue, buffer);
@@ -629,8 +674,9 @@ void outputCallback(void* userData, AudioQueueRef queue, AudioQueueBufferRef buf
 
 } // namespace
 
-extern "C" int32_t oscilloscope_demo_start(mlang_string wavPath,
-                                           mlang_string outputDeviceSelector)
+extern "C" int32_t oscilloscope_demo_start(
+    mlang_string wavPath,
+    mlang_string outputDeviceSelector)
 {
     if(!wavPath || !wavPath[0])
     {
@@ -646,7 +692,8 @@ extern "C" int32_t oscilloscope_demo_start(mlang_string wavPath,
 
     g_state.wav = std::move(wav);
     g_state.frameCursor.store(0);
-    g_state.totalFrames.store(static_cast<std::uint64_t>(g_state.wav.left.size()));
+    g_state.totalFrames.store(
+        static_cast<std::uint64_t>(g_state.wav.left.size()));
     g_state.sampleRate.store(g_state.wav.sampleRate);
     g_state.finished.store(0);
     g_state.running.store(1);
@@ -654,10 +701,11 @@ extern "C" int32_t oscilloscope_demo_start(mlang_string wavPath,
     g_state.ringRight.assign(kRingCapacity, 0.0f);
     clearVisualizationState();
 
-    AudioStreamBasicDescription format {};
+    AudioStreamBasicDescription format{};
     format.mSampleRate = static_cast<Float64>(g_state.wav.sampleRate);
     format.mFormatID = kAudioFormatLinearPCM;
-    format.mFormatFlags = kLinearPCMFormatFlagIsFloat | kAudioFormatFlagIsPacked;
+    format.mFormatFlags =
+        kLinearPCMFormatFlagIsFloat | kAudioFormatFlagIsPacked;
     format.mBytesPerPacket = 2 * sizeof(float);
     format.mFramesPerPacket = 1;
     format.mBytesPerFrame = 2 * sizeof(float);
@@ -665,7 +713,13 @@ extern "C" int32_t oscilloscope_demo_start(mlang_string wavPath,
     format.mBitsPerChannel = 32;
 
     const OSStatus createRc = AudioQueueNewOutput(
-        &format, outputCallback, nullptr, nullptr, nullptr, 0, &g_state.queue);
+        &format,
+        outputCallback,
+        nullptr,
+        nullptr,
+        nullptr,
+        0,
+        &g_state.queue);
     if(createRc != noErr)
     {
         setAudioError("AudioQueueNewOutput", createRc);
@@ -683,7 +737,8 @@ extern "C" int32_t oscilloscope_demo_start(mlang_string wavPath,
     for(std::uint32_t i = 0; i < kBufferCount; ++i)
     {
         AudioQueueBufferRef buffer = nullptr;
-        const OSStatus allocRc = AudioQueueAllocateBuffer(g_state.queue, bufferBytes, &buffer);
+        const OSStatus allocRc =
+            AudioQueueAllocateBuffer(g_state.queue, bufferBytes, &buffer);
         if(allocRc != noErr)
         {
             setAudioError("AudioQueueAllocateBuffer", allocRc);
@@ -766,7 +821,8 @@ extern "C" mlang_string oscilloscope_demo_last_error(void)
 
 extern "C" mlang_string oscilloscope_demo_output_device(void)
 {
-    return g_state.outputDeviceName.empty() ? "" : g_state.outputDeviceName.c_str();
+    return g_state.outputDeviceName.empty() ? ""
+                                            : g_state.outputDeviceName.c_str();
 }
 
 extern "C" mlang_string oscilloscope_demo_list_output_devices(void)
@@ -805,11 +861,13 @@ extern "C" mlang_string oscilloscope_demo_list_output_devices_verbose(void)
         out += '\n';
 
         char info[128];
-        std::snprintf(info, sizeof(info),
-                      "  id: %u\n  output channels: %u\n  nominal sample rate: %.0f Hz\n",
-                      static_cast<unsigned>(device.id),
-                      static_cast<unsigned>(device.outputChannels),
-                      device.nominalSampleRate);
+        std::snprintf(
+            info,
+            sizeof(info),
+            "  id: %u\n  output channels: %u\n  nominal sample rate: %.0f Hz\n",
+            static_cast<unsigned>(device.id),
+            static_cast<unsigned>(device.outputChannels),
+            device.nominalSampleRate);
         out += info;
         out += '\n';
     }
@@ -818,7 +876,9 @@ extern "C" mlang_string oscilloscope_demo_list_output_devices_verbose(void)
     return dupString(out);
 }
 
-extern "C" mlang_list_t oscilloscope_demo_snapshot_i64(int32_t channel, int64_t window)
+extern "C" mlang_list_t oscilloscope_demo_snapshot_i64(
+    int32_t channel,
+    int64_t window)
 {
     if(window <= 0)
         return {0, nullptr};
@@ -834,7 +894,10 @@ extern "C" mlang_list_t oscilloscope_demo_snapshot_i64(int32_t channel, int64_t 
     const std::uint32_t ringSize = static_cast<std::uint32_t>(ring.size());
     if(ringSize == 0)
     {
-        std::memset(out, 0, static_cast<std::size_t>(window) * sizeof(std::int64_t));
+        std::memset(
+            out,
+            0,
+            static_cast<std::size_t>(window) * sizeof(std::int64_t));
         return {window, out};
     }
 
@@ -853,6 +916,7 @@ extern "C" mlang_list_t oscilloscope_demo_snapshot_i64(int32_t channel, int64_t 
 
 extern "C" int64_t oscilloscope_demo_level_i64(int32_t channel)
 {
-    const float level = channel == 1 ? g_state.levelRight.load() : g_state.levelLeft.load();
+    const float level =
+        channel == 1 ? g_state.levelRight.load() : g_state.levelLeft.load();
     return static_cast<int64_t>(std::lrint(clampUnit(level) * 1000.0f));
 }

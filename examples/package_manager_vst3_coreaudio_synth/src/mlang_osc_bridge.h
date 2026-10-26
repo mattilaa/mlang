@@ -1,6 +1,7 @@
 #pragma once
 
-namespace mlang_vst3_example {
+namespace mlang_vst3_example
+{
 
 enum class Waveform
 {
@@ -10,7 +11,7 @@ enum class Waveform
 
 class OscillatorBridge
 {
-  public:
+public:
     void reset();
     void setSampleRate(float sampleRate);
     void setWaveform(Waveform waveform);

@@ -10,8 +10,9 @@ bool isIdentifierChar(char c)
     return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_';
 }
 
-std::optional<IdentifierMatch> identifierAt(std::string_view lineText,
-                                            int character)
+std::optional<IdentifierMatch> identifierAt(
+    std::string_view lineText,
+    int character)
 {
     int idx = character;
     if(idx < 0)
@@ -40,13 +41,15 @@ std::optional<IdentifierMatch> identifierAt(std::string_view lineText,
     return match;
 }
 
-std::optional<IdentifierMatch>
-identifierAt(const std::vector<std::string>& lines, const Position& position)
+std::optional<IdentifierMatch> identifierAt(
+    const std::vector<std::string>& lines,
+    const Position& position)
 {
     if(position.line < 0 || position.line >= static_cast<int>(lines.size()))
         return std::nullopt;
-    return identifierAt(lines[static_cast<size_t>(position.line)],
-                        position.character);
+    return identifierAt(
+        lines[static_cast<size_t>(position.line)],
+        position.character);
 }
 
 std::string identifierPrefixAt(std::string_view lineText, int character)
@@ -63,8 +66,9 @@ std::string identifierPrefixAt(std::string_view lineText, int character)
     return std::string(lineText.substr(start, idx - start));
 }
 
-std::vector<Range> findWholeWordMatches(const std::vector<std::string>& lines,
-                                        std::string_view word)
+std::vector<Range> findWholeWordMatches(
+    const std::vector<std::string>& lines,
+    std::string_view word)
 {
     std::vector<Range> out;
     if(word.empty())
@@ -83,7 +87,8 @@ std::vector<Range> findWholeWordMatches(const std::vector<std::string>& lines,
             const int start = static_cast<int>(found);
             const int end = start + static_cast<int>(word.size());
             const bool leftOk =
-                start == 0 || !isIdentifierChar(line[static_cast<size_t>(start - 1)]);
+                start == 0 ||
+                !isIdentifierChar(line[static_cast<size_t>(start - 1)]);
             const bool rightOk =
                 end >= static_cast<int>(line.size()) ||
                 !isIdentifierChar(line[static_cast<size_t>(end)]);

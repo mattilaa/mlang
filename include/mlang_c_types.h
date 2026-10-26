@@ -3,12 +3,12 @@
 #include <stdint.h>
 
 #if defined(__has_include)
-#  if __has_include(<uchar.h>)
-#    include <uchar.h>
+#if __has_include(<uchar.h>)
+#include <uchar.h>
 typedef char16_t mlang_char16;
-#  else
+#else
 typedef uint16_t mlang_char16;
-#  endif
+#endif
 #else
 typedef uint16_t mlang_char16;
 #endif

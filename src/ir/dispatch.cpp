@@ -10,14 +10,20 @@ void CodeGenerator::generateStatement(StatementNode* node)
     {
         const char*& current;
         const char* saved;
+
         DiagnosticFileScope(const char*& c, const char* file)
             : current(c), saved(c)
         {
             if(file)
                 current = file;
         }
-        ~DiagnosticFileScope() { current = saved; }
+
+        ~DiagnosticFileScope()
+        {
+            current = saved;
+        }
     } diagnosticScope(diagnosticFile, node ? node->file : nullptr);
+
     // mlang -g: the statement's source line (no-op without debug info).
     debugSetLocation(node);
 
@@ -37,10 +43,12 @@ void CodeGenerator::generateStatement(StatementNode* node)
         if(slot != namedValues.end())
         {
             TypeNode* type = letNode->type;
-            if(diBuilder && !type && (dynamic_cast<ListLiteralNode*>(letNode->expression) ||
-                                     dynamic_cast<MapLiteralNode*>(letNode->expression) ||
-                                     dynamic_cast<TupleLiteralNode*>(letNode->expression)))
-                type = inferExpressionTypeNode(letNode->expression, letNode->line);
+            if(diBuilder && !type &&
+               (dynamic_cast<ListLiteralNode*>(letNode->expression) ||
+                dynamic_cast<MapLiteralNode*>(letNode->expression) ||
+                dynamic_cast<TupleLiteralNode*>(letNode->expression)))
+                type =
+                    inferExpressionTypeNode(letNode->expression, letNode->line);
             debugDeclareVariable(letNode->name, slot->second, type, letNode);
         }
     }
@@ -52,18 +60,19 @@ void CodeGenerator::generateStatement(StatementNode* node)
         if(slot != namedValues.end())
         {
             TypeNode* type = varNode->type;
-            if(diBuilder && !type && (dynamic_cast<ListLiteralNode*>(varNode->initExpr) ||
-                                     dynamic_cast<MapLiteralNode*>(varNode->initExpr) ||
-                                     dynamic_cast<TupleLiteralNode*>(varNode->initExpr)))
-                type = inferExpressionTypeNode(varNode->initExpr, varNode->line);
+            if(diBuilder && !type &&
+               (dynamic_cast<ListLiteralNode*>(varNode->initExpr) ||
+                dynamic_cast<MapLiteralNode*>(varNode->initExpr) ||
+                dynamic_cast<TupleLiteralNode*>(varNode->initExpr)))
+                type =
+                    inferExpressionTypeNode(varNode->initExpr, varNode->line);
             debugDeclareVariable(varNode->name, slot->second, type, varNode);
         }
     }
     else if(auto assignNode = dynamic_cast<AssignmentNode*>(node))
     {
         generateAssignment(assignNode);
-        trackAggregateBorrowOrigins(assignNode->name,
-                                    assignNode->expression);
+        trackAggregateBorrowOrigins(assignNode->name, assignNode->expression);
     }
     else if(auto fieldAssignNode = dynamic_cast<FieldAssignmentNode*>(node))
     {
@@ -164,11 +173,11 @@ void CodeGenerator::generateStatement(StatementNode* node)
                            !call->doesNotThrow())
                             structuralProbeNoThrow = false;
             auto selected = structuralSelectedTypes.find(exprStmt->expression);
-            structuralProbeResult =
-                selected == structuralSelectedTypes.end()
-                    ? inferExpressionTypeNode(exprStmt->expression,
+            structuralProbeResult = selected == structuralSelectedTypes.end()
+                                        ? inferExpressionTypeNode(
+                                              exprStmt->expression,
                                               exprStmt->line)
-                    : cloneTypeNode(selected->second);
+                                        : cloneTypeNode(selected->second);
             if(auto* call = llvm::dyn_cast<llvm::CallBase>(value))
                 if(auto* callee = call->getCalledFunction())
                     for(const auto& owner : structMethods)
@@ -212,8 +221,9 @@ void CodeGenerator::generateStatement(StatementNode* node)
     }
 }
 
-llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
-                                               TypeNode* expectedType)
+llvm::Value* CodeGenerator::generateExpression(
+    ExpressionNode* node,
+    TypeNode* expectedType)
 {
     if(auto* requirement = dynamic_cast<RequiresExpressionNode*>(node))
     {
@@ -224,8 +234,9 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
             reportError(node->line, error);
             return nullptr;
         }
-        return llvm::ConstantInt::get(llvm::Type::getInt1Ty(context),
-                                      value.boolValue);
+        return llvm::ConstantInt::get(
+            llvm::Type::getInt1Ty(context),
+            value.boolValue);
     }
     if(auto* conceptDefinition = dynamic_cast<ConceptApplicationNode*>(node))
     {
@@ -236,8 +247,9 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
             reportError(node->line, error);
             return nullptr;
         }
-        return llvm::ConstantInt::get(llvm::Type::getInt1Ty(context),
-                                      value.boolValue);
+        return llvm::ConstantInt::get(
+            llvm::Type::getInt1Ty(context),
+            value.boolValue);
     }
     if(auto intLit = dynamic_cast<IntLiteralNode*>(node))
     {
@@ -318,23 +330,25 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
             std::vector<std::pair<std::string, TypeNode*>> captures;
             TypeNode* returnType = nullptr;
             if(closure->second &&
-               getRuntimeClosureCaptures(closure->second, captures,
-                                         returnType))
+               getRuntimeClosureCaptures(closure->second, captures, returnType))
             {
                 for(const auto& capture : captures)
                     if(variableScopeDepth.count(capture.first))
                     {
-                        reportError(node->line,
-                                    "cannot pass closure '" + id->name +
-                                        "' because it borrows local variable '" +
-                                        capture.first +
-                                        "' to a non-callable parameter");
+                        reportError(
+                            node->line,
+                            "cannot pass closure '" + id->name +
+                                "' because it borrows local variable '" +
+                                capture.first +
+                                "' to a non-callable parameter");
                         return nullptr;
                     }
             }
-            reportError(node->line, "closure '" + id->name +
-                                        "' requires a callable fn(...) -> ... "
-                                        "parameter");
+            reportError(
+                node->line,
+                "closure '" + id->name +
+                    "' requires a callable fn(...) -> ... "
+                    "parameter");
             return nullptr;
         }
         return generateIdentifier(id);
@@ -363,7 +377,8 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
     {
         if(auto* listType = dynamic_cast<GenericListTypeNode*>(expectedType))
             return generateListLiteral(
-                listLit, getLLVMTypeFromNode(listType->elementType),
+                listLit,
+                getLLVMTypeFromNode(listType->elementType),
                 listType->elementType);
         return generateListLiteral(listLit);
     }
@@ -371,7 +386,8 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
     {
         if(auto* mapType = dynamic_cast<MapTypeNode*>(expectedType))
             return generateMapLiteral(
-                mapLit, getLLVMTypeFromNode(mapType->keyType),
+                mapLit,
+                getLLVMTypeFromNode(mapType->keyType),
                 getLLVMTypeFromNode(mapType->valueType));
         return generateMapLiteral(mapLit);
     }
@@ -415,19 +431,25 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
             // the callback cannot outlive that environment.
             std::vector<std::pair<std::string, TypeNode*>> captures;
             TypeNode* inferredReturnType = nullptr;
-            if(!getRuntimeClosureCaptures(typedClosure, captures,
-                                          inferredReturnType))
+            if(!getRuntimeClosureCaptures(
+                   typedClosure,
+                   captures,
+                   inferredReturnType))
                 return nullptr;
-            if(!isClosureReturnTypeCompatible(inferredReturnType,
-                                              closureReturnType))
+            if(!isClosureReturnTypeCompatible(
+                   inferredReturnType,
+                   closureReturnType))
             {
-                reportError(closure->line,
-                            "inline closure return type does not match its "
-                            "callback signature");
+                reportError(
+                    closure->line,
+                    "inline closure return type does not match its "
+                    "callback signature");
                 return nullptr;
             }
             llvm::Function* fn = generateClosureFn(
-                typedClosure, &captures, &constantVariables,
+                typedClosure,
+                &captures,
+                &constantVariables,
                 closureReturnType);
             if(!fn)
                 return nullptr;
@@ -435,63 +457,74 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
                 getLLVMTypeFromNode(expectedFunctionType));
             if(!closureStruct || closureStruct->getNumElements() != 2)
             {
-                reportError(closure->line,
-                            "unsupported inline closure value representation");
+                reportError(
+                    closure->line,
+                    "unsupported inline closure value representation");
                 return nullptr;
             }
             llvm::Value* value = llvm::UndefValue::get(closureStruct);
             llvm::Type* codeType = closureStruct->getElementType(0);
             llvm::Value* code = fn;
             if(code->getType() != codeType)
-                code = builder.CreateBitCast(code, codeType,
-                                             "closure.code.cast");
-            value = builder.CreateInsertValue(value, code, 0,
-                                              "closure.value.code");
+                code =
+                    builder.CreateBitCast(code, codeType, "closure.code.cast");
+            value =
+                builder.CreateInsertValue(value, code, 0, "closure.value.code");
             auto* environmentPointer = llvm::dyn_cast<llvm::PointerType>(
                 closureStruct->getElementType(1));
             if(!environmentPointer)
             {
-                reportError(closure->line,
-                            "unsupported inline closure environment type");
+                reportError(
+                    closure->line,
+                    "unsupported inline closure environment type");
                 return nullptr;
             }
             llvm::Value* environment =
                 llvm::ConstantPointerNull::get(environmentPointer);
             if(!captures.empty())
             {
-                std::vector<llvm::Type*> environmentFields(captures.size(),
-                                                            environmentPointer);
+                std::vector<llvm::Type*>
+                    environmentFields(captures.size(), environmentPointer);
                 auto* environmentType =
                     llvm::StructType::get(context, environmentFields);
                 llvm::Function* currentFunction =
                     builder.GetInsertBlock()->getParent();
                 auto* environmentStorage = createEntryBlockAlloca(
-                    currentFunction, environmentType, "inline.closure.env");
+                    currentFunction,
+                    environmentType,
+                    "inline.closure.env");
                 for(size_t i = 0; i < captures.size(); ++i)
                 {
                     auto captured = namedValues.find(captures[i].first);
                     if(captured == namedValues.end())
                     {
-                        reportError(closure->line,
-                                    "captured variable is unavailable: '" +
-                                        captures[i].first + "'");
+                        reportError(
+                            closure->line,
+                            "captured variable is unavailable: '" +
+                                captures[i].first + "'");
                         return nullptr;
                     }
                     llvm::Value* address = builder.CreatePointerCast(
-                        captured->second, environmentPointer,
+                        captured->second,
+                        environmentPointer,
                         captures[i].first + ".capture.address");
                     llvm::Value* field = builder.CreateStructGEP(
-                        environmentType, environmentStorage,
+                        environmentType,
+                        environmentStorage,
                         static_cast<unsigned>(i),
                         captures[i].first + ".capture.field");
                     builder.CreateStore(address, field);
                 }
                 environment = builder.CreatePointerCast(
-                    environmentStorage, environmentPointer,
+                    environmentStorage,
+                    environmentPointer,
                     "inline.closure.env.ptr");
             }
-            return builder.CreateInsertValue(value, environment, 1,
-                                             "closure.value.environment");
+            return builder.CreateInsertValue(
+                value,
+                environment,
+                1,
+                "closure.value.environment");
         }
         llvm::Function* fn =
             generateClosureFn(closure, nullptr, nullptr, closureReturnType);
@@ -509,7 +542,8 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
     {
         if(auto* listType = dynamic_cast<GenericListTypeNode*>(expectedType))
             return generateArrayFill(
-                arrFill, getLLVMTypeFromNode(listType->elementType));
+                arrFill,
+                getLLVMTypeFromNode(listType->elementType));
         return generateArrayFill(arrFill);
     }
     return nullptr;

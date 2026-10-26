@@ -31,22 +31,27 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
         }
         else
         {
-            if(!validateVariableAccessible(fieldAccess->structName, line,
-                                           fieldAccess->col))
+            if(!validateVariableAccessible(
+                   fieldAccess->structName,
+                   line,
+                   fieldAccess->col))
                 return nullptr;
             structPtr = namedValues[fieldAccess->structName];
             if(!structPtr)
             {
-                reportError(line,
-                            "unknown variable: " + fieldAccess->structName);
+                reportError(
+                    line,
+                    "unknown variable: " + fieldAccess->structName);
                 return nullptr;
             }
 
             auto typeIt = structVariableTypes.find(fieldAccess->structName);
             if(typeIt == structVariableTypes.end())
             {
-                reportError(line, "variable '" + fieldAccess->structName +
-                                      "' is not a struct");
+                reportError(
+                    line,
+                    "variable '" + fieldAccess->structName +
+                        "' is not a struct");
                 return nullptr;
             }
             structTypeName = typeIt->second;
@@ -57,7 +62,9 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
                 if(allocaType->isPointerTy())
                 {
                     structPtr = builder.CreateLoad(
-                        allocaType, alloca, fieldAccess->structName + ".ptr");
+                        allocaType,
+                        alloca,
+                        fieldAccess->structName + ".ptr");
                 }
             }
         }
@@ -82,22 +89,28 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
 
         if(fieldIndex < 0)
         {
-            reportError(line, "struct '" + structTypeName +
-                                  "' has no field named '" +
-                                  fieldAccess->fieldName + "'");
+            reportError(
+                line,
+                "struct '" + structTypeName + "' has no field named '" +
+                    fieldAccess->fieldName + "'");
             return nullptr;
         }
-        if(!canAccessStructField(structTypeName, fieldIndex, line,
-                                 fieldAccess->fieldName))
+        if(!canAccessStructField(
+               structTypeName,
+               fieldIndex,
+               line,
+               fieldAccess->fieldName))
             return nullptr;
 
         llvm::StructType* structType = getStructType(structTypeName);
         if(!structType)
             return nullptr;
 
-        return builder.CreateStructGEP(structType, structPtr,
-                                       static_cast<unsigned>(fieldIndex),
-                                       fieldAccess->fieldName + "_ptr");
+        return builder.CreateStructGEP(
+            structType,
+            structPtr,
+            static_cast<unsigned>(fieldIndex),
+            fieldAccess->fieldName + "_ptr");
     }
 
     if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
@@ -121,15 +134,19 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
         if(value == namedValues.end() || !value->second ||
            elements == tupleElementTypes.end())
         {
-            reportError(line, "cannot access tuple element: '" + baseId->name +
-                                   "' is not a tuple");
+            reportError(
+                line,
+                "cannot access tuple element: '" + baseId->name +
+                    "' is not a tuple");
             return nullptr;
         }
         if(tuple->index < 0 ||
            static_cast<size_t>(tuple->index) >= elements->second.size())
         {
-            reportError(line, "tuple index " + std::to_string(tuple->index) +
-                                   " is out of bounds");
+            reportError(
+                line,
+                "tuple index " + std::to_string(tuple->index) +
+                    " is out of bounds");
             return nullptr;
         }
         std::vector<llvm::Type*> tupleTypes;
@@ -140,10 +157,13 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
                 return nullptr;
             tupleTypes.push_back(type);
         }
-        llvm::StructType* tupleType = llvm::StructType::get(context, tupleTypes);
-        return builder.CreateStructGEP(tupleType, value->second,
-                                       static_cast<unsigned>(tuple->index),
-                                       "tuple.element.ptr");
+        llvm::StructType* tupleType =
+            llvm::StructType::get(context, tupleTypes);
+        return builder.CreateStructGEP(
+            tupleType,
+            value->second,
+            static_cast<unsigned>(tuple->index),
+            "tuple.element.ptr");
     }
 
     if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
@@ -207,8 +227,9 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
            (reference->isMutable && address->op != UnaryOpNode::OP_ADDR_MUT) ||
            !source || typeMangle(source) != typeMangle(reference->elementType))
         {
-            reportError(node->line,
-                        "reference assignment requires a matching borrow");
+            reportError(
+                node->line,
+                "reference assignment requires a matching borrow");
             return;
         }
         for(const auto& parameter : inoutParams)
@@ -223,8 +244,10 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     // Check if trying to assign to a constant (let) variable
     if(constantVariables.find(node->name) != constantVariables.end())
     {
-        reportError(node->line, "cannot assign to constant variable '" +
-                                    node->name + "' (declared with 'let')");
+        reportError(
+            node->line,
+            "cannot assign to constant variable '" + node->name +
+                "' (declared with 'let')");
         return;
     }
 
@@ -255,10 +278,10 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
                 {
                     if(borrower != node->name)
                     {
-                        reportError(node->line, "cannot assign to closure '" +
-                                                      node->name +
-                                                      "' while borrowed by '" +
-                                                      borrower + "'");
+                        reportError(
+                            node->line,
+                            "cannot assign to closure '" + node->name +
+                                "' while borrowed by '" + borrower + "'");
                         return;
                     }
                 }
@@ -280,37 +303,39 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
                 auto* targetParam = targetNode->parameters->parameters[i];
                 auto* sourceParam = sourceNode->parameters->parameters[i];
                 sameSignature = targetParam && sourceParam &&
-                    typeMangle(targetParam->type) ==
-                        typeMangle(sourceParam->type);
+                                typeMangle(targetParam->type) ==
+                                    typeMangle(sourceParam->type);
             }
             auto targetReturn = runtimeClosureReturnTypes.find(node->name);
             auto sourceReturn = runtimeClosureReturnTypes.find(sourceId->name);
             sameSignature = sameSignature &&
-                targetReturn != runtimeClosureReturnTypes.end() &&
-                sourceReturn != runtimeClosureReturnTypes.end() &&
-                typeMangle(targetReturn->second) ==
-                    typeMangle(sourceReturn->second);
+                            targetReturn != runtimeClosureReturnTypes.end() &&
+                            sourceReturn != runtimeClosureReturnTypes.end() &&
+                            typeMangle(targetReturn->second) ==
+                                typeMangle(sourceReturn->second);
             if(!sameSignature)
             {
-                reportError(node->line,
-                            "cannot assign closure with a different "
-                            "signature to '" + node->name + "'");
+                reportError(
+                    node->line,
+                    "cannot assign closure with a different "
+                    "signature to '" +
+                        node->name + "'");
                 return;
             }
 
             auto sourceSlotIt = namedValues.find(sourceId->name);
             auto* targetSlot = llvm::dyn_cast<llvm::AllocaInst>(variable);
-            auto* sourceSlot = sourceSlotIt == namedValues.end()
-                                   ? nullptr
-                                   : llvm::dyn_cast<llvm::AllocaInst>(
-                                         sourceSlotIt->second);
+            auto* sourceSlot =
+                sourceSlotIt == namedValues.end()
+                    ? nullptr
+                    : llvm::dyn_cast<llvm::AllocaInst>(sourceSlotIt->second);
             if(!targetSlot || !sourceSlot ||
-               targetSlot->getAllocatedType() !=
-                   sourceSlot->getAllocatedType())
+               targetSlot->getAllocatedType() != sourceSlot->getAllocatedType())
             {
-                reportError(node->line,
-                            "runtime closure assignment requires compatible "
-                            "local closure slots");
+                reportError(
+                    node->line,
+                    "runtime closure assignment requires compatible "
+                    "local closure slots");
                 return;
             }
 
@@ -325,22 +350,20 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
                        ownerDepth != variableScopeDepth.end() &&
                        targetDepth->second < ownerDepth->second)
                     {
-                        reportError(node->line, "cannot assign closure '" +
-                                                      sourceId->name +
-                                                      "' to longer-lived '" +
-                                                      node->name +
-                                                      "'; it borrows local '" +
-                                                      owner + "'");
+                        reportError(
+                            node->line,
+                            "cannot assign closure '" + sourceId->name +
+                                "' to longer-lived '" + node->name +
+                                "'; it borrows local '" + owner + "'");
                         return;
                     }
-                    if(activeMutBorrower.find(owner) !=
-                       activeMutBorrower.end())
+                    if(activeMutBorrower.find(owner) != activeMutBorrower.end())
                     {
-                        reportError(node->line, "cannot assign closure '" +
-                                                      sourceId->name +
-                                                      "' while capture '" +
-                                                      owner +
-                                                      "' is mutably borrowed");
+                        reportError(
+                            node->line,
+                            "cannot assign closure '" + sourceId->name +
+                                "' while capture '" + owner +
+                                "' is mutably borrowed");
                         return;
                     }
                 }
@@ -348,7 +371,8 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
 
             releaseRuntimeClosureBorrows(node->name);
             llvm::Value* closureValue = builder.CreateLoad(
-                sourceSlot->getAllocatedType(), sourceSlot,
+                sourceSlot->getAllocatedType(),
+                sourceSlot,
                 node->name + ".closure.assign.value");
             builder.CreateStore(closureValue, targetSlot);
             closureVariables[node->name] = sourceNode;
@@ -379,10 +403,10 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
                 {
                     if(borrower != node->name)
                     {
-                        reportError(node->line, "cannot assign to callable '" +
-                                                      node->name +
-                                                      "' while borrowed by '" +
-                                                      borrower + "'");
+                        reportError(
+                            node->line,
+                            "cannot assign to callable '" + node->name +
+                                "' while borrowed by '" + borrower + "'");
                         return;
                     }
                 }
@@ -397,17 +421,20 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
                 dynamic_cast<FunctionTypeNode*>(expectedCallableType);
             std::vector<std::pair<std::string, TypeNode*>> captures;
             TypeNode* closureReturnType = nullptr;
-            if(!expectedFunction ||
-               !getRuntimeClosureCaptures(contextual, captures,
-                                          closureReturnType))
+            if(!expectedFunction || !getRuntimeClosureCaptures(
+                                        contextual,
+                                        captures,
+                                        closureReturnType))
                 return;
             if(!closureReturnType || !expectedFunction->returnType ||
                typeMangle(closureReturnType) !=
                    typeMangle(expectedFunction->returnType))
             {
-                reportError(node->line,
-                            "assigned closure return type does not match "
-                            "callable type of '" + node->name + "'");
+                reportError(
+                    node->line,
+                    "assigned closure return type does not match "
+                    "callable type of '" +
+                        node->name + "'");
                 return;
             }
             auto targetDepth = variableScopeDepth.find(node->name);
@@ -418,26 +445,30 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
                    captureDepth != variableScopeDepth.end() &&
                    targetDepth->second < captureDepth->second)
                 {
-                    reportError(node->line,
-                                "cannot assign closure borrowing local '" +
-                                    capture.first + "' to longer-lived '" +
-                                    node->name + "'");
+                    reportError(
+                        node->line,
+                        "cannot assign closure borrowing local '" +
+                            capture.first + "' to longer-lived '" + node->name +
+                            "'");
                     return;
                 }
             }
             releaseRuntimeClosureBorrows(node->name);
             closureVariables[node->name] = contextual;
-            if(!tryGenerateRuntimeClosureValue(node->name, contextual,
-                                               node->line,
-                                               expectedCallableType))
+            if(!tryGenerateRuntimeClosureValue(
+                   node->name,
+                   contextual,
+                   node->line,
+                   expectedCallableType))
                 return;
             auto actual = functionTypeVariables.find(node->name);
             if(actual == functionTypeVariables.end() ||
                typeMangle(actual->second) != typeMangle(expectedCallableType))
             {
-                reportError(node->line,
-                            "assigned closure does not match callable type of '" +
-                                node->name + "'");
+                reportError(
+                    node->line,
+                    "assigned closure does not match callable type of '" +
+                        node->name + "'");
                 return;
             }
             functionTypeVariables[node->name] = expectedCallableType;
@@ -450,8 +481,7 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     auto callableTypeIt = functionTypeVariables.find(node->name);
     if(callableTypeIt != functionTypeVariables.end())
     {
-        expectedSemanticType.reset(
-            cloneTypeNode(callableTypeIt->second));
+        expectedSemanticType.reset(cloneTypeNode(callableTypeIt->second));
     }
     auto listTypeIt = listElementTypes.find(node->name);
     if(!expectedSemanticType && listTypeIt != listElementTypes.end())
@@ -464,8 +494,8 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         auto mapTypeIt = mapKeyValueTypes.find(node->name);
         if(mapTypeIt != mapKeyValueTypes.end())
         {
-            expectedSemanticType = std::make_unique<MapTypeNode>(
-                mapTypeIt->second.first, mapTypeIt->second.second);
+            expectedSemanticType = std::make_unique<
+                MapTypeNode>(mapTypeIt->second.first, mapTypeIt->second.second);
         }
     }
 
@@ -478,20 +508,26 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     if(borIt != activeBorrowers.end() && !borIt->second.empty())
     {
         std::string by = *borIt->second.begin();
-        reportError(node->line, "cannot assign to '" + node->name +
-                                    "' while borrowed by '" + by + "'");
+        reportError(
+            node->line,
+            "cannot assign to '" + node->name + "' while borrowed by '" + by +
+                "'");
         return;
     }
     auto mutBorIt = activeMutBorrower.find(node->name);
     if(mutBorIt != activeMutBorrower.end())
     {
-        reportError(node->line, "cannot assign to '" + node->name +
-                                    "' directly while mutably borrowed by '" +
-                                    mutBorIt->second + "'");
+        reportError(
+            node->line,
+            "cannot assign to '" + node->name +
+                "' directly while mutably borrowed by '" + mutBorIt->second +
+                "'");
         return;
     }
-    consumeMoveFromExpression(node->expression, node->line,
-                              "assigning to '" + node->name + "'");
+    consumeMoveFromExpression(
+        node->expression,
+        node->line,
+        "assigning to '" + node->name + "'");
 
     llvm::Type* targetType = nullptr;
     llvm::AllocaInst* targetAlloca = llvm::dyn_cast<llvm::AllocaInst>(variable);
@@ -506,8 +542,9 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
             getLValueType(new IdentifierNode(node->name), node->line));
     else
     {
-        reportError(node->line, "assignment target is not addressable: '" +
-                                    node->name + "'");
+        reportError(
+            node->line,
+            "assignment target is not addressable: '" + node->name + "'");
         return;
     }
 
@@ -554,8 +591,8 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         {
             value = builder.CreateFPToSI(value, targetType, "fptosi");
         }
-        else if(valueType->isFloatingPointTy() &&
-                targetType->isFloatingPointTy())
+        else if(
+            valueType->isFloatingPointTy() && targetType->isFloatingPointTy())
         {
             value = builder.CreateFPCast(value, targetType, "fpcast");
         }
@@ -571,10 +608,10 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         }
     }
 
-    if(targetGlobal &&
-       !validateNoEscapingBorrow(
-           node->expression, node->line,
-           "store in global/static '" + node->name + "'"))
+    if(targetGlobal && !validateNoEscapingBorrow(
+                           node->expression,
+                           node->line,
+                           "store in global/static '" + node->name + "'"))
         return;
 
     value = applyStructCopySemantics(value);
@@ -586,10 +623,10 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         ++scope)
     {
         auto cleanup = std::find_if(
-            scope->rbegin(), scope->rend(),
-            [&](const ScopeCleanup& action) {
-                return action.varName == node->name;
-            });
+            scope->rbegin(),
+            scope->rend(),
+            [&](const ScopeCleanup& action)
+            { return action.varName == node->name; });
         if(cleanup != scope->rend())
         {
             emitScopeCleanup(*cleanup, "assign");
@@ -602,8 +639,7 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     clearMovedVariable(node->name);
     if(functionTypeVariables.count(node->name) != 0)
     {
-        if(auto* functionItem =
-               dynamic_cast<IdentifierNode*>(node->expression))
+        if(auto* functionItem = dynamic_cast<IdentifierNode*>(node->expression))
         {
             auto copied = functionItemVariables.find(functionItem->name);
             if(copied != functionItemVariables.end())
@@ -611,7 +647,8 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
             else
             {
                 std::string target = resolveFunctionItemTarget(
-                    functionItem, functionTypeVariables[node->name]);
+                    functionItem,
+                    functionTypeVariables[node->name]);
                 functionItemVariables[node->name] =
                     target.empty() ? std::set<std::string>{}
                                    : std::set<std::string>{std::move(target)};
@@ -626,8 +663,11 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
             bool _is_mut_borrow =
                 _borrow_unary && _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
-            registerPointerBorrow(node->name, node->expression, node->line,
-                                  _is_mut_borrow);
+            registerPointerBorrow(
+                node->name,
+                node->expression,
+                node->line,
+                _is_mut_borrow);
         }
         if(auto knownNull = pointerExpressionKnownNull(node->expression))
             pointerKnownNull[node->name] = *knownNull;
@@ -643,7 +683,8 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
 
 void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 {
-    auto retainAggregateStoreOrigins = [&](const std::string& owner) {
+    auto retainAggregateStoreOrigins = [&](const std::string& owner)
+    {
         if(owner.empty())
             return;
         std::set<std::string> previousOrigins;
@@ -655,8 +696,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         if(previousPlaceInfo != aggregateBorrowPlaces.end())
             previousPlaces = previousPlaceInfo->second;
         const auto previousPlacesBeforeFieldUpdate = previousPlaces;
-        std::map<std::string,
-                 std::map<std::string, std::set<std::string>>>
+        std::map<std::string, std::map<std::string, std::set<std::string>>>
             previousFieldPlaces;
         auto previousFieldInfo = aggregateBorrowFieldPlaces.find(owner);
         if(previousFieldInfo != aggregateBorrowFieldPlaces.end())
@@ -674,7 +714,8 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
             if(destinationPath.front() == '.')
                 destinationPath.erase(0, 1);
         }
-        auto fieldIsReplaced = [&](const std::string& fieldPath) {
+        auto fieldIsReplaced = [&](const std::string& fieldPath)
+        {
             if(destinationPath.empty())
                 return false;
             // Overlap is not enough: an unknown/dynamic index may overwrite
@@ -685,8 +726,10 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
             if(fieldPath == destinationPath)
                 return true;
             return fieldPath.size() > destinationPath.size() &&
-                   fieldPath.compare(0, destinationPath.size(),
-                                     destinationPath) == 0 &&
+                   fieldPath.compare(
+                       0,
+                       destinationPath.size(),
+                       destinationPath) == 0 &&
                    (fieldPath[destinationPath.size()] == '.' ||
                     fieldPath[destinationPath.size()] == '[');
         };
@@ -707,8 +750,8 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
             {
                 auto source = field.second.find(sourceOwner);
                 if(source != field.second.end())
-                    retainedPlaces.insert(source->second.begin(),
-                                          source->second.end());
+                    retainedPlaces
+                        .insert(source->second.begin(), source->second.end());
             }
             if(retainedPlaces.empty())
             {
@@ -759,17 +802,21 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                             }
                         }
                     if(!isShared)
-                        previousExclusivePlaces.emplace_back(byOwner.first,
-                                                             sourcePlace);
+                        previousExclusivePlaces
+                            .emplace_back(byOwner.first, sourcePlace);
                 }
         }
 
-        trackAggregateBorrowOrigins(owner, node->expression,
-                                    destinationPath);
+        trackAggregateBorrowOrigins(owner, node->expression, destinationPath);
         if(!mergeAggregateBorrowStateAfterUpdate(
-               owner, previousOrigins, previousPlaces,
-               previousExclusivePlaces, previousExclusiveKeys,
-               previousExclusiveOwner, previousExclusivePlace, node->line))
+               owner,
+               previousOrigins,
+               previousPlaces,
+               previousExclusivePlaces,
+               previousExclusiveKeys,
+               previousExclusiveOwner,
+               previousExclusivePlace,
+               node->line))
             return;
         auto mergedFieldPlaces = std::move(previousFieldPlaces);
         auto updatedFieldInfo = aggregateBorrowFieldPlaces.find(owner);
@@ -799,8 +846,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
     if(auto* tupleTarget = dynamic_cast<TupleAccessNode*>(node->target))
     {
-        const std::string owner =
-            resolveBorrowOwnerFromLValue(tupleTarget);
+        const std::string owner = resolveBorrowOwnerFromLValue(tupleTarget);
         const std::string targetPlace =
             resolveBorrowPlaceFromLValue(tupleTarget);
         if(owner.empty() || targetPlace.empty())
@@ -810,18 +856,21 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         }
         if(constantVariables.count(owner) != 0)
         {
-            reportError(node->line,
-                        "cannot mutate tuple '" + owner +
-                            "' because it is immutable; use var or &mut");
+            reportError(
+                node->line,
+                "cannot mutate tuple '" + owner +
+                    "' because it is immutable; use var or &mut");
             return;
         }
 
-        auto rejectOverlappingBorrow = [&](const std::string& borrower) {
+        auto rejectOverlappingBorrow = [&](const std::string& borrower)
+        {
             if(!borrowerPlaceOverlaps(borrower, owner, targetPlace))
                 return false;
-            reportError(node->line,
-                        "cannot assign to tuple element of '" + owner +
-                            "' while borrowed by '" + borrower + "'");
+            reportError(
+                node->line,
+                "cannot assign to tuple element of '" + owner +
+                    "' while borrowed by '" + borrower + "'");
             return true;
         };
         auto sharedBorrowers = activeBorrowers.find(owner);
@@ -836,8 +885,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         }
 
         auto tupleElements = tupleElementTypes.find(owner);
-        if(tupleElements == tupleElementTypes.end() ||
-           tupleTarget->index < 0 ||
+        if(tupleElements == tupleElementTypes.end() || tupleTarget->index < 0 ||
            static_cast<size_t>(tupleTarget->index) >=
                tupleElements->second.size())
         {
@@ -846,31 +894,36 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         }
         llvm::Value* targetPtr = getLValuePointer(tupleTarget, node->line);
         TypeNode* targetNode = tupleElements->second[tupleTarget->index];
-        llvm::Type* targetType = targetNode ? getLLVMTypeFromNode(targetNode)
-                                            : nullptr;
-        llvm::Value* value = targetNode
-                                 ? generateExpression(node->expression,
-                                                      targetNode)
-                                 : nullptr;
+        llvm::Type* targetType =
+            targetNode ? getLLVMTypeFromNode(targetNode) : nullptr;
+        llvm::Value* value =
+            targetNode ? generateExpression(node->expression, targetNode)
+                       : nullptr;
         if(!targetPtr || !targetType || !value)
             return;
         if(value->getType() != targetType)
         {
             if(value->getType()->isIntegerTy() && targetType->isIntegerTy())
-                value = builder.CreateSExtOrTrunc(value, targetType,
-                                                  "tuple.assign.int");
-            else if(value->getType()->isFloatingPointTy() &&
-                    targetType->isFloatingPointTy())
-                value = builder.CreateFPCast(value, targetType,
-                                             "tuple.assign.float");
+                value = builder.CreateSExtOrTrunc(
+                    value,
+                    targetType,
+                    "tuple.assign.int");
+            else if(
+                value->getType()->isFloatingPointTy() &&
+                targetType->isFloatingPointTy())
+                value =
+                    builder
+                        .CreateFPCast(value, targetType, "tuple.assign.float");
             else
             {
                 reportError(node->line, "type mismatch in tuple assignment");
                 return;
             }
         }
-        consumeMoveFromExpression(node->expression, node->line,
-                                  "assigning tuple element");
+        consumeMoveFromExpression(
+            node->expression,
+            node->line,
+            "assigning tuple element");
         builder.CreateStore(applyStructCopySemantics(value), targetPtr);
         clearMovedVariable(targetPlace);
         retainAggregateStoreOrigins(owner);
@@ -885,36 +938,36 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         auto* rootIdentifier = dynamic_cast<IdentifierNode*>(root);
         if(!rootIdentifier)
         {
-            reportError(node->line,
-                        "mutable multiarray assignment requires a named "
-                        "multiarray root");
+            reportError(
+                node->line,
+                "mutable multiarray assignment requires a named "
+                "multiarray root");
             return;
         }
 
         auto mutability = multiarrayMutability.find(rootIdentifier->name);
         const bool isMultiarray = mutability != multiarrayMutability.end();
         const bool isMutableListLike =
-            !isMultiarray &&
-            listElementTypes.find(rootIdentifier->name) !=
-                listElementTypes.end();
+            !isMultiarray && listElementTypes.find(rootIdentifier->name) !=
+                                 listElementTypes.end();
         if((isMultiarray && !mutability->second) ||
            (!isMultiarray && !isMutableListLike))
         {
-            reportError(node->line,
-                        isMultiarray
-                            ? "indexed assignment requires mutmultiarray; '" +
-                                  rootIdentifier->name + "' is immutable"
-                            : "indexed assignment requires a mutable list or "
-                              "array; '" +
-                                  rootIdentifier->name + "' is not mutable");
+            reportError(
+                node->line,
+                isMultiarray ? "indexed assignment requires mutmultiarray; '" +
+                                   rootIdentifier->name + "' is immutable"
+                             : "indexed assignment requires a mutable list or "
+                               "array; '" +
+                                   rootIdentifier->name + "' is not mutable");
             return;
         }
         if(constantVariables.count(rootIdentifier->name) != 0)
         {
-            reportError(node->line,
-                        "cannot mutate indexed container '" +
-                            rootIdentifier->name +
-                            "' because it is immutable; use var or &mut");
+            reportError(
+                node->line,
+                "cannot mutate indexed container '" + rootIdentifier->name +
+                    "' because it is immutable; use var or &mut");
             return;
         }
         const std::string targetPlace =
@@ -927,23 +980,25 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
             {
                 if(borrowerPlaceOverlaps(borrower, ownerName, targetPlace))
                 {
-                    reportError(node->line,
-                                "cannot mutate indexed element of '" +
-                                    ownerName + "' while borrowed by '" +
-                                    borrower + "'");
+                    reportError(
+                        node->line,
+                        "cannot mutate indexed element of '" + ownerName +
+                            "' while borrowed by '" + borrower + "'");
                     return;
                 }
             }
         }
         for(const auto& mutableBorrow : activeMutBorrower)
         {
-            if(borrowerPlaceOverlaps(mutableBorrow.second, ownerName,
-                                     targetPlace))
+            if(borrowerPlaceOverlaps(
+                   mutableBorrow.second,
+                   ownerName,
+                   targetPlace))
             {
-                reportError(node->line,
-                            "cannot mutate indexed element of '" + ownerName +
-                                "' while borrowed by '" +
-                                mutableBorrow.second + "'");
+                reportError(
+                    node->line,
+                    "cannot mutate indexed element of '" + ownerName +
+                        "' while borrowed by '" + mutableBorrow.second + "'");
                 return;
             }
         }
@@ -962,30 +1017,41 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         if(value->getType() != targetType)
         {
             if(value->getType()->isIntegerTy() && targetType->isIntegerTy())
-                value = builder.CreateSExtOrTrunc(value, targetType,
-                                                  "index.assign.int");
-            else if(value->getType()->isFloatingPointTy() &&
-                    targetType->isFloatingPointTy())
-                value = builder.CreateFPCast(value, targetType,
-                                             "index.assign.float");
-            else if(value->getType()->isIntegerTy() &&
-                    targetType->isFloatingPointTy())
-                value = builder.CreateSIToFP(value, targetType,
-                                             "index.assign.sitofp");
-            else if(value->getType()->isFloatingPointTy() &&
-                    targetType->isIntegerTy())
-                value = builder.CreateFPToSI(value, targetType,
-                                             "index.assign.fptosi");
+                value = builder.CreateSExtOrTrunc(
+                    value,
+                    targetType,
+                    "index.assign.int");
+            else if(
+                value->getType()->isFloatingPointTy() &&
+                targetType->isFloatingPointTy())
+                value =
+                    builder
+                        .CreateFPCast(value, targetType, "index.assign.float");
+            else if(
+                value->getType()->isIntegerTy() &&
+                targetType->isFloatingPointTy())
+                value =
+                    builder
+                        .CreateSIToFP(value, targetType, "index.assign.sitofp");
+            else if(
+                value->getType()->isFloatingPointTy() &&
+                targetType->isIntegerTy())
+                value =
+                    builder
+                        .CreateFPToSI(value, targetType, "index.assign.fptosi");
             else
             {
-                reportError(node->line,
-                            "type mismatch in mutable multiarray assignment");
+                reportError(
+                    node->line,
+                    "type mismatch in mutable multiarray assignment");
                 return;
             }
         }
 
-        consumeMoveFromExpression(node->expression, node->line,
-                                  "assigning mutable multiarray element");
+        consumeMoveFromExpression(
+            node->expression,
+            node->line,
+            "assigning mutable multiarray element");
         builder.CreateStore(value, elementPointer);
         clearMovedVariable(targetPlace);
         retainAggregateStoreOrigins(ownerName);
@@ -1055,16 +1121,19 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
             structPtr = namedValues[fieldAccess->structName];
             if(!structPtr)
             {
-                reportError(node->line,
-                            "unknown variable: " + fieldAccess->structName);
+                reportError(
+                    node->line,
+                    "unknown variable: " + fieldAccess->structName);
                 return;
             }
 
             auto typeIt = structVariableTypes.find(fieldAccess->structName);
             if(typeIt == structVariableTypes.end())
             {
-                reportError(node->line, "variable '" + fieldAccess->structName +
-                                            "' is not a struct");
+                reportError(
+                    node->line,
+                    "variable '" + fieldAccess->structName +
+                        "' is not a struct");
                 return;
             }
             structTypeName = typeIt->second;
@@ -1077,7 +1146,9 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                 if(allocaType->isPointerTy())
                 {
                     structPtr = builder.CreateLoad(
-                        allocaType, alloca, fieldAccess->structName + ".ptr");
+                        allocaType,
+                        alloca,
+                        fieldAccess->structName + ".ptr");
                 }
             }
         }
@@ -1099,8 +1170,9 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         auto typeIt = structVariableTypes.find(node->structName);
         if(typeIt == structVariableTypes.end())
         {
-            reportError(node->line,
-                        "variable '" + node->structName + "' is not a struct");
+            reportError(
+                node->line,
+                "variable '" + node->structName + "' is not a struct");
             return;
         }
         structTypeName = typeIt->second;
@@ -1112,18 +1184,19 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
             llvm::Type* allocaType = alloca->getAllocatedType();
             if(allocaType->isPointerTy())
             {
-                structPtr = builder.CreateLoad(allocaType, alloca,
-                                               node->structName + ".ptr");
+                structPtr = builder.CreateLoad(
+                    allocaType,
+                    alloca,
+                    node->structName + ".ptr");
             }
         }
     }
 
-    if(!ownerName.empty() &&
-       immutableReferenceVariables.count(ownerName) != 0)
+    if(!ownerName.empty() && immutableReferenceVariables.count(ownerName) != 0)
     {
-        reportError(node->line,
-                    "cannot mutate through immutable reference '" +
-                        ownerName + "'");
+        reportError(
+            node->line,
+            "cannot mutate through immutable reference '" + ownerName + "'");
         return;
     }
 
@@ -1181,9 +1254,10 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                 if(allowedBorrowers.find(by) == allowedBorrowers.end() &&
                    borrowerPlaceOverlaps(by, ownerName, targetPlace))
                 {
-                    reportError(node->line,
-                                "cannot assign to field of '" + ownerName +
-                                    "' while borrowed by '" + by + "'");
+                    reportError(
+                        node->line,
+                        "cannot assign to field of '" + ownerName +
+                            "' while borrowed by '" + by + "'");
                     return;
                 }
             }
@@ -1192,13 +1266,13 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         for(const auto& mutBorrow : activeMutBorrower)
         {
             if(allowedBorrowers.find(mutBorrow.second) !=
-                allowedBorrowers.end() ||
+                   allowedBorrowers.end() ||
                !borrowerPlaceOverlaps(mutBorrow.second, ownerName, targetPlace))
                 continue;
-            reportError(node->line,
-                        "cannot assign to field of '" + ownerName +
-                            "' while borrowed by '" + mutBorrow.second +
-                            "'");
+            reportError(
+                node->line,
+                "cannot assign to field of '" + ownerName +
+                    "' while borrowed by '" + mutBorrow.second + "'");
             return;
         }
     }
@@ -1227,8 +1301,10 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
     if(fieldIndex < 0)
     {
-        reportError(node->line, "struct '" + structTypeName +
-                                    "' has no field named '" + fieldName + "'");
+        reportError(
+            node->line,
+            "struct '" + structTypeName + "' has no field named '" + fieldName +
+                "'");
         return;
     }
     if(!canAccessStructField(structTypeName, fieldIndex, node->line, fieldName))
@@ -1252,9 +1328,11 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         }
         else if(exprType)
         {
-            value = buildTraitObjectValue(node->expression, traitObj->traitName,
-                                          node->line,
-                                          /*heapCopy=*/true);
+            value = buildTraitObjectValue(
+                node->expression,
+                traitObj->traitName,
+                node->line,
+                /*heapCopy=*/true);
         }
         else
         {
@@ -1270,13 +1348,16 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         if(!value)
             return;
     }
-    consumeMoveFromExpression(node->expression, node->line,
-                              "assigning to field '" + fieldName + "'");
+    consumeMoveFromExpression(
+        node->expression,
+        node->line,
+        "assigning to field '" + fieldName + "'");
 
     if(targetGlobalStorage &&
-       !validateNoEscapingBorrow(node->expression, node->line,
-                                 "store in global/static field '" + fieldName +
-                                     "'"))
+       !validateNoEscapingBorrow(
+           node->expression,
+           node->line,
+           "store in global/static field '" + fieldName + "'"))
     {
         return;
     }
@@ -1297,8 +1378,8 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                 value = builder.CreateSExt(value, targetType, "sext");
             }
         }
-        else if(valueType->isFloatingPointTy() &&
-                targetType->isFloatingPointTy())
+        else if(
+            valueType->isFloatingPointTy() && targetType->isFloatingPointTy())
         {
             value = builder.CreateFPCast(value, targetType, "fpcast");
         }
@@ -1347,16 +1428,23 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
             else
                 targetTypeStr = "unknown";
 
-            reportError(node->line, "type mismatch in assignment to field '" +
-                                        fieldName + "': expected '" +
-                                        targetTypeStr + "', got '" +
-                                        valueTypeStr + "'");
+            reportError(
+                node->line,
+                "type mismatch in assignment to field '" + fieldName +
+                    "': expected '" + targetTypeStr + "', got '" +
+                    valueTypeStr + "'");
             return;
         }
     }
 
-    storeStructFieldValue(structTypeName, structPtr, fieldIndex, fieldType,
-                          value, fieldName, node->line);
+    storeStructFieldValue(
+        structTypeName,
+        structPtr,
+        fieldIndex,
+        fieldType,
+        value,
+        fieldName,
+        node->line);
     clearMovedVariable(targetPlace);
     retainAggregateStoreOrigins(ownerName);
 }
@@ -1399,8 +1487,10 @@ void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
     llvm::Value* value = generateExpression(node->value, elemTypeNode);
     if(!value)
         return;
-    consumeMoveFromExpression(node->value, node->line,
-                              "assigning through dereference");
+    consumeMoveFromExpression(
+        node->value,
+        node->line,
+        "assigning through dereference");
 
     llvm::Type* valueType = value->getType();
     if(valueType != elemType)
@@ -1442,8 +1532,9 @@ void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
 
 // Helper to get struct pointer and type name from an expression
 // Returns {pointer, typeName} or {nullptr, ""} on error
-std::pair<llvm::Value*, std::string>
-CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
+std::pair<llvm::Value*, std::string> CodeGenerator::getStructPtrAndType(
+    ExpressionNode* expr,
+    int line)
 {
     auto resolveStructAliasName = [&](const std::string& typeName)
     {
@@ -1463,8 +1554,9 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(
                    aliasIt->second.aliasedType))
             {
-                current = getOrCreateMonomorphizedStruct(genRef->structName,
-                                                         genRef->typeArgs);
+                current = getOrCreateMonomorphizedStruct(
+                    genRef->structName,
+                    genRef->typeArgs);
                 break;
             }
             break;
@@ -1500,8 +1592,9 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             }
             if(inferredStructName.empty())
             {
-                reportError(line,
-                            "variable '" + id->name + "' is not a struct");
+                reportError(
+                    line,
+                    "variable '" + id->name + "' is not a struct");
                 return {nullptr, ""};
             }
         }
@@ -1544,22 +1637,27 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
         else
         {
             // Simple: get pointer from structName
-            if(!validateVariableAccessible(fieldAccess->structName, line,
-                                           fieldAccess->col))
+            if(!validateVariableAccessible(
+                   fieldAccess->structName,
+                   line,
+                   fieldAccess->col))
                 return {nullptr, ""};
             objPtr = namedValues[fieldAccess->structName];
             if(!objPtr)
             {
-                reportError(line,
-                            "unknown variable: " + fieldAccess->structName);
+                reportError(
+                    line,
+                    "unknown variable: " + fieldAccess->structName);
                 return {nullptr, ""};
             }
 
             auto typeIt = structVariableTypes.find(fieldAccess->structName);
             if(typeIt == structVariableTypes.end())
             {
-                reportError(line, "variable '" + fieldAccess->structName +
-                                      "' is not a struct");
+                reportError(
+                    line,
+                    "variable '" + fieldAccess->structName +
+                        "' is not a struct");
                 return {nullptr, ""};
             }
             objTypeName = resolveStructAliasName(typeIt->second);
@@ -1571,7 +1669,9 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
                 if(allocaType->isPointerTy())
                 {
                     objPtr = builder.CreateLoad(
-                        allocaType, alloca, fieldAccess->structName + ".ptr");
+                        allocaType,
+                        alloca,
+                        fieldAccess->structName + ".ptr");
                 }
             }
         }
@@ -1600,13 +1700,17 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
 
         if(fieldIndex < 0)
         {
-            reportError(line, "struct '" + objTypeName +
-                                  "' has no field named '" +
-                                  fieldAccess->fieldName + "'");
+            reportError(
+                line,
+                "struct '" + objTypeName + "' has no field named '" +
+                    fieldAccess->fieldName + "'");
             return {nullptr, ""};
         }
-        if(!canAccessStructField(objTypeName, fieldIndex, line,
-                                 fieldAccess->fieldName))
+        if(!canAccessStructField(
+               objTypeName,
+               fieldIndex,
+               line,
+               fieldAccess->fieldName))
             return {nullptr, ""};
 
         // Check if the field is a struct type
@@ -1629,15 +1733,18 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
 
             // Get pointer to the nested struct field
             llvm::Value* fieldPtr = builder.CreateStructGEP(
-                structType, objPtr, layout->storageIndex,
+                structType,
+                objPtr,
+                layout->storageIndex,
                 fieldAccess->fieldName + "_ptr");
 
             return {fieldPtr, structTypeRef->structName};
         }
         else
         {
-            reportError(line, "field '" + fieldAccess->fieldName +
-                                  "' is not a struct type");
+            reportError(
+                line,
+                "field '" + fieldAccess->fieldName + "' is not a struct type");
             return {nullptr, ""};
         }
     }
@@ -1648,8 +1755,7 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
     if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
     {
         TypeNode* elementType = nullptr;
-        llvm::Value* elementPtr =
-            generateListIndexPointer(index, elementType);
+        llvm::Value* elementPtr = generateListIndexPointer(index, elementType);
         if(!elementPtr || !elementType)
             return {nullptr, ""};
 
@@ -1657,9 +1763,11 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             return {elementPtr, resolveStructAliasName(structRef->structName)};
         if(auto* genericRef =
                dynamic_cast<GenericStructTypeRefNode*>(elementType))
-            return {elementPtr,
-                    getOrCreateMonomorphizedStruct(genericRef->structName,
-                                                   genericRef->typeArgs)};
+            return {
+                elementPtr,
+                getOrCreateMonomorphizedStruct(
+                    genericRef->structName,
+                    genericRef->typeArgs)};
         reportError(line, "indexed element is not a struct");
         return {nullptr, ""};
     }
@@ -1697,7 +1805,8 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(elemType))
             {
                 std::string mangled = getOrCreateMonomorphizedStruct(
-                    genRef->structName, genRef->typeArgs);
+                    genRef->structName,
+                    genRef->typeArgs);
                 return {ptrVal, mangled};
             }
         }
@@ -1717,16 +1826,19 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             {
                 structTypeName = structRef->structName;
             }
-            else if(auto* genRef =
-                        dynamic_cast<GenericStructTypeRefNode*>(exprType))
+            else if(
+                auto* genRef =
+                    dynamic_cast<GenericStructTypeRefNode*>(exprType))
             {
                 structTypeName = getOrCreateMonomorphizedStruct(
-                    genRef->structName, genRef->typeArgs);
+                    genRef->structName,
+                    genRef->typeArgs);
             }
             if(structTypeName.empty())
             {
-                reportError(line,
-                            "internal error: expected struct type reference");
+                reportError(
+                    line,
+                    "internal error: expected struct type reference");
                 return {nullptr, ""};
             }
 
@@ -1760,11 +1872,13 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
                 {
                     objStructTypeName = structRef->structName;
                 }
-                else if(auto* genRef =
-                            dynamic_cast<GenericStructTypeRefNode*>(objType))
+                else if(
+                    auto* genRef =
+                        dynamic_cast<GenericStructTypeRefNode*>(objType))
                 {
                     objStructTypeName = getOrCreateMonomorphizedStruct(
-                        genRef->structName, genRef->typeArgs);
+                        genRef->structName,
+                        genRef->typeArgs);
                 }
                 hasRealNameField =
                     structHasFieldNamed(objStructTypeName, "name");
@@ -1793,7 +1907,10 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
                 tmp.line = node->line;
                 typeName = expressionTypeNameForLog(&tmp, node->line);
             }
-            return Helpers::create_global_cstring(builder, typeName, "type.name");
+            return Helpers::create_global_cstring(
+                builder,
+                typeName,
+                "type.name");
         }
     }
 
@@ -1836,8 +1953,9 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
             }
             if(structTypeName.empty())
             {
-                reportError(node->line, "variable '" + node->structName +
-                                            "' is not a struct");
+                reportError(
+                    node->line,
+                    "variable '" + node->structName + "' is not a struct");
                 return nullptr;
             }
         }
@@ -1852,8 +1970,10 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
             llvm::Type* allocaType = alloca->getAllocatedType();
             if(allocaType->isPointerTy())
             {
-                structPtr = builder.CreateLoad(allocaType, alloca,
-                                               node->structName + ".ptr");
+                structPtr = builder.CreateLoad(
+                    allocaType,
+                    alloca,
+                    node->structName + ".ptr");
             }
         }
     }
@@ -1882,15 +2002,23 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
 
     if(fieldIndex < 0)
     {
-        reportError(node->line, "struct '" + structTypeName +
-                                    "' has no field named '" + node->fieldName +
-                                    "'");
+        reportError(
+            node->line,
+            "struct '" + structTypeName + "' has no field named '" +
+                node->fieldName + "'");
         return nullptr;
     }
-    if(!canAccessStructField(structTypeName, fieldIndex, node->line,
-                             node->fieldName))
+    if(!canAccessStructField(
+           structTypeName,
+           fieldIndex,
+           node->line,
+           node->fieldName))
         return nullptr;
 
-    return loadStructFieldValue(structTypeName, structPtr, fieldIndex,
-                                fieldType, node->fieldName);
+    return loadStructFieldValue(
+        structTypeName,
+        structPtr,
+        fieldIndex,
+        fieldType,
+        node->fieldName);
 }
