@@ -1,6 +1,6 @@
 /// \file for_loop_example.mla
 /// @ingroup examples
-/// \brief Basic for-loop iteration example over ranges and lists.
+/// \brief Range loops, index-based list access, and index/value iteration.
 ///
 fn sum_range(start: i64, end: i64) -> i64 {
     var total: i64 = 0;
@@ -23,9 +23,37 @@ fn main() -> i32 {
     let fact: i32 = factorial(5); // 120
     println!("Sum: {} Factorial: {}", sum, fact);
 
-    // Test ..= in for loop
+    // Inclusive range: ..= includes the upper bound.
     for i in 1..=10 {
         println!("Val: {}", i);
     }
-    return 0;
+
+    let values: list<i32> = [10, 20, 30];
+
+    // Index-based iteration: .. excludes values.len().
+    var indexed_total: i32 = 0;
+    for i in 0..values.len() {
+        println!("Index {}: {}", i, values[i]);
+        indexed_total += values[i];
+    }
+
+    // Manual index control uses while; C-style for(init; condition; step)
+    // headers are not supported. Container lengths use .len().
+    var manual_total: i32 = 0;
+    var i: i64 = 0;
+    while i < values.len() {
+        println!("Manual index {}: {}", i, values[i]);
+        manual_total += values[i];
+        ++i;
+    }
+
+    // Obtain both the zero-based index and the value directly.
+    var enumerated_total: i32 = 0;
+    for (index, value) in values {
+        println!("Index/value {}: {}", index, value);
+        enumerated_total += value;
+    }
+
+    return sum == 45 && fact == 120 && indexed_total == 60
+        && manual_total == 60 && enumerated_total == 60 ? 0 : 1;
 }

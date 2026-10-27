@@ -41,6 +41,9 @@ The feature-oriented index in [New Features Guide](new_features.md) covers
 language and standard-library examples that are not all repeated below. The
 following additional programs are useful runnable showcases:
 
+- [Loop iteration](../examples/for_loop_example.mla) — inclusive and exclusive
+  ranges, list access by index, manual `while` loops, and index/value iteration.
+  See [index-based loop syntax](language_syntax.md#index-based-loops).
 - [where constraints](../examples/where_constraints_demo.mla) and
   [req expressions](../examples/req_expression_demo.mla) — separate boolean
   declaration constraints from structural checks, then combine them with

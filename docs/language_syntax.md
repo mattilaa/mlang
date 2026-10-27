@@ -25,6 +25,7 @@ the compiler.
   - [Branch prediction hints](#branch-prediction-hints)
   - [Guarded if forms](#guarded-if-forms)
   - [Empty block warning](#empty-block-warning)
+  - [Index-based loops](#index-based-loops)
   - [while guards](#while-guard-syntax)
   - [Enums with explicit backing type](#enums-with-explicit-backing-type)
   - [switch / case](#switch--case)
@@ -1016,6 +1017,47 @@ if flag {
 
 Diagnostic:
 - `file.mla:row:column: warning: empty block`
+
+### Index-Based Loops
+
+Use a range and subscripting to iterate a list by index:
+
+```mla
+let values: list<i32> = [10, 20, 30];
+
+for i in 0..values.len() {
+    println!("{}: {}", i, values[i]);
+}
+```
+
+The range `0..values.len()` excludes the upper bound, so the indices are
+`0`, `1`, and `2`. Use `..=` when the upper bound should be included.
+Container lengths use `.len()`.
+
+For manual index control, use `while`:
+
+```mla
+var i: i64 = 0;
+while i < values.len() {
+    println!("{}: {}", i, values[i]);
+    ++i;
+}
+```
+
+C-style `for(init; condition; step)` headers are not supported. The `while`
+form evaluates its condition before each iteration. If you use `continue`,
+ensure the index advances before that path skips the increment.
+
+When both the index and value are needed, use index/value iteration:
+
+```mla
+for (i, value) in values {
+    println!("{}: {}", i, value);
+}
+```
+
+Indices start at zero. See [the runnable loop example](../examples/for_loop_example.mla)
+for all three forms and inclusive range iteration.
 
 ### `while` Guard Syntax
 

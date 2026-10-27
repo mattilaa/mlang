@@ -44,6 +44,9 @@ The feature-oriented index in [New Features Guide](New-Features) covers
 language and standard-library examples that are not all repeated below. The
 following additional programs are useful runnable showcases:
 
+- [Loop iteration](https://github.com/mattilaa/mlang/blob/main/examples/for_loop_example.mla) — inclusive and exclusive
+  ranges, list access by index, manual [`while`](Language-Syntax) loops, and index/value iteration.
+  See [index-based loop syntax](Language-Syntax#index-based-loops).
 - [where constraints](https://github.com/mattilaa/mlang/blob/main/examples/where_constraints_demo.mla) and
   [req expressions](https://github.com/mattilaa/mlang/blob/main/examples/req_expression_demo.mla) — separate boolean
   declaration constraints from structural checks, then combine them with
