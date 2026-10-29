@@ -28,7 +28,7 @@ impl ListView {
         if !marked { next.push(item.id); } self.marks = next; self.cancel_pending(); return true;
     }
     /// Stable IDs in display order; the cursor is the fallback when none is marked.
-    pub fn targets(self: ListView) -> list<i32> {
+    pub fn targets(self: &Self) -> list<i32> {
         var selected: list<i32> = [];
         for index in 0..self.items.len() {
             let id: i32 = self.items[index].id;
