@@ -213,13 +213,11 @@ impl OpenSessionDialog {
             nodes: [], tree_selected: -1, files: [], file_selected: -1, status: ""};
     }
     fn clear_nodes(self: &mut Self) -> void {
-        let nodes: list<DirectoryNode> = self.nodes;
-        for node in nodes { free(node.path); free(node.label); }
+        for index in 0..self.nodes.len() { free(self.nodes[index].path); free(self.nodes[index].label); }
         self.nodes.clear();
     }
     fn clear_files(self: &mut Self) -> void {
-        let files: list<str8> = self.files;
-        for name in files { free(name); }
+        for index in 0..self.files.len() { free(self.files[index]); }
         self.files.clear();
     }
     pub fn release(self: &mut Self) -> void {
@@ -229,10 +227,12 @@ impl OpenSessionDialog {
     }
     /// Does not change the process working directory or write filesystem data.
     fn clear_marked(self: &mut Self) -> void {
-        let marked: list<str8> = self.marked; for path in marked { free(path); } self.marked = [];
+        for index in 0..self.marked.len() { free(self.marked[index]); }
+        self.marked = [];
     }
     fn clear_accepted(self: &mut Self) -> void {
-        let paths: list<str8> = self.accepted_paths; for path in paths { free(path); } self.accepted_paths = [];
+        for index in 0..self.accepted_paths.len() { free(self.accepted_paths[index]); }
+        self.accepted_paths = [];
     }
     /// True when `path` is marked for multi-open.
     pub fn is_marked(self: OpenSessionDialog, path: str8) -> bool {
@@ -391,8 +391,8 @@ impl OpenSessionDialog {
     }
     /// Accept every marked file. All must still pass the filter and exist.
     fn accept_marked(self: &mut Self) -> void {
-        let marked: list<str8> = self.marked;
-        for path in marked {
+        for index in 0..self.marked.len() {
+            let path: str8 = self.marked[index];
             if !self.matches_file(path) { self.status = "A marked file does not match the filter."; return; }
             if file_exists(path) == 0 && !(is_dir(path) == 1 && self.matches_bundle(path)) {
                 self.status = "A marked file no longer exists or is inaccessible."; return;
@@ -400,7 +400,11 @@ impl OpenSessionDialog {
         }
         self.clear_accepted();
         var first: str8 = "";
-        for path in marked { if first == "" { first = path; } self.accepted_paths.push(clone(path)); }
+        for index in 0..self.marked.len() {
+            let path: str8 = self.marked[index];
+            if first == "" { first = path; }
+            self.accepted_paths.push(clone(path));
+        }
         free(self.accepted_path); self.accepted_path = clone(first);
         self.accepted = true; self.active = false; self.result = 1;
     }

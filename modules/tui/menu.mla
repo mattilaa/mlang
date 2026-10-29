@@ -128,8 +128,7 @@ impl MenuBar {
     }
     fn items_at(self: MenuBar, depth: i32) -> list<MenuItem> {
         if self.active < 0 || self.active >= self.menus.len() { return []; }
-        let menu: Menu = self.menus[self.active];
-        var items: list<MenuItem> = menu.items;
+        var items: list<MenuItem> = self.menus[self.active].items;
         for level in 0..depth {
             if level >= self.path.len() { return []; }
             let index: i32 = self.path[level];
@@ -221,11 +220,11 @@ impl MenuBar {
     pub fn keep_open(self: &mut Self, previous: MenuBar) -> void {
         if previous.active < 0 || previous.active >= self.menus.len() { return; }
         self.active = previous.active; self.path = [];
-        let path: list<i32> = previous.path;
-        for index in path { self.path.push(index); }
+        let previous_depth: i32 = i32(previous.path.len());
+        for level in 0..previous_depth { self.path.push(previous.path[level]); }
         self.selected = previous.selected;
         let items: list<MenuItem> = self.items_at(self.depth());
-        if self.depth() != previous.depth() || self.selected < 0 || self.selected >= items.len() { self.open(previous.active); }
+        if self.depth() != previous_depth || self.selected < 0 || self.selected >= items.len() { self.open(previous.active); }
     }
     pub fn popup_rect(self: MenuBar, bounds: Rect) -> Rect {
         return self.popup_rect_at(bounds, 0);
@@ -271,7 +270,6 @@ impl MenuBar {
             Cell { glyph: 32, foreground: theme.foreground, background: theme.menu_background });
         var x: i32 = bounds.x;
         for i in 0..self.menus.len() {
-            let menu: Menu = self.menus[i];
             let width: i32 = self.tab_width(i32(i));
             let bg: i32 = i == self.active ? theme.selection : theme.menu_background;
             // With shortcuts a title starts at its "[" and two cells follow it
@@ -288,7 +286,7 @@ impl MenuBar {
                 text_area = Rect::new(text_area.x + label_width(label), bounds.y, text_area.width - label_width(label), 1);
             }
             surface.text(text_area.intersect(bounds),
-                menu.title, theme.foreground, bg);
+                self.menus[i].title, theme.foreground, bg);
             x = x + width;
         }
         if self.active < 0 || self.active >= self.menus.len() { return; }
