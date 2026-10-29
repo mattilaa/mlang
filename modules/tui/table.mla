@@ -201,14 +201,15 @@ pub struct Table {
             start = start + width;
         }
         // Keep a selected group together when it fits the scrollable viewport.
-        let groups: list<TableGroup> = self.groups;
-        for group in groups {
-            if self.selected_column < group.first || self.selected_column >= group.first + group.count ||
-                    group.first < self.frozen_count() || group.count <= 0 { continue; }
+        for group_index in 0..self.groups.len() {
+            let group_first: i32 = self.groups[group_index].first;
+            let group_count: i32 = self.groups[group_index].count;
+            if self.selected_column < group_first || self.selected_column >= group_first + group_count ||
+                    group_first < self.frozen_count() || group_count <= 0 { continue; }
             var first: i32 = 0; var width: i32 = 0;
             for c in 0..self.columns.len() {
-                if c < group.first { first = first + self.column_width(i32(c)); }
-                else if c < group.first + group.count { width = width + self.column_width(i32(c)); }
+                if c < group_first { first = first + self.column_width(i32(c)); }
+                else if c < group_first + group_count { width = width + self.column_width(i32(c)); }
             }
             if width <= visible && width > 0 {
                 if first - frozen < self.scroll_x { self.scroll_x = first - frozen; }
