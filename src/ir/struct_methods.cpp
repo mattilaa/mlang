@@ -488,6 +488,33 @@ llvm::Function* CodeGenerator::generateMethodDefinition(
                                 mapInner->keyType,
                                 mapInner->valueType);
                     }
+                    if(auto* structInner =
+                           dynamic_cast<StructTypeRefNode*>(
+                               refType->elementType))
+                    {
+                        std::string resolvedEnumName =
+                            resolveVisibleEnumName(structInner->structName);
+                        if(!resolvedEnumName.empty())
+                        {
+                            variableTypes[std::string(arg.getName())] =
+                                TypeNode::TYPE_INT;
+                            enumVariableTypes[std::string(arg.getName())] =
+                                resolvedEnumName;
+                        }
+                        else
+                            structVariableTypes[std::string(arg.getName())] =
+                                structInner->structName;
+                    }
+                    if(auto* genStructInner =
+                           dynamic_cast<GenericStructTypeRefNode*>(
+                               refType->elementType))
+                    {
+                        std::string mangled = getOrCreateMonomorphizedStruct(
+                            genStructInner->structName,
+                            genStructInner->typeArgs);
+                        structVariableTypes[std::string(arg.getName())] =
+                            mangled;
+                    }
                 }
                 else
                 {

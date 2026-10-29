@@ -1,0 +1,24 @@
+mod std::testing;
+use std::testing::verify;
+
+struct BorrowedValue { var value: i32; };
+struct BorrowedReader { var marker: i32; };
+
+impl BorrowedReader {
+    fn read(self: BorrowedReader, input: &BorrowedValue) -> i32 {
+        return input.value;
+    }
+    fn copy_then_read(self: BorrowedReader, input: &BorrowedValue) -> i32 {
+        var local: BorrowedValue = BorrowedValue {};
+        local = input;
+        return local.value;
+    }
+}
+
+#[test]
+fn test_instance_method_reads_borrowed_struct_argument() {
+    let reader: BorrowedReader = BorrowedReader {};
+    let value: BorrowedValue = BorrowedValue { value: 42 };
+    verify(reader.read(value) == 42);
+    verify(reader.copy_then_read(value) == 42);
+}
