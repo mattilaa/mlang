@@ -235,19 +235,16 @@ pub struct Table {
         if row < 0 || row >= self.rows.len() || column < 0 || column >= self.columns.len() { return false; }
         let definition: TableColumn = self.columns[column];
         if definition.read_only { return false; }
-        let target: TableRow = self.rows[row];
-        if column >= target.cells.len() { return false; }
+        if column >= self.rows[row].cells.len() { return false; }
         return definition.validate(value);
     }
     pub fn set_cell(self: &mut Self, row: i32, column: i32, value: str8) -> bool {
         if !self.can_set(row, column, value) { return false; }
-        var target: TableRow = self.rows[row];
         var cells: list<str8> = [];
-        for i in 0..target.cells.len() { cells.push(i == column ? value : target.cells[i]); }
-        target.cells = cells;
-        var rows: list<TableRow> = [];
-        for i in 0..self.rows.len() { rows.push(i == row ? target : self.rows[i]); }
-        self.rows = rows; return true;
+        for i in 0..self.rows[row].cells.len() { cells.push(i == column ? value : self.rows[row].cells[i]); }
+        var target: &mut TableRow = &mut self.rows[row];
+        (*target).cells = cells;
+        return true;
     }
     pub fn selected_rect(self: Table, area: Rect) -> Rect {
         if self.selected_column < 0 || self.selected_row < 0 { return Rect::new(area.x, area.y, 0, 0); }
@@ -282,12 +279,10 @@ pub struct Table {
         for y in 0..body.height {
             let row_index: i32 = self.scroll_y + i32(y) / self.row_spacing();
             if row_index >= self.rows.len() { break; }
-            let row: TableRow = self.rows[row_index];
             let subrow: i32 = i32(y) % self.row_spacing();
             var stripe: i32 = subrow == 0 ? (row_index % 2 == 1 ? darken(theme.panel, 82) : theme.panel)
                 : darken(theme.panel, subrow % 2 == 1 ? 64 : 74);
-            let marked: list<i32> = self.bright_rows;
-            if subrow == 0 { for mark in marked { if mark == row_index { stripe = lighten(stripe, 10); } } }
+            if subrow == 0 { for mark in 0..self.bright_rows.len() { if self.bright_rows[mark] == row_index { stripe = lighten(stripe, 10); } } }
             let base_bg: i32 = row_index == self.selected_row && subrow == self.selected_subrow ? theme.selection : stripe;
             let bg: i32 = self.visual_rows && self.visual_position(row_index, subrow, 0) ? lighten(base_bg, 20) : base_bg;
             canvas.fill(Rect::new(0, i32(y) + body.y, body.width, 1), Cell { glyph: 32, foreground: theme.foreground, background: bg });
@@ -306,7 +301,7 @@ pub struct Table {
                 canvas.fill(cell.intersect(body), Cell { glyph: 32, foreground: fg, background: cell_bg });
                 let text_width: i32 = x + width > body.width ? body.width - x : width;
                 if c == 0 && subrow != 0 { canvas.text(Rect::new(x, i32(y) + body.y, text_width, 1), ".", fg, cell_bg); }
-                if c < row.cells.len() && i32(y) % self.row_spacing() == 0 { canvas.text(Rect::new(x, i32(y) + body.y, text_width, 1), row.cells[c], fg, cell_bg); }
+                if c < self.rows[row_index].cells.len() && i32(y) % self.row_spacing() == 0 { canvas.text(Rect::new(x, i32(y) + body.y, text_width, 1), self.rows[row_index].cells[c], fg, cell_bg); }
             }
         }
         for order in 0..self.columns.len() {
@@ -323,25 +318,26 @@ pub struct Table {
             canvas.text(Rect::new(x, header.y, x + width > body.width ? body.width - x : width, 1), column.title, fg, bg);
         }
         let frozen: i32 = self.frozen_width() > body.width ? body.width : self.frozen_width();
-        let groups: list<TableGroup> = self.groups;
-        for group in groups {
-            if group.first < self.frozen_count() || group.first < 0 || group.first >= self.columns.len() || group.count <= 0 { continue; }
+        for group_index in 0..self.groups.len() {
+            let group_first: i32 = self.groups[group_index].first;
+            let group_count: i32 = self.groups[group_index].count;
+            if group_first < self.frozen_count() || group_first < 0 || group_first >= self.columns.len() || group_count <= 0 { continue; }
             var width: i32 = 0;
-            for c in group.first..group.first + group.count {
+            for c in group_first..group_first + group_count {
                 if c < self.columns.len() { width = width + self.column_width(i32(c)); }
             }
-            let start: i32 = self.column_x(group.first);
+            let start: i32 = self.column_x(group_first);
             let rect: Rect = Rect::new(start, 0, width, 1);
             let visible: Rect = rect.intersect(Rect::new(frozen, 0, body.width - frozen, 1));
-            let active: bool = self.selected_column >= group.first && self.selected_column < group.first + group.count;
+            let active: bool = self.selected_column >= group_first && self.selected_column < group_first + group_count;
             let bg: i32 = active ? theme.selection : theme.menu_background;
             canvas.fill(visible, Cell { glyph: 32, foreground: theme.muted, background: bg });
-            canvas.text(visible, group.title, active ? theme.accent : theme.muted, bg);
+            canvas.text(visible, self.groups[group_index].title, active ? theme.accent : theme.muted, bg);
             if self.group_subtitles {
                 let under: Rect = Rect::new(start, 1, width, 1);
                 let line: Rect = under.intersect(Rect::new(frozen, 1, body.width - frozen, 1));
                 canvas.fill(line, Cell { glyph: 32, foreground: theme.muted, background: bg });
-                canvas.text(line, group.subtitle, active ? theme.accent : theme.muted, bg);
+                canvas.text(line, self.groups[group_index].subtitle, active ? theme.accent : theme.muted, bg);
             }
             let first_detail: i32 = self.group_subtitles ? 2 : 1;
             for row in 0..self.group_detail_rows {
@@ -350,7 +346,7 @@ pub struct Table {
                 let selected: bool = active && row == self.selected_group_detail;
                 let background: i32 = selected ? theme.selection : theme.panel;
                 canvas.fill(line, Cell { glyph: 32, foreground: theme.foreground, background: background });
-                if row < group.details.len() { canvas.text(line, group.details[row], selected ? theme.accent : theme.foreground, background); }
+                if row < self.groups[group_index].details.len() { canvas.text(line, self.groups[group_index].details[row], selected ? theme.accent : theme.foreground, background); }
             }
         }
         if self.vertical_scrollbar { self.paint_bar(canvas, Rect::new(body.width, body.y, 1, body.height), i32(self.rows.len()) * self.row_spacing(), body.height, self.scroll_y * self.row_spacing(), true, theme); }
