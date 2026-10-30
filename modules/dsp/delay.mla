@@ -309,12 +309,12 @@ impl StereoDelay {
     }
 
     /// @brief Return the current in-flight delay time in milliseconds.
-    pub fn delay_ms(self: StereoDelay) -> f32 {
+    pub fn delay_ms(self: &Self) -> f32 {
         return self.delay_read_samples * 1000.0f / self.sample_rate_hz;
     }
 
     /// @brief Return the current in-flight jitter depth in milliseconds.
-    pub fn jitter_ms(self: StereoDelay) -> f32 {
+    pub fn jitter_ms(self: &Self) -> f32 {
         return self.jitter_depth_samples * 1000.0f / self.sample_rate_hz;
     }
 
@@ -505,7 +505,7 @@ impl StereoDelay {
     }
 
     /// @brief Return the current in-flight filtered-feedback blend.
-    pub fn damping_value(self: StereoDelay) -> f32 {
+    pub fn damping_value(self: &Self) -> f32 {
         return self.damping;
     }
 
@@ -552,7 +552,7 @@ impl StereoDelay {
         return self.delay_read_samples + self.jitter_value * depth;
     }
 
-    fn read_fractional(self: StereoDelay, buffer: RingBufferF32, position: f32) -> f32 {
+    fn read_fractional(self: &Self, buffer: &RingBufferF32, position: f32) -> f32 {
         let center: i64 = llroundf(position);
         let offset: f32 = position - f32(center);
         let adjacent: i64 = offset < 0.0f ? center - 1 : center + 1;
@@ -739,7 +739,7 @@ impl StereoDelay {
         return input + (filtered - input) * self.damping;
     }
 
-    fn loop_feedback(self: StereoDelay, input: f32) -> f32 {
+    fn loop_feedback(self: &Self, input: f32) -> f32 {
         let regenerated: f32 = input * self.feedback;
         if self.feedback <= 0.98f { return regenerated; }
         return tanhf(regenerated * 1.25f) / 1.25f;
