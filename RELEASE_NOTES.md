@@ -1,3 +1,59 @@
+# MLang 0.4.3
+
+MLang 0.4.3 fixes ownership and borrowing issues found after 0.4.2 in
+compiler-generated instance methods, TUI widgets, DSP delay processing, and
+the single-producer/single-consumer queue.
+
+## Fixes
+
+- Register borrowed struct and generic struct parameters in instance methods
+  so field and method access retains the correct type information.
+- Preserve TUI table rows and groups, dialog and list storage, and menu items
+  during read-only inspection and reconciliation. Table snapshots now copy
+  nested rows, and menu path traversal copies nested items safely.
+- Borrow list views while collecting target IDs instead of moving their
+  underlying storage.
+- Borrow StereoDelay state and ring buffers for read-only helpers and
+  fractional reads, preserving buffers across repeated delay taps.
+- Pass a mutable staged value to the native SPSC push operation under an
+  explicit unsafe boundary; the native call copies the value before returning.
+
+# MLang 0.4.2
+
+MLang 0.4.2 adds concepts and structural requirements for generic code,
+user-defined literal suffixes, and nested mutable references. It also includes
+compiler fixes, editor support, and expanded documentation and CI coverage.
+
+## Language and compiler
+
+- Added named concepts, `std::concepts` predicates, generic parameter bounds,
+  and constrained overload selection. Use `where` for boolean constraints and
+  `req(...) { ... }` for unevaluated checks of expressions and types.
+- Added user-defined suffixes for integer, floating-point, and string literals.
+  Literal operators work in namespaces and imports and can be evaluated in
+  compile-time expressions.
+- Added nested mutable references such as `&mut &mut T` in local bindings and
+  function calls, including generic functions.
+- Added bitwise AND compound assignment (`&=`).
+- Fixed a compiler crash when a struct contains an invalid or unresolved field
+  type; the compiler now reports the type error before creating its layout.
+
+## Tools and documentation
+
+- Added concept and constraint completion, hover information, semantic tokens,
+  and definition navigation in the language servers.
+- Added runnable examples and reference material for constraints, literal
+  suffixes, nested references, and the debugger.
+- Added AddressSanitizer builds and tests on Linux and macOS CI.
+
+## Migration notes
+
+- Replace the former `requires` spelling with `where` for boolean constraints
+  and nested predicates, or `req` for structural checks. The old spelling now
+  produces `MLANG-E1020`.
+- Nested mutable references cannot yet rebind borrowed reference slots through
+  a function parameter; mutate the value reached by the reference instead.
+
 # MLang 0.4.1
 
 MLang 0.4.1 is a maintenance release that corrects compiler version reporting
