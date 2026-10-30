@@ -91,6 +91,13 @@ impl TableColumn {
     }
 }
 pub struct TableRow { var cells: list<str8>; };
+impl TableRow {
+    pub fn copy(self: &Self) -> TableRow {
+        var cells: list<str8> = [];
+        for i in 0..self.cells.len() { cells.push(clone(self.cells[i])); }
+        return TableRow { cells: cells };
+    }
+}
 pub struct TableGroup { var title: str8; var first: i32; var count: i32; var details: list<str8>; var subtitle: str8{""}; };
 
 /// Strings are borrowed. Scrollbar visibility does not disable scrolling.

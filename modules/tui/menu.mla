@@ -48,8 +48,28 @@ impl MenuItem {
     pub fn submenu(label: str8, children: list<MenuItem>) -> MenuItem {
         return MenuItem { label: label, action: 0, enabled: true, children: children };
     }
+    fn copy(self: &Self) -> MenuItem {
+        var children: list<MenuItem> = [];
+        for i in 0..self.children.len() { children.push(self.children[i].copy()); }
+        return MenuItem { label: clone(self.label), action: self.action, enabled: self.enabled,
+            children: children, shortcut: clone(self.shortcut) };
+    }
+    fn release_copy(self: MenuItem) -> void {
+        free(self.label); free(self.shortcut);
+        let children: list<MenuItem> = self.children;
+        for child in children { child.release_copy(); }
+    }
 }
 pub struct Menu { var title: str8; var items: list<MenuItem>; };
+
+fn copy_menu_items(source: &list<MenuItem>) -> list<MenuItem> {
+    var items: list<MenuItem> = [];
+    for i in 0..source.len() { items.push(source[i].copy()); }
+    return items;
+}
+fn release_menu_items(items: list<MenuItem>) -> void {
+    for item in items { item.release_copy(); }
+}
 
 fn label_width(text: str8) -> i32 {
     let raw: result<Bytes, str8> = Bytes::from_string(text);
@@ -126,15 +146,15 @@ impl MenuBar {
         if self.active == index { self.dismiss(); } else { self.open(index); }
         return true;
     }
-    fn items_at(self: MenuBar, depth: i32) -> list<MenuItem> {
+    fn items_at(self: &Self, depth: i32) -> list<MenuItem> {
         if self.active < 0 || self.active >= self.menus.len() { return []; }
-        var items: list<MenuItem> = self.menus[self.active].items;
+        var items: list<MenuItem> = copy_menu_items(self.menus[self.active].items);
         for level in 0..depth {
-            if level >= self.path.len() { return []; }
+            if level >= self.path.len() { release_menu_items(items); return []; }
             let index: i32 = self.path[level];
-            if index < 0 || index >= items.len() { return []; }
-            let item: MenuItem = items[index];
-            items = item.children;
+            if index < 0 || index >= items.len() { release_menu_items(items); return []; }
+            let children: list<MenuItem> = copy_menu_items(items[index].children);
+            release_menu_items(items); items = children;
         }
         return items;
     }
@@ -144,9 +164,10 @@ impl MenuBar {
     }
     fn enter_submenu(self: &mut Self) -> bool {
         let items: list<MenuItem> = self.items_at(self.depth());
-        if self.selected < 0 || self.selected >= items.len() { return false; }
-        let item: MenuItem = items[self.selected];
-        if !item.enabled || item.children.len() == 0 { return false; }
+        let can_enter: bool = self.selected >= 0 && self.selected < items.len() &&
+            items[self.selected].enabled && items[self.selected].children.len() > 0;
+        release_menu_items(items);
+        if !can_enter { return false; }
         self.path.push(self.selected);
         self.selected = -1;
         self.move_selection(1);
@@ -162,15 +183,16 @@ impl MenuBar {
         if self.active < 0 || self.active >= self.menus.len() { return; }
         let items: list<MenuItem> = self.items_at(self.depth());
         let count: i32 = i32(items.len());
-        if count == 0 { self.selected = -1; return; }
+        if count == 0 { release_menu_items(items); self.selected = -1; return; }
         var next: i32 = self.selected;
         for _i in 0..count {
             next = (next + direction + count) % count;
-            let item: MenuItem = items[next];
-            if item.enabled && (item.action > 0 || item.children.len() > 0) {
+            if items[next].enabled && (items[next].action > 0 || items[next].children.len() > 0) {
+                release_menu_items(items);
                 self.selected = next; return;
             }
         }
+        release_menu_items(items);
         self.selected = -1;
     }
     /// Returns a positive command ID on activation, otherwise zero.
@@ -195,10 +217,12 @@ impl MenuBar {
         else if key == Key::Enter {
             if self.enter_submenu() { return 0; }
             let items: list<MenuItem> = self.items_at(self.depth());
+            var action: i32 = 0;
             if self.selected >= 0 && self.selected < items.len() {
-                let item: MenuItem = items[self.selected];
-                if item.enabled && item.action > 0 { self.dismiss(); return item.action; }
+                if items[self.selected].enabled && items[self.selected].action > 0 { action = items[self.selected].action; }
             }
+            release_menu_items(items);
+            if action > 0 { self.dismiss(); return action; }
         }
         return 0;
     }
@@ -209,10 +233,13 @@ impl MenuBar {
     pub fn toggle_selected(self: &mut Self) -> i32 {
         if self.active < 0 { return 0; }
         let items: list<MenuItem> = self.items_at(self.depth());
-        if self.selected < 0 || self.selected >= items.len() { return 0; }
-        let item: MenuItem = items[self.selected];
-        if !item.enabled || item.action <= 0 || !is_option_label(item.label) { return 0; }
-        return item.action;
+        var action: i32 = 0;
+        if self.selected >= 0 && self.selected < items.len() && items[self.selected].enabled &&
+            items[self.selected].action > 0 && is_option_label(items[self.selected].label) {
+            action = items[self.selected].action;
+        }
+        release_menu_items(items);
+        return action;
     }
     /// Reopen the menu, submenu and item `previous` had open, e.g. after the
     /// bar was rebuilt to relabel a toggled option. Ignored when that item no
@@ -224,7 +251,9 @@ impl MenuBar {
         for level in 0..previous_depth { self.path.push(previous.path[level]); }
         self.selected = previous.selected;
         let items: list<MenuItem> = self.items_at(self.depth());
-        if self.depth() != previous_depth || self.selected < 0 || self.selected >= items.len() { self.open(previous.active); }
+        let invalid: bool = self.depth() != previous_depth || self.selected < 0 || self.selected >= items.len();
+        release_menu_items(items);
+        if invalid { self.open(previous.active); }
     }
     pub fn popup_rect(self: MenuBar, bounds: Rect) -> Rect {
         return self.popup_rect_at(bounds, 0);
@@ -245,6 +274,7 @@ impl MenuBar {
             var width: i32 = popup_width(items);
             if width > bounds.width { width = bounds.width; }
             let wanted: i32 = i32(items.len()) + 2;
+            release_menu_items(items);
             let height: i32 = wanted > bounds.height - 1 ? bounds.height - 1 : wanted;
             var y: i32 = bounds.y + 1;
             if level > 0 {
@@ -295,6 +325,7 @@ impl MenuBar {
             let popup: Rect = self.popup_rect_at(bounds, i32(level));
             let items: list<MenuItem> = self.items_at(i32(level));
             self.paint_popup(surface, bounds, popup, theme, items, self.selected_at(i32(level)));
+            release_menu_items(items);
         }
     }
     fn paint_popup(self: MenuBar, surface: Surface, bounds: Rect, popup: Rect,
