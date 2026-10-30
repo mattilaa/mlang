@@ -1,3 +1,23 @@
+# MLang 0.4.3
+
+MLang 0.4.3 fixes ownership and borrowing issues found after 0.4.2 in
+compiler-generated instance methods, TUI widgets, DSP delay processing, and
+the single-producer/single-consumer queue.
+
+## Fixes
+
+- Register borrowed struct and generic struct parameters in instance methods
+  so field and method access retains the correct type information.
+- Preserve TUI table rows and groups, dialog and list storage, and menu items
+  during read-only inspection and reconciliation. Table snapshots now copy
+  nested rows, and menu path traversal copies nested items safely.
+- Borrow list views while collecting target IDs instead of moving their
+  underlying storage.
+- Borrow StereoDelay state and ring buffers for read-only helpers and
+  fractional reads, preserving buffers across repeated delay taps.
+- Pass a mutable staged value to the native SPSC push operation under an
+  explicit unsafe boundary; the native call copies the value before returning.
+
 # MLang 0.4.2
 
 MLang 0.4.2 adds concepts and structural requirements for generic code,
