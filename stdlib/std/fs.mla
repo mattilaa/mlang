@@ -56,6 +56,8 @@
 /// @brief Seek position anchor — describes where a seek is measured from.
 /// @ingroup seekfrom
 /// \cond INTERNAL_IMPORTS
+mod std::strbuf;
+use std::strbuf::len;
 mod std::fs::detail;
 use std::fs::detail::*;
 /// \endcond
@@ -592,7 +594,7 @@ pub fn free_lines(lines: list<str8>) -> void {
 /// @param path Directory path. Empty string means current directory.
 /// @return Directory entries. Returns empty list on open failure or empty directory.
 pub fn list_dir(path: str8) -> list<str8> {
-    let p: str8 = __mlang_std_strbuf_len(path) == 0 ? ".": path;
+    let p: str8 = len(path) == 0 ? ".": path;
     let items: list<str8> = __mlang_std_fs_list_dir(p);
     return items;
 }
@@ -666,7 +668,7 @@ pub fn chdir(path: str8) -> i32 {
 ///         cannot be opened or read.
 pub fn read_all_text(path: str8) -> result<str8, str8> {
     let text: str8 = __mlang_std_fs_read_all_text(path);
-    if __mlang_std_strbuf_len(text) == 0 {
+    if len(text) == 0 {
         if file_exists(path) == 0 {
             return Err<str8, str8>("std::fs::read_all_text failed");
         }
