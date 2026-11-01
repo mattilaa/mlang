@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v6
+        with:
+          ref: ${{ env.MLANG_RELEASE_TAG }}
 
       - name: Validate release tag
         shell: bash
@@ -141,3 +143,66 @@ jobs:
           gh release upload "$RELEASE_TAG" release-assets/* \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
+
+  bump-version:
+    name: Propose next patch version
+    needs: release
+    runs-on: ubuntu-22.04
+    concurrency:
+      group: release-version-bump
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+
+    steps:
+      - name: Check out development branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.DEFAULT_BRANCH }}
+          fetch-depth: 0
+
+      - name: Prepare version bump
+        run: python3 scripts/bump_release_version.py --release-tag "$RELEASE_TAG" --yes
+
+      - name: Open confirmation pull request
+        shell: bash
+        run: |
+          if git diff --quiet -- CMakeLists.txt src/main.cpp src/package_manager.cpp; then
+            exit 0
+          fi
+          branch="release/bump-after-$RELEASE_TAG"
+          existing=$(gh pr list --state all --head "$branch" --base "$DEFAULT_BRANCH" --json url --jq '.[0].url // empty')
+          if [[ -n "$existing" ]]; then
+            echo "Version bump already proposed: $existing"
+            echo "Review the existing PR; a closed PR can be reopened or the local script used."
+            exit 0
+          fi
+          # Recover if an earlier run pushed the branch but failed to create the PR.
+          remote_branch=$(git ls-remote --heads origin "refs/heads/$branch")
+          if [[ -n "$remote_branch" ]]; then
+            git fetch origin "refs/heads/$branch"
+            git diff --exit-code FETCH_HEAD -- CMakeLists.txt src/main.cpp src/package_manager.cpp
+          else
+            git switch -c "$branch"
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add CMakeLists.txt src/main.cpp src/package_manager.cpp
+            git commit -m "Bump patch version after $RELEASE_TAG"
+            git push origin "$branch"
+          fi
+          cat > "$RUNNER_TEMP/version-bump-pr.md" <<EOF
+          Release $RELEASE_TAG has been published and its assets uploaded.
+
+          Increment the source patch version by one for subsequent development builds,
+          including the compiler and package manager fallback versions.
+
+          Review the diff and merge this PR to confirm the bump.
+          EOF
+          gh pr create --base "$DEFAULT_BRANCH" --head "$branch" \
+            --title "Bump patch version after $RELEASE_TAG" \
+            --body-file "$RUNNER_TEMP/version-bump-pr.md"

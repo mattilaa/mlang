@@ -1579,6 +1579,9 @@ Common bootstrap task entrypoints include:
 
 ## GitHub Releases
 
+See [RELEASE_PROCESS.md](RELEASE_PROCESS.md) for the step-by-step GitHub release
+procedure and the confirmed post-release patch version bump.
+
 Development builds report `MAJOR.MINOR.BUGFIX.BUILD`; CMake increments the
 fourth component on each configure. Public release tags omit the build number.
 
