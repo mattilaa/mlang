@@ -97,3 +97,14 @@ fn test_chdir_updates_cwd_impl() -> i32 {
 fn test_chdir_updates_cwd() {
     verify(test_chdir_updates_cwd_impl() == 0);
 }
+
+
+#[test]
+fn filesystem_text_helpers_share_public_string_api() {
+    let path: str8 = "/tmp/mlang_fs_string_api.txt";
+    let written: result<i32, str8> = std::fs::write_all_text(path, "filesystem text");
+    verify(written.is_ok());
+    let read: result<str8, str8> = std::fs::read_all_text(path); verify(read.is_ok());
+    let value: str8 = read.unwrap(); verify(std::strbuf::len(value) == 15); std::strbuf::free(value);
+    std::fs::remove_tree(path);
+}
