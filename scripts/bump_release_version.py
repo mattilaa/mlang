@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 
-VERSION_FILES = ("CMakeLists.txt", "src/main.cpp", "src/package_manager.cpp")
+VERSION_FILES = ("version.txt",)
 
 
 def run(*args, cwd):
@@ -35,20 +35,12 @@ def bump(root, tag, assume_yes=False):
     if run("git", "status", "--porcelain", "--", *VERSION_FILES, cwd=root):
         raise ValueError("version files have local changes; commit or stash them first")
 
-    contents = {name: (root / name).read_text() for name in VERSION_FILES}
-    cmake = contents["CMakeLists.txt"]
-    components = []
-    for component in ("MAJOR", "MINOR", "BUGFIX"):
-        values = re.findall(rf"^set\(MLANG_VERSION_{component} ([0-9]+)\)$", cmake, re.M)
-        if len(values) != 1:
-            raise ValueError(f"expected one numeric MLANG_VERSION_{component} in CMakeLists.txt")
-        components.append(int(values[0]))
-    current = tuple(components)
-    current_text = ".".join(map(str, current))
-    for name in VERSION_FILES[1:]:
-        versions = re.findall(r'^#define MLANG_VERSION "([^"]+)"$', contents[name], re.M)
-        if versions != [current_text]:
-            raise ValueError(f"{name}: fallback version does not match {current_text}")
+    version_file = root / "version.txt"
+    current_text = version_file.read_text().strip()
+    match = re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", current_text)
+    if not match:
+        raise ValueError("version.txt must contain MAJOR.MINOR.BUGFIX (no leading zeros)")
+    current = tuple(map(int, match.groups()))
     if current > released:
         print(f"Version is already {current_text}; no bump needed after {tag}.")
         return False
@@ -66,14 +58,7 @@ def bump(root, tag, assume_yes=False):
             print("Cancelled; no files changed.")
             return False
 
-    contents["CMakeLists.txt"] = re.sub(
-        r"^set\(MLANG_VERSION_BUGFIX [0-9]+\)$",
-        f"set(MLANG_VERSION_BUGFIX {next_version[2]})", cmake, flags=re.M)
-    for name in VERSION_FILES[1:]:
-        contents[name] = contents[name].replace(
-            f'#define MLANG_VERSION "{current_text}"', f'#define MLANG_VERSION "{next_text}"')
-    for name, content in contents.items():
-        (root / name).write_text(content)
+    version_file.write_text(next_text + "\n")
     print(f"Updated source version to {next_text}. Review and commit the diff.")
     return True
 

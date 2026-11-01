@@ -30,13 +30,12 @@ user confirmation for the version bump.**
 
    Replace `<default-branch>` with the repository's default branch name. Commit
    or stash any local changes before proceeding.
-3. Check `MLANG_VERSION_MAJOR`, `MLANG_VERSION_MINOR`, and
-   `MLANG_VERSION_BUGFIX` in `CMakeLists.txt`. Their values form the next release
-   tag; the fourth, automatically incremented build component is omitted.
+3. Check the root `version.txt`. Its `MAJOR.MINOR.BUGFIX` value forms the next
+   release tag; the fourth, automatically incremented build component is omitted.
    Add release notes to `RELEASE_NOTES.md`, commit and push them, and wait for
-   CI. For a deliberate major/minor change, update the CMake version and the
-   `MLANG_VERSION` fallbacks in `src/main.cpp` and `src/package_manager.cpp`
-   together before tagging.
+   CI. For a deliberate major/minor change, edit only `version.txt` before
+   tagging. CMake reads it and supplies the version to the compiler and runtime;
+   changing it also triggers CMake reconfiguration on the next build.
 4. Tag that commit and push **only the intended tag**. For example, if the
    source version is `0.4.3` and `v0.4.3` does not already exist:
 
@@ -64,8 +63,8 @@ user confirmation for the version bump.**
    in the README and the archive's `INSTALL.txt`.
 7. Use **Edit** on the release to review the generated notes, incorporate the
    relevant `RELEASE_NOTES.md` entry, and save.
-8. Open **Pull requests > Bump patch version after vX.Y.Z**. Review the three
-   changed files. For `v0.4.3`, the proposed source version is `0.4.4`.
+8. Open **Pull requests > Bump patch version after vX.Y.Z**. Review the
+   change to `version.txt`. For `v0.4.3`, the proposed source version is `0.4.4`.
    Approve any pending workflow runs in the PR's merge box, wait for required
    checks, and merge the PR to confirm the bump. The workflow leaves this
    confirmation to a maintainer; it does not enable automatic merging.
@@ -107,16 +106,16 @@ python3 scripts/bump_release_version.py --release-tag v0.4.3
 ```
 
 The script verifies the local tag is in the current checkout's history and the
-GitHub Release is published and is not a prerelease. It checks that all three
-source version declarations agree and have no local changes, shows the next
+GitHub Release is published and is not a prerelease. It checks that the
+version in `version.txt` is valid and has no local changes, shows the next
 patch version, and asks `Apply this patch version bump? [y/N]`. Enter `y` to
 change the files. Any other answer, including end of input, cancels the change.
 The script leaves committing and pushing to you:
 
 ```sh
-git diff -- CMakeLists.txt src/main.cpp src/package_manager.cpp
+git diff -- version.txt
 git switch -c release/bump-after-v0.4.3
-git add CMakeLists.txt src/main.cpp src/package_manager.cpp
+git add version.txt
 git commit -m "Bump patch version after v0.4.3"
 git push -u origin release/bump-after-v0.4.3
 gh pr create --fill

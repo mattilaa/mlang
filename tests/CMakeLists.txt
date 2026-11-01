@@ -44,6 +44,16 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME mlang_builtin_reference
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_builtin_reference.py)
     set_tests_properties(mlang_builtin_reference PROPERTIES LABELS "documentation")
+    add_test(NAME mlang_version_file
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_version_file.py)
+    add_test(NAME mlang_bump_release_version
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_bump_release_version.py)
+    set_tests_properties(mlang_version_file mlang_bump_release_version PROPERTIES LABELS "bootstrap")
+    if(UNIX)
+        add_test(NAME mlang_build_script
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_build_script.py)
+        set_tests_properties(mlang_build_script PROPERTIES LABELS "bootstrap")
+    endif()
 endif()
 
 if(TARGET mlang-config)

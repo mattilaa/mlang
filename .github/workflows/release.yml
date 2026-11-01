@@ -172,7 +172,7 @@ jobs:
       - name: Open confirmation pull request
         shell: bash
         run: |
-          if git diff --quiet -- CMakeLists.txt src/main.cpp src/package_manager.cpp; then
+          if git diff --quiet -- version.txt; then
             exit 0
           fi
           branch="release/bump-after-$RELEASE_TAG"
@@ -186,20 +186,19 @@ jobs:
           remote_branch=$(git ls-remote --heads origin "refs/heads/$branch")
           if [[ -n "$remote_branch" ]]; then
             git fetch origin "refs/heads/$branch"
-            git diff --exit-code FETCH_HEAD -- CMakeLists.txt src/main.cpp src/package_manager.cpp
+            git diff --exit-code FETCH_HEAD -- version.txt
           else
             git switch -c "$branch"
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add CMakeLists.txt src/main.cpp src/package_manager.cpp
+            git add version.txt
             git commit -m "Bump patch version after $RELEASE_TAG"
             git push origin "$branch"
           fi
           cat > "$RUNNER_TEMP/version-bump-pr.md" <<EOF
           Release $RELEASE_TAG has been published and its assets uploaded.
 
-          Increment the source patch version by one for subsequent development builds,
-          including the compiler and package manager fallback versions.
+          Increment version.txt by one patch version for subsequent development builds.
 
           Review the diff and merge this PR to confirm the bump.
           EOF

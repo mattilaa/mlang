@@ -17,7 +17,7 @@ Usage: ./build.sh [options]
 Options:
   -S, --source-dir DIR    Source directory (default: .)
   -B, --build-dir DIR     CMake build directory (default: build)
-      --config-file FILE  mlang-config.conf to import (default: BUILD_DIR/mlang-config.conf)
+      --config-file FILE  Config to import (default: create/reuse BUILD_DIR/mlang-config.conf)
   -j, --jobs N            Override saved parallel build jobs
       --target NAME       Build a specific CMake target only
   -i, --install           Install after build
@@ -131,22 +131,45 @@ expand_user_path() {
 
 if [ -z "$config_file" ]; then
     config_file="$build_dir/mlang-config.conf"
+elif [ ! -f "$config_file" ]; then
+    echo "build.sh: missing config file: $config_file" >&2
+    exit 1
 fi
 
-if [ ! -f "$config_file" ]; then
-    echo "build.sh: missing config file: $config_file" >&2
-    echo "Run ./bootstrap.sh and ./build/mlang-config first, or pass --config-file." >&2
-    exit 1
+use_ninja=""
+if [ ! -f "$build_dir/CMakeCache.txt" ] && command -v ninja >/dev/null 2>&1; then
+    use_ninja="1"
 fi
 
 mlang_config="$build_dir/mlang-config"
 if [ ! -x "$mlang_config" ]; then
     if [ -x "$build_dir/mlang-config.exe" ]; then
         mlang_config="$build_dir/mlang-config.exe"
+    elif [ -x "$build_dir/Release/mlang-config.exe" ]; then
+        mlang_config="$build_dir/Release/mlang-config.exe"
     else
-        echo "build.sh: $mlang_config is missing; bootstrapping first"
-        ./bootstrap.sh --build-dir "$build_dir"
+        echo "build.sh: building mlang-config first"
+        if [ -n "$use_ninja" ]; then
+            cmake -S "$source_dir" -B "$build_dir" -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -G Ninja
+        else
+            cmake -S "$source_dir" -B "$build_dir" -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
+        fi
+        if [ -n "$jobs" ]; then
+            cmake --build "$build_dir" --config Release --target mlang-config --parallel "$jobs"
+        else
+            cmake --build "$build_dir" --config Release --target mlang-config
+        fi
+        if [ -x "$build_dir/mlang-config.exe" ]; then
+            mlang_config="$build_dir/mlang-config.exe"
+        elif [ -x "$build_dir/Release/mlang-config.exe" ]; then
+            mlang_config="$build_dir/Release/mlang-config.exe"
+        fi
     fi
+fi
+
+if [ ! -f "$config_file" ]; then
+    echo "build.sh: creating default config: $config_file"
+    "$mlang_config" --build-dir "$build_dir" --write
 fi
 
 cache_file="$build_dir/mlang_config_cache.cmake"
@@ -170,11 +193,6 @@ bin_dir="$(expand_user_path "$bin_dir")"
 
 echo "$mlang_config --import $config_file --build-dir $build_dir --install-prefix $prefix --bin-dir $bin_dir --write"
 "$mlang_config" --import "$config_file" --build-dir "$build_dir" --install-prefix "$prefix" --bin-dir "$bin_dir" --write
-
-use_ninja=""
-if command -v ninja >/dev/null 2>&1; then
-    use_ninja="1"
-fi
 
 if [ -n "$use_ninja" ]; then
     echo "cmake -C $cache_file -S $source_dir -B $build_dir -G Ninja"

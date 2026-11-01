@@ -1,3 +1,13 @@
+# MLang 0.4.4
+
+- Let `build.sh --build-dir build --install` initialize its configuration on
+  a clean checkout and continue through the build and installation.
+- Build only `mlang-config` during bootstrap. Bootstrap confirmation prompts
+  now default to Yes when Enter is pressed.
+- Maintain the public version in the root `version.txt`, shared by CMake and
+  the post-release version bump script. Builds reconfigure when it changes.
+- Preserve the existing CMake generator when reusing a build directory.
+
 # MLang 0.4.3
 
 MLang 0.4.3 fixes ownership and borrowing issues found after 0.4.2 in

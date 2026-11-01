@@ -1814,10 +1814,6 @@ static std::optional<int> run_test_directory_mode(
 
 int main(int argc, char** argv)
 {
-#ifndef MLANG_VERSION
-#define MLANG_VERSION "0.4.3"
-#endif
-
     std::vector<std::string> filteredArgStorage;
     filteredArgStorage.reserve(static_cast<std::size_t>(argc));
     filteredArgStorage.emplace_back(argv[0] ? argv[0] : "mlang");

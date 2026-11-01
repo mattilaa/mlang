@@ -667,15 +667,20 @@ sudo apt install cmake llvm-dev libllvm15 clang flex bison libssl-dev python3 bu
 ## Scripted Bootstrap And Build
 
 The root scripts mirror the `uvim` workflow and keep the full build explicit:
-first build the C++ seed compiler/runtime and `mlang-config`, then compile the
-MLang-native tools from their `.mla` sources with that freshly built compiler.
+first build `mlang-config` to configure the build, then build the C++ seed
+compiler/runtime and compile the MLang-native tools from their `.mla` sources.
 There is no prebuilt compiler or hidden bootstrap binary.
 
 POSIX/macOS:
 ```sh
-./bootstrap.sh
-./build.sh --install
+./build.sh --build-dir build --install
 ```
+
+On a clean checkout, `build.sh` first builds `mlang-config` and writes its
+default configuration, then builds and installs the toolchain. The default
+install prefix is `~/.local`; use `--prefix` and `--bin-dir` to override it.
+Existing saved configurations are reused. To customize the configuration
+interactively before the full build, run `./bootstrap.sh` first.
 
 Windows PowerShell:
 ```powershell
@@ -684,8 +689,7 @@ Windows PowerShell:
 ```
 
 What the scripts do:
-- `bootstrap.sh` / `bootstrap.ps1` run CMake and build `mlang`,
-  `mlang_std`, and `mlang-config`.
+- `bootstrap.sh` / `bootstrap.ps1` run CMake and build only `mlang-config`.
 - `mlang-config` writes `build/mlang-config.conf` and
   `build/mlang_config_cache.cmake`.
 - Its Install section includes an **Install mladbg** toggle, enabled by default
@@ -702,7 +706,8 @@ What the scripts do:
   destination instead of a literal `~` directory.
 - When `bootstrap.sh` / `bootstrap.ps1` runs `mlang-config`, it also asks
   whether to build and install the output binaries to the configured install
-  location.
+  location. All bootstrap confirmation prompts use `[Y/n]`; press Enter to
+  accept or enter `n` to decline.
 
 Useful non-interactive forms:
 ```sh
@@ -1584,6 +1589,10 @@ procedure and the confirmed post-release patch version bump.
 
 Development builds report `MAJOR.MINOR.BUGFIX.BUILD`; CMake increments the
 fourth component on each configure. Public release tags omit the build number.
+The root `version.txt` holds the maintained `MAJOR.MINOR.BUGFIX` version; edit
+that file to change it. CMake reads it for the compiler and runtime and
+automatically reconfigures when it changes. Release packaging can still pin an
+exact version using `MLANG_RELEASE_VERSION`.
 
 Pushing a tag in `vMAJOR.MINOR.BUGFIX` form runs the release workflow. It builds
 Linux `x86_64` and macOS `arm64` archives, creates or updates the matching

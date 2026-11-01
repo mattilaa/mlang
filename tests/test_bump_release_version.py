@@ -20,12 +20,7 @@ class BumpReleaseVersionTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        (self.root / "src").mkdir()
-        (self.root / "CMakeLists.txt").write_text(
-            "set(MLANG_VERSION_MAJOR 0)\nset(MLANG_VERSION_MINOR 4)\n"
-            "set(MLANG_VERSION_BUGFIX 9)\n")
-        for name in bump_script.VERSION_FILES[1:]:
-            (self.root / name).write_text('#define MLANG_VERSION "0.4.9"\n')
+        (self.root / "version.txt").write_text("0.4.9\n")
         self.git("init", "-q")
         self.git("config", "user.email", "test@example.com")
         self.git("config", "user.name", "Test")
@@ -58,9 +53,7 @@ class BumpReleaseVersionTests(unittest.TestCase):
     def test_confirmation_and_patch_carry(self):
         with patch("builtins.input", return_value="yes"):
             self.assertTrue(bump_script.bump(self.root, "v0.4.9"))
-        self.assertIn("set(MLANG_VERSION_BUGFIX 10)", (self.root / "CMakeLists.txt").read_text())
-        for name in bump_script.VERSION_FILES[1:]:
-            self.assertEqual((self.root / name).read_text(), '#define MLANG_VERSION "0.4.10"\n')
+        self.assertEqual((self.root / "version.txt").read_text(), "0.4.10\n")
 
     def test_decline_or_eof_preserves_files(self):
         before = self.snapshot()
@@ -93,19 +86,20 @@ class BumpReleaseVersionTests(unittest.TestCase):
                 bump_script.bump(self.root, tag, True)
 
     def test_dirty_file_rejected(self):
-        (self.root / "src/main.cpp").write_text("local edits\n")
+        (self.root / "version.txt").write_text("local edits\n")
         before = self.snapshot()
         with self.assertRaises(ValueError):
             bump_script.bump(self.root, "v0.4.9", True)
         self.assertEqual(before, self.snapshot())
 
-    def test_inconsistent_fallback_rejected(self):
-        (self.root / "src/main.cpp").write_text('#define MLANG_VERSION "0.4.8"\n')
-        self.commit()
-        before = self.snapshot()
-        with self.assertRaises(ValueError):
-            bump_script.bump(self.root, "v0.4.9", True)
-        self.assertEqual(before, self.snapshot())
+    def test_invalid_source_version_rejected(self):
+        for version in ("0.4", "v0.4.9", "0.4.09", "0.4.9.1", "0.4.9-rc1", ""):
+            (self.root / "version.txt").write_text(version + "\n")
+            self.commit()
+            before = self.snapshot()
+            with self.assertRaises(ValueError):
+                bump_script.bump(self.root, "v0.4.9", True)
+            self.assertEqual(before, self.snapshot())
 
     def test_source_older_than_release_rejected(self):
         self.git("tag", "v0.4.10")

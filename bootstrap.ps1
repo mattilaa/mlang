@@ -52,7 +52,7 @@ function Confirm-YesNo($Prompt) {
         Write-Host -NoNewline "$Prompt "
         $answer = [Console]::In.ReadLine()
         if ($null -eq $answer) { return $false }
-        if ($answer -eq "y" -or $answer -eq "Y") { return $true }
+        if ($answer -eq "" -or $answer -eq "y" -or $answer -eq "Y") { return $true }
         if ($answer -eq "n" -or $answer -eq "N") { return $false }
     }
 }
@@ -76,7 +76,7 @@ while ($i -lt $args.Count) {
 
 $ConfigureArgs = @("-S", ".", "-B", $BuildDir, "-DBUILD_TESTS=OFF", "-DCMAKE_BUILD_TYPE=Release")
 $ConfigureCommand = "cmake -S . -B $BuildDir -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release"
-if (Test-NinjaAvailable) {
+if (!(Test-Path -LiteralPath (Join-Path $BuildDir "CMakeCache.txt")) -and (Test-NinjaAvailable)) {
     $ConfigureArgs += @("-G", "Ninja")
     $ConfigureCommand += " -G Ninja"
 }
@@ -84,8 +84,8 @@ Write-Host $ConfigureCommand
 cmake @ConfigureArgs
 Stop-IfNativeCommandFailed "cmake configure"
 
-$BuildArgs = @("--build", $BuildDir, "--config", "Release", "--target", "mlang", "mlang_std", "mlang-config")
-$BuildCommand = "cmake --build $BuildDir --config Release --target mlang mlang_std mlang-config"
+$BuildArgs = @("--build", $BuildDir, "--config", "Release", "--target", "mlang-config")
+$BuildCommand = "cmake --build $BuildDir --config Release --target mlang-config"
 if (![string]::IsNullOrEmpty($Jobs)) {
     $BuildArgs += @("--parallel", $Jobs)
     $BuildCommand += " --parallel $Jobs"
@@ -100,14 +100,14 @@ if ([string]::IsNullOrEmpty($MlangConfig)) {
     exit 1
 }
 
-if (Confirm-YesNo "Do you want to run mlang-config? (y/n)") {
+if (Confirm-YesNo "Do you want to run mlang-config? [Y/n]") {
     Write-Host $MlangConfig
     & $MlangConfig
     Stop-IfNativeCommandFailed "mlang-config"
 
-    if (Confirm-YesNo "Do you want to build the full MLang toolchain now? (y/n)") {
+    if (Confirm-YesNo "Do you want to build the full MLang toolchain now? [Y/n]") {
         $BuildScript = Join-Path "." "build.ps1"
-        if (Confirm-YesNo "Do you want to install the output binaries to the configured install location? (y/n)") {
+        if (Confirm-YesNo "Do you want to install the output binaries to the configured install location? [Y/n]") {
             Write-Host "$BuildScript --build-dir $BuildDir --install"
             & $BuildScript --build-dir $BuildDir --install
         } else {

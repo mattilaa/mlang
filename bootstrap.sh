@@ -63,14 +63,14 @@ confirm_yes_no() {
             return 1
         fi
         case "$answer" in
-            y|Y) return 0 ;;
+            ""|y|Y) return 0 ;;
             n|N) return 1 ;;
         esac
     done
 }
 
 use_ninja=""
-if command -v ninja >/dev/null 2>&1; then
+if [ ! -f "$build_dir/CMakeCache.txt" ] && command -v ninja >/dev/null 2>&1; then
     use_ninja="1"
 fi
 
@@ -82,13 +82,13 @@ else
     cmake -S . -B "$build_dir" -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
 fi
 
-build_args="--target mlang mlang_std mlang-config"
+build_args="--target mlang-config"
 if [ -n "$jobs" ]; then
     echo "cmake --build $build_dir --config Release $build_args --parallel $jobs"
-    cmake --build "$build_dir" --config Release --target mlang mlang_std mlang-config --parallel "$jobs"
+    cmake --build "$build_dir" --config Release --target mlang-config --parallel "$jobs"
 else
     echo "cmake --build $build_dir --config Release $build_args"
-    cmake --build "$build_dir" --config Release --target mlang mlang_std mlang-config
+    cmake --build "$build_dir" --config Release --target mlang-config
 fi
 
 mlang_config="$build_dir/mlang-config"
@@ -103,12 +103,12 @@ if [ ! -x "$mlang_config" ]; then
     fi
 fi
 
-if confirm_yes_no "Do you want to run mlang-config? (y/n)"; then
+if confirm_yes_no "Do you want to run mlang-config? [Y/n]"; then
     echo "$mlang_config"
     "$mlang_config"
 
-    if confirm_yes_no "Do you want to build the full MLang toolchain now? (y/n)"; then
-        if confirm_yes_no "Do you want to install the output binaries to the configured install location? (y/n)"; then
+    if confirm_yes_no "Do you want to build the full MLang toolchain now? [Y/n]"; then
+        if confirm_yes_no "Do you want to install the output binaries to the configured install location? [Y/n]"; then
             echo "./build.sh --build-dir $build_dir --install"
             ./build.sh --build-dir "$build_dir" --install
         else

@@ -31,10 +31,6 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/SHA256.h>
 
-#ifndef MLANG_VERSION
-#define MLANG_VERSION "0.4.3"
-#endif
-
 static std::string package_semantic_version()
 {
     // The compiler's display version may include a fourth build-number
