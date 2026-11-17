@@ -255,6 +255,56 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                         typeArgs);
             }
         }
+        // A nested variadic call can determine another generic argument's
+        // type before either function body is instantiated. Its return type
+        // depends on fixed generic parameters; the value pack has no single
+        // type to substitute.
+        auto variadic = variadicGenericFunctionTemplates.find(lookupName);
+        if(variadic != variadicGenericFunctionTemplates.end())
+        {
+            for(auto* candidate : variadic->second)
+            {
+                if(!candidate || !candidate->parameters ||
+                   !candidate->returnType)
+                    continue;
+                FunctionDefNode fixed = *candidate;
+                ParameterListNode parameters;
+                for(auto* parameter : candidate->parameters->parameters)
+                    if(!parameter->isPack)
+                        parameters.parameters.push_back(parameter);
+                if(call->arguments.size() < parameters.parameters.size())
+                    continue;
+                fixed.parameters = &parameters;
+                fixed.typeParams.erase(
+                    std::remove(
+                        fixed.typeParams.begin(),
+                        fixed.typeParams.end(),
+                        fixed.typePackParam),
+                    fixed.typeParams.end());
+                std::vector<ExpressionNode*> arguments(
+                    call->arguments.begin(),
+                    call->arguments.begin() + parameters.parameters.size());
+                std::map<std::string, TypeNode*> bindings;
+                if(!inferGenericFunctionTypeBindings(
+                       &fixed,
+                       arguments,
+                       bindings))
+                    continue;
+                std::vector<TypeNode*> typeArgs;
+                for(const auto& name : fixed.typeParams)
+                {
+                    auto binding = bindings.find(name);
+                    if(binding == bindings.end())
+                        break;
+                    typeArgs.push_back(binding->second);
+                }
+                if(typeArgs.size() == fixed.typeParams.size())
+                    return substituteTypeParams(
+                        candidate->returnType,
+                        fixed.typeParams,
+                        typeArgs);
+            }
+        }
     }
 
     if(auto* methodCall = dynamic_cast<MethodCallNode*>(expr))

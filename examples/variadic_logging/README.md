@@ -33,3 +33,13 @@ build/mlang --tests tests/variadic_generic_tests.mla
 The logging tests use the same module as the demo. They check mixed types,
 exact output, empty and single-element packs, repeated specializations,
 append order, and evaluation of arguments exactly once from left to right.
+
+For nested structured output, see the [JSON logging demo](../variadic_json_logging.mla).
+It uses the standard-library module [`std::log::json`](../../stdlib/std/log/json.mla)
+and prints both compact and indented JSON. Run it and its tests with:
+
+```sh
+build/mlang examples/variadic_json_logging.mla -o /tmp/variadic_json_logging
+/tmp/variadic_json_logging
+build/mlang --tests tests/std_log_json_tests.mla
+```

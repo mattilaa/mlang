@@ -56,6 +56,10 @@ Currently provided:
   individual levels to configurable log file paths. Also includes `Log`
   instances created with a file path up front, timestamp prefixes, and
   configurable timestamp colors.
+- `std/log/json.mla`: structured JSON logging with heterogeneous generic packs,
+  named fields (`kv`), nested objects (`json_object`), compact records and
+  output (`json_record`, `log_json`), and pretty versions
+  (`json_record_pretty`, `log_json_pretty`).
 - `std/strbuf.mla`: string allocation + utility helpers
   (`new/with_capacity/free`, len/compare/find/rfind/repeat,
    `pad_left/pad_right`, numeric padding helpers

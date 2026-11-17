@@ -1,0 +1,97 @@
+/// \file log/json.mla
+/// \brief Structured JSON logging with heterogeneous generic parameter packs.
+/// Compact records are suitable for JSON Lines; pretty records span multiple lines.
+mod std::json;
+use std::json::JsonDoc;
+
+/// A named field that retains its concrete value type until pack expansion.
+pub struct Field<T> {
+    var key: str8;
+    var value: T;
+};
+
+/// A nested JSON object built with `json_object`.
+pub struct JsonObject {
+    var text: str8;
+};
+
+/// Pair a JSON key with a typed value; escaping happens during serialization.
+generic<T>
+pub fn kv(key: str8, value: T) -> Field<T> {
+    return Field<T> { key: key, value: value };
+}
+
+generic<T>
+fn encode(value: T) -> str8 {
+    return format!("{:json}", value);
+}
+
+// An already-built nested object is embedded as JSON, preserving its shape.
+fn encode(value: JsonObject) -> str8 {
+    return value.text;
+}
+
+generic<T>
+fn append_field(parts: &mut list<str8>, item: Field<T>) -> void {
+    let key: str8 = format!("{:json}", item.key);
+    let value: str8 = encode(item.value);
+    parts.push(format!("{}:{}", key, value));
+}
+
+/// Collect heterogeneous fields in argument order, embedding nested objects.
+generic<Fields...>
+pub fn json_object(fields: Fields...) -> JsonObject {
+    var parts: list<str8> = [];
+    (append_field(&mut parts, fields), ...);
+    var body: str8 = "";
+    var separator: str8 = "";
+    for part in parts {
+        body = format!("{}{}{}", body, separator, part);
+        separator = ",";
+    }
+    return JsonObject { text: format!("{{{}}}", body) };
+}
+
+/// Build a compact JSON log record with structured context fields.
+generic<Fields...>
+pub fn json_record(level: str8, message: str8, fields: Fields...) -> str8 {
+    let record: JsonObject = json_object(
+        kv("level", level),
+        kv("message", message),
+        kv("context", json_object(fields...))
+    );
+    return record.text;
+}
+
+/// Build an indented JSON log record with the same structure and value types.
+generic<Fields...>
+pub fn json_record_pretty(level: str8, message: str8, fields: Fields...) -> result<str8, str8> {
+    let record: str8 = json_record(level, message, fields...);
+    let parsed_result: result<JsonDoc, str8> = JsonDoc::parse(record);
+    if parsed_result.is_err() {
+        return Err<str8, str8>(parsed_result.unwrap_err());
+    }
+    let parsed: JsonDoc = parsed_result.unwrap();
+    let pretty_result: result<str8, str8> = parsed.stringify_pretty();
+    parsed.free();
+    return pretty_result;
+}
+
+/// Write one compact JSON record followed by a newline to stdout.
+generic<Fields...>
+pub fn log_json(level: str8, message: str8, fields: Fields...) -> void {
+    let record: str8 = json_record(level, message, fields...);
+    println!("{}", record);
+}
+
+/// Write an indented JSON record followed by a newline to stdout.
+generic<Fields...>
+pub fn log_json_pretty(level: str8, message: str8, fields: Fields...) -> result<i32, str8> {
+    let formatted: result<str8, str8> = json_record_pretty(level, message, fields...);
+    if formatted.is_err() {
+        return Err<i32, str8>(formatted.unwrap_err());
+    }
+    let record: str8 = formatted.unwrap();
+    println!("{}", record);
+    return Ok<i32, str8>(0);
+}

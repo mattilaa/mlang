@@ -61,6 +61,20 @@ fn invoke(args: Args...) -> i32 {
     return (callback)(args...);
 }
 
+generic<T>
+fn nested_identity(value: T) -> T { return value; }
+
+generic<T, Args...>
+fn first_with_context(value: T, args: Args...) -> T { return value; }
+
+#[test]
+fn test_variadic_nested_call_infers_fixed_generic_return_type() {
+    let number: i32 = nested_identity(first_with_context(i32(42), "context", true));
+    let text: str8 = nested_identity(first_with_context("ready", i32(7)));
+    verify(number == 42);
+    verify(text == "ready");
+}
+
 #[test]
 fn test_variadic_forwarding_preserves_heterogeneous_arguments() {
     verify(forward(42, "pack", true) == 42);

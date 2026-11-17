@@ -2,6 +2,9 @@
 
 Module file: `stdlib/std/log.mla`
 
+For nested structured records and compact or indented JSON output, see
+[`std::log::json`](std_log_json.md).
+
 Line-oriented logging helpers:
 - `out(msg: str8) -> i64` writes `msg` plus newline to stdout.
 - `warn(msg: str8) -> i64` writes `warn: {msg}` plus newline to stderr.

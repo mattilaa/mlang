@@ -1,0 +1,37 @@
+/// Build: build/mlang examples/variadic_json_logging.mla -o /tmp/variadic_json_logging
+/// Run: /tmp/variadic_json_logging
+mod std::log::json;
+use std::log::json::kv;
+use std::log::json::json_object;
+use std::log::json::log_json;
+use std::log::json::log_json_pretty;
+
+// Both output helpers receive the same heterogeneous field pack.
+generic<Fields...>
+fn show_both(fields: Fields...) -> i32 {
+    log_json("INFO", "request completed", fields...);
+    let written: result<i32, str8> = log_json_pretty("INFO", "request completed", fields...);
+    if written.is_err() {
+        eprintln!("{}", written.unwrap_err());
+        return 1;
+    }
+    return 0;
+}
+
+fn main() -> i32 {
+    return show_both(
+        kv("request", json_object(
+            kv("method", "GET"),
+            kv("path", "/api/items"),
+            kv("status", i32(200))
+        )),
+        kv("client", json_object(
+            kv("id", i64(42)),
+            kv("authenticated", true)
+        )),
+        kv("metrics", json_object(
+            kv("duration_ms", 12.5),
+            kv("cache_hit", false)
+        ))
+    );
+}

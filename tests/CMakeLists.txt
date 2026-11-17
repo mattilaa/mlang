@@ -102,6 +102,7 @@ else()
         "mla_tests.mla"
         "std_atomic_float_tests.mla"
         "std_range_views_tests.mla"
+        "std_log_json_tests.mla"
         "variadic_generic_tests.mla"
     )
 endif()
