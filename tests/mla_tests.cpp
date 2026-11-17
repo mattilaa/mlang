@@ -20739,6 +20739,36 @@ TEST_F(MLATest, VariadicGenericCommaFoldPushesArgumentsInOrder)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, VariadicGenericExpansionRejectsOrdinaryVariable)
+{
+    writeSource(R"(
+        fn accept(value: i32) -> i32 { return value; }
+        fn main() -> i32 {
+            let value: i32 = 42;
+            return accept(value...);
+        }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("pack expansion requires a parameter pack: 'value'"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, VariadicGenericExpansionChecksExpandedArgumentTypes)
+{
+    writeSource(R"(
+        fn accept(value: i32) -> i32 { return value; }
+        generic<Args...>
+        fn forward(args: Args...) -> i32 { return accept(args...); }
+        fn main() -> i32 { return forward("wrong type"); }
+    )");
+    int rc = 0;
+    const std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("accept"), std::string::npos);
+}
+
 TEST_F(MLATest, VariadicGenericConstructibilityFoldRejectsBadArgument)
 {
     writeSource(R"(

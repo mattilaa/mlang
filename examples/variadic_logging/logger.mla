@@ -1,0 +1,29 @@
+// Each argument is formatted using its own concrete type.
+generic<T>
+pub fn collect_one(parts: &mut list<str8>, value: T) -> void {
+    parts.push(format!("{}", value));
+}
+
+// A comma fold collects every argument, left to right, into one string list.
+generic<Args...>
+pub fn collect(parts: &mut list<str8>, args: Args...) -> void {
+    (collect_one(&mut parts, args), ...);
+}
+
+generic<Args...>
+pub fn format_record(level: str8, args: Args...) -> str8 {
+    var parts: list<str8> = [];
+    collect(&mut parts, args...);
+    var record: str8 = format!("[{}]", level);
+    for part in parts {
+        record = format!("{} {}", record, part);
+    }
+    return record;
+}
+
+// Forwarding keeps each argument's type until collect_one formats it.
+generic<Args...>
+pub fn log(level: str8, args: Args...) -> void {
+    let record: str8 = format_record(level, args...);
+    println!("{}", record);
+}

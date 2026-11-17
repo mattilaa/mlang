@@ -3569,6 +3569,18 @@ static_assert_statement
 argument_list
     : expression { $$ = mla_ast_argument_list_create($1); }
     | argument_list COMMA expression { $$ = mla_ast_argument_list_add($1, $3); }
+    | IDENTIFIER ELLIPSIS
+        {
+            auto* expansion = new PackExpansionNode($1);
+            expansion->line = yylineno;
+            $$ = mla_ast_argument_list_create(expansion);
+        }
+    | argument_list COMMA IDENTIFIER ELLIPSIS
+        {
+            auto* expansion = new PackExpansionNode($3);
+            expansion->line = yylineno;
+            $$ = mla_ast_argument_list_add($1, expansion);
+        }
     ;
 
 format_argument

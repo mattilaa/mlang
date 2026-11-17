@@ -16,6 +16,16 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 
     if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
     {
+        std::vector<ExpressionNode*> expanded;
+        if(!expandCallArguments(call->arguments, expanded))
+            return nullptr;
+        if(expanded != call->arguments)
+        {
+            FunctionCallNode expandedCall = *call;
+            expandedCall.arguments = std::move(expanded);
+            return getLValueType(&expandedCall, line);
+        }
+
         if(call->name == "std::copy")
         {
             if(call->arguments.size() == 1)

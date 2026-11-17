@@ -2469,6 +2469,16 @@ llvm::Value* CodeGenerator::generateMultiarrayGet(
 
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
+    std::vector<ExpressionNode*> expanded;
+    if(!expandCallArguments(node->arguments, expanded))
+        return nullptr;
+    if(expanded != node->arguments)
+    {
+        MethodCallNode call = *node;
+        call.arguments = std::move(expanded);
+        return generateMethodCall(&call);
+    }
+
     const std::string& method = node->methodName;
     const std::string receiverPlace =
         resolveBorrowPlaceFromLValue(node->object);

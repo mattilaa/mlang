@@ -439,8 +439,21 @@ public:
     std::string toString() const override;
 };
 
-// Fold expression node (C++-style shape over list values):
-//   (... + xs)  /  (xs + ...)
+// Expansion of a named function parameter pack in a call argument list.
+class PackExpansionNode : public ExpressionNode
+{
+public:
+    std::string name;
+
+    explicit PackExpansionNode(const std::string& packName) : name(packName) {}
+
+    std::string toString() const override
+    {
+        return name + "...";
+    }
+};
+
+// Fold expression over a parameter pack or list: (... + xs) / (xs + ...).
 class FoldExpressionNode : public ExpressionNode
 {
 public:

@@ -20,6 +20,7 @@ ${MLANG}           ${EXECDIR}/build/mlang
 ...    examples/ffi_cos.mla
 ...    examples/for_loop_example.mla
 ...    examples/generics_test.mla
+...    examples/variadic_logging.mla
 ...    examples/inline_attrs.mla
 ...    examples/main.mla
 ...    examples/map_iteration.mla

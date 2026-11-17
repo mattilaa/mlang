@@ -1,0 +1,14 @@
+/// \file variadic_logging.mla
+/// \brief Collect and log arbitrary mixed arguments with variadic generics.
+/// Build: build/mlang examples/variadic_logging.mla -o /tmp/variadic_logging
+/// Run: /tmp/variadic_logging
+/// Test: build/mlang --tests examples/variadic_logging_tests.mla
+mod variadic_logging::logger;
+use variadic_logging::logger::log;
+
+fn main() -> i32 {
+    log("INFO", "connected", "client", 42, "ready", true);
+    log("DEBUG", "gain", 1.5);
+    log("INFO");
+    return 0;
+}

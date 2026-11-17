@@ -1308,7 +1308,9 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
 
         if(!packName.empty())
         {
-            const auto& expansions = activePackExpansions.at(packName);
+            // Lowering an element may instantiate another generic function,
+            // which saves and replaces the active pack map.
+            const auto expansions = activePackExpansions.at(packName);
             llvm::Value* accumulator = nullptr;
             auto restoreNames = [&]()
             {

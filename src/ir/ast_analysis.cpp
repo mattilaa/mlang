@@ -12,6 +12,11 @@ void collect_used_idents(ASTNode* node, std::set<std::string>& out)
         out.insert(id->name);
         return;
     }
+    if(auto* expansion = dynamic_cast<PackExpansionNode*>(node))
+    {
+        out.insert(expansion->name);
+        return;
+    }
     if(auto* bin = dynamic_cast<BinaryOpNode*>(node))
     {
         collect_used_idents(bin->left, out);
