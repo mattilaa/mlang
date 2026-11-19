@@ -15,6 +15,39 @@ The reference includes declaration and control-flow keywords, fixed-capacity
 `array`, `narrow_cast`, pack-fold `is_constructible`, literal `operator`
 declarations, and `free_objs`, in addition to the types and intrinsics below.
 
+### Embedded Pointer and Memory Built-ins
+
+These functions are recognized by the compiler and require no module import.
+All five calls require an `unsafe` block; they are not ordinary functions from
+an application memory module.
+
+| Built-in | Result and behavior |
+| --- | --- |
+| `ptr_from_address<T>(address)` | Converts a pointer-width integer address to `ptr<T>`. |
+| `ptr_address(pointer)` | Returns the address as `u32` on x86 or `u64` on x64/AArch64, without dereferencing it. |
+| `volatile_load(pointer)` | Reads one naturally aligned `i8/u8`, `i16/u16`, `i32/u32`, or `i64/u64` value. |
+| `volatile_store(pointer, value)` | Writes one value of the pointer's matching integer type. |
+| `compiler_barrier()` | Emits a compiler memory clobber to prevent compiler reordering; returns `void`. |
+
+```mla
+pub fn copy_byte(dst: ptr<u8>, src: ptr<u8>) -> void {
+    unsafe {
+        volatile_store(dst, volatile_load(src));
+        compiler_barrier();
+    }
+}
+```
+
+The caller must ensure valid storage, natural alignment, permissions, and
+lifetime. Volatile access is not atomic and does not replace a CPU memory
+barrier; unsafe code still respects known borrow restrictions.
+
+Go to definition opens the matching `@builtin_fn` entry in `stdlib/types.mla`;
+hover and completion describe the built-in. Ordinary helpers such as a
+firmware's `memory_copy` remain application declarations and resolve to their
+`.mla` definitions. See [Embedded Hardware Primitives](language_syntax.md#embedded-hardware-primitives)
+for MMIO examples and CPU barriers.
+
 ### Constraints and Structural Queries
 
 | Entry | Purpose |

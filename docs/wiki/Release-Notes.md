@@ -4,6 +4,10 @@
 
 Development version: 0.4.6.
 
+- Document embedded pointer/memory built-ins in the built-in reference and expose
+  their hover text and completion metadata in the language server. Keep ordinary
+  same-line helper calls and user declarations resolving to their source.
+
 # MLang 0.4.5
 
 MLang 0.4.5 adds allocation-free embedded programming features, generic

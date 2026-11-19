@@ -3203,6 +3203,38 @@ static std::optional<ImportDefinitionFallback> builtinDefinitionFromTypesFile(
     return std::nullopt;
 }
 
+// Reuse the editor-readable builtin reference for hover text as well as gd.
+// This is a fallback: real declarations retain their own signature and docs.
+static std::string builtinDocumentationFromTypesFile(
+    std::string_view requester_uri,
+    std::string_view name)
+{
+    const auto definition = builtinDefinitionFromTypesFile(requester_uri, name);
+    if(!definition)
+        return {};
+    const auto path = resolveBuiltinTypesFilePath(requester_uri);
+    if(!path)
+        return {};
+    std::ifstream input(*path);
+    std::string line;
+    int number = 0;
+    std::string documentation;
+    while(std::getline(input, line))
+    {
+        if(++number <= definition->line)
+            continue;
+        const std::string text = trimWs(line);
+        if(!startsWith(text, "//") || startsWith(text, "// @builtin"))
+            break;
+        if(!documentation.empty())
+            documentation += "\n";
+        documentation += trimWs(std::string_view(text).substr(2));
+    }
+    if(documentation.empty())
+        return {};
+    return "builtin: " + std::string(name) + "\n" + documentation;
+}
+
 static bool moduleHasSegment(
     std::string_view module_name,
     std::string_view token)
@@ -4875,6 +4907,11 @@ static constexpr std::string_view kBuiltinCompletionLabels[] = {
     "None",
     "array",
     "size_of",
+    "ptr_from_address",
+    "ptr_address",
+    "volatile_load",
+    "volatile_store",
+    "compiler_barrier",
     "Vec",
     "Span",
     "span",
@@ -6380,6 +6417,31 @@ extern "C"
                 column);
         if(!resolved.has_value())
         {
+            if(const auto offset = mlang::compiler_api::offsetFromLineColumn(
+                   current->text,
+                   line,
+                   column))
+                if(const auto token = mlang::compiler_api::tokenSpanAtOffset(
+                       current->text,
+                       *offset))
+                {
+                    const auto documentation =
+                        mlang::compiler_api::builtinDocumentationFromTypesFile(
+                            current->uri,
+                            token->token);
+                    if(!documentation.empty())
+                    {
+                        *out_message_length =
+                            static_cast<int>(documentation.size());
+                        const size_t count = std::min(
+                            static_cast<size_t>(out_message_capacity - 1),
+                            documentation.size());
+                        std::memcpy(out_message, documentation.data(), count);
+                        out_message[count] = '\0';
+                        return static_cast<int>(
+                            mlang::compiler_api::Status::Ok);
+                    }
+                }
             return static_cast<int>(
                 mlang::compiler_api::Status::SymbolNotFound);
         }

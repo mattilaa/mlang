@@ -49,6 +49,12 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/embedded_hardware_e2e.py
             --compiler ${MLA_COMPILER_CMD} --stdlib ${MLANG_LIB_DIR})
     set_tests_properties(mlang_embedded_hardware_e2e PROPERTIES LABELS "compiler;embedded")
+    if(TARGET mlangd-mla)
+        add_test(NAME mlang_lsp_hardware_builtins
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/lsp_mlangd-mla_hardware_builtins_transcript.py
+                --mlangd ${MLANGD_MLA_OUTPUT})
+        set_tests_properties(mlang_lsp_hardware_builtins PROPERTIES LABELS "lsp;embedded" TIMEOUT 60)
+    endif()
     add_test(NAME mlang_builtin_reference
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_builtin_reference.py)
     set_tests_properties(mlang_builtin_reference PROPERTIES LABELS "documentation")

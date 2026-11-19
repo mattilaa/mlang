@@ -1858,7 +1858,14 @@ fn symbol_kind_lsp(sig: str8) -> i32 {
     return 13;
 }
 
+fn is_hardware_builtin(label: str8) -> bool {
+    return eq(label, "ptr_from_address") == 1 || eq(label, "ptr_address") == 1 ||
+           eq(label, "volatile_load") == 1 || eq(label, "volatile_store") == 1 ||
+           eq(label, "compiler_barrier") == 1;
+}
+
 fn completion_kind_lsp(label: str8) -> i32 {
+    if is_hardware_builtin(label) { return 3; }
     if eq(label, "same_as") == 1 { return 11; }
     if eq(label, "integral") == 1 { return 11; }
     if eq(label, "signed_integral") == 1 { return 11; }
@@ -1934,6 +1941,7 @@ fn completion_kind_lsp(label: str8) -> i32 {
 }
 
 fn completion_detail(label: str8) -> str8 {
+    if is_hardware_builtin(label) { return "unsafe compiler builtin"; }
     if eq(label, "same_as") == 1 { return "std::concepts::same_as: compile-time type predicate"; }
     if eq(label, "integral") == 1 { return "std::concepts::integral: compile-time type predicate"; }
     if eq(label, "signed_integral") == 1 { return "std::concepts::signed_integral: compile-time type predicate"; }
@@ -2036,6 +2044,12 @@ fn completion_detail(label: str8) -> str8 {
 }
 
 fn completion_documentation(label: str8) -> str8 {
+    if eq(label, "ptr_from_address") == 1 { return "Unsafe ptr_from_address<T>(address) converts a pointer-width unsigned integer to ptr<T>. The caller must provide valid storage, alignment, permissions and lifetime."; }
+    if eq(label, "ptr_address") == 1 { return "Unsafe ptr_address(pointer) returns its pointer-width unsigned address (u32 on x86, u64 on x64/AArch64). It does not dereference the pointer."; }
+    if eq(label, "volatile_load") == 1 { return "Unsafe volatile_load(pointer) reads a naturally aligned 8/16/32/64-bit integer. Volatile access does not imply atomic access or a CPU fence."; }
+    if eq(label, "volatile_store") == 1 { return "Unsafe volatile_store(pointer, value) writes a matching integer type through a writable, naturally aligned pointer. Known borrow permissions remain enforced."; }
+    if eq(label, "compiler_barrier") == 1 { return "Unsafe compiler_barrier() prevents compiler reordering of memory accesses. It emits a memory clobber, not a CPU memory fence."; }
+
     if eq(label, "same_as") == 1 { return "Standard concept same_as<T, U> is true for the same resolved type, including reference structure and mutability. Import std::concepts. The declaration is in std/concepts.mla."; }
     if eq(label, "integral") == 1 { return "Standard concept integral<T> accepts bool, bit, and signed or unsigned 8-, 16-, 32-, and 64-bit integers. Import std::concepts."; }
     if eq(label, "signed_integral") == 1 { return "Standard concept signed_integral<T> accepts i8, i16, i32, and i64. Import std::concepts."; }
@@ -2682,6 +2696,9 @@ fn handle_definition(payload: str8) -> str8 {
     let semantic_result: result<ResolvedSymbol, str8> = semantic_session.resolve_symbol(uri, line + 1, col + 1);
     if semantic_result.is_ok() {
         let symbol: ResolvedSymbol = semantic_result.unwrap();
+        if is_hardware_builtin(symbol.name) && eq(symbol.uri, uri) == 1 {
+            return format!("[{}]", location_json(symbol.uri, symbol.line, symbol.column));
+        }
         if symbol.kind == 6 || eq(symbol.name, "same_as") == 1 || eq(symbol.name, "integral") == 1 ||
            eq(symbol.name, "signed_integral") == 1 || eq(symbol.name, "unsigned_integral") == 1 ||
            eq(symbol.name, "floating_point") == 1 || eq(symbol.name, "arithmetic") == 1 {
