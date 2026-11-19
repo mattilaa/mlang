@@ -58,6 +58,9 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_bump_release_version.py)
     set_tests_properties(mlang_version_file mlang_bump_release_version PROPERTIES LABELS "bootstrap")
     if(UNIX)
+        add_test(NAME mlang_llvm_tools
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_llvm_tools.py)
+        set_tests_properties(mlang_llvm_tools PROPERTIES LABELS "bootstrap")
         add_test(NAME mlang_build_script
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_build_script.py)
         set_tests_properties(mlang_build_script PROPERTIES LABELS "bootstrap")

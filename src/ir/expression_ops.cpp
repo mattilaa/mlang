@@ -208,7 +208,7 @@ llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
             "assembly constraints do not match the result and operand count");
         return nullptr;
     }
-#if LLVM_VERSION_MAJOR >= 22
+    // LLVM 15 and later return llvm::Error from the lowercase API.
     if(auto error = llvm::InlineAsm::verify(asmType, constraints))
     {
         reportError(
@@ -217,13 +217,6 @@ llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
                 llvm::toString(std::move(error)));
         return nullptr;
     }
-#else
-    if(!llvm::InlineAsm::Verify(asmType, constraints))
-    {
-        reportError(node->line, "invalid assembly constraints");
-        return nullptr;
-    }
-#endif
     llvm::InlineAsm* asmFn = llvm::InlineAsm::get(
         asmType,
         node->asmTemplate,

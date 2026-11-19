@@ -654,6 +654,13 @@ components and launcher, but not the separate `mlangpkg` prototype.
 | `c++` toolchain | Links the artifacts produced by the seed compiler            |
 | `doxygen`   | Required only if you build the docs (`run docs`)                 |
 
+The self-hosted tools also require `clang++` from the same LLVM major version as
+the backend libraries. CMake prefers the selected LLVM installation's tools and
+rejects mismatched versions before building generated IR. Override the choices
+with `-DLLVM_DIR=/path/to/lib/cmake/llvm` and
+`-DMLANG_CLANGXX_EXE=/path/to/clang++`; clear an old cached Clang selection with
+`-UMLANG_CLANGXX_EXE` when reconfiguring.
+
 macOS (Homebrew):
 ```sh
 brew install cmake llvm flex bison openssl@3 python doxygen

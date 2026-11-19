@@ -1,5 +1,10 @@
 # Unreleased
 
+- Select the IR-consuming Clang from the linked LLVM installation, and reject
+  mismatched cached tool versions during configuration. Linux CI explicitly
+  selects LLVM/Clang 17 for both regular and ASan builds. Inline assembly
+  validation uses the lowercase Error-returning API supported by LLVM 15 and later.
+
 - Unsafe embedded hardware builtins for pointer/address conversion, volatile
   integer access, and compiler memory barriers. Storage declarations support
   `#[align(N)]` for static and local DMA buffers.

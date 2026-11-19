@@ -223,7 +223,7 @@ add_definitions(${LLVM_DEFINITIONS_LIST})
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)
 find_package(OpenSSL REQUIRED)
-find_program(MLANG_CLANGXX_EXE NAMES clang++-17 clang++ REQUIRED)
+include(cmake/MLangLLVMTools.cmake)
 
 get_filename_component(MLANG_OPENSSL_SSL_DIR "${OPENSSL_SSL_LIBRARY}" DIRECTORY)
 get_filename_component(MLANG_OPENSSL_CRYPTO_DIR "${OPENSSL_CRYPTO_LIBRARY}" DIRECTORY)
