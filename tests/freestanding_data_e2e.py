@@ -51,6 +51,33 @@ class FreestandingDataTests(unittest.TestCase):
                     self.assertIn("[3 x i32]", ir)
                     self.assertRegex(ir, r"@__mlang_global_first.*@__mlang_global_second")
 
+    def test_imported_globals_are_shared_across_diamond_imports(self):
+        (self.root / "storage.mla").write_text("""
+            #[align(16)] var words: fixedarray<i32, 3> = [7, 8, 9];
+            pub fn bump() -> i32 { words[1] += 1; return words[1]; }
+        """)
+        (self.root / "facade.mla").write_text("""
+            mod storage; use storage::*;
+            pub fn bump_again() -> i32 { return bump(); }
+        """)
+        source = """
+            mod storage; use storage::*;
+            mod facade; use facade::*;
+            fn main() -> i32 {
+                if bump() != 9 { return 1; }
+                return bump_again() == 10 ? 0 : 2;
+            }
+        """
+        result, output = self.compile(source, "-O0")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        ir = output.read_text()
+        self.assertEqual(len(re.findall(r"^@__mlang_global_words =", ir, re.M)), 1)
+        self.assertRegex(ir, r"@__mlang_global_words[^\n]*align 16")
+        result, output = self.compile(source, "-O2", link=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        run = subprocess.run([str(output)], cwd=self.root, capture_output=True, timeout=10)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+
     def test_rejects_invalid_or_unsafe_operations(self):
         cases = {
             "raw pointer offset needs unsafe": (

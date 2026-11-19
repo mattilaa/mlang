@@ -12,6 +12,7 @@ class EmbeddedHardwareTests(FreestandingDataTests):
     test_static_aggregates_have_no_heap_or_constructors = None
     test_rejects_invalid_or_unsafe_operations = None
     test_runtime_bounds_checks_abort = None
+    test_imported_globals_are_shared_across_diamond_imports = None
 
     def test_hardware_ir_on_both_targets(self):
         source = '''

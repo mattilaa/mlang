@@ -599,7 +599,9 @@ instead of the synthetic type-name property.
 Structure-valued globals accept constant field initializers, including nested
 structures, declaration-site defaults, integer expressions, UTF-8 strings, and
 addresses of globals. Forward and cyclic global addresses are resolved after all
-global storage has been declared. Initializers never run a constructor or allocate
+global storage has been declared. Globals used by imported functions are included
+once across transitive and diamond imports, preserving shared state. Initializers
+never run a constructor or allocate
 at startup; an initializer that needs runtime evaluation is rejected.
 
 ```mla

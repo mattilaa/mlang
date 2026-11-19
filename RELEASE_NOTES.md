@@ -1,5 +1,8 @@
 # Unreleased
 
+- Preserve module globals used by imported functions, including aligned inline
+  buffers, and emit shared storage once across transitive/diamond imports.
+
 - Select the IR-consuming Clang from the linked LLVM installation, and reject
   mismatched cached tool versions during configuration. Linux CI explicitly
   selects LLVM/Clang 17 for both regular and ASan builds. Inline assembly

@@ -590,6 +590,16 @@ bool ModuleLoader::processUseDeclarations(
             }
         }
 
+        // Imported functions can refer to their module's static storage. Keep
+        // each declaration once across transitive/diamond imports, just like
+        // module assembly; do not silently merge distinct declarations by name.
+        for(auto* global : module->globalVars)
+            if(global && std::find(
+                             program->globalVars.begin(),
+                             program->globalVars.end(),
+                             global) == program->globalVars.end())
+                program->globalVars.push_back(global);
+
         // Always import ALL functions from the module (for internal calls)
         // but mark their source module so visibility can be checked at call
         // sites
