@@ -452,6 +452,11 @@ static int mla_lex_peek_branch_declaration()
 "@property"           { return PROPERTY_ATTR; }
 "#[x86-64]"          { return X86_64_ATTR; }
 "#[aarch64]"         { return AARCH64_ATTR; }
+"#[align("[0-9]+")]" {
+    unsigned long long alignment = strtoull(yytext + 8, nullptr, 10);
+    yylval.ival = alignment > (1ULL << 29) ? 0 : alignment;
+    return ALIGN_ATTR;
+}
 "#[inline(always)]"   { return INLINE_ALWAYS_ATTR; }
 "#[inline(never)]"    { return INLINE_NEVER_ATTR; }
 "#[inline]"           { return INLINE_ATTR; }

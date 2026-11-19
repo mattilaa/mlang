@@ -1,0 +1,71 @@
+#[align(32)] var dma_bytes: fixedarray<u8, 64>;
+
+#[test]
+fn test_volatile_integer_access_and_address_round_trip() -> i32 {
+    var value: u32 = 1u32;
+    let pointer: ptr<u32> = &mut value;
+    unsafe {
+        volatile_store(pointer, 42u32);
+        if volatile_load(pointer) != 42u32 { return 1; }
+        let address = ptr_address(pointer);
+        let restored: ptr<u32> = ptr_from_address<u32>(address);
+        if ptr_address(restored) != address || volatile_load(restored) != 42u32 { return 1; }
+        compiler_barrier();
+    }
+    return value == 42u32 ? 0 : 1;
+}
+
+#[test]
+fn test_aligned_global_and_local_storage() -> i32 {
+    #[align(64)] var local: fixedarray<u8, 65> = [9];
+    unsafe {
+        let global_address = ptr_address(&mut dma_bytes[0]);
+        let local_address = ptr_address(&mut local[0]);
+        if global_address % 32u64 != 0u64 || local_address % 64u64 != 0u64 { return 1; }
+    }
+    return local[0] == 9 ? 0 : 1;
+}
+
+fn volatile_reader(pointer: ptr<u32>) -> u32 {
+    unsafe { return volatile_load(pointer); }
+}
+
+#[test]
+fn test_shared_borrow_can_be_read_volatile() -> i32 {
+    var value: u32 = 7u32;
+    return volatile_reader(&value) == 7u32 ? 0 : 1;
+}
+
+#[x86-64]
+#[test]
+fn test_explicit_assembly_output_without_seed() -> i32 {
+    unsafe {
+        let answer: u64 = asm volatile x64(u64, "movq $$42, $0" : "=r");
+        return answer == 42u64 ? 0 : 1;
+    }
+}
+
+#[aarch64]
+#[test]
+fn test_explicit_aarch64_assembly_output_without_seed() -> i32 {
+    unsafe {
+        let answer: u64 = asm volatile aarch64(u64, "mov $0, #42" : "=r");
+        return answer == 42u64 ? 0 : 1;
+    }
+}
+
+#[test]
+fn test_volatile_access_preserves_integer_widths() -> i32 {
+    var small: u8 = 0u8;
+    var medium: i16 = 0i16;
+    var large: u64 = 0u64;
+    unsafe {
+        volatile_store(&mut small, 255u8);
+        volatile_store(&mut medium, i16(-123));
+        volatile_store(&mut large, 4294967297u64);
+        if volatile_load(&small) != 255u8 { return 1; }
+        if volatile_load(&medium) != i16(-123) { return 1; }
+        if volatile_load(&large) != 4294967297u64 { return 1; }
+    }
+    return 0;
+}

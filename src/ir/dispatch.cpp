@@ -24,6 +24,17 @@ void CodeGenerator::generateStatement(StatementNode* node)
         }
     } diagnosticScope(diagnosticFile, node ? node->file : nullptr);
 
+    uint64_t requestedAlignment = 0;
+    if(auto* variable = dynamic_cast<VarDeclNode*>(node))
+        requestedAlignment = variable->storageAlignment;
+    else if(auto* binding = dynamic_cast<LetDeclNode*>(node))
+        requestedAlignment = binding->storageAlignment;
+    if(requestedAlignment && (requestedAlignment & (requestedAlignment - 1)))
+    {
+        reportError(node->line, "storage alignment must be a power of two");
+        return;
+    }
+
     // mlang -g: the statement's source line (no-op without debug info).
     debugSetLocation(node);
 
@@ -42,6 +53,16 @@ void CodeGenerator::generateStatement(StatementNode* node)
         auto slot = namedValues.find(letNode->name);
         if(slot != namedValues.end())
         {
+            if(letNode->storageAlignment)
+            {
+                if(auto* storage =
+                       llvm::dyn_cast<llvm::AllocaInst>(slot->second))
+                    storage->setAlignment(
+                        llvm::Align(
+                            std::max<uint64_t>(
+                                storage->getAlign().value(),
+                                letNode->storageAlignment)));
+            }
             TypeNode* type = letNode->type;
             if(diBuilder && !type &&
                (dynamic_cast<ListLiteralNode*>(letNode->expression) ||
@@ -59,6 +80,26 @@ void CodeGenerator::generateStatement(StatementNode* node)
         auto slot = namedValues.find(varNode->name);
         if(slot != namedValues.end())
         {
+            if(varNode->storageAlignment)
+            {
+                if(auto* storage =
+                       llvm::dyn_cast<llvm::AllocaInst>(slot->second))
+                    storage->setAlignment(
+                        llvm::Align(
+                            std::max<uint64_t>(
+                                storage->getAlign().value(),
+                                varNode->storageAlignment)));
+                else if(
+                    auto* storage =
+                        llvm::dyn_cast<llvm::GlobalVariable>(slot->second))
+                    storage->setAlignment(
+                        llvm::Align(
+                            std::max<uint64_t>(
+                                module->getDataLayout()
+                                    .getABITypeAlign(storage->getValueType())
+                                    .value(),
+                                varNode->storageAlignment)));
+            }
             TypeNode* type = varNode->type;
             if(diBuilder && !type &&
                (dynamic_cast<ListLiteralNode*>(varNode->initExpr) ||

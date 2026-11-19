@@ -2887,6 +2887,10 @@ void CodeGenerator::registerPointerBorrow(
     int line,
     bool isMutable)
 {
+    if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+        if(isHardwareIntrinsic(call->name))
+            return; // Scalar reads/addresses carry no pointer borrow; address
+                    // construction is explicitly unsafe.
     std::vector<ExpressionNode*> alternatives;
     bool hasAlternativeWrapper = false;
     std::function<void(ExpressionNode*)> collectAlternatives =

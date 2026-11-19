@@ -45,6 +45,10 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/freestanding_data_e2e.py
             --compiler ${MLA_COMPILER_CMD} --stdlib ${MLANG_LIB_DIR})
     set_tests_properties(mlang_freestanding_data_e2e PROPERTIES LABELS "compiler;freestanding")
+    add_test(NAME mlang_embedded_hardware_e2e
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/embedded_hardware_e2e.py
+            --compiler ${MLA_COMPILER_CMD} --stdlib ${MLANG_LIB_DIR})
+    set_tests_properties(mlang_embedded_hardware_e2e PROPERTIES LABELS "compiler;embedded")
     add_test(NAME mlang_builtin_reference
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_builtin_reference.py)
     set_tests_properties(mlang_builtin_reference PROPERTIES LABELS "documentation")
@@ -105,6 +109,7 @@ else()
     set(MLA_TEST_FILES
         "mla_tests.mla"
         "freestanding_data_tests.mla"
+        "embedded_hardware_tests.mla"
         "std_atomic_float_tests.mla"
         "std_range_views_tests.mla"
         "std_log_json_tests.mla"

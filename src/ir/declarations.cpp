@@ -1226,6 +1226,10 @@ llvm::Value* CodeGenerator::applyBooleanBranchPrediction(
 void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 {
     TypeNode* declaredType = node->type;
+    if(!declaredType)
+        if(auto* call = dynamic_cast<FunctionCallNode*>(node->expression))
+            if(isHardwareIntrinsic(call->name))
+                declaredType = hardwareIntrinsicType(call);
     if(declaredType && !activeFunctionTypeBindings.empty())
     {
         std::vector<std::string> typeParams;
@@ -2417,6 +2421,10 @@ void CodeGenerator::generateCexprDeclaration(
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
     TypeNode* declaredType = node->type;
+    if(!declaredType)
+        if(auto* call = dynamic_cast<FunctionCallNode*>(node->initExpr))
+            if(isHardwareIntrinsic(call->name))
+                declaredType = hardwareIntrinsicType(call);
     if(dynamic_cast<ReferenceTypeNode*>(declaredType) &&
        (node->isGlobalStorage || node->isStaticStorage))
     {

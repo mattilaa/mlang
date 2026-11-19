@@ -421,6 +421,19 @@ void CodeGenerator::generateGlobalVarDeclaration(
         llvm::GlobalValue::InternalLinkage,
         init,
         "__mlang_global_" + node->name);
+    if(node->storageAlignment)
+    {
+        if(node->storageAlignment & (node->storageAlignment - 1))
+        {
+            reportError(node->line, "storage alignment must be a power of two");
+            return;
+        }
+        gv->setAlignment(
+            llvm::Align(
+                std::max<uint64_t>(
+                    module->getDataLayout().getABITypeAlign(llvmTy).value(),
+                    node->storageAlignment)));
+    }
     globalNamedValues[node->name] = gv;
     globalVariableTypes[node->name] = kind;
     globalSemanticTypes[node->name] =

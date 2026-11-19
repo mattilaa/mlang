@@ -487,3 +487,24 @@
 // @builtin arithmetic
 // Standard concept arithmetic<T> accepts integral<T> or floating_point<T>.
 // Import std::concepts; this is a library predicate, not a new primitive type.
+
+// @builtin_fn ptr_from_address
+// Unsafe ptr_from_address<T>(address) converts a pointer-width integer to ptr<T>.
+// The caller supplies valid storage and maintains its lifetime and permissions.
+
+// @builtin_fn ptr_address
+// Unsafe ptr_address(pointer) returns the pointer-width unsigned address.
+
+// @builtin_fn volatile_load
+// Unsafe volatile_load(pointer) reads a naturally aligned 8/16/32/64-bit integer.
+
+// @builtin_fn volatile_store
+// Unsafe volatile_store(pointer, value) writes a matching integer type and
+// preserves known borrow permissions. Volatile does not imply atomic access.
+
+// @builtin_fn compiler_barrier
+// Unsafe compiler_barrier() emits a compiler memory clobber, not a CPU fence.
+
+// @builtin align
+// #[align(N)] requests storage alignment for a local var/let or global var.
+// N must be a nonzero power of two at most 2^29. Type layout is unchanged.

@@ -8,6 +8,7 @@
 #include <functional>
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/InlineAsm.h>
+#include <llvm/Support/Error.h>
 
 using mlang::ir_detail::module_target_triple_string;
 using mlang::ir_detail::normalize_target_arch_name;
@@ -101,7 +102,7 @@ llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
             "pointer, or void result types");
         return nullptr;
     }
-    if(!returnsVoid)
+    if(!returnsVoid && node->constraints.empty())
     {
         if(argValues.empty())
         {
@@ -142,6 +143,87 @@ llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
 
     llvm::FunctionType* asmType =
         llvm::FunctionType::get(resultType, argTypes, false);
+    if(!node->constraints.empty())
+    {
+        if(unsafeDepth <= 0 && !structuralRequirementProbe)
+        {
+            reportError(
+                node->line,
+                "explicit assembly constraints require an unsafe block");
+            return nullptr;
+        }
+        constraints = node->constraints;
+    }
+    // Volatile assembly may access memory that is not listed as a register
+    // operand. Keep surrounding memory accesses ordered against the block.
+    if(node->isVolatile && constraints.find("~{memory}") == std::string::npos)
+        constraints +=
+            (constraints.empty() ? "" : ",") + std::string("~{memory}");
+    unsigned outputs = 0, inputs = 0;
+    auto parsedConstraints = llvm::InlineAsm::ParseConstraints(constraints);
+    for(const auto& constraint : parsedConstraints)
+    {
+        if(constraint.isIndirect || constraint.Type == llvm::InlineAsm::isLabel)
+        {
+            reportError(
+                node->line,
+                "assembly constraints support register operands and clobbers "
+                "only");
+            return nullptr;
+        }
+        if(constraint.Type != llvm::InlineAsm::isClobber)
+        {
+            if(constraint.Codes.size() != 1 || constraint.isMultipleAlternative)
+            {
+                reportError(
+                    node->line,
+                    "assembly constraints require a single register constraint "
+                    "per operand");
+                return nullptr;
+            }
+            const auto& code = constraint.Codes.front();
+            bool tied = !code.empty();
+            for(char character : code)
+                tied = tied && character >= '0' && character <= '9';
+            if(code != "r" &&
+               !(code.size() > 2 && code.front() == '{' &&
+                 code.back() == '}') &&
+               !tied)
+            {
+                reportError(
+                    node->line,
+                    "assembly constraints support registers, ties, and "
+                    "clobbers only");
+                return nullptr;
+            }
+        }
+        outputs += constraint.Type == llvm::InlineAsm::isOutput;
+        inputs += constraint.Type == llvm::InlineAsm::isInput;
+    }
+    if(outputs != (returnsVoid ? 0U : 1U) || inputs != argValues.size() ||
+       (!constraints.empty() && parsedConstraints.empty()))
+    {
+        reportError(
+            node->line,
+            "assembly constraints do not match the result and operand count");
+        return nullptr;
+    }
+#if LLVM_VERSION_MAJOR >= 22
+    if(auto error = llvm::InlineAsm::verify(asmType, constraints))
+    {
+        reportError(
+            node->line,
+            "invalid assembly constraints: " +
+                llvm::toString(std::move(error)));
+        return nullptr;
+    }
+#else
+    if(!llvm::InlineAsm::Verify(asmType, constraints))
+    {
+        reportError(node->line, "invalid assembly constraints");
+        return nullptr;
+    }
+#endif
     llvm::InlineAsm* asmFn = llvm::InlineAsm::get(
         asmType,
         node->asmTemplate,

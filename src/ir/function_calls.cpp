@@ -102,9 +102,14 @@ bool CodeGenerator::functionMayWritePointerParameter(
     auto expressionMayWrite = [&](ASTNode* expression)
     {
         if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
+        {
+            if(call->name == "volatile_load" || call->name == "ptr_address")
+                return false;
             for(auto* argument : call->arguments)
                 if(usesAlias(argument))
                     return true;
+            return false;
+        }
         if(auto* call = dynamic_cast<CallableInvokeNode*>(expression))
         {
             if(usesAlias(call->callable))
@@ -2270,6 +2275,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         call.arguments = std::move(expanded);
         return generateFunctionCall(&call);
     }
+
+    if(isHardwareIntrinsic(node->name))
+        return generateHardwareIntrinsic(node);
 
     // std::copy has a dedicated diagnostic below and must reach that check.
     if(node->name != "std::copy")
@@ -6129,6 +6137,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             };
             if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
             {
+                if(call->name == "volatile_store" && !call->arguments.empty() &&
+                   usesPointerAlias(call->arguments[0]))
+                    return true;
                 const auto suppliedEffect =
                     suppliedCallableEffect(call->name, call->arguments);
                 if(suppliedEffect.first)

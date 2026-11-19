@@ -2064,7 +2064,7 @@ enum UpdatePosition
 }
 
 %token <sval> IDENTIFIER STRING_LITERAL LITERAL_OPERATOR_NAME
-%token <ival> INT_LITERAL
+%token <ival> INT_LITERAL ALIGN_ATTR
 %token <ast> TYPED_INT_LITERAL USER_DEFINED_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
@@ -2139,6 +2139,7 @@ enum UpdatePosition
 %type <sval> module_path mod_module_path trait_bound_chain
 %type <ast> print_statement argument_list format_argument format_argument_list assert_eq_statement assert_statement static_assert_statement
 %type <ast> global_var_statement static_var_statement
+%type <sval> asm_constraints
 %type <ast> map_literal map_entries map_entry index_expression
 %type <ast> tuple_type type_list tuple_literal tuple_elements
 %type <ast> multiarray_dimensions brace_array_initializer brace_array_elements brace_array_element
@@ -2199,6 +2200,8 @@ top_level_item
     | impl_block
     | cexpr_declaration
     | global_var_statement
+    | ALIGN_ATTR global_var_statement
+        { if($1 == 0 || ($1 & ($1 - 1))) yyerror("storage alignment must be a nonzero power of two, at most 2^29"); static_cast<VarDeclNode*>($2)->storageAlignment = $1; $$ = $2; }
     | module_asm_declaration
     ;
 
@@ -3102,7 +3105,16 @@ statement_list
     ;
 
 statement
-    : let_statement
+    : ALIGN_ATTR statement
+        {
+            if($1 == 0 || ($1 & ($1 - 1))) yyerror("storage alignment must be a nonzero power of two, at most 2^29");
+            if(auto* var = dynamic_cast<VarDeclNode*>($2)) var->storageAlignment = $1;
+            else if(dynamic_cast<CexprDeclNode*>($2)) yyerror("align requires runtime storage");
+            else if(auto* let = dynamic_cast<LetDeclNode*>($2)) let->storageAlignment = $1;
+            else yyerror("align requires a storage declaration");
+            $$ = $2;
+        }
+    | let_statement
     | cexpr_declaration
     | var_statement
     | type_alias_def
@@ -4048,22 +4060,27 @@ ternary_expression
     ;
 
 asm_expression
-    : ASM LPAREN type COMMA STRING_LITERAL RPAREN
-        { $$ = mla_ast_inline_asm($3, $5, NULL, NULL, 0, yylineno); }
-    | ASM LPAREN type COMMA STRING_LITERAL COMMA argument_list RPAREN
-        { $$ = mla_ast_inline_asm($3, $5, NULL, $7, 0, yylineno); }
-    | ASM IDENTIFIER LPAREN type COMMA STRING_LITERAL RPAREN
-        { $$ = mla_ast_inline_asm($4, $6, $2, NULL, 0, yylineno); }
-    | ASM IDENTIFIER LPAREN type COMMA STRING_LITERAL COMMA argument_list RPAREN
-        { $$ = mla_ast_inline_asm($4, $6, $2, $8, 0, yylineno); }
-    | ASM VOLATILE LPAREN type COMMA STRING_LITERAL RPAREN
-        { $$ = mla_ast_inline_asm($4, $6, NULL, NULL, 1, yylineno); }
-    | ASM VOLATILE LPAREN type COMMA STRING_LITERAL COMMA argument_list RPAREN
-        { $$ = mla_ast_inline_asm($4, $6, NULL, $8, 1, yylineno); }
-    | ASM VOLATILE IDENTIFIER LPAREN type COMMA STRING_LITERAL RPAREN
-        { $$ = mla_ast_inline_asm($5, $7, $3, NULL, 1, yylineno); }
-    | ASM VOLATILE IDENTIFIER LPAREN type COMMA STRING_LITERAL COMMA argument_list RPAREN
-        { $$ = mla_ast_inline_asm($5, $7, $3, $9, 1, yylineno); }
+    : ASM LPAREN type COMMA STRING_LITERAL asm_constraints RPAREN
+        { $$ = mla_ast_inline_asm($3, $5, NULL, NULL, 0, yylineno); static_cast<InlineAsmNode*>($$)->constraints = $6; free($6); }
+    | ASM LPAREN type COMMA STRING_LITERAL COMMA argument_list asm_constraints RPAREN
+        { $$ = mla_ast_inline_asm($3, $5, NULL, $7, 0, yylineno); static_cast<InlineAsmNode*>($$)->constraints = $8; free($8); }
+    | ASM IDENTIFIER LPAREN type COMMA STRING_LITERAL asm_constraints RPAREN
+        { $$ = mla_ast_inline_asm($4, $6, $2, NULL, 0, yylineno); static_cast<InlineAsmNode*>($$)->constraints = $7; free($7); }
+    | ASM IDENTIFIER LPAREN type COMMA STRING_LITERAL COMMA argument_list asm_constraints RPAREN
+        { $$ = mla_ast_inline_asm($4, $6, $2, $8, 0, yylineno); static_cast<InlineAsmNode*>($$)->constraints = $9; free($9); }
+    | ASM VOLATILE LPAREN type COMMA STRING_LITERAL asm_constraints RPAREN
+        { $$ = mla_ast_inline_asm($4, $6, NULL, NULL, 1, yylineno); static_cast<InlineAsmNode*>($$)->constraints = $7; free($7); }
+    | ASM VOLATILE LPAREN type COMMA STRING_LITERAL COMMA argument_list asm_constraints RPAREN
+        { $$ = mla_ast_inline_asm($4, $6, NULL, $8, 1, yylineno); static_cast<InlineAsmNode*>($$)->constraints = $9; free($9); }
+    | ASM VOLATILE IDENTIFIER LPAREN type COMMA STRING_LITERAL asm_constraints RPAREN
+        { $$ = mla_ast_inline_asm($5, $7, $3, NULL, 1, yylineno); static_cast<InlineAsmNode*>($$)->constraints = $8; free($8); }
+    | ASM VOLATILE IDENTIFIER LPAREN type COMMA STRING_LITERAL COMMA argument_list asm_constraints RPAREN
+        { $$ = mla_ast_inline_asm($5, $7, $3, $9, 1, yylineno); static_cast<InlineAsmNode*>($$)->constraints = $10; free($10); }
+    ;
+
+asm_constraints
+    : { $$ = strdup(""); }
+    | COLON STRING_LITERAL { $$ = $2; }
     ;
 
 match_expression
@@ -4356,6 +4373,12 @@ function_call
         {
             if(strcmp($1, "add") == 0)
                 $$ = create_builder_root(builder_type_hint_from_type_args($3), NULL, yylineno);
+            else if(strcmp($1, "ptr_from_address") == 0)
+            {
+                if(static_cast<TypeListNode*>($3)->types.size() != 1) yyerror("ptr_from_address requires exactly one element type");
+                std::string name = std::string($1) + "<" + static_cast<TypeListNode*>($3)->toString() + ">";
+                $$ = mla_ast_function_call_simple(strdup(name.c_str()), NULL, NULL, yylineno);
+            }
             else
                 $$ = mla_ast_result_constructor($1, $3, NULL, yylineno);
         }
@@ -4379,6 +4402,12 @@ function_call
         {
             if(strcmp($1, "add") == 0)
                 $$ = create_builder_root(builder_type_hint_from_type_args($3), $6, yylineno);
+            else if(strcmp($1, "ptr_from_address") == 0)
+            {
+                if(static_cast<TypeListNode*>($3)->types.size() != 1) yyerror("ptr_from_address requires exactly one element type");
+                std::string name = std::string($1) + "<" + static_cast<TypeListNode*>($3)->toString() + ">";
+                $$ = mla_ast_function_call_from_list(strdup(name.c_str()), $6, yylineno);
+            }
             else
                 $$ = mla_ast_result_constructor($1, $3, $6, yylineno);
         }

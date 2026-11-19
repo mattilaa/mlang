@@ -588,7 +588,8 @@ public:
 ///
 /// The result type is explicit in source so the frontend can preserve type
 /// information through parsing and IR lowering. Non-`void` forms currently use
-/// the first operand as the tied input/output register in code generation.
+/// the first operand as the tied input/output register unless explicit
+/// constraints are supplied.
 class InlineAsmNode : public ExpressionNode
 {
 public:
@@ -602,6 +603,7 @@ public:
     std::vector<ExpressionNode*> arguments;
     /// \brief Whether LLVM should treat the asm block as side-effecting.
     bool isVolatile;
+    std::string constraints;
 
     InlineAsmNode(
         TypeNode* type,
@@ -1063,6 +1065,7 @@ public:
     TypeNode* type;
     std::string name;
     ExpressionNode* expression;
+    uint64_t storageAlignment = 0;
     BranchPrediction branchPrediction = BranchPrediction::None;
 
     LetDeclNode(TypeNode* t, const std::string& n, ExpressionNode* e)
@@ -1093,6 +1096,7 @@ public:
     bool isExplicitZeroInit = false;
     bool isStaticStorage = false;
     bool isGlobalStorage = false;
+    uint64_t storageAlignment = 0;
     BranchPrediction branchPrediction = BranchPrediction::None;
 
     VarDeclNode(TypeNode* t, const std::string& n, ExpressionNode* e)

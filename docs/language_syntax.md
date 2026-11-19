@@ -1491,8 +1491,8 @@ Constraints:
 - The result type is explicit in source; use `void` for side-effect-only asm.
 - Inline asm currently supports only integer, pointer, or `void` result types.
 - Operands currently support only integer and pointer values.
-- Non-`void` inline asm must have at least one operand.
-- For non-`void` inline asm, the first operand must have the same type as the
+- Without explicit constraints, non-`void` inline asm must have at least one operand.
+- Without explicit constraints, the first operand must have the same type as the
   declared result type. It is used as the tied input/output register.
 - `asm volatile(...)` is required when side effects must not be optimized away.
 - Arch-qualified forms require a matching compilation target selected with
@@ -1501,6 +1501,66 @@ Constraints:
   not match the active target architecture.
 - Module assembly is allowed only at top level, always requires an architecture
   qualifier, and has no operands or result type.
+
+Explicit LLVM register constraints can follow a colon inside the assembly call.
+This form requires `unsafe` and supports a scalar output, register inputs, tied
+inputs, and clobbers. Indirect memory operands and label operands are rejected.
+An explicit output constraint can produce a result without a seed operand:
+
+```mla
+fn counter() -> u64 {
+    unsafe {
+        return asm volatile aarch64(u64, "mrs $0, cntpct_el0" : "=r");
+    }
+}
+
+fn host_exit(block: ptr<u64>) -> void {
+    unsafe {
+        asm volatile aarch64(void, "hlt #0xf000", 24u64, block : "{x0},{x1},~{memory}");
+    }
+}
+```
+
+All `asm volatile` blocks now include a compiler memory clobber. This prevents
+ordinary memory accesses from moving across a device barrier such as `dmb sy`.
+The instruction itself must still provide the required hardware ordering.
+
+### Embedded Hardware Primitives
+
+The following builtins lower directly to LLVM and require `unsafe`:
+
+- `ptr_from_address<T>(address)` constructs a typed raw pointer from a
+  pointer-width integer (`u64`/`i64` on 64-bit targets, `u32`/`i32` on 32-bit targets).
+- `ptr_address(pointer)` returns the pointer-width unsigned integer address.
+- `volatile_load(pointer)` reads an `i8/u8`, `i16/u16`, `i32/u32`, or `i64/u64`.
+- `volatile_store(pointer, value)` writes the matching integer type. Untyped
+  integer literals use the pointee type as their context.
+- `compiler_barrier()` prevents compiler reordering of memory accesses. It emits
+  no CPU fence; use architecture-specific assembly for device ordering.
+
+Volatile accesses retain known shared/exclusive borrow permissions and null
+checks. They use the natural alignment of the integer type; callers must supply
+valid, suitably aligned device or DMA addresses. Volatile is not atomic and does
+not synchronize threads. Address/integer conversions deliberately expose raw
+addresses: the caller is responsible for lifetime and access permissions when
+reconstructing a pointer. No heap allocation or runtime helper implements these
+operations.
+
+`#[align(N)]` on a local `var`/`let` or global `var` requests at least `N` bytes of
+storage alignment. `N` must be a nonzero power of two no greater than `2^29`.
+The annotation does not change the type's size, field offsets, or element stride.
+Use separate aligned globals for separately aligned DMA rings/buffers:
+
+```mla
+#[align(16)] var descriptors: fixedarray<u64, 8>;
+
+fn uart_status() -> u32 {
+    unsafe {
+        let status: ptr<u32> = ptr_from_address<u32>(150994968u64);
+        return volatile_load(status);
+    }
+}
+```
 
 Reference examples in the repository:
 - `examples/inline_asm_x64_demo.mla`

@@ -1,5 +1,11 @@
 # Unreleased
 
+- Unsafe embedded hardware builtins for pointer/address conversion, volatile
+  integer access, and compiler memory barriers. Storage declarations support
+  `#[align(N)]` for static and local DMA buffers.
+- Inline assembly accepts explicit LLVM register constraints and fixed-register
+  operands; volatile assembly includes a compiler memory clobber.
+
 - Constant-initialized structure globals, including nested defaults, UTF-8
   strings, and forward/cyclic references to other globals.
 - `fixedarray<T, N>` provides inline, allocation-free value storage in locals,

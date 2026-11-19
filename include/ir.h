@@ -1136,6 +1136,9 @@ private:
     ///
     /// `asm volatile(...)` is emitted with LLVM `sideeffect`; plain `asm(...)`
     /// is emitted without it.
+    bool isHardwareIntrinsic(const std::string& name) const;
+    TypeNode* hardwareIntrinsicType(FunctionCallNode* node);
+    llvm::Value* generateHardwareIntrinsic(FunctionCallNode* node);
     llvm::Value* generateInlineAsm(InlineAsmNode* node);
     llvm::Value* generateBinaryOp(BinaryOpNode* node);
     llvm::Value* generateFoldExpression(FoldExpressionNode* node);

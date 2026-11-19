@@ -26,6 +26,9 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             return getLValueType(&expandedCall, line);
         }
 
+        if(isHardwareIntrinsic(call->name))
+            return hardwareIntrinsicType(call);
+
         if(call->name == "std::copy")
         {
             if(call->arguments.size() == 1)
