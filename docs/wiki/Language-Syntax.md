@@ -21,6 +21,8 @@ the compiler.
   - [Conditional regions](#conditional-regions)
 - [Compile-time information and declarations](#compile-time-information-and-declarations)
   - [Type name property](#type-name-property-name)
+  - [Static structure globals and inline arrays](#static-structure-globals-and-inline-arrays)
+  - [Pointer offsets and string indexing](#pointer-offsets-and-string-indexing)
   - [Typed var declarations](#typed-var-declarations-without-initializers)
   - [cexpr compile-time evaluation](#cexpr-compile-time-evaluation)
 - [Control flow and errors](#control-flow-and-errors)
@@ -596,6 +598,77 @@ For collection values, the returned name includes inner types when available:
 If a struct defines a real field named `name`, normal field access is used
 instead of the synthetic type-name property.
 
+### Static Structure Globals and Inline Arrays
+
+Structure-valued globals accept constant field initializers, including nested
+structures, declaration-site defaults, integer expressions, UTF-8 strings, and
+addresses of globals. Forward and cyclic global addresses are resolved after all
+global storage has been declared. Globals used by imported functions are included
+once across transitive and diamond imports, preserving shared state. Initializers
+never run a constructor or allocate
+at startup; an initializer that needs runtime evaluation is rejected.
+
+```rust
+struct Calibration { var offset: i32{-7}; var scale: i32{1000}; };
+struct Climate { var label: str8; var calibration: Calibration; };
+var climate: Climate = Climate { label: "winter" };
+```
+
+`fixedarray<T, N>` stores exactly `N` elements inline. It is a value type: copying
+or returning it copies its storage, so returned arrays never point into a dead
+stack frame. Local storage is on the stack, global storage is static, and fields
+are part of their enclosing structure. The array itself needs no heap buffer.
+
+```rust
+var pressures: fixedarray<i32, 4> = [10133, 9546, 8988, 8456];
+struct Sample { var values: fixedarray<i32, 3>; };
+
+fn make_sample() -> fixedarray<i32, 3> { return [10, 20, 30]; }
+
+fn example() -> i32 {
+    var values: fixedarray<i32, 3> = make_sample();
+    values[1] = 42;
+    let padded: fixedarray<u8, 3> = [200]; // remaining elements are zero
+    let repeated: fixedarray<i32, 3> = [6; 3];
+    static_assert!(size_of(fixedarray<i32, 3>) == 12);
+    return values[1] + i32(padded[1]) + repeated[2];
+}
+```
+
+`len()` and `capacity()` both return `N`; `is_empty()` is true for `N == 0`.
+Checked indexing and iteration are supported, including nested fixed arrays.
+Indexed writes need [`var`](Language-Syntax) or an exclusive `&mut` reference. There are no resizing
+methods or implicit conversions to the list ABI. Existing `array<T, N>`,
+[`multiarray`](Stdlib-Multiarray), and [`list<T>`](Quick-Guide#types) retain their previous representation and behavior.
+An inline array is copyable when its elements are copyable; otherwise existing
+move and borrow rules apply to its elements.
+
+### Pointer Offsets and String Indexing
+
+Within `unsafe`, typed raw pointers support `pointer + integer`,
+`integer + pointer`, `pointer - integer`, `pointer[index]`, and indexed writes.
+Offsets are measured in elements, rather than bytes. Subtraction of pointers
+with matching element types returns an [`i64`](Quick-Guide#types) distance in elements. The caller
+must keep arithmetic and dereferences within valid live storage. Matching raw
+pointer types also support `==` and `!=` comparisons.
+
+```rust
+fn next(pointer: ptr<i32>) -> ptr<i32> {
+    unsafe { return pointer + 1; }
+}
+```
+
+Pointer operations preserve borrow provenance: offsets cannot turn a shared
+borrow into a writable pointer or let a pointer to local storage escape. Null
+checks still run in `unsafe`.
+
+`str8[index]` returns a UTF-8 byte ([`u8`](Quick-Guide#types)); `str16[index]` returns a UTF-16 code unit
+([`u16`](Quick-Guide#types)). Indexing is read-only and checks against the terminating zero, which may
+itself be read. Negative indices and indices beyond that terminator abort.
+String indexing performs no allocation and does not require `unsafe`. It scans
+to the requested unit, so iterating with repeated string indexing is quadratic;
+use a typed raw buffer for large sequential scans when its bounds are known.
+
 ### Typed [`var`](Language-Syntax) Declarations Without Initializers
 
 A typed [`var`](Language-Syntax) declaration with no initializer is zero-initialized.
@@ -902,6 +975,58 @@ Current first-version constraints:
 - `cexpr if` currently supports block bodies, `else if` chains, and an
   optional [`else`](Language-Syntax) block.
 - Calling a non-`cexpr fn` from `cexpr(...)` is rejected.
+
+### Variadic generic functions
+
+Runtime generic functions support a trailing type parameter pack and a
+corresponding trailing function parameter pack. Each argument retains its
+concrete type, and the compiler specializes the function for those types:
+
+```rust
+generic<Args...>
+fn sum(args: Args...) -> i32 {
+    return (args + ...);
+}
+
+generic<Args...>
+fn forward_sum(args: Args...) -> i32 {
+    return sum(args...);
+}
+
+fn main() -> i32 {
+    return forward_sum(10, 20, 12); // 42
+}
+```
+
+`args...` expands a named parameter pack into individual call arguments. It
+works in function, method, and callable-value calls, including calls to another
+variadic generic function. Ordinary arguments may appear before or after an
+expansion. An empty pack contributes no arguments. Expanding a name that is not
+a parameter pack is an error.
+
+Fixed parameters and fixed generic types may precede the pack:
+
+```rust
+generic<T, Args...>
+fn push_all(values: &mut list<T>, args: Args...) -> void {
+    static_assert!((is_constructible<T>(args) && ...));
+    (values.push(args), ...);
+}
+```
+
+Pack folds support `+`, `*`, `&&`, `||`, and comma. A comma fold evaluates its
+expression once per argument in order, which also allows heterogeneous packs
+such as `(args.release(), ...)`. Numeric folds require matching numeric types.
+The existing logical pack folds evaluate every element.
+
+Current scope is runtime free functions with inferred type arguments, one
+trailing type pack, and one trailing value pack whose type names that pack.
+Variadic structs, aliases, type-argument expansion, arbitrary expression
+expansion such as `transform(args)...`, and C++ forwarding references are not
+supported. Packs follow the ordinary MLang ownership and borrowing rules.
+
+See [the variadic logging example](Variadic-Logging)
+for forwarding mixed arguments and collecting their formatted values in order.
 
 ## Control Flow and Errors
 
@@ -1373,8 +1498,8 @@ Constraints:
 - The result type is explicit in source; use [`void`](Quick-Guide#types) for side-effect-only asm.
 - Inline asm currently supports only integer, pointer, or [`void`](Quick-Guide#types) result types.
 - Operands currently support only integer and pointer values.
-- Non-[`void`](Quick-Guide#types) inline asm must have at least one operand.
-- For non-[`void`](Quick-Guide#types) inline asm, the first operand must have the same type as the
+- Without explicit constraints, non-[`void`](Quick-Guide#types) inline asm must have at least one operand.
+- Without explicit constraints, the first operand must have the same type as the
   declared result type. It is used as the tied input/output register.
 - `asm volatile(...)` is required when side effects must not be optimized away.
 - Arch-qualified forms require a matching compilation target selected with
@@ -1383,6 +1508,66 @@ Constraints:
   not match the active target architecture.
 - Module assembly is allowed only at top level, always requires an architecture
   qualifier, and has no operands or result type.
+
+Explicit LLVM register constraints can follow a colon inside the assembly call.
+This form requires `unsafe` and supports a scalar output, register inputs, tied
+inputs, and clobbers. Indirect memory operands and label operands are rejected.
+An explicit output constraint can produce a result without a seed operand:
+
+```rust
+fn counter() -> u64 {
+    unsafe {
+        return asm volatile aarch64(u64, "mrs $0, cntpct_el0" : "=r");
+    }
+}
+
+fn host_exit(block: ptr<u64>) -> void {
+    unsafe {
+        asm volatile aarch64(void, "hlt #0xf000", 24u64, block : "{x0},{x1},~{memory}");
+    }
+}
+```
+
+All `asm volatile` blocks now include a compiler memory clobber. This prevents
+ordinary memory accesses from moving across a device barrier such as `dmb sy`.
+The instruction itself must still provide the required hardware ordering.
+
+### Embedded Hardware Primitives
+
+The following builtins lower directly to LLVM and require `unsafe`:
+
+- `ptr_from_address<T>(address)` constructs a typed raw pointer from a
+  pointer-width integer ([`u64`](Quick-Guide#types)/[`i64`](Quick-Guide#types) on 64-bit targets, [`u32`](Quick-Guide#types)/[`i32`](Quick-Guide#types) on 32-bit targets).
+- `ptr_address(pointer)` returns the pointer-width unsigned integer address.
+- `volatile_load(pointer)` reads an `i8/u8`, `i16/u16`, `i32/u32`, or `i64/u64`.
+- `volatile_store(pointer, value)` writes the matching integer type. Untyped
+  integer literals use the pointee type as their context.
+- `compiler_barrier()` prevents compiler reordering of memory accesses. It emits
+  no CPU fence; use architecture-specific assembly for device ordering.
+
+Volatile accesses retain known shared/exclusive borrow permissions and null
+checks. They use the natural alignment of the integer type; callers must supply
+valid, suitably aligned device or DMA addresses. Volatile is not atomic and does
+not synchronize threads. Address/integer conversions deliberately expose raw
+addresses: the caller is responsible for lifetime and access permissions when
+reconstructing a pointer. No heap allocation or runtime helper implements these
+operations.
+
+`#[align(N)]` on a local [`var`](Language-Syntax)/[`let`](Language-Syntax) or global [`var`](Language-Syntax) requests at least `N` bytes of
+storage alignment. `N` must be a nonzero power of two no greater than `2^29`.
+The annotation does not change the type's size, field offsets, or element stride.
+Use separate aligned globals for separately aligned DMA rings/buffers:
+
+```rust
+#[align(16)] var descriptors: fixedarray<u64, 8>;
+
+fn uart_status() -> u32 {
+    unsafe {
+        let status: ptr<u32> = ptr_from_address<u32>(150994968u64);
+        return volatile_load(status);
+    }
+}
+```
 
 Reference examples in the repository:
 - `examples/inline_asm_x64_demo.mla`

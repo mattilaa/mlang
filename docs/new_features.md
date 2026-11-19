@@ -7,6 +7,7 @@ focused `.mla` example was added under `examples/`.
 
 ## Table of Contents
 
+- [MLang 0.4.5](#mlang-045)
 - [Core language](#core-language)
 - [Control flow and expressions](#control-flow-and-expressions)
 - [Data types and containers](#data-types-and-containers)
@@ -15,6 +16,26 @@ focused `.mla` example was added under `examples/`.
 - [Standard library feature examples](#standard-library-feature-examples)
 - [Package and tooling examples](#package-and-tooling-examples)
 - [See also](#see-also)
+
+## MLang 0.4.5
+
+- **Static aggregates and inline arrays:** structure-valued globals and
+  `fixedarray<T, N>` provide static, allocation-free storage. Imported functions
+  retain their globals, including shared storage across diamond imports.
+  See [static data and inline arrays](language_syntax.md#static-structure-globals-and-inline-arrays),
+  and the [freestanding data tests](../tests/freestanding_data_tests.mla).
+- **Embedded hardware:** use unsafe pointer/address conversions, volatile
+  integer access, memory barriers, aligned storage, and explicit inline assembly
+  constraints. See [Language Syntax](language_syntax.md) and the
+  [AArch64 assembly example](../examples/inline_asm_aarch64_demo.mla).
+- **Generic pack forwarding:** expand `args...` through function, method, and
+  callable arguments. See [Variadic Logging](../examples/variadic_logging/README.md).
+- **Structured JSON logging:** build heterogeneous nested records with typed
+  `kv` fields and `json_object`; choose compact or pretty output.
+  See [std::log::json](stdlib/std_log_json.md).
+
+The [release notes](../RELEASE_NOTES.md) cover LLVM/Clang compatibility fixes
+and migration details.
 
 ## Core Language
 

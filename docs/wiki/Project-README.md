@@ -17,7 +17,7 @@ VST3 plugins) is now developed in its own repository: <https://github.com/mattil
 ## Table Of Contents
 
 - [What Is Mlang](#what-is-mlang)
-- [Release Notes](https://github.com/mattilaa/mlang/blob/main/RELEASE_NOTES.md)
+- [Release Notes](Release-Notes)
 - [Compile-Time Evaluation With `cexpr`](#compile-time-evaluation-with-cexpr)
 - [`likely` And `unlikely` Branch Hints](#likely-and-unlikely-branch-hints)
 - [Checked Narrow Integer Casts](#checked-narrow-integer-casts)
@@ -658,6 +658,13 @@ components and launcher, but not the separate `mlangpkg` prototype.
 | `c++` toolchain | Links the artifacts produced by the seed compiler            |
 | `doxygen`   | Required only if you build the docs (`run docs`)                 |
 
+The self-hosted tools also require `clang++` from the same LLVM major version as
+the backend libraries. CMake prefers the selected LLVM installation's tools and
+rejects mismatched versions before building generated IR. Override the choices
+with `-DLLVM_DIR=/path/to/lib/cmake/llvm` and
+`-DMLANG_CLANGXX_EXE=/path/to/clang++`; clear an old cached Clang selection with
+`-UMLANG_CLANGXX_EXE` when reconfiguring.
+
 macOS (Homebrew):
 ```sh
 brew install cmake llvm flex bison openssl@3 python doxygen
@@ -671,15 +678,20 @@ sudo apt install cmake llvm-dev libllvm15 clang flex bison libssl-dev python3 bu
 ## Scripted Bootstrap And Build
 
 The root scripts mirror the `uvim` workflow and keep the full build explicit:
-first build the C++ seed compiler/runtime and `mlang-config`, then compile the
-MLang-native tools from their `.mla` sources with that freshly built compiler.
+first build `mlang-config` to configure the build, then build the C++ seed
+compiler/runtime and compile the MLang-native tools from their `.mla` sources.
 There is no prebuilt compiler or hidden bootstrap binary.
 
 POSIX/macOS:
 ```sh
-./bootstrap.sh
-./build.sh --install
+./build.sh --build-dir build --install
 ```
+
+On a clean checkout, `build.sh` first builds `mlang-config` and writes its
+default configuration, then builds and installs the toolchain. The default
+install prefix is `~/.local`; use `--prefix` and `--bin-dir` to override it.
+Existing saved configurations are reused. To customize the configuration
+interactively before the full build, run `./bootstrap.sh` first.
 
 Windows PowerShell:
 ```powershell
@@ -688,8 +700,7 @@ Windows PowerShell:
 ```
 
 What the scripts do:
-- `bootstrap.sh` / `bootstrap.ps1` run CMake and build `mlang`,
-  `mlang_std`, and `mlang-config`.
+- `bootstrap.sh` / `bootstrap.ps1` run CMake and build only `mlang-config`.
 - `mlang-config` writes `build/mlang-config.conf` and
   `build/mlang_config_cache.cmake`.
 - Its Install section includes an **Install mladbg** toggle, enabled by default
@@ -706,7 +717,8 @@ What the scripts do:
   destination instead of a literal `~` directory.
 - When `bootstrap.sh` / `bootstrap.ps1` runs `mlang-config`, it also asks
   whether to build and install the output binaries to the configured install
-  location.
+  location. All bootstrap confirmation prompts use `[Y/n]`; press Enter to
+  accept or enter `n` to decline.
 
 Useful non-interactive forms:
 ```sh
@@ -1583,19 +1595,26 @@ Common bootstrap task entrypoints include:
 
 ## GitHub Releases
 
+See [RELEASE_PROCESS.md](Release-Process) for the step-by-step GitHub release
+procedure and the confirmed post-release patch version bump.
+
 Development builds report `MAJOR.MINOR.BUGFIX.BUILD`; CMake increments the
 fourth component on each configure. Public release tags omit the build number.
+The root `version.txt` holds the maintained `MAJOR.MINOR.BUGFIX` version; edit
+that file to change it. CMake reads it for the compiler and runtime and
+automatically reconfigures when it changes. Release packaging can still pin an
+exact version using `MLANG_RELEASE_VERSION`.
 
 Pushing a tag in `vMAJOR.MINOR.BUGFIX` form runs the release workflow. It builds
 Linux `x86_64` and macOS `arm64` archives, creates or updates the matching
 GitHub Release, and uploads the archives and SHA-256 checksum files. The macOS
 job also creates an unsigned `.pkg` installer for `/usr/local`.
 
-For the `v0.4.1` release:
+For the `v0.4.3` release:
 
 ```sh
-git tag -a v0.4.1 -m "MLang v0.4.1"
-git push origin v0.4.1
+git tag -a v0.4.3 -m "MLang v0.4.3"
+git push origin v0.4.3
 ```
 
 The archives contain `mlang`, `libmlang_std.a`, standard-library sources,
@@ -1604,8 +1623,8 @@ Their `bin/mlang` wrapper locates all bundled resources, so an archive can be
 unpacked and run in place:
 
 ```sh
-tar -xzf mlang-v0.4.1-linux-x86_64.tar.gz
-./mlang-v0.4.1-linux-x86_64/bin/mlang --version
+tar -xzf mlang-v0.4.3-linux-x86_64.tar.gz
+./mlang-v0.4.3-linux-x86_64/bin/mlang --version
 ```
 
 Native programs produced by MLang still need a C++ linker and OpenSSL
@@ -1617,13 +1636,13 @@ compiler/linker and its native runtime dependencies. Each archive also includes
 downloaded artifacts before use:
 
 ```sh
-shasum -a 256 -c mlang-v0.4.1-macos-arm64.tar.gz.sha256
+shasum -a 256 -c mlang-v0.4.3-macos-arm64.tar.gz.sha256
 ```
 
 Build the current-host archive locally with:
 
 ```sh
-scripts/build_release.sh --version v0.4.1
+scripts/build_release.sh --version v0.4.3
 ```
 
 For an existing tag, open **Actions > Release binaries > Run workflow** and

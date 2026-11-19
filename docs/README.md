@@ -67,6 +67,9 @@ If you are new to MLang, read these pages in this order:
 
 ## Quick Links
 
+- [Release Notes](../RELEASE_NOTES.md)
+  Published release changes and migration notes, including MLang 0.4.5.
+
 - [Quick Guide](quick_guide.md)
   A short introduction with small examples and “how do I write code in this
   language?” answers.

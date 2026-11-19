@@ -5,6 +5,7 @@
 - [[MLang Documentation|Home]]
 - [[New Features Guide|New-Features]]
 - [[Project README|Project-README]]
+- [[Release Notes|Release-Notes]]
 
 ## Language
 - [[Compiler Diagnostics|Compiler-Diagnostics]]
@@ -72,6 +73,7 @@
 - [[std::jsonrpc|Stdlib-Jsonrpc]]
 - [[std::limits|Stdlib-Limits]]
 - [[std::log|Stdlib-Log]]
+- [[std::log::json|Stdlib-Log-Json]]
 - [[std::source_location|Stdlib-Source-Location]]
 - [[std::stacktrace|Stdlib-Stacktrace]]
 - [[std::scope_exit|Stdlib-Scope-Exit]]
@@ -108,6 +110,7 @@
 
 ## Tooling
 - [[Bootstrap|Bootstrap]]
+- [[Release Process|Release-Process]]
 - [[mladbg Debugger|Mladbg]]
 - [[mlangpkg|Mlangpkg]]
 - [[Package Manager|Package-Manager]]
@@ -119,6 +122,7 @@
 
 ## Demos
 - [[Directory Demos|Demos]]
+- [[Variadic Logging|Variadic-Logging]]
 - [[MLang QEMU x86 Bootloader Example|QEMU-x86-Bootloader-Example]]
 - [[MLang QEMU AArch64 Boot Example|QEMU-AArch64-Boot-Example]]
 - [[UML UI Generator|UML-UI-Generator]]

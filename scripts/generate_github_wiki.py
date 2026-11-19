@@ -69,6 +69,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::jsonrpc", "std_jsonrpc.md"),
     ("std::limits", "std_limits.md"),
     ("std::log", "std_log.md"),
+    ("std::log::json", "std_log_json.md"),
     ("std::math", "std_math.md"),
     ("std::numbers", "std_numbers.md"),
     ("std::source_location", "std_source_location.md"),
@@ -134,6 +135,7 @@ PAGES: list[Page] = [
     Page(Path("docs/README.md"), "MLang Documentation", "Home", "Start Here"),
     Page(Path("docs/new_features.md"), "New Features Guide", "New-Features", "Start Here"),
     Page(Path("README.md"), "Project README", "Project-README", "Start Here"),
+    Page(Path("RELEASE_NOTES.md"), "Release Notes", "Release-Notes", "Start Here"),
     Page(Path("docs/compiler_diagnostics.md"), "Compiler Diagnostics", "Compiler-Diagnostics", "Language"),
     Page(Path("docs/language_attributes.md"), "Language Attributes", "Language-Attributes", "Language"),
     Page(Path("docs/language_builtins.md"), "Language Built-ins", "Language-Built-ins", "Language"),
@@ -142,6 +144,7 @@ PAGES: list[Page] = [
     Page(Path("docs/quick_guide.md"), "Quick Guide", "Quick-Guide", "Language"),
     Page(Path("docs/examples.md"), "Examples", "Examples", "Examples"),
     Page(DEMO_INDEX_SOURCE, "Directory Demos", "Demos", "Demos"),
+    Page(Path("examples/variadic_logging/README.md"), "Variadic Logging", "Variadic-Logging", "Demos"),
     Page(Path("examples/qemu_x86_bootloader/README.md"), "MLang QEMU x86 Bootloader Example", "QEMU-x86-Bootloader-Example", "Demos"),
     Page(Path("examples/qemu_aarch64_bootloader/README.md"), "MLang QEMU AArch64 Boot Example", "QEMU-AArch64-Boot-Example", "Demos"),
     Page(Path("docs/uml_ui_generator.md"), "UML UI Generator", "UML-UI-Generator", "Demos"),
@@ -168,6 +171,7 @@ PAGES: list[Page] = [
     for module, filename in STDLIB_MODULE_DOCS
 ] + [
     Page(Path("bootstrap/README.md"), "Bootstrap", "Bootstrap", "Tooling"),
+    Page(Path("RELEASE_PROCESS.md"), "Release Process", "Release-Process", "Tooling"),
     Page(Path("docs/debugging.md"), "mladbg Debugger", "Mladbg", "Tooling"),
     Page(Path("tools/mlangpkg/README.md"), "mlangpkg", "Mlangpkg", "Tooling"),
     Page(Path("docs/package_manager.md"), "Package Manager", "Package-Manager", "Tooling"),

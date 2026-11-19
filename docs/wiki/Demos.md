@@ -39,6 +39,22 @@ README files.
 | `examples/module_path_generic_static_demo` | Fully qualified associated calls on a generic type imported from another module. | `./build/mlang examples/module_path_generic_static_demo/main.mla -L build -lmlang_std -o /tmp/module_path_generic_static_demo && /tmp/module_path_generic_static_demo` |
 | `examples/trait_advanced_demo` | Default trait methods, super-traits, and a generic type with multiple trait bounds. | `./build/mlang examples/trait_advanced_demo/main.mla -L build -lmlang_std -o /tmp/trait_advanced_demo && /tmp/trait_advanced_demo` |
 
+### `examples/variadic_logging`
+
+Forward heterogeneous generic argument packs through a shared logging module,
+including empty packs and comma folds. The companion JSON demo builds nested
+structured records with [`std::log::json`](Stdlib-Log) and prints compact and pretty output.
+
+```sh
+build/mlang examples/variadic_logging.mla -o /tmp/variadic_logging
+/tmp/variadic_logging
+build/mlang examples/variadic_json_logging.mla -o /tmp/variadic_json_logging
+/tmp/variadic_json_logging
+```
+
+See [Variadic Logging](Variadic-Logging) for output,
+formatting conventions, forwarding details, and regression test commands.
+
 ## Terminal, networking, route, and audio demos
 
 ### `examples/esc_widgets`
