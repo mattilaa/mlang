@@ -187,8 +187,17 @@ void CodeGenerator::registerFunctionOverload(
                 else if(auto* attempt = dynamic_cast<TryExpressionNode*>(value))
                     collect(attempt->expression);
                 else if(auto* binary = dynamic_cast<BinaryOpNode*>(value))
+                {
                     if(binary->op == BinaryOpNode::OP_COMMA)
                         collect(binary->right);
+                    else if(
+                        binary->op == BinaryOpNode::OP_PLUS ||
+                        binary->op == BinaryOpNode::OP_MINUS)
+                    {
+                        collect(binary->left);
+                        collect(binary->right);
+                    }
+                }
             };
             collect(expression);
             return result;
@@ -1347,8 +1356,18 @@ void CodeGenerator::registerFunctionOverload(
                 return result;
             }
             if(auto* binary = dynamic_cast<BinaryOpNode*>(expression))
+            {
                 if(binary->op == BinaryOpNode::OP_COMMA)
                     return origins(binary->right);
+                if(binary->op == BinaryOpNode::OP_PLUS ||
+                   binary->op == BinaryOpNode::OP_MINUS)
+                {
+                    auto result = origins(binary->left);
+                    auto right = origins(binary->right);
+                    result.insert(right.begin(), right.end());
+                    return result;
+                }
+            }
             if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
             {
                 std::set<size_t> arguments;
@@ -1840,9 +1859,8 @@ void CodeGenerator::registerFunctionOverload(
                     pointsAtTrackedPointer =
                         pointerLocalSlots.count(identifier->name) != 0;
                 }
-                else if(
-                    auto* address = dynamic_cast<UnaryOpNode*>(argument);
-                    address && address->op == UnaryOpNode::OP_ADDR_MUT)
+                else if(auto* address = dynamic_cast<UnaryOpNode*>(argument);
+                        address && address->op == UnaryOpNode::OP_ADDR_MUT)
                 {
                     std::string targetPath;
                     if(!getFieldPath(address->operand, targetPath))

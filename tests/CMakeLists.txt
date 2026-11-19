@@ -41,6 +41,10 @@ option(BUILD_CPP_GTESTS "Build GoogleTest-based C++ compiler tests" ON)
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
+    add_test(NAME mlang_freestanding_data_e2e
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/freestanding_data_e2e.py
+            --compiler ${MLA_COMPILER_CMD} --stdlib ${MLANG_LIB_DIR})
+    set_tests_properties(mlang_freestanding_data_e2e PROPERTIES LABELS "compiler;freestanding")
     add_test(NAME mlang_builtin_reference
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_builtin_reference.py)
     set_tests_properties(mlang_builtin_reference PROPERTIES LABELS "documentation")
@@ -100,6 +104,7 @@ if(MLA_REGISTER_ALL_MLANG_SUITES)
 else()
     set(MLA_TEST_FILES
         "mla_tests.mla"
+        "freestanding_data_tests.mla"
         "std_atomic_float_tests.mla"
         "std_range_views_tests.mla"
     )

@@ -1237,6 +1237,17 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         }
         declaredType = substituteTypeParams(declaredType, typeParams, typeArgs);
     }
+    if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(declaredType))
+    {
+        recordScopedPointerVariable(node->name);
+        generateFixedArrayDeclaration(
+            node->name,
+            fixed,
+            node->expression,
+            true,
+            node->line);
+        return;
+    }
     recordScopedPointerVariable(node->name);
     enumVariableTypes.erase(node->name);
     if(auto* functionType = dynamic_cast<FunctionTypeNode*>(declaredType))
@@ -2424,6 +2435,17 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             typeArgs.push_back(binding.second);
         }
         declaredType = substituteTypeParams(declaredType, typeParams, typeArgs);
+    }
+    if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(declaredType))
+    {
+        recordScopedPointerVariable(node->name);
+        generateFixedArrayDeclaration(
+            node->name,
+            fixed,
+            node->initExpr,
+            false,
+            node->line);
+        return;
     }
     recordScopedPointerVariable(node->name);
     enumVariableTypes.erase(node->name);

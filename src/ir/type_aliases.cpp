@@ -36,6 +36,10 @@ std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
                std::to_string(multiarrayType->capacity);
     }
 
+    if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(typeNode))
+        return "fixedarray_" + typeMangle(fixed->elementType) + "_" +
+               std::to_string(fixed->capacity);
+
     if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(typeNode))
     {
         return "array_" + typeMangle(arrayType->elementType) + "_" +
@@ -164,6 +168,11 @@ TypeNode* CodeGenerator::cloneTypeNode(TypeNode* typeNode)
             multiarrayType->capacity,
             multiarrayType->elementsMutable);
     }
+
+    if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(typeNode))
+        return new FixedArrayTypeNode(
+            cloneTypeNode(fixed->elementType),
+            fixed->capacity);
 
     if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(typeNode))
     {

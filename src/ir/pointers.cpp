@@ -103,3 +103,49 @@ bool CodeGenerator::validatePointerDereference(
 
     return true;
 }
+
+llvm::Value* CodeGenerator::generatePointerIndexPointer(
+    IndexExpressionNode* node,
+    TypeNode*& elementType)
+{
+    auto* pointer =
+        dynamic_cast<PointerTypeNode*>(getLValueType(node->base, node->line));
+    if(!pointer)
+        return nullptr;
+    if(unsafeDepth <= 0 && !structuralRequirementProbe)
+    {
+        reportError(
+            node->line,
+            "raw pointer indexing requires an unsafe block");
+        return nullptr;
+    }
+    if(!validatePointerDereference(node->base, node->line))
+        return nullptr;
+    llvm::Value* address = generateExpression(node->base);
+    llvm::Value* index = generateExpression(node->index);
+    elementType = pointer->elementType;
+    llvm::Type* element = getLLVMTypeFromNode(elementType);
+    if(!address || !index)
+        return nullptr;
+    if(!element || !element->isSized() || element->isVoidTy() ||
+       module->getDataLayout().getTypeAllocSize(element) == 0)
+    {
+        reportError(
+            node->line,
+            "pointer indexing requires a sized nonempty element type");
+        return nullptr;
+    }
+    if(!index->getType()->isIntegerTy())
+    {
+        reportError(node->line, "pointer index must be an integer");
+        return nullptr;
+    }
+    if(!emitRuntimeNullPointerCheck(address, node->line))
+        return nullptr;
+    TypeNode* indexType = inferExpressionTypeNode(node->index, node->line);
+    index = builder.CreateIntCast(
+        index,
+        llvm::Type::getInt64Ty(context),
+        !indexType || !isUnsignedType(indexType->kind));
+    return builder.CreateGEP(element, address, index, "ptr.index");
+}

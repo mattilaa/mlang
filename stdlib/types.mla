@@ -27,6 +27,7 @@
 /// - `list<T>`: growable sequence container.
 /// - `array<T, N>`: fixed-capacity, list-compatible sequence. Literal
 ///   initializers are checked at compile time so they cannot exceed `N`.
+/// - `fixedarray<T, N>`: inline, allocation-free fixed-size value storage.
 /// - `multiarray<T, D1, ..., DN>`: one-or-more-dimensional fixed-capacity
 ///   array with nested brace initialization and chained indexing.
 /// - `mutmultiarray<T, D1, ..., DN>`: mutable-element variant of `multiarray`;
@@ -431,6 +432,12 @@
 // @builtin array
 // A fixed-capacity, list-compatible container: array<T, N>. The capacity is
 // compile-time constant, and literal initializers cannot exceed it.
+
+// @builtin fixedarray
+// Inline fixed-size value storage: fixedarray<T, N>. Literals, copies, and
+// returns never allocate a backing buffer. Missing elements are zero-filled;
+// length is always N. Supports checked indexing, len(), capacity(), and is_empty().
+// Use var or &mut for indexed writes. Resizing and list conversions are not implicit.
 
 // @builtin struct
 // Declare a named aggregate with fields and optional methods.

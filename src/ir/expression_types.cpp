@@ -26,6 +26,11 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
     {
+        auto globalType = globalSemanticTypes.find(id->name);
+        if(globalType != globalSemanticTypes.end() &&
+           namedValues.count(id->name) &&
+           namedValues[id->name] == globalNamedValues[id->name])
+            return cloneTypeNode(globalType->second);
         auto constant = constexprValues.find(id->name);
         if(constant != constexprValues.end())
             return new TypeNode(constant->second.typeKind);
@@ -87,6 +92,13 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                         cloneTypeNode(listIt->second),
                         capIt->second,
                         multiIt->second);
+                llvm::Value* storage = namedValues[id->name];
+                if(auto* slot =
+                       llvm::dyn_cast_or_null<llvm::AllocaInst>(storage))
+                    if(slot->getAllocatedType()->isArrayTy())
+                        return new FixedArrayTypeNode(
+                            cloneTypeNode(listIt->second),
+                            capIt->second);
                 return new ArrayTypeNode(
                     cloneTypeNode(listIt->second),
                     capIt->second);
@@ -156,6 +168,14 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
     if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
     {
         TypeNode* baseType = getLValueType(index->base, line);
+        if(auto* pointer = dynamic_cast<PointerTypeNode*>(baseType))
+            return cloneTypeNode(pointer->elementType);
+        if(baseType && (baseType->kind == TypeNode::TYPE_STRING ||
+                        baseType->kind == TypeNode::TYPE_STR8 ||
+                        baseType->kind == TypeNode::TYPE_STR16))
+            return new TypeNode(
+                baseType->kind == TypeNode::TYPE_STR16 ? TypeNode::TYPE_U16
+                                                       : TypeNode::TYPE_U8);
         if(auto* listType = dynamic_cast<GenericListTypeNode*>(baseType))
             return cloneTypeNode(listType->elementType);
         if(auto* mapType = dynamic_cast<MapTypeNode*>(baseType))
@@ -523,6 +543,22 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
         }
     }
 
+    if(auto* binary = dynamic_cast<BinaryOpNode*>(expr))
+    {
+        if(binary->op == BinaryOpNode::OP_PLUS ||
+           binary->op == BinaryOpNode::OP_MINUS)
+        {
+            TypeNode* left = getLValueType(binary->left, line);
+            TypeNode* right = getLValueType(binary->right, line);
+            if(auto* pointer = dynamic_cast<PointerTypeNode*>(left))
+                return dynamic_cast<PointerTypeNode*>(right)
+                           ? new TypeNode(TypeNode::TYPE_I64)
+                           : cloneTypeNode(pointer);
+            if(binary->op == BinaryOpNode::OP_PLUS &&
+               dynamic_cast<PointerTypeNode*>(right))
+                return cloneTypeNode(right);
+        }
+    }
     return nullptr;
 }
 

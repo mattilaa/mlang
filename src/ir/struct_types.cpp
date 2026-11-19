@@ -84,7 +84,9 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
         else
         {
             llvm::Type* memberType = getLLVMTypeFromNode(member->type);
-            if(!memberType || !llvm::StructType::isValidElementType(memberType))
+            if(!memberType ||
+               !llvm::StructType::isValidElementType(memberType) ||
+               !memberType->isSized())
             {
                 reportError(
                     member->line,
@@ -102,8 +104,11 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
         layouts.push_back(layout);
     }
 
-    llvm::StructType* structType =
-        llvm::StructType::create(context, memberTypes, node->name);
+    llvm::StructType* structType = getStructType(node->name);
+    if(structType && structType->isOpaque())
+        structType->setBody(memberTypes);
+    else
+        structType = llvm::StructType::create(context, memberTypes, node->name);
     structTypes[node->name] = structType;
     structMembers[node->name] = members;
     structFieldLayouts[node->name] = layouts;

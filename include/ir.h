@@ -315,6 +315,7 @@ private:
     std::map<std::string, int> variableScopeDepth;
     std::map<std::string, TypeNode::TypeKind> variableTypes;
     std::map<std::string, TypeNode::TypeKind> globalVariableTypes;
+    std::map<std::string, TypeNode*> globalSemanticTypes;
     // Track element types for generic lists and maps
     std::map<std::string, TypeNode*> listElementTypes;
     std::map<std::string, int64_t> arrayCapacities;
@@ -904,6 +905,9 @@ private:
     bool validatePointerDereference(ExpressionNode* pointerExpr, int line);
     std::optional<bool> pointerExpressionKnownNull(ExpressionNode* expr) const;
     bool emitRuntimeNullPointerCheck(llvm::Value* ptrValue, int line);
+    llvm::Value* generatePointerIndexPointer(
+        IndexExpressionNode* node,
+        TypeNode*& elementType);
     bool evaluateCompileTimeInt(ExpressionNode* expr, int64_t& out);
     bool evaluateCompileTimeBool(ExpressionNode* expr, bool& out);
     std::optional<uint64_t> fixedArrayByteSize(TypeNode* typeNode);
@@ -1016,7 +1020,26 @@ private:
     llvm::Function* generateFunctionDeclaration(FunctionDefNode* node);
     llvm::Function* generateFunctionDefinition(FunctionDefNode* node);
     void generateStructDefinition(StructDefNode* node);
-    void generateGlobalVarDeclaration(VarDeclNode* node);
+    void generateGlobalVarDeclaration(
+        VarDeclNode* node,
+        bool declarationOnly = false);
+    llvm::Value* generateFixedArrayValue(
+        ExpressionNode* expression,
+        FixedArrayTypeNode* type,
+        int line);
+    llvm::Value* generateFixedArrayIndexPointer(
+        IndexExpressionNode* node,
+        FixedArrayTypeNode* type);
+    void generateFixedArrayDeclaration(
+        const std::string& name,
+        FixedArrayTypeNode* type,
+        ExpressionNode* expression,
+        bool immutable,
+        int line);
+    llvm::Constant* buildGlobalInitializer(
+        ExpressionNode* expression,
+        TypeNode* type,
+        int line);
     void seedFunctionScopeWithGlobals();
 
     void generateStatement(StatementNode* node);

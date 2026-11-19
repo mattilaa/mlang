@@ -1,3 +1,13 @@
+# Unreleased
+
+- Constant-initialized structure globals, including nested defaults, UTF-8
+  strings, and forward/cyclic references to other globals.
+- `fixedarray<T, N>` provides inline, allocation-free value storage in locals,
+  globals, and structure fields, with checked indexing and value returns.
+- Typed raw pointer offsets, element distances, comparisons, and indexed access
+  preserve borrow permissions and lifetime checks. Pointer arithmetic requires
+  `unsafe`; strings support checked read-only byte/code-unit indexing.
+
 # MLang 0.4.4
 
 - Let `build.sh --build-dir build --install` initialize its configuration on

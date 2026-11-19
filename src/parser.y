@@ -2068,7 +2068,7 @@ enum UpdatePosition
 %token <ast> TYPED_INT_LITERAL USER_DEFINED_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
-%token FUNCTION RETURN IF ELSE LIKELY UNLIKELY VOID BOOL BIT FLOAT DOUBLE STR8 STR16 ARRAY MULTIARRAY MUTMULTIARRAY LIST MAP TUPLE PTR STRUCT ENUM FIELD
+%token FUNCTION RETURN IF ELSE LIKELY UNLIKELY VOID BOOL BIT FLOAT DOUBLE STR8 STR16 ARRAY FIXEDARRAY MULTIARRAY MUTMULTIARRAY LIST MAP TUPLE PTR STRUCT ENUM FIELD
 %token QUESTION TRY_QUESTION
 %token ELLIPSIS
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
@@ -3037,6 +3037,9 @@ closure_parameter
 
 type
     : builtin_type_name { $$ = type_node_from_simple_name($1); }
+    | FIXEDARRAY GENERIC_LT type COMMA INT_LITERAL GT
+        { auto* shape = static_cast<ArrayTypeNode*>(make_array_type($3, $5, yylineno, yycolumn_token));
+          $$ = new FixedArrayTypeNode(shape->elementType, shape->capacity); }
     | ARRAY GENERIC_LT type COMMA INT_LITERAL GT
         { $$ = make_array_type($3, $5, yylineno, yycolumn_token); }
     | MULTIARRAY GENERIC_LT type COMMA multiarray_dimensions GT

@@ -257,7 +257,8 @@ TypeNode* Helpers::type_from_text(std::string text)
             }
         }
     }
-    for(const std::string wrapper : {"array", "multiarray", "mutmultiarray"})
+    for(const std::string wrapper :
+        {"array", "fixedarray", "multiarray", "mutmultiarray"})
         if(is_wrapped_generic(text, wrapper.c_str()))
         {
             auto parts = split_top_level_commas(text.substr(
@@ -276,6 +277,11 @@ TypeNode* Helpers::type_from_text(std::string text)
                 if(parsed.ec != std::errc{} ||
                    parsed.ptr != parts[i].data() + parts[i].size())
                     return new StructTypeRefNode(text);
+                if(wrapper == "fixedarray")
+                {
+                    element = new FixedArrayTypeNode(element, capacity);
+                    continue;
+                }
                 element = wrapper == "array"
                               ? static_cast<TypeNode*>(
                                     new ArrayTypeNode(element, capacity))

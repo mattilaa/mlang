@@ -165,6 +165,88 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     if(!L || !R)
         return nullptr;
 
+    auto* leftPointer =
+        dynamic_cast<PointerTypeNode*>(getLValueType(node->left, node->line));
+    auto* rightPointer =
+        dynamic_cast<PointerTypeNode*>(getLValueType(node->right, node->line));
+    if(leftPointer || rightPointer)
+    {
+        if(leftPointer && rightPointer &&
+           (node->op == BinaryOpNode::OP_EQ || node->op == BinaryOpNode::OP_NE))
+        {
+            if(typeMangle(leftPointer) != typeMangle(rightPointer))
+            {
+                reportError(
+                    node->line,
+                    "pointer comparison requires matching element types");
+                return nullptr;
+            }
+            return node->op == BinaryOpNode::OP_EQ ? builder.CreateICmpEQ(L, R)
+                                                   : builder.CreateICmpNE(L, R);
+        }
+        if(unsafeDepth <= 0 && !structuralRequirementProbe)
+        {
+            reportError(
+                node->line,
+                "pointer arithmetic requires an unsafe block");
+            return nullptr;
+        }
+        if(node->op == BinaryOpNode::OP_PLUS ||
+           node->op == BinaryOpNode::OP_MINUS)
+        {
+            if(leftPointer && rightPointer &&
+               node->op == BinaryOpNode::OP_MINUS)
+            {
+                llvm::Type* element =
+                    getLLVMTypeFromNode(leftPointer->elementType);
+                if(typeMangle(leftPointer) != typeMangle(rightPointer) ||
+                   !element || !element->isSized() || element->isVoidTy() ||
+                   module->getDataLayout().getTypeAllocSize(element) == 0)
+                {
+                    reportError(
+                        node->line,
+                        "pointer subtraction requires matching sized element "
+                        "types");
+                    return nullptr;
+                }
+                return builder.CreatePtrDiff(element, L, R, "ptr.distance");
+            }
+            if(!(leftPointer && rightPointer) &&
+               (leftPointer || node->op == BinaryOpNode::OP_PLUS))
+            {
+                auto* pointer = leftPointer ? leftPointer : rightPointer;
+                llvm::Value* address = leftPointer ? L : R;
+                llvm::Value* offset = leftPointer ? R : L;
+                llvm::Type* element = getLLVMTypeFromNode(pointer->elementType);
+                if(!offset->getType()->isIntegerTy() || !element ||
+                   !element->isSized() || element->isVoidTy() ||
+                   module->getDataLayout().getTypeAllocSize(element) == 0)
+                {
+                    reportError(
+                        node->line,
+                        "pointer arithmetic requires an integer offset and "
+                        "sized element type");
+                    return nullptr;
+                }
+                TypeNode* offsetType = inferExpressionTypeNode(
+                    leftPointer ? node->right : node->left,
+                    node->line);
+                offset = builder.CreateIntCast(
+                    offset,
+                    llvm::Type::getInt64Ty(context),
+                    !offsetType || !isUnsignedType(offsetType->kind));
+                if(node->op == BinaryOpNode::OP_MINUS)
+                    offset = builder.CreateNeg(offset);
+                if(!emitRuntimeNullPointerCheck(address, node->line))
+                    return nullptr;
+                return builder
+                    .CreateGEP(element, address, offset, "ptr.offset");
+            }
+        }
+        reportError(node->line, "unsupported pointer operation");
+        return nullptr;
+    }
+
     auto generateTraitBinaryOp = [&](const std::string& traitName,
                                      const std::string& methodName,
                                      const std::string& opText) -> llvm::Value*

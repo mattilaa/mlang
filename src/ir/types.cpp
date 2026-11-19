@@ -189,6 +189,14 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
         return getTraitObjectType(traitObj->traitName);
     }
 
+    if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(typeNode))
+    {
+        llvm::Type* element = getLLVMTypeFromNode(fixed->elementType);
+        return element && element->isSized() && fixed->capacity >= 0
+                   ? llvm::ArrayType::get(element, fixed->capacity)
+                   : nullptr;
+    }
+
     // Handle generic list type
     if(auto* listType = dynamic_cast<GenericListTypeNode*>(typeNode))
     {

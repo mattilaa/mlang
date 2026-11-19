@@ -222,8 +222,15 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
             }
             else
             {
-                if(auto* returnList = dynamic_cast<GenericListTypeNode*>(
+                if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(
                        currentSemanticReturnType))
+                    returnValue = generateFixedArrayValue(
+                        node->expression,
+                        fixed,
+                        node->line);
+                else if(
+                    auto* returnList = dynamic_cast<GenericListTypeNode*>(
+                        currentSemanticReturnType))
                 {
                     if(auto* returnArray = dynamic_cast<ArrayTypeNode*>(
                            currentSemanticReturnType))
@@ -2605,8 +2612,12 @@ void CodeGenerator::generateForListLiteralIteration(
         hadOldIdxDepth = oldIdxDepthIt != variableScopeDepth.end();
         oldIdxDepth = hadOldIdxDepth ? oldIdxDepthIt->second : 0;
         namedValues[node->indexVarName] = indexVar;
-        debugDeclareVariable(node->indexVarName, indexVar, nullptr, node); // mlang
-                                                                           // -g
+        debugDeclareVariable(
+            node->indexVarName,
+            indexVar,
+            nullptr,
+            node); // mlang
+                   // -g
         variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
         recordVariableScopeDepth(node->indexVarName);
     }
@@ -2824,13 +2835,29 @@ void CodeGenerator::generateForListVariableIteration(
     llvm::StructType* listStructType =
         llvm::StructType::get(context, listStructTypes);
 
-    // Load the list struct
-    llvm::Value* listStruct =
-        builder.CreateLoad(listStructType, listPtr, "list");
-
-    // Extract size and data pointer
-    llvm::Value* listSize = builder.CreateExtractValue(listStruct, 0, "size");
-    llvm::Value* dataPtr = builder.CreateExtractValue(listStruct, 1, "data");
+    llvm::Value* listSize = nullptr;
+    llvm::Value* dataPtr = nullptr;
+    llvm::Type* storedType = nullptr;
+    if(auto* slot = llvm::dyn_cast<llvm::AllocaInst>(listPtr))
+        storedType = slot->getAllocatedType();
+    else if(auto* global = llvm::dyn_cast<llvm::GlobalVariable>(listPtr))
+        storedType = global->getValueType();
+    if(auto* fixed = llvm::dyn_cast_or_null<llvm::ArrayType>(storedType))
+    {
+        listSize = llvm::ConstantInt::get(i64Type, fixed->getNumElements());
+        dataPtr = builder.CreateGEP(
+            fixed,
+            listPtr,
+            {llvm::ConstantInt::get(i64Type, 0),
+             llvm::ConstantInt::get(i64Type, 0)});
+    }
+    else
+    {
+        llvm::Value* listStruct =
+            builder.CreateLoad(listStructType, listPtr, "list");
+        listSize = builder.CreateExtractValue(listStruct, 0, "size");
+        dataPtr = builder.CreateExtractValue(listStruct, 1, "data");
+    }
 
     // Create index variable
     llvm::AllocaInst* indexVar = builder.CreateAlloca(i64Type, nullptr, "idx");
@@ -2962,8 +2989,12 @@ void CodeGenerator::generateForListVariableIteration(
         hadOldIdxDepth = oldIdxDepthIt != variableScopeDepth.end();
         oldIdxDepth = hadOldIdxDepth ? oldIdxDepthIt->second : 0;
         namedValues[node->indexVarName] = indexVar;
-        debugDeclareVariable(node->indexVarName, indexVar, nullptr, node); // mlang
-                                                                           // -g
+        debugDeclareVariable(
+            node->indexVarName,
+            indexVar,
+            nullptr,
+            node); // mlang
+                   // -g
         variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
         recordVariableScopeDepth(node->indexVarName);
     }
@@ -3189,8 +3220,12 @@ void CodeGenerator::generateForEnumIteration(
         hadOldIdxDepth = oldIdxDepthIt != variableScopeDepth.end();
         oldIdxDepth = hadOldIdxDepth ? oldIdxDepthIt->second : 0;
         namedValues[node->indexVarName] = indexVar;
-        debugDeclareVariable(node->indexVarName, indexVar, nullptr, node); // mlang
-                                                                           // -g
+        debugDeclareVariable(
+            node->indexVarName,
+            indexVar,
+            nullptr,
+            node); // mlang
+                   // -g
         variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
         recordVariableScopeDepth(node->indexVarName);
     }
@@ -3464,8 +3499,12 @@ void CodeGenerator::generateForMapIteration(
             loopVar =
                 builder.CreateAlloca(entryStructType, nullptr, node->varName);
             namedValues[node->varName] = loopVar;
-            debugDeclareVariable(node->varName, loopVar, nullptr, node); // mlang
-                                                                         // -g
+            debugDeclareVariable(
+                node->varName,
+                loopVar,
+                nullptr,
+                node); // mlang
+                       // -g
             variableTypes[node->varName] = TypeNode::TYPE_TUPLE;
             clearMovedVariable(node->varName);
             recordVariableScopeDepth(node->varName);

@@ -1,0 +1,106 @@
+mod std::strbuf;
+use std::strbuf::to_utf16;
+// Compiler regressions for static data and freestanding pointer/string access.
+struct Calibration { var offset: i32 { -7 }; var scale: i32 { 1000 }; };
+struct Climate { var name: str8; var calibration: Calibration; var enabled: bool { true }; };
+var climate: Climate = Climate { name: "winter" };
+var counter: i32 = 5;
+struct CounterRef { var value: ptr<i32>; };
+var reference: CounterRef = CounterRef { value: &mut counter };
+
+#[test]
+fn test_structure_global_defaults_and_mutation() -> i32 {
+    if climate.calibration.offset != -7 || climate.calibration.scale != 1000 || !climate.enabled { return 1; }
+    climate.calibration.offset = -9;
+    return climate.calibration.offset == -9 ? 0 : 1;
+}
+
+#[test]
+fn test_structure_global_pointer_relocation() -> i32 {
+    unsafe { * reference.value = 11; }
+    return counter == 11 ? 0 : 1;
+}
+
+#[test]
+fn test_string_indexing_including_terminator() -> i32 {
+    let word: str8 = "weather";
+    return word[0] == 119 && word[6] == 114 && word[7] == 0 ? 0 : 1;
+}
+
+struct Pair { var first: i32; var second: i32; };
+#[test]
+fn test_typed_pointer_offsets_and_indexed_writes() -> i32 {
+    var values: Pair = Pair { first: 10, second: 20 };
+    let writer: ptr<i32> = &mut values.first;
+    unsafe { writer[1] = 42; }
+    let pointer: ptr<i32> = &values.first;
+    unsafe {
+        let second: ptr<i32> = pointer + 1;
+        if * second != 42 || second - pointer != 1 || second == pointer { return 1; }
+        if * (1 + pointer) != 42 || * (second - 1) != 10 { return 1; }
+    }
+    return values.second == 42 ? 0 : 1;
+}
+
+var pressures: fixedarray<i32, 4> = { 10133, 9546, 8988, 8456 };
+struct Samples { var values: fixedarray<i32, 3>; };
+var samples: Samples = Samples { values: [7, 8, 9] };
+
+fn make_table() -> fixedarray<i32, 3> { return [10, 20, 30]; }
+fn sum_table(table: fixedarray<i32, 3>) -> i32 {
+    var sum: i32 = 0;
+    for value in table { sum += value; }
+    return sum;
+}
+
+#[test]
+fn test_inline_arrays_globals_locals_and_value_returns() -> i32 {
+    static_assert!(size_of(fixedarray<i32, 3>) == 12);
+    static_assert!(size_of(Samples) == 12);
+    var table: fixedarray<i32, 3> = make_table();
+    table[1] = 42;
+    if table[1] != 42 || table.len() != 3 || table.capacity() != 3 || table.is_empty() { return 1; }
+    if sum_table(make_table()) != 60 || make_table()[2] != 30 { return 1; }
+    if pressures[1] != 9546 || samples.values[2] != 9 { return 1; }
+    let padded: fixedarray<u8, 3> = { 200 };
+    let repeated: fixedarray<i32, 3> = [6; 3];
+    return padded[0] == 200 && padded[1] == 0 && repeated[2] == 6 ? 0 : 1;
+}
+
+fn modify_table(table: &mut fixedarray<i32, 3>) -> void { table[1] = 19; }
+#[test]
+fn test_inline_arrays_borrowed_and_nested() -> i32 {
+    var table: fixedarray<i32, 3> = [1, 2, 3];
+    modify_table(&mut table);
+    var wrapped: Samples = Samples { values: [4, 5, 6] };
+    wrapped.values[2] = 17;
+    var matrix: fixedarray<fixedarray<i32, 2>, 2> = [[1, 2], [3, 4]];
+    matrix[1][0] = 21;
+    return table[1] == 19 && wrapped.values[2] == 17 && matrix[1][0] == 21 ? 0 : 1;
+}
+
+fn offset_pointer(pointer: ptr<i32>, amount: i32) -> ptr<i32> {
+    unsafe { return pointer + amount; }
+}
+#[test]
+fn test_pointer_forwarding_preserves_the_argument_lifetime() -> i32 {
+    var value: i32 = 7;
+    let pointer: ptr<i32> = offset_pointer(&mut value, 0);
+    unsafe { * pointer = 12; }
+    return value == 12 ? 0 : 1;
+}
+
+struct GlobalBox<T> { var value: T; };
+var boxed: GlobalBox<i32> = GlobalBox<i32> { value: 42 };
+var inferred_box = GlobalBox<i32> { value: 17 };
+#[test]
+fn test_generic_globals_and_inline_array_copies() -> i32 {
+    var source: fixedarray<i32, 2> = [1, 2];
+    var copied = source;
+    copied[0] = 99;
+    let empty: fixedarray<i32, 0> = [];
+    let text: str16 = to_utf16("AZ");
+    if boxed.value != 42 || inferred_box.value != 17 { return 1; }
+    if source[0] != 1 || copied[0] != 99 || !empty.is_empty() { return 1; }
+    return text[0] == 65 && text[1] == 90 && text[2] == 0 ? 0 : 1;
+}

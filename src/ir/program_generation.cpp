@@ -22,6 +22,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
     globalNamedValues.clear();
     globalConstantVariables.clear();
     globalVariableTypes.clear();
+    globalSemanticTypes.clear();
     globalStructVariableTypes.clear();
     arrayCapacities.clear();
     arrayKnownLengths.clear();
@@ -420,16 +421,6 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
-    if(!program->globalVars.empty())
-    {
-        for(auto* gv : program->globalVars)
-        {
-            if(!gv)
-                continue;
-            generateGlobalVarDeclaration(gv);
-        }
-    }
-
     if(program->enumList)
     {
         for(auto* en : program->enumList->enums)
@@ -801,6 +792,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
         for(auto structDef : program->structList->structs)
         {
             structMap[structDef->name] = structDef;
+            if(!structDef->isGeneric() && !structTypes.count(structDef->name))
+                structTypes[structDef->name] =
+                    llvm::StructType::create(context, structDef->name);
         }
 
         // Process structs in dependency order (bases before derived)
@@ -838,11 +832,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
                     processMemberType(refType->elementType);
                     return;
                 }
-                if(auto* ptrType = dynamic_cast<PointerTypeNode*>(type))
-                {
-                    processMemberType(ptrType->elementType);
+                // Pointer layout does not require the pointee's completed body.
+                if(dynamic_cast<PointerTypeNode*>(type))
                     return;
-                }
                 if(auto* tupleType = dynamic_cast<TupleTypeNode*>(type))
                 {
                     if(tupleType->elementTypes)
@@ -910,6 +902,33 @@ void CodeGenerator::generateCode(ProgramNode* program)
     }
 
     // Invalid layouts must not reach function signatures or method bodies.
+    if(hasError)
+        return;
+
+    if(!program->globalVars.empty())
+    {
+        for(auto* gv : program->globalVars)
+        {
+            if(!gv)
+                continue;
+            generateGlobalVarDeclaration(gv, true);
+        }
+    }
+
+    // Resolve addresses after every global has storage, including self/cyclic
+    // references.
+    for(auto* global : program->globalVars)
+    {
+        if(!global || !globalNamedValues.count(global->name))
+            continue;
+        auto* initializer = buildGlobalInitializer(
+            global->initExpr,
+            globalSemanticTypes[global->name],
+            global->line);
+        if(initializer)
+            llvm::cast<llvm::GlobalVariable>(globalNamedValues[global->name])
+                ->setInitializer(initializer);
+    }
     if(hasError)
         return;
 

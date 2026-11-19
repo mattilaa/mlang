@@ -539,6 +539,8 @@ TypeNode* CodeGenerator::substituteTypeParams(
                 newElemType,
                 multiarrayType->capacity,
                 multiarrayType->elementsMutable);
+        if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(type))
+            return new FixedArrayTypeNode(newElemType, fixed->capacity);
         if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(type))
             return new ArrayTypeNode(newElemType, arrayType->capacity);
         return new GenericListTypeNode(newElemType);

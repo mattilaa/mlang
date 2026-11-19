@@ -557,6 +557,8 @@ llvm::Value* CodeGenerator::generateArgumentValue(
         }
     }
 
+    if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(declaredType))
+        return generateFixedArrayValue(arg, fixed, arg->line);
     auto* listType = dynamic_cast<GenericListTypeNode*>(declaredType);
     if(listType && listType->elementType &&
        isNumericTypeKind(listType->elementType->kind))
@@ -1073,6 +1075,13 @@ llvm::Value* CodeGenerator::generateListIndexPointer(
 
     auto* baseId = dynamic_cast<IdentifierNode*>(node->base);
     TypeNode* baseType = getLValueType(node->base, node->line);
+    if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(baseType))
+    {
+        elementTypeNode = fixed->elementType;
+        return generateFixedArrayIndexPointer(node, fixed);
+    }
+    if(dynamic_cast<PointerTypeNode*>(baseType))
+        return generatePointerIndexPointer(node, elementTypeNode);
     auto* listType = dynamic_cast<GenericListTypeNode*>(baseType);
     if(!listType)
     {
@@ -1204,6 +1213,86 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
 
     auto* baseId = dynamic_cast<IdentifierNode*>(node->base);
     TypeNode* baseType = getLValueType(node->base, node->line);
+    if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(baseType))
+    {
+        auto* pointer = generateFixedArrayIndexPointer(node, fixed);
+        return pointer ? builder.CreateLoad(
+                             getLLVMTypeFromNode(fixed->elementType),
+                             pointer,
+                             "fixedarray.element")
+                       : nullptr;
+    }
+    if(dynamic_cast<PointerTypeNode*>(baseType))
+    {
+        TypeNode* element = nullptr;
+        llvm::Value* address = generatePointerIndexPointer(node, element);
+        return address ? builder.CreateLoad(
+                             getLLVMTypeFromNode(element),
+                             address,
+                             "ptr.element")
+                       : nullptr;
+    }
+    if(baseType && (baseType->kind == TypeNode::TYPE_STRING ||
+                    baseType->kind == TypeNode::TYPE_STR8 ||
+                    baseType->kind == TypeNode::TYPE_STR16))
+    {
+        llvm::Value* address = generateExpression(node->base);
+        llvm::Value* index = generateExpression(node->index);
+        if(!address || !index)
+            return nullptr;
+        if(!index->getType()->isIntegerTy())
+        {
+            reportError(node->line, "string index must be an integer");
+            return nullptr;
+        }
+        if(!emitRuntimeNullPointerCheck(address, node->line))
+            return nullptr;
+        llvm::Type* integer = llvm::Type::getInt64Ty(context);
+        llvm::Type* unit = baseType->kind == TypeNode::TYPE_STR16
+                               ? llvm::Type::getInt16Ty(context)
+                               : llvm::Type::getInt8Ty(context);
+        TypeNode* indexType = inferExpressionTypeNode(node->index, node->line);
+        index = builder.CreateIntCast(
+            index,
+            integer,
+            !indexType || !isUnsignedType(indexType->kind));
+        llvm::Function* function = builder.GetInsertBlock()->getParent();
+        auto* start = builder.GetInsertBlock();
+        auto* loop =
+            llvm::BasicBlock::Create(context, "string.index.scan", function);
+        auto* step =
+            llvm::BasicBlock::Create(context, "string.index.step", function);
+        auto* done =
+            llvm::BasicBlock::Create(context, "string.index.done", function);
+        auto* fail =
+            llvm::BasicBlock::Create(context, "string.index.fail", function);
+        builder.CreateCondBr(
+            builder.CreateICmpSLT(index, llvm::ConstantInt::get(integer, 0)),
+            fail,
+            loop);
+        builder.SetInsertPoint(loop);
+        auto* cursor = builder.CreatePHI(integer, 2, "string.cursor");
+        cursor->addIncoming(llvm::ConstantInt::get(integer, 0), start);
+        auto* byte = builder.CreateLoad(
+            unit,
+            builder.CreateGEP(unit, address, cursor),
+            "string.unit");
+        builder.CreateCondBr(builder.CreateICmpEQ(cursor, index), done, step);
+        builder.SetInsertPoint(step);
+        auto* next =
+            builder.CreateAdd(cursor, llvm::ConstantInt::get(integer, 1));
+        cursor->addIncoming(next, step);
+        builder.CreateCondBr(
+            builder.CreateICmpEQ(byte, llvm::ConstantInt::get(unit, 0)),
+            fail,
+            loop);
+        builder.SetInsertPoint(fail);
+        initializeFormatFunctions();
+        builder.CreateCall(abortFunc, {});
+        builder.CreateUnreachable();
+        builder.SetInsertPoint(done);
+        return byte;
+    }
     llvm::Value* baseValue = nullptr;
     llvm::Value* basePtr = nullptr;
     if(dynamic_cast<IndexExpressionNode*>(node->base))
@@ -1964,8 +2053,13 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
 
             if(!fieldValue)
             {
-                if(auto* expectedList = dynamic_cast<GenericListTypeNode*>(
+                if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(
                        currentMembers[memberIndex].second))
+                    fieldValue =
+                        generateFixedArrayValue(valueExpr, fixed, node->line);
+                else if(
+                    auto* expectedList = dynamic_cast<GenericListTypeNode*>(
+                        currentMembers[memberIndex].second))
                 {
                     if(auto* expectedArray = dynamic_cast<ArrayTypeNode*>(
                            currentMembers[memberIndex].second))

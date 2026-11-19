@@ -932,10 +932,29 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
     if(auto* indexTarget = dynamic_cast<IndexExpressionNode*>(node->target))
     {
+        if(dynamic_cast<PointerTypeNode*>(
+               getLValueType(indexTarget->base, node->line)))
+        {
+            BinaryOpNode address(
+                BinaryOpNode::OP_PLUS,
+                indexTarget->base,
+                indexTarget->index);
+            address.line = node->line;
+            DerefAssignmentNode assignment(&address, node->expression);
+            assignment.line = node->line;
+            generateDerefAssignment(&assignment);
+            return;
+        }
         ExpressionNode* root = indexTarget;
         while(auto* index = dynamic_cast<IndexExpressionNode*>(root))
             root = index->base;
         auto* rootIdentifier = dynamic_cast<IdentifierNode*>(root);
+        IdentifierNode fixedRoot(resolveBorrowOwnerFromLValue(root));
+        const bool fixedTarget =
+            dynamic_cast<FixedArrayTypeNode*>(
+                getLValueType(indexTarget->base, node->line)) != nullptr;
+        if(!rootIdentifier && fixedTarget && namedValues.count(fixedRoot.name))
+            rootIdentifier = &fixedRoot;
         if(!rootIdentifier)
         {
             reportError(
@@ -948,8 +967,9 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         auto mutability = multiarrayMutability.find(rootIdentifier->name);
         const bool isMultiarray = mutability != multiarrayMutability.end();
         const bool isMutableListLike =
-            !isMultiarray && listElementTypes.find(rootIdentifier->name) !=
-                                 listElementTypes.end();
+            !isMultiarray &&
+            (fixedTarget || listElementTypes.find(rootIdentifier->name) !=
+                                listElementTypes.end());
         if((isMultiarray && !mutability->second) ||
            (!isMultiarray && !isMutableListLike))
         {

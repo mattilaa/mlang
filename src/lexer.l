@@ -409,6 +409,7 @@ static int mla_lex_peek_branch_declaration()
 "str8"          { return STR8; }
 "str16"         { return STR16; }
 "array"         { return ARRAY; }
+"fixedarray"    { return FIXEDARRAY; }
 "multiarray"    { return MULTIARRAY; }
 "mutmultiarray" { return MUTMULTIARRAY; }
 "list"          { return LIST; }

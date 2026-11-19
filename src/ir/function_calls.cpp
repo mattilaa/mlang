@@ -4230,6 +4230,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             expected = refType->elementType;
         while(auto* refType = dynamic_cast<ReferenceTypeNode*>(actual))
             actual = refType->elementType;
+        if(dynamic_cast<FixedArrayTypeNode*>(expected) ||
+           dynamic_cast<FixedArrayTypeNode*>(actual))
+            return false;
         auto* expectedList = dynamic_cast<GenericListTypeNode*>(expected);
         auto* actualArray = dynamic_cast<ArrayTypeNode*>(actual);
         if(!expectedList || !actualArray ||

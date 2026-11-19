@@ -110,13 +110,250 @@ void CodeGenerator::seedFunctionScopeWithGlobals()
         namedValues[it.first] = it.second;
     for(const auto& it : globalVariableTypes)
         variableTypes[it.first] = it.second;
+    for(const auto& item : globalSemanticTypes)
+    {
+        if(auto* pointer = dynamic_cast<PointerTypeNode*>(item.second))
+            pointerElementTypes[item.first] = pointer->elementType;
+        if(auto* array = dynamic_cast<ArrayTypeNode*>(item.second))
+        {
+            listElementTypes[item.first] = array->elementType;
+            arrayCapacities[item.first] = array->capacity;
+        }
+    }
     for(const auto& it : globalStructVariableTypes)
         structVariableTypes[it.first] = it.second;
     for(const auto& n : globalConstantVariables)
         constantVariables.insert(n);
 }
 
-void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
+llvm::Constant* CodeGenerator::buildGlobalInitializer(
+    ExpressionNode* expression,
+    TypeNode* type,
+    int line)
+{
+    llvm::Type* target = getLLVMTypeFromNode(type);
+    if(!target)
+        return nullptr;
+    auto fail = [&]() -> llvm::Constant*
+    {
+        reportError(
+            line,
+            "global initializer must be a compatible constant expression");
+        return nullptr;
+    };
+    if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(type))
+    {
+        auto* array = llvm::cast<llvm::ArrayType>(target);
+        std::vector<llvm::Constant*> elements;
+        auto* literal = dynamic_cast<ListLiteralNode*>(expression);
+        auto* fill = dynamic_cast<ArrayFillNode*>(expression);
+        int64_t count = literal && literal->elements
+                            ? literal->elements->elements.size()
+                            : 0;
+        if(fill && !evaluateCompileTimeInt(fill->count, count))
+            return fail();
+        if((expression && !literal && !fill) || count < 0 ||
+           count > fixed->capacity)
+            return fail();
+        for(int64_t i = 0; i < fixed->capacity; ++i)
+        {
+            ExpressionNode* value =
+                i < count
+                    ? (fill ? fill->value : literal->elements->elements[i])
+                    : nullptr;
+            auto* constant =
+                buildGlobalInitializer(value, fixed->elementType, line);
+            if(!constant)
+                return nullptr;
+            elements.push_back(constant);
+        }
+        return llvm::ConstantArray::get(array, elements);
+    }
+    if(auto* structure = llvm::dyn_cast<llvm::StructType>(target))
+    {
+        if(!structure->hasName())
+            return expression ? fail() : llvm::Constant::getNullValue(target);
+        const std::string name = structure->getName().str();
+        auto members = structMembers.find(name);
+        if(members == structMembers.end())
+            return fail();
+        auto* literal = dynamic_cast<StructLiteralNode*>(expression);
+        if(expression && !literal)
+            return fail();
+        if(literal && !literal->structName.empty())
+        {
+            TypeNode* literalType = new StructTypeRefNode(literal->structName);
+            if(!literal->typeArgs.empty())
+            {
+                auto* generic =
+                    new GenericStructTypeRefNode(literal->structName);
+                for(const auto& argument : literal->typeArgs)
+                    generic->typeArgs.push_back(
+                        Helpers::type_from_text(argument));
+                literalType = generic;
+            }
+            if(getLLVMTypeFromNode(literalType) != target)
+                return fail();
+        }
+        std::map<std::string, ExpressionNode*> explicitFields;
+        if(literal)
+        {
+            for(const auto& field : literal->fields)
+            {
+                if(!explicitFields.emplace(field.first, field.second).second)
+                {
+                    reportError(
+                        line,
+                        "duplicate global initializer field '" + field.first +
+                            "'");
+                    return nullptr;
+                }
+            }
+        }
+        std::vector<llvm::Constant*> fields;
+        for(llvm::Type* fieldType : structure->elements())
+            fields.push_back(llvm::Constant::getNullValue(fieldType));
+        for(size_t i = 0; i < members->second.size(); ++i)
+        {
+            const auto& member = members->second[i];
+            ExpressionNode* value = nullptr;
+            auto supplied = explicitFields.find(member.first);
+            if(supplied != explicitFields.end())
+            {
+                if(!canAccessStructField(
+                       name,
+                       static_cast<int>(i),
+                       line,
+                       member.first))
+                    return nullptr;
+                value = supplied->second;
+                explicitFields.erase(supplied);
+            }
+            else
+            {
+                auto defaults = structMemberDefaults.find(name);
+                if(defaults != structMemberDefaults.end())
+                {
+                    auto defaultValue = defaults->second.find(member.first);
+                    if(defaultValue != defaults->second.end())
+                        value = defaultValue->second;
+                }
+            }
+            llvm::Constant* field =
+                buildGlobalInitializer(value, member.second, line);
+            const auto* layout =
+                getStructFieldLayout(name, static_cast<int>(i));
+            if(!field || !layout)
+                return nullptr;
+            if(layout->packedBit)
+            {
+                auto* integer = llvm::dyn_cast<llvm::ConstantInt>(field);
+                auto* previous = llvm::dyn_cast<llvm::ConstantInt>(
+                    fields[layout->storageIndex]);
+                if(!integer || !previous)
+                    return fail();
+                fields[layout->storageIndex] = llvm::ConstantInt::get(
+                    previous->getType(),
+                    previous->getZExtValue() |
+                        ((integer->isZero() ? 0ULL : 1ULL)
+                         << layout->bitOffset));
+            }
+            else
+                fields[layout->storageIndex] = field;
+        }
+        if(!explicitFields.empty())
+        {
+            reportError(
+                line,
+                "unknown global initializer field '" +
+                    explicitFields.begin()->first + "'");
+            return nullptr;
+        }
+        return llvm::ConstantStruct::get(structure, fields);
+    }
+    if(!expression)
+        return llvm::Constant::getNullValue(target);
+    if(auto* string = dynamic_cast<StringLiteralNode*>(expression))
+    {
+        if(!target->isPointerTy() || (type->kind != TypeNode::TYPE_STRING &&
+                                      type->kind != TypeNode::TYPE_STR8))
+            return fail();
+#if LLVM_VERSION_MAJOR >= 21
+        return builder.CreateGlobalString(
+            string->value,
+            "global.string",
+            0,
+            module.get());
+#else
+        return builder.CreateGlobalStringPtr(
+            string->value,
+            "global.string",
+            0,
+            module.get());
+#endif
+    }
+    if(auto* address = dynamic_cast<UnaryOpNode*>(expression))
+    {
+        if(target->isPointerTy() && (address->op == UnaryOpNode::OP_ADDR ||
+                                     address->op == UnaryOpNode::OP_ADDR_MUT))
+        {
+            if(auto* id = dynamic_cast<IdentifierNode*>(address->operand))
+            {
+                auto global = globalNamedValues.find(id->name);
+                if(global != globalNamedValues.end())
+                {
+                    auto* pointer = dynamic_cast<PointerTypeNode*>(type);
+                    auto* storage =
+                        llvm::dyn_cast<llvm::GlobalVariable>(global->second);
+                    if(pointer && storage &&
+                       storage->getValueType() ==
+                           getLLVMTypeFromNode(pointer->elementType))
+                        return llvm::ConstantExpr::getPointerCast(
+                            storage,
+                            llvm::cast<llvm::PointerType>(target));
+                }
+            }
+            return fail();
+        }
+    }
+    if(target->isFloatingPointTy())
+    {
+        if(auto* number = dynamic_cast<FloatLiteralNode*>(expression))
+            return llvm::ConstantFP::get(target, number->value);
+        if(auto* number = dynamic_cast<DoubleLiteralNode*>(expression))
+            return llvm::ConstantFP::get(target, number->value);
+        if(auto* negative = dynamic_cast<UnaryOpNode*>(expression))
+        {
+            if(negative->op == UnaryOpNode::OP_NEG)
+            {
+                auto* operand =
+                    buildGlobalInitializer(negative->operand, type, line);
+                if(auto* number =
+                       llvm::dyn_cast_or_null<llvm::ConstantFP>(operand))
+                {
+                    llvm::APFloat value = number->getValueAPF();
+                    value.changeSign();
+                    return llvm::ConstantFP::get(context, value);
+                }
+                return nullptr;
+            }
+        }
+    }
+    if(target->isIntegerTy())
+    {
+        int64_t value = 0;
+        if(evaluateCompileTimeInt(expression, value))
+            return llvm::ConstantInt::get(
+                target,
+                value,
+                !isUnsignedType(type->kind));
+    }
+    return fail();
+}
+
+void CodeGenerator::generateGlobalVarDeclaration(
+    VarDeclNode* node,
+    bool declarationOnly)
 {
     if(!node)
         return;
@@ -133,7 +370,22 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         kind = node->type->kind;
     else if(node->initExpr)
     {
-        if(dynamic_cast<BoolLiteralNode*>(node->initExpr))
+        if(auto* literal = dynamic_cast<StructLiteralNode*>(node->initExpr))
+        {
+            if(literal->typeArgs.empty())
+                node->type = new StructTypeRefNode(literal->structName);
+            else
+            {
+                auto* generic =
+                    new GenericStructTypeRefNode(literal->structName);
+                for(const auto& argument : literal->typeArgs)
+                    generic->typeArgs.push_back(
+                        Helpers::type_from_text(argument));
+                node->type = generic;
+            }
+            kind = TypeNode::TYPE_STRUCT;
+        }
+        else if(dynamic_cast<BoolLiteralNode*>(node->initExpr))
             kind = TypeNode::TYPE_BOOL;
         else if(dynamic_cast<FloatLiteralNode*>(node->initExpr))
             kind = TypeNode::TYPE_FLOAT;
@@ -153,88 +405,14 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         return;
     }
 
-    llvm::Constant* init = llvm::Constant::getNullValue(llvmTy);
-    if(node->initExpr)
-    {
-        if(auto* i = dynamic_cast<IntLiteralNode*>(node->initExpr))
-        {
-            if(!llvmTy->isIntegerTy())
-            {
-                reportError(
-                    node->line,
-                    "global integer initializer type mismatch for '" +
-                        node->name + "'");
-                return;
-            }
-            init = llvm::ConstantInt::get(llvmTy, i->value, true);
-        }
-        else if(auto* b = dynamic_cast<BoolLiteralNode*>(node->initExpr))
-        {
-            if(!llvmTy->isIntegerTy(1))
-            {
-                reportError(
-                    node->line,
-                    "global bool initializer type mismatch for '" + node->name +
-                        "'");
-                return;
-            }
-            init = llvm::ConstantInt::get(llvmTy, b->value ? 1 : 0, false);
-        }
-        else if(auto* f = dynamic_cast<FloatLiteralNode*>(node->initExpr))
-        {
-            if(!llvmTy->isFloatTy())
-            {
-                reportError(
-                    node->line,
-                    "global float initializer type mismatch for '" +
-                        node->name + "'");
-                return;
-            }
-            init = llvm::ConstantFP::get(llvmTy, f->value);
-        }
-        else if(auto* d = dynamic_cast<DoubleLiteralNode*>(node->initExpr))
-        {
-            if(!llvmTy->isDoubleTy())
-            {
-                reportError(
-                    node->line,
-                    "global double initializer type mismatch for '" +
-                        node->name + "'");
-                return;
-            }
-            init = llvm::ConstantFP::get(llvmTy, d->value);
-        }
-        else if(auto* s = dynamic_cast<StringLiteralNode*>(node->initExpr))
-        {
-            if(!llvmTy->isPointerTy())
-            {
-                reportError(
-                    node->line,
-                    "global string initializer type mismatch for '" +
-                        node->name + "'");
-                return;
-            }
-#if LLVM_VERSION_MAJOR >= 21
-            auto* gstr =
-                builder.CreateGlobalString(s->value, node->name + ".gstr");
-            init = llvm::dyn_cast<llvm::Constant>(gstr);
-#else
-            auto* gstr =
-                builder.CreateGlobalStringPtr(s->value, node->name + ".gstr");
-            init = llvm::dyn_cast<llvm::Constant>(gstr);
-#endif
-            if(!init)
-                init = llvm::ConstantPointerNull::get(
-                    llvm::cast<llvm::PointerType>(llvmTy));
-        }
-        else
-        {
-            reportError(
-                node->line,
-                "global initializer must be a literal constant");
-            return;
-        }
-    }
+    llvm::Constant* init =
+        declarationOnly ? llvm::Constant::getNullValue(llvmTy)
+                        : buildGlobalInitializer(
+                              node->initExpr,
+                              node->type ? node->type : new TypeNode(kind),
+                              node->line);
+    if(!init)
+        return;
 
     auto* gv = new llvm::GlobalVariable(
         *module,
@@ -245,6 +423,16 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         "__mlang_global_" + node->name);
     globalNamedValues[node->name] = gv;
     globalVariableTypes[node->name] = kind;
+    globalSemanticTypes[node->name] =
+        node->type ? cloneTypeNode(node->type) : new TypeNode(kind);
+    if(auto* structure = llvm::dyn_cast<llvm::StructType>(llvmTy))
+    {
+        if(structure->hasName())
+        {
+            globalVariableTypes[node->name] = TypeNode::TYPE_STRUCT;
+            globalStructVariableTypes[node->name] = structure->getName().str();
+        }
+    }
 }
 
 llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
@@ -443,7 +631,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                 std::string(arg.getName()) + ".in");
             inoutParams.push_back({&arg, std::string(arg.getName())});
         }
-        else if(arg.getType()->isStructTy())
+        else if(arg.getType()->isStructTy() || arg.getType()->isArrayTy())
             paramValue = applyStructCopySemantics(paramValue);
         builder.CreateStore(paramValue, alloca);
         namedValues[std::string(arg.getName())] = alloca;
@@ -467,6 +655,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                 {
                     listElementTypes[std::string(arg.getName())] =
                         genListInner->elementType;
+                    if(auto* array = dynamic_cast<ArrayTypeNode*>(genListInner))
+                        arrayCapacities[std::string(arg.getName())] =
+                            array->capacity;
                 }
                 if(auto* mapInner =
                        dynamic_cast<MapTypeNode*>(refType->elementType))

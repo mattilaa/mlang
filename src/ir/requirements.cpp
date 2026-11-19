@@ -155,6 +155,7 @@ bool CodeGenerator::probeRequirement(
                 probe.globalNamedValues[binding.first] = declaration;
     }
     probe.globalVariableTypes = globalVariableTypes;
+    probe.globalSemanticTypes = globalSemanticTypes;
     probe.globalStructVariableTypes = globalStructVariableTypes;
     probe.globalConstantVariables = globalConstantVariables;
     probe.functionOverloads = functionOverloads;

@@ -375,6 +375,8 @@ llvm::Value* CodeGenerator::generateExpression(
     }
     else if(auto listLit = dynamic_cast<ListLiteralNode*>(node))
     {
+        if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(expectedType))
+            return generateFixedArrayValue(listLit, fixed, node->line);
         if(auto* listType = dynamic_cast<GenericListTypeNode*>(expectedType))
             return generateListLiteral(
                 listLit,
@@ -540,6 +542,8 @@ llvm::Value* CodeGenerator::generateExpression(
     }
     else if(auto* arrFill = dynamic_cast<ArrayFillNode*>(node))
     {
+        if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(expectedType))
+            return generateFixedArrayValue(arrFill, fixed, node->line);
         if(auto* listType = dynamic_cast<GenericListTypeNode*>(expectedType))
             return generateArrayFill(
                 arrFill,

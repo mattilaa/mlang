@@ -488,9 +488,8 @@ llvm::Function* CodeGenerator::generateMethodDefinition(
                                 mapInner->keyType,
                                 mapInner->valueType);
                     }
-                    if(auto* structInner =
-                           dynamic_cast<StructTypeRefNode*>(
-                               refType->elementType))
+                    if(auto* structInner = dynamic_cast<StructTypeRefNode*>(
+                           refType->elementType))
                     {
                         std::string resolvedEnumName =
                             resolveVisibleEnumName(structInner->structName);
@@ -2469,6 +2468,39 @@ llvm::Value* CodeGenerator::generateMultiarrayGet(
 
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
+    TypeNode* fixedReceiverType = nullptr;
+    if(auto* receiver = dynamic_cast<IdentifierNode*>(node->object))
+    {
+        if(namedValues.count(receiver->name))
+            fixedReceiverType = getLValueType(node->object, node->line);
+    }
+    else if(
+        dynamic_cast<FieldAccessNode*>(node->object) ||
+        dynamic_cast<IndexExpressionNode*>(node->object) ||
+        dynamic_cast<UnaryOpNode*>(node->object))
+        fixedReceiverType = getLValueType(node->object, node->line);
+    if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(fixedReceiverType))
+    {
+        if((node->methodName == "len" || node->methodName == "capacity" ||
+            node->methodName == "is_empty") &&
+           node->arguments.empty())
+        {
+            if(!validateBorrowRead(node->object, node->line))
+                return nullptr;
+            if(node->methodName == "is_empty")
+                return llvm::ConstantInt::get(
+                    llvm::Type::getInt1Ty(context),
+                    fixed->capacity == 0);
+            return llvm::ConstantInt::get(
+                llvm::Type::getInt64Ty(context),
+                fixed->capacity);
+        }
+        reportError(
+            node->line,
+            "fixedarray has inline fixed-size storage; unsupported method '" +
+                node->methodName + "'");
+        return nullptr;
+    }
     const std::string& method = node->methodName;
     const std::string receiverPlace =
         resolveBorrowPlaceFromLValue(node->object);

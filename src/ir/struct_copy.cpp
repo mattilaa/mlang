@@ -42,6 +42,18 @@ llvm::Value* CodeGenerator::resetCopiedStructState(
             continue;
         }
 
+        if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(fieldType))
+        {
+            auto* array =
+                builder.CreateExtractValue(adjusted, {layout->storageIndex});
+            auto* copied = applyStructCopySemantics(array, fixed);
+            adjusted = builder.CreateInsertValue(
+                adjusted,
+                copied,
+                {layout->storageIndex});
+            continue;
+        }
+
         std::string nestedStructName;
         if(auto* structRef = dynamic_cast<StructTypeRefNode*>(fieldType))
             nestedStructName = structRef->structName;
@@ -78,6 +90,21 @@ llvm::Value* CodeGenerator::applyStructCopySemantics(
     if(!value)
         return nullptr;
 
+    if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(semanticType))
+    {
+        for(int64_t i = 0; i < fixed->capacity; ++i)
+        {
+            auto* element =
+                builder.CreateExtractValue(value, {static_cast<unsigned>(i)});
+            element = applyStructCopySemantics(element, fixed->elementType);
+            value = builder.CreateInsertValue(
+                value,
+                element,
+                {static_cast<unsigned>(i)});
+        }
+        return value;
+    }
+
     if(auto* structRef = dynamic_cast<StructTypeRefNode*>(semanticType))
         return resetCopiedStructState(value, structRef->structName);
 
@@ -98,6 +125,21 @@ llvm::Value* CodeGenerator::applyStructCopySemantics(llvm::Value* value)
 {
     if(!value)
         return nullptr;
+
+    if(auto* array = llvm::dyn_cast<llvm::ArrayType>(value->getType()))
+    {
+        for(uint64_t i = 0; i < array->getNumElements(); ++i)
+        {
+            auto* element =
+                builder.CreateExtractValue(value, {static_cast<unsigned>(i)});
+            element = applyStructCopySemantics(element);
+            value = builder.CreateInsertValue(
+                value,
+                element,
+                {static_cast<unsigned>(i)});
+        }
+        return value;
+    }
 
     auto* structType = llvm::dyn_cast<llvm::StructType>(value->getType());
     if(!structType || !structType->hasName())

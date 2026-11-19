@@ -180,6 +180,22 @@ public:
     std::string toString() const override;
 };
 
+// Inline value storage: unlike array<T,N>, this never owns a heap buffer.
+class FixedArrayTypeNode : public ArrayTypeNode
+{
+public:
+    FixedArrayTypeNode(TypeNode* element, int64_t capacity)
+        : ArrayTypeNode(element, capacity)
+    {
+    }
+
+    std::string toString() const override
+    {
+        return "fixedarray<" + elementType->toString() + ", " +
+               std::to_string(capacity) + ">";
+    }
+};
+
 // Fixed multidimensional array. Only the outer node carries element
 // mutability; its element type is the nested fixed-array shape.
 class MultiArrayTypeNode : public ArrayTypeNode

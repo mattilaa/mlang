@@ -18,6 +18,8 @@ the compiler.
   - [Conditional regions](#conditional-regions)
 - [Compile-time information and declarations](#compile-time-information-and-declarations)
   - [Type name property](#type-name-property-name)
+  - [Static structure globals and inline arrays](#static-structure-globals-and-inline-arrays)
+  - [Pointer offsets and string indexing](#pointer-offsets-and-string-indexing)
   - [Typed var declarations](#typed-var-declarations-without-initializers)
   - [cexpr compile-time evaluation](#cexpr-compile-time-evaluation)
 - [Control flow and errors](#control-flow-and-errors)
@@ -591,6 +593,75 @@ For collection values, the returned name includes inner types when available:
 
 If a struct defines a real field named `name`, normal field access is used
 instead of the synthetic type-name property.
+
+### Static Structure Globals and Inline Arrays
+
+Structure-valued globals accept constant field initializers, including nested
+structures, declaration-site defaults, integer expressions, UTF-8 strings, and
+addresses of globals. Forward and cyclic global addresses are resolved after all
+global storage has been declared. Initializers never run a constructor or allocate
+at startup; an initializer that needs runtime evaluation is rejected.
+
+```mla
+struct Calibration { var offset: i32{-7}; var scale: i32{1000}; };
+struct Climate { var label: str8; var calibration: Calibration; };
+var climate: Climate = Climate { label: "winter" };
+```
+
+`fixedarray<T, N>` stores exactly `N` elements inline. It is a value type: copying
+or returning it copies its storage, so returned arrays never point into a dead
+stack frame. Local storage is on the stack, global storage is static, and fields
+are part of their enclosing structure. The array itself needs no heap buffer.
+
+```mla
+var pressures: fixedarray<i32, 4> = [10133, 9546, 8988, 8456];
+struct Sample { var values: fixedarray<i32, 3>; };
+
+fn make_sample() -> fixedarray<i32, 3> { return [10, 20, 30]; }
+
+fn example() -> i32 {
+    var values: fixedarray<i32, 3> = make_sample();
+    values[1] = 42;
+    let padded: fixedarray<u8, 3> = [200]; // remaining elements are zero
+    let repeated: fixedarray<i32, 3> = [6; 3];
+    static_assert!(size_of(fixedarray<i32, 3>) == 12);
+    return values[1] + i32(padded[1]) + repeated[2];
+}
+```
+
+`len()` and `capacity()` both return `N`; `is_empty()` is true for `N == 0`.
+Checked indexing and iteration are supported, including nested fixed arrays.
+Indexed writes need `var` or an exclusive `&mut` reference. There are no resizing
+methods or implicit conversions to the list ABI. Existing `array<T, N>`,
+`multiarray`, and `list<T>` retain their previous representation and behavior.
+An inline array is copyable when its elements are copyable; otherwise existing
+move and borrow rules apply to its elements.
+
+### Pointer Offsets and String Indexing
+
+Within `unsafe`, typed raw pointers support `pointer + integer`,
+`integer + pointer`, `pointer - integer`, `pointer[index]`, and indexed writes.
+Offsets are measured in elements, rather than bytes. Subtraction of pointers
+with matching element types returns an `i64` distance in elements. The caller
+must keep arithmetic and dereferences within valid live storage. Matching raw
+pointer types also support `==` and `!=` comparisons.
+
+```mla
+fn next(pointer: ptr<i32>) -> ptr<i32> {
+    unsafe { return pointer + 1; }
+}
+```
+
+Pointer operations preserve borrow provenance: offsets cannot turn a shared
+borrow into a writable pointer or let a pointer to local storage escape. Null
+checks still run in `unsafe`.
+
+`str8[index]` returns a UTF-8 byte (`u8`); `str16[index]` returns a UTF-16 code unit
+(`u16`). Indexing is read-only and checks against the terminating zero, which may
+itself be read. Negative indices and indices beyond that terminator abort.
+String indexing performs no allocation and does not require `unsafe`. It scans
+to the requested unit, so iterating with repeated string indexing is quadratic;
+use a typed raw buffer for large sequential scans when its bounds are known.
 
 ### Typed `var` Declarations Without Initializers
 

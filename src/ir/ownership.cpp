@@ -19,6 +19,10 @@ CodeGenerator::OwnershipClass CodeGenerator::classifyOwnership(
         if(!t)
             return OwnershipClass::MoveOnly;
 
+        if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(t))
+            return fixed->capacity == 0 ? OwnershipClass::Copy
+                                        : classify(fixed->elementType);
+
         if(auto* tupleType = dynamic_cast<TupleTypeNode*>(t))
         {
             if(!tupleType->elementTypes)
@@ -195,6 +199,17 @@ bool CodeGenerator::isMoveOnlyVariable(const std::string& name)
         auto lit = listElementTypes.find(name);
         if(lit != listElementTypes.end())
         {
+            auto storage = namedValues.find(name);
+            if(storage != namedValues.end())
+                if(auto* slot =
+                       llvm::dyn_cast<llvm::AllocaInst>(storage->second))
+                    if(auto* array = llvm::dyn_cast<llvm::ArrayType>(
+                           slot->getAllocatedType()))
+                    {
+                        FixedArrayTypeNode
+                            fixed(lit->second, array->getNumElements());
+                        return !isCopyType(&fixed);
+                    }
             GenericListTypeNode listType(lit->second);
             return !isCopyType(&listType);
         }

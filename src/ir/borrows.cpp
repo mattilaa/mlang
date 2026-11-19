@@ -397,6 +397,19 @@ bool CodeGenerator::validateBorrowWriteThroughPointer(
     ExpressionNode* expr,
     int line)
 {
+    if(auto* binary = dynamic_cast<BinaryOpNode*>(expr))
+    {
+        if(binary->op == BinaryOpNode::OP_PLUS ||
+           binary->op == BinaryOpNode::OP_MINUS)
+        {
+            if(dynamic_cast<PointerTypeNode*>(
+                   getLValueType(binary->left, line)))
+                return validateBorrowWriteThroughPointer(binary->left, line);
+            if(dynamic_cast<PointerTypeNode*>(
+                   getLValueType(binary->right, line)))
+                return validateBorrowWriteThroughPointer(binary->right, line);
+        }
+    }
     if(auto* reference =
            dynamic_cast<ReferenceTypeNode*>(getLValueType(expr, line)))
         if(!reference->isMutable)
@@ -554,6 +567,18 @@ bool CodeGenerator::validateBorrowWriteThroughPointer(
 std::string CodeGenerator::getBorrowedOwnerForPointerExpression(
     ExpressionNode* expr) const
 {
+    if(auto* binary = dynamic_cast<BinaryOpNode*>(expr))
+    {
+        if(binary->op == BinaryOpNode::OP_PLUS ||
+           binary->op == BinaryOpNode::OP_MINUS)
+        {
+            std::string owner =
+                getBorrowedOwnerForPointerExpression(binary->left);
+            return owner.empty()
+                       ? getBorrowedOwnerForPointerExpression(binary->right)
+                       : owner;
+        }
+    }
     auto* idExpr = dynamic_cast<IdentifierNode*>(expr);
     if(!idExpr)
         return "";
@@ -806,9 +831,15 @@ bool CodeGenerator::expressionIsPointerParameterBorrow(
             });
     }
     if(auto* binary = dynamic_cast<BinaryOpNode*>(expr))
-        return binary->op == BinaryOpNode::OP_COMMA
-                   ? expressionIsPointerParameterBorrow(binary->right)
-                   : false;
+    {
+        if(binary->op == BinaryOpNode::OP_COMMA)
+            return expressionIsPointerParameterBorrow(binary->right);
+        if(binary->op == BinaryOpNode::OP_PLUS ||
+           binary->op == BinaryOpNode::OP_MINUS)
+            return expressionIsPointerParameterBorrow(binary->left) ||
+                   expressionIsPointerParameterBorrow(binary->right);
+        return false;
+    }
     if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
     {
         bool hasUnknownSummary = false;
@@ -855,6 +886,11 @@ bool CodeGenerator::expressionIsKnownSharedBorrow(ExpressionNode* expr) const
     if(auto* ternary = dynamic_cast<TernaryNode*>(expr))
         return expressionIsKnownSharedBorrow(ternary->trueExpr) ||
                expressionIsKnownSharedBorrow(ternary->falseExpr);
+    if(auto* binary = dynamic_cast<BinaryOpNode*>(expr))
+        if(binary->op == BinaryOpNode::OP_PLUS ||
+           binary->op == BinaryOpNode::OP_MINUS)
+            return expressionIsKnownSharedBorrow(binary->left) ||
+                   expressionIsKnownSharedBorrow(binary->right);
     if(auto* match = dynamic_cast<MatchExpressionNode*>(expr))
         for(auto* arm : match->arms)
             if(arm && expressionIsKnownSharedBorrow(arm->expression))
@@ -2067,8 +2103,18 @@ bool CodeGenerator::validateNoEscapingBorrow(
                 return;
             }
             if(auto* binary = dynamic_cast<BinaryOpNode*>(current))
+            {
                 if(binary->op == BinaryOpNode::OP_COMMA)
                     collectPointerOwners(binary->right);
+                else if(
+                    (binary->op == BinaryOpNode::OP_PLUS ||
+                     binary->op == BinaryOpNode::OP_MINUS) &&
+                    dynamic_cast<PointerTypeNode*>(getLValueType(binary, line)))
+                {
+                    collectPointerOwners(binary->left);
+                    collectPointerOwners(binary->right);
+                }
+            }
         };
         collectPointerOwners(expr);
     }
@@ -2874,12 +2920,26 @@ void CodeGenerator::registerPointerBorrow(
             return;
         }
         if(auto* binary = dynamic_cast<BinaryOpNode*>(expression))
+        {
             if(binary->op == BinaryOpNode::OP_COMMA)
             {
                 hasAlternativeWrapper = true;
                 collectAlternatives(binary->right);
                 return;
             }
+            if((binary->op == BinaryOpNode::OP_PLUS ||
+                binary->op == BinaryOpNode::OP_MINUS) &&
+               dynamic_cast<PointerTypeNode*>(getLValueType(binary, line)))
+            {
+                hasAlternativeWrapper = true;
+                collectAlternatives(
+                    dynamic_cast<PointerTypeNode*>(
+                        getLValueType(binary->left, line))
+                        ? binary->left
+                        : binary->right);
+                return;
+            }
+        }
         alternatives.push_back(expression);
     };
     collectAlternatives(expr);
