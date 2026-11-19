@@ -1,12 +1,17 @@
-# Unreleased
+# MLang 0.4.5
+
+MLang 0.4.5 adds allocation-free embedded programming features, generic
+argument-pack forwarding, structured JSON logging, and LLVM toolchain fixes.
+
+## Language and embedded programming
+
+- Forward named generic argument packs with `args...` in function, method,
+  and callable argument lists, including empty and heterogeneous packs.
+- Preserve mutable-parameter writeback and infer generic return types when
+  expanding nested variadic calls and folds.
 
 - Preserve module globals used by imported functions, including aligned inline
   buffers, and emit shared storage once across transitive/diamond imports.
-
-- Select the IR-consuming Clang from the linked LLVM installation, and reject
-  mismatched cached tool versions during configuration. Linux CI explicitly
-  selects LLVM/Clang 17 for both regular and ASan builds. Inline assembly
-  validation uses the lowercase Error-returning API supported by LLVM 15 and later.
 
 - Unsafe embedded hardware builtins for pointer/address conversion, volatile
   integer access, and compiler memory barriers. Storage declarations support
@@ -21,6 +26,31 @@
 - Typed raw pointer offsets, element distances, comparisons, and indexed access
   preserve borrow permissions and lifetime checks. Pointer arithmetic requires
   `unsafe`; strings support checked read-only byte/code-unit indexing.
+
+## Standard library and examples
+
+- Add `std::log::json` builders for heterogeneous, nested JSON records using
+  typed `kv` fields and `json_object`. Compact and pretty output preserve
+  field order, escape strings, and retain numeric and boolean types.
+- Add runnable variadic logging, nested JSON logging, freestanding data, and
+  AArch64 inline assembly examples, plus regression coverage and documentation.
+
+## Build and compatibility fixes
+
+- Select the IR-consuming Clang from the linked LLVM installation and reject
+  mismatched cached tool versions during configuration. Linux CI explicitly
+  selects LLVM/Clang 17 for both regular and AddressSanitizer builds.
+- Validate inline assembly with the lowercase, Error-returning LLVM API
+  supported by LLVM 15 and later, fixing Linux compiler builds.
+
+## Migration notes
+
+- Use `fixedarray<T, N>` for inline storage without heap allocation. Existing
+  `array<T, N>` and list behavior is preserved.
+- Pointer arithmetic and hardware access require `unsafe`; known borrow and
+  lifetime restrictions remain enforced.
+- This release provides language primitives for freestanding targets; hardware
+  startup, linking, and runtime integration remain application responsibilities.
 
 # MLang 0.4.4
 
