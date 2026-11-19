@@ -54,6 +54,10 @@ if(Python3_Interpreter_FOUND)
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/lsp_mlangd-mla_hardware_builtins_transcript.py
                 --mlangd ${MLANGD_MLA_OUTPUT})
         set_tests_properties(mlang_lsp_hardware_builtins PROPERTIES LABELS "lsp;embedded" TIMEOUT 60)
+        add_test(NAME mlang_lsp_module_paths
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/lsp_mlangd-mla_module_paths_transcript.py
+                --mlangd ${MLANGD_MLA_OUTPUT})
+        set_tests_properties(mlang_lsp_module_paths PROPERTIES LABELS "lsp;modules" TIMEOUT 60)
     endif()
     add_test(NAME mlang_builtin_reference
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_builtin_reference.py)

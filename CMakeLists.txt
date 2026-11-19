@@ -675,6 +675,7 @@ if(NOT RAPIDJSON_INCLUDE_DIR)
     endif()
     set(RAPIDJSON_INCLUDE_DIR ${rapidjson_SOURCE_DIR}/include)
 endif()
+target_include_directories(mlang PRIVATE ${RAPIDJSON_INCLUDE_DIR})
 target_include_directories(mlang_std PRIVATE ${RAPIDJSON_INCLUDE_DIR})
 
 # Print debug information

@@ -1042,8 +1042,15 @@ mlang-frontend examples/main.mla -o /tmp/main_bin
 mlang-frontend test tests
 ```
 
-`mlang` emits `mlang_commands.json` for editor tooling. You can add module
-search paths in `mlang.toml`:
+`mlang` emits `mlang_commands.json` for editor tooling. The language server uses
+its `module_paths` to resolve imported declarations from unopened files, including
+projects with nested source directories such as `src/hal` and `src/runtime`.
+It searches parent directories of the current document for the nearest usable
+`mlang_commands.json` or `build/mlang_commands.json`. Relative search paths are
+resolved from the workspace directory containing that database (the parent of
+`build` for the fallback). Invalid databases are ignored.
+
+You can also add explicit module search paths in `mlang.toml`:
 
 ```toml
 [tool.mlang]

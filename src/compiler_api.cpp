@@ -3,6 +3,8 @@
 #include "install_paths.h"
 #include "source_filter.h"
 
+#include <rapidjson/document.h>
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -1018,6 +1020,57 @@ static void appendStdlibPaths(std::vector<std::string>& module_paths)
     }
 }
 
+// Command databases are emitted by the compiler even for CMake projects that
+// have no mlang.toml. Discover the nearest usable database from the document,
+// rather than depending on the server's working directory or opened imports.
+static std::vector<std::string> commandModuleSearchPaths(
+    std::filesystem::path directory)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    directory = fs::absolute(directory, ec);
+    if(ec)
+        return {};
+    while(!directory.empty())
+    {
+        for(const auto& relative :
+            {"mlang_commands.json", "build/mlang_commands.json"})
+        {
+            std::ifstream input(directory / relative);
+            if(!input)
+                continue;
+            const std::string text(
+                (std::istreambuf_iterator<char>(input)),
+                std::istreambuf_iterator<char>());
+            rapidjson::Document database;
+            database.Parse(text.data(), text.size());
+            if(database.HasParseError() || !database.IsObject() ||
+               !database.HasMember("module_paths") ||
+               !database["module_paths"].IsArray())
+                continue;
+            std::vector<std::string> paths;
+            for(const auto& entry : database["module_paths"].GetArray())
+            {
+                if(!entry.IsString() || entry.GetStringLength() == 0)
+                    continue;
+                fs::path path(
+                    std::string(entry.GetString(), entry.GetStringLength()));
+                // As with the editor's file list, relative entries use the
+                // workspace directory, including for its build/ database.
+                if(path.is_relative())
+                    path = directory / path;
+                paths.push_back(path.lexically_normal().string());
+            }
+            return paths;
+        }
+        const auto parent = directory.parent_path();
+        if(parent == directory)
+            break;
+        directory = parent;
+    }
+    return {};
+}
+
 static std::vector<std::string> moduleSearchPathsForUri(std::string_view uri)
 {
     namespace fs = std::filesystem;
@@ -1059,6 +1112,12 @@ static std::vector<std::string> moduleSearchPathsForUri(std::string_view uri)
                 out.push_back(abs.lexically_normal().string());
             }
         }
+    }
+
+    for(const auto& path : commandModuleSearchPaths(base))
+    {
+        if(std::find(out.begin(), out.end(), path) == out.end())
+            out.push_back(path);
     }
 
     appendStdlibPaths(out);

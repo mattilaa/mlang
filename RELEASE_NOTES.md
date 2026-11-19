@@ -2,6 +2,10 @@
 
 Development version: 0.4.6.
 
+- Resolve imported functions and module navigation using `module_paths` from
+  workspace or build-directory `mlang_commands.json` databases, including
+  nested firmware source trees and unopened imported modules.
+
 - Document embedded pointer/memory built-ins in the built-in reference and expose
   their hover text and completion metadata in the language server. Keep ordinary
   same-line helper calls and user declarations resolving to their source.

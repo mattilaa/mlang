@@ -2746,6 +2746,17 @@ fn handle_definition(payload: str8) -> str8 {
                 if len(attr_loc) > 0 { return format!("[{}]", attr_loc); }
             }
             let line_trim: str8 = trim_ascii_ws(line_text);
+            // Import resolution must share manifest/command-database paths
+            // with semantic lookup, including nested CMake source directories.
+            if starts_with(line_trim, "mod ") == 1 || starts_with(line_trim, "use ") == 1 {
+                let import_session: SessionRef = current_session();
+                let imported: result<DefinitionLocation, str8> = import_session.definition(uri, line + 1, col + 1);
+                if imported.is_ok() {
+                    let target: DefinitionLocation = imported.unwrap();
+                    return format!("[{}]", location_json(target.uri, target.line, target.column));
+                }
+            }
+
             if starts_with(line_trim, "use ") == 1 {
                 let use_mod: str8 = use_line_module_name(line_trim);
                 if len(use_mod) > 0 {
