@@ -2468,6 +2468,16 @@ llvm::Value* CodeGenerator::generateMultiarrayGet(
 
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
+    std::vector<ExpressionNode*> expanded;
+    if(!expandCallArguments(node->arguments, expanded))
+        return nullptr;
+    if(expanded != node->arguments)
+    {
+        MethodCallNode call = *node;
+        call.arguments = std::move(expanded);
+        return generateMethodCall(&call);
+    }
+
     TypeNode* fixedReceiverType = nullptr;
     if(auto* receiver = dynamic_cast<IdentifierNode*>(node->object))
     {

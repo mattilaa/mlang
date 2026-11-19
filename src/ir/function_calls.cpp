@@ -2070,8 +2070,49 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
     }
 }
 
+bool CodeGenerator::expandCallArguments(
+    const std::vector<ExpressionNode*>& arguments,
+    std::vector<ExpressionNode*>& expanded)
+{
+    for(auto* argument : arguments)
+    {
+        auto* expansion = dynamic_cast<PackExpansionNode*>(argument);
+        if(!expansion)
+        {
+            expanded.push_back(argument);
+            continue;
+        }
+        auto pack = activePackExpansions.find(expansion->name);
+        if(pack == activePackExpansions.end())
+        {
+            reportError(
+                expansion->line,
+                "pack expansion requires a parameter pack: '" +
+                    expansion->name + "'");
+            return false;
+        }
+        for(const auto& name : pack->second)
+        {
+            auto* identifier = new IdentifierNode(name);
+            identifier->line = expansion->line;
+            expanded.push_back(identifier);
+        }
+    }
+    return true;
+}
+
 llvm::Value* CodeGenerator::generateCallableInvocation(CallableInvokeNode* node)
 {
+    std::vector<ExpressionNode*> expanded;
+    if(!expandCallArguments(node->arguments, expanded))
+        return nullptr;
+    if(expanded != node->arguments)
+    {
+        CallableInvokeNode call = *node;
+        call.arguments = std::move(expanded);
+        return generateCallableInvocation(&call);
+    }
+
     TypeNode* callableSemantic = getLValueType(node->callable, node->line);
     auto* callableType = dynamic_cast<FunctionTypeNode*>(callableSemantic);
     if(!callableType)
@@ -2220,6 +2261,16 @@ llvm::Value* CodeGenerator::generateCallableInvocation(CallableInvokeNode* node)
 
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
+    std::vector<ExpressionNode*> expanded;
+    if(!expandCallArguments(node->arguments, expanded))
+        return nullptr;
+    if(expanded != node->arguments)
+    {
+        FunctionCallNode call = *node;
+        call.arguments = std::move(expanded);
+        return generateFunctionCall(&call);
+    }
+
     // std::copy has a dedicated diagnostic below and must reach that check.
     if(node->name != "std::copy")
     {

@@ -1,0 +1,57 @@
+mod std::testing;
+use std::testing::verify;
+mod variadic_logging::logger;
+use variadic_logging::logger::collect;
+use variadic_logging::logger::format_record;
+
+#[test]
+fn test_logging_collects_mixed_arguments_in_order() {
+    var parts: list<str8> = [];
+    collect(&mut parts, "client", i32(42), true, 1.5);
+    verify(parts.len() == 4);
+    verify(parts[0] == "client");
+    verify(parts[1] == "42");
+    verify(parts[2] == "1");
+    verify(parts[3] == "1.500000");
+}
+
+#[test]
+fn test_logging_forwards_and_formats_a_complete_record() {
+    let record: str8 = format_record("INFO", "client", i32(42), "ready", true);
+    verify(record == "[INFO] client 42 ready 1");
+}
+
+#[test]
+fn test_logging_accepts_empty_and_single_argument_packs() {
+    var parts: list<str8> = [];
+    collect(&mut parts);
+    verify(parts.len() == 0);
+    let empty: str8 = format_record("INFO");
+    let single: str8 = format_record("WARN", "offline");
+    verify(empty == "[INFO]");
+    verify(single == "[WARN] offline");
+}
+
+#[test]
+fn test_logging_appends_across_different_pack_specializations() {
+    var parts: list<str8> = ["existing"];
+    collect(&mut parts, i32(7), "first");
+    collect(&mut parts, false);
+    collect(&mut parts);
+    collect(&mut parts, i32(9), "last");
+    verify(parts.len() == 6);
+    verify(parts[0] == "existing" && parts[1] == "7" && parts[2] == "first");
+    verify(parts[3] == "0" && parts[4] == "9" && parts[5] == "last");
+}
+
+#[test]
+fn test_logging_evaluates_each_argument_once_in_order() {
+    var sequence: i32 = 0;
+    let next = || {
+        sequence = sequence + 1;
+        return sequence;
+    };
+    let record: str8 = format_record("TRACE", next(), next(), next());
+    verify(record == "[TRACE] 1 2 3");
+    verify(sequence == 3);
+}

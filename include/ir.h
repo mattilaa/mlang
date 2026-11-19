@@ -1150,6 +1150,9 @@ private:
     llvm::Value* generateEnumLiteral(EnumLiteralNode* node);
     llvm::Value* generateFieldAccess(FieldAccessNode* node);
     llvm::Value* generateFunctionCall(FunctionCallNode* node);
+    bool expandCallArguments(
+        const std::vector<ExpressionNode*>& arguments,
+        std::vector<ExpressionNode*>& expanded);
     llvm::Value* generateCallableInvocation(CallableInvokeNode* node);
     llvm::Value* generateVariadicGenericCall(
         FunctionCallNode* node,

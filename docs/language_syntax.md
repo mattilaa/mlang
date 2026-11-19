@@ -970,6 +970,58 @@ Current first-version constraints:
   optional `else` block.
 - Calling a non-`cexpr fn` from `cexpr(...)` is rejected.
 
+### Variadic generic functions
+
+Runtime generic functions support a trailing type parameter pack and a
+corresponding trailing function parameter pack. Each argument retains its
+concrete type, and the compiler specializes the function for those types:
+
+```mla
+generic<Args...>
+fn sum(args: Args...) -> i32 {
+    return (args + ...);
+}
+
+generic<Args...>
+fn forward_sum(args: Args...) -> i32 {
+    return sum(args...);
+}
+
+fn main() -> i32 {
+    return forward_sum(10, 20, 12); // 42
+}
+```
+
+`args...` expands a named parameter pack into individual call arguments. It
+works in function, method, and callable-value calls, including calls to another
+variadic generic function. Ordinary arguments may appear before or after an
+expansion. An empty pack contributes no arguments. Expanding a name that is not
+a parameter pack is an error.
+
+Fixed parameters and fixed generic types may precede the pack:
+
+```mla
+generic<T, Args...>
+fn push_all(values: &mut list<T>, args: Args...) -> void {
+    static_assert!((is_constructible<T>(args) && ...));
+    (values.push(args), ...);
+}
+```
+
+Pack folds support `+`, `*`, `&&`, `||`, and comma. A comma fold evaluates its
+expression once per argument in order, which also allows heterogeneous packs
+such as `(args.release(), ...)`. Numeric folds require matching numeric types.
+The existing logical pack folds evaluate every element.
+
+Current scope is runtime free functions with inferred type arguments, one
+trailing type pack, and one trailing value pack whose type names that pack.
+Variadic structs, aliases, type-argument expansion, arbitrary expression
+expansion such as `transform(args)...`, and C++ forwarding references are not
+supported. Packs follow the ordinary MLang ownership and borrowing rules.
+
+See [the variadic logging example](../examples/variadic_logging/README.md)
+for forwarding mixed arguments and collecting their formatted values in order.
+
 ## Control Flow and Errors
 
 ### `if` / `else if` Syntax

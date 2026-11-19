@@ -483,6 +483,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedConstexprValues = constexprValues;
     auto savedPackExpansions = activePackExpansions;
     auto savedFunctionTypeBindings = activeFunctionTypeBindings;
+    auto savedInoutParams = inoutParams;
+    auto* savedInoutFunction = inoutFunction;
     auto savedMovedVariables = movedVariables;
     auto savedPointerBorrowTarget = pointerBorrowTarget;
     auto savedPointerBorrowParent = pointerBorrowParent;
@@ -498,6 +500,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedTraitObjectVariableTypes = traitObjectVariableTypes;
     auto savedEnumVariableTypes = enumVariableTypes;
     auto savedListElementTypes = listElementTypes;
+    auto savedArrayCapacities = arrayCapacities;
+    auto savedArrayKnownLengths = arrayKnownLengths;
+    auto savedMultiarrayMutability = multiarrayMutability;
     auto savedMapKeyValueTypes = mapKeyValueTypes;
     auto savedTupleElementTypes = tupleElementTypes;
     auto savedPointerElementTypes = pointerElementTypes;
@@ -567,6 +572,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     enumVariableTypes.clear();
     arrayCapacities.clear();
     arrayKnownLengths.clear();
+    multiarrayMutability.clear();
     unsafeDepth = 0;
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
@@ -884,6 +890,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     traitObjectVariableTypes = std::move(savedTraitObjectVariableTypes);
     enumVariableTypes = std::move(savedEnumVariableTypes);
     listElementTypes = std::move(savedListElementTypes);
+    arrayCapacities = std::move(savedArrayCapacities);
+    arrayKnownLengths = std::move(savedArrayKnownLengths);
+    multiarrayMutability = std::move(savedMultiarrayMutability);
     mapKeyValueTypes = std::move(savedMapKeyValueTypes);
     tupleElementTypes = std::move(savedTupleElementTypes);
     pointerElementTypes = std::move(savedPointerElementTypes);
@@ -913,6 +922,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     currentModule = savedModule;
     constexprValues = std::move(savedConstexprValues);
     activePackExpansions = std::move(savedPackExpansions);
+    inoutParams = std::move(savedInoutParams);
+    inoutFunction = savedInoutFunction;
     activeFunctionTypeBindings = std::move(savedFunctionTypeBindings);
     builder.restoreIP(savedIP);
 

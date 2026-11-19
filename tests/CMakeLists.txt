@@ -107,6 +107,8 @@ else()
         "freestanding_data_tests.mla"
         "std_atomic_float_tests.mla"
         "std_range_views_tests.mla"
+        "std_log_json_tests.mla"
+        "variadic_generic_tests.mla"
     )
 endif()
 
@@ -132,6 +134,17 @@ foreach(test_file ${MLA_TEST_FILES})
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
 endforeach()
+
+add_test(
+    NAME mla_example_variadic_logging
+    COMMAND ${MLA_COMPILER_CMD} --tests
+            ${CMAKE_CURRENT_SOURCE_DIR}/../examples/variadic_logging_tests.mla
+            -L ${MLANG_LIB_DIR} -lmlang_std
+)
+set_tests_properties(mla_example_variadic_logging PROPERTIES
+    LABELS "mla"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
 
 add_custom_target(run_tests
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -L mla

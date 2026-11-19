@@ -1,0 +1,90 @@
+mod std::testing;
+mod std::json;
+mod std::strbuf;
+mod std::log::json;
+use std::testing::verify;
+use std::json::JsonDoc;
+use std::strbuf::contains;
+use std::log::json::JsonObject;
+use std::log::json::kv;
+use std::log::json::json_object;
+use std::log::json::json_record;
+use std::log::json::json_record_pretty;
+
+#[test]
+fn test_json_log_preserves_mixed_value_types_and_field_order() {
+    let record: str8 = json_record("INFO", "ready",
+        kv("name", "client"), kv("id", i64(42)), kv("ok", true), kv("gain", 1.5));
+    verify(record == "{\"level\":\"INFO\",\"message\":\"ready\",\"context\":{\"name\":\"client\",\"id\":42,\"ok\":true,\"gain\":1.500000}}");
+}
+
+#[test]
+fn test_json_log_builds_nested_objects_with_inline_pack_calls() {
+    let record: str8 = json_record("INFO", "request completed",
+        kv("request", json_object(kv("method", "GET"), kv("status", i32(200)))),
+        kv("client", json_object(kv("id", i64(42)), kv("authenticated", true))));
+    verify(record == "{\"level\":\"INFO\",\"message\":\"request completed\",\"context\":{\"request\":{\"method\":\"GET\",\"status\":200},\"client\":{\"id\":42,\"authenticated\":true}}}");
+}
+
+#[test]
+fn test_json_log_empty_context_and_nested_empty_objects() {
+    let empty: JsonObject = json_object();
+    verify(empty.text == "{}");
+    let record: str8 = json_record("DEBUG", "tick");
+    verify(record == "{\"level\":\"DEBUG\",\"message\":\"tick\",\"context\":{}}");
+    let nested: JsonObject = json_object(kv("empty", json_object()));
+    verify(nested.text == "{\"empty\":{}}");
+}
+
+#[test]
+fn test_json_log_escapes_keys_and_string_values() {
+    let record: str8 = json_record("I\"NFO", "line\nnext",
+        kv("a\"b", "slash\\tab\t{} 100%"));
+    verify(record == "{\"level\":\"I\\\"NFO\",\"message\":\"line\\nnext\",\"context\":{\"a\\\"b\":\"slash\\\\tab\\t{} 100%\"}}");
+    let parsed: result<JsonDoc, str8> = JsonDoc::parse(record);
+    verify(parsed.is_ok());
+    let doc: JsonDoc = parsed.unwrap();
+    doc.free();
+}
+
+#[test]
+fn test_json_log_pretty_output_preserves_the_compact_record() {
+    let compact: str8 = json_record("INFO", "ready",
+        kv("client", json_object(kv("id", i32(42)), kv("ok", true))));
+    let formatted: result<str8, str8> = json_record_pretty("INFO", "ready",
+        kv("client", json_object(kv("id", i32(42)), kv("ok", true))));
+    verify(formatted.is_ok());
+    let pretty: str8 = formatted.unwrap();
+    verify(contains(pretty, "\n    \"level\": \"INFO\"") == 1);
+    verify(contains(pretty, "\n        \"client\": {") == 1);
+    verify(contains(pretty, "\n            \"ok\": true") == 1);
+    let parsed: result<JsonDoc, str8> = JsonDoc::parse(pretty);
+    verify(parsed.is_ok());
+    let doc: JsonDoc = parsed.unwrap();
+    let normalized: result<str8, str8> = doc.stringify();
+    verify(normalized.is_ok());
+    let roundtrip: str8 = normalized.unwrap();
+    verify(roundtrip == compact);
+    doc.free();
+}
+
+#[test]
+fn test_json_log_evaluates_field_values_once_in_order() {
+    var sequence: i32 = 0;
+    let next = || {
+        sequence = sequence + 1;
+        return sequence;
+    };
+    let record: str8 = json_record("TRACE", "sequence",
+        kv("first", next()),
+        kv("nested", json_object(kv("second", next()), kv("third", next()))));
+    verify(sequence == 3);
+    verify(record == "{\"level\":\"TRACE\",\"message\":\"sequence\",\"context\":{\"first\":1,\"nested\":{\"second\":2,\"third\":3}}}");
+}
+
+#[test]
+fn test_json_log_pretty_reports_invalid_raw_nested_json() {
+    let invalid: JsonObject = JsonObject { text: "not JSON" };
+    let formatted: result<str8, str8> = json_record_pretty("ERROR", "invalid", kv("raw", invalid));
+    verify(formatted.is_err());
+}

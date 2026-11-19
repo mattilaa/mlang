@@ -1,0 +1,120 @@
+mod std::testing;
+use std::testing::verify;
+
+fn combine(number: i32, text: str8, flag: bool) -> i32 {
+    if text != "pack" || !flag { return 0; }
+    return number;
+}
+
+generic<Args...>
+fn forward(args: Args...) -> i32 {
+    return combine(args...);
+}
+
+generic<Args...>
+fn forward_again(args: Args...) -> i32 {
+    return forward(args...);
+}
+
+generic<Args...>
+fn surround(args: Args...) -> i32 {
+    return combine(42, args..., true);
+}
+
+generic<T, Args...>
+fn push_all(values: &mut list<T>, args: Args...) -> void {
+    (values.push(args), ...);
+}
+
+generic<T, Args...>
+fn forward_push(values: &mut list<T>, args: Args...) -> void {
+    push_all(&mut values, args...);
+}
+
+generic<Args...>
+fn sum(args: Args...) -> i32 {
+    return (args + ...);
+}
+
+generic<Args...>
+fn sum_forward(args: Args...) -> i32 {
+    return sum(args...);
+}
+
+struct Receiver { var base: i32; };
+impl Receiver {
+    fn add(self: Receiver, a: i32, b: i32) -> i32 {
+        return self.base + a + b;
+    }
+}
+
+generic<Args...>
+fn forward_method(receiver: Receiver, args: Args...) -> i32 {
+    return receiver.add(args...);
+}
+
+fn add(a: i32, b: i32) -> i32 { return a + b; }
+
+generic<Args...>
+fn invoke(args: Args...) -> i32 {
+    let callback: fn(i32, i32) -> i32 = add;
+    return (callback)(args...);
+}
+
+generic<T>
+fn nested_identity(value: T) -> T { return value; }
+
+generic<T, Args...>
+fn first_with_context(value: T, args: Args...) -> T { return value; }
+
+#[test]
+fn test_variadic_nested_call_infers_fixed_generic_return_type() {
+    let number: i32 = nested_identity(first_with_context(i32(42), "context", true));
+    let text: str8 = nested_identity(first_with_context("ready", i32(7)));
+    verify(number == 42);
+    verify(text == "ready");
+}
+
+#[test]
+fn test_variadic_forwarding_preserves_heterogeneous_arguments() {
+    verify(forward(42, "pack", true) == 42);
+    verify(forward_again(17, "pack", true) == 17);
+    verify(surround("pack") == 42);
+}
+
+#[test]
+fn test_variadic_forwarding_reuses_body_for_different_pack_lengths() {
+    verify(sum_forward(1, 2, 3) == 6);
+    verify(sum_forward(9) == 9);
+    verify(sum_forward(4, 7) == 11);
+    verify(sum_forward(1, 2, 3) == 6);
+}
+
+#[test]
+fn test_variadic_forwarding_empty_pack_and_fixed_borrow() {
+    var values: list<i32> = [];
+    forward_push(&mut values);
+    verify(values.len() == 0);
+    forward_push(&mut values, 4, 7, 9);
+    verify(values.len() == 3);
+    verify(values[0] == 4 && values[1] == 7 && values[2] == 9);
+}
+
+#[test]
+fn test_variadic_forwarding_to_method_and_callable() {
+    let receiver: Receiver = Receiver { base: 30 };
+    verify(forward_method(receiver, 5, 7) == 42);
+    verify(invoke(17, 25) == 42);
+}
+
+generic<Args...>
+fn forwarded_inline_length(values: fixedarray<i32, 3>, args: Args...) -> i64 {
+    return values.len(args...);
+}
+
+#[test]
+fn test_variadic_empty_pack_expands_before_inline_array_method_dispatch() {
+    let values: fixedarray<i32, 3> = [10, 20, 30];
+    verify(forwarded_inline_length(values) == 3);
+    verify(values.len() == 3 && values[2] == 30);
+}
