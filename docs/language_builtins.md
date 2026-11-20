@@ -15,6 +15,18 @@ The reference includes declaration and control-flow keywords, fixed-capacity
 `array`, `narrow_cast`, pack-fold `is_constructible`, literal `operator`
 declarations, and `free_objs`, in addition to the types and intrinsics below.
 
+### Primitive Casts
+
+Primitive conversion expressions such as `u64(size)`, `u8(fw_byte())`, and
+`i32(size)` use the language's built-in types. They need no import and resolve
+to the matching `@builtin` entry in [stdlib/types.mla](../stdlib/types.mla),
+including when multiple casts or nested calls share a line. Type annotations
+use the same reference. Native C typedef navigation remains available for C
+interop declarations.
+
+See [Checked Narrow Integer Casts](language_syntax.md#checked-narrow-integer-casts)
+for conversion checks and diagnostics.
+
 ### Embedded Pointer and Memory Built-ins
 
 These functions are recognized by the compiler and require no module import.

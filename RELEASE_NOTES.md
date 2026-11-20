@@ -2,6 +2,9 @@
 
 Development version: 0.4.6.
 
+- Resolve primitive casts and type annotations to the MLang builtin reference
+  from external workspaces, before native C header navigation.
+
 - Discover GoogleTest cases during the build so packaged build trees can run
   CTest on a separate CI runner without the builder's CMake installation.
 

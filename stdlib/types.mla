@@ -17,6 +17,10 @@
 ///   width, so `u8` is 8 bits (1 byte) and `u64` is 64 bits (8 bytes).
 /// - `f32`, `f64`: floating-point types.
 ///
+/// Primitive names also introduce explicit conversions, such as `u64(size)`,
+/// `u8(value)`, `i32(value)`, and `f64(value)`. Editor go-to-definition uses the
+/// same `@builtin` reference entry for a cast and a type annotation.
+///
 /// \section builtin_types_string String Types
 /// - `str8`: UTF-8 string type.
 /// - `str16`: UTF-16 string type.

@@ -562,6 +562,13 @@ fn runtime_builtin_location(word: str8) -> str8 {
     return String::new();
 }
 
+fn is_primitive_builtin(word: str8) -> bool {
+    return eq(word, "void") == 1 || eq(word, "bool") == 1 || eq(word, "bit") == 1 ||
+           eq(word, "i8") == 1 || eq(word, "i16") == 1 || eq(word, "i32") == 1 || eq(word, "i64") == 1 ||
+           eq(word, "u8") == 1 || eq(word, "u16") == 1 || eq(word, "u32") == 1 || eq(word, "u64") == 1 ||
+           eq(word, "f32") == 1 || eq(word, "f64") == 1 || eq(word, "str8") == 1 || eq(word, "str16") == 1;
+}
+
 fn builtin_type_location(word: str8) -> str8 {
     if len(word) == 0 { return String::new(); }
     var lookup: str8 = word;
@@ -1809,20 +1816,20 @@ fn word_at_col(line_text: str8, col0: i64) -> str8 {
     if idx > n { idx = n; }
     if idx > 0 {
         let chp: str8 = sub(line_text, idx - 1, 1);
-        if is_ident_char(chp) == 1 {
+        if is_ident_char(chp) {
             idx = idx - 1;
         }
     }
     if idx >= n { idx = n - 1; }
     if idx < 0 { return String::new(); }
     let ch: str8 = sub(line_text, idx, 1);
-    if is_ident_char(ch) == 0 { return String::new(); }
+    if !is_ident_char(ch) { return String::new(); }
     var s: i64 = idx;
     let idx0: i64 = idx;
     for i in 0..idx0 {
         let p: i64 = idx0 - i - 1;
         let c: str8 = sub(line_text, p, 1);
-        if is_ident_char(c) == 1 {
+        if is_ident_char(c) {
             s = p;
             continue;
         }
@@ -1831,7 +1838,7 @@ fn word_at_col(line_text: str8, col0: i64) -> str8 {
     var e: i64 = idx + 1;
     for i in (idx0 + 1)..n {
         let c: str8 = sub(line_text, i, 1);
-        if is_ident_char(c) == 1 {
+        if is_ident_char(c) {
             e = i + 1;
             continue;
         }
@@ -2724,6 +2731,18 @@ fn handle_definition(payload: str8) -> str8 {
 
     if len(query_text) > 0 {
             let line_text: str8 = line_text_at(query_text, line);
+            // Primitive casts and type annotations use MLang's own reference.
+            // The compiler API knows installed/command-database stdlib paths;
+            // cwd-only heuristics can otherwise send external projects to C headers.
+            let cursor_word: str8 = word_at_col(line_text, col);
+            if is_primitive_builtin(cursor_word) {
+                let reference: result<DefinitionLocation, str8> = semantic_session.definition(uri, line + 1, col + 1);
+                if reference.is_ok() {
+                    let target: DefinitionLocation = reference.unwrap();
+                    return format!("[{}]", location_json(target.uri, target.line, target.column));
+                }
+            }
+
             let extern_here0: str8 = extern_fn_name_from_line(line_text);
             if len(extern_here0) > 0 {
                 let c_std_decl0: str8 = c_stdlib_function_location(extern_here0);

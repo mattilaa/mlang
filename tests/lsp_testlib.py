@@ -25,12 +25,13 @@ def position_of(text: str, needle: str, nth: int = 1) -> tuple[int, int]:
 
 
 class JsonRpcClient:
-    def __init__(self, argv: list[str]):
+    def __init__(self, argv: list[str], *, cwd: Path | None = None):
         self.proc = subprocess.Popen(
             argv,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            cwd=cwd,
         )
         self._next_id = 1
 
