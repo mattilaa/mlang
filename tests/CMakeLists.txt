@@ -59,6 +59,9 @@ if(Python3_Interpreter_FOUND)
                 --mlangd ${MLANGD_MLA_OUTPUT})
         set_tests_properties(mlang_lsp_module_paths PROPERTIES LABELS "lsp;modules" TIMEOUT 60)
     endif()
+    add_test(NAME mlang_gtest_discovery
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_gtest_discovery.py)
+    set_tests_properties(mlang_gtest_discovery PROPERTIES LABELS "bootstrap")
     add_test(NAME mlang_builtin_reference
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_builtin_reference.py)
     set_tests_properties(mlang_builtin_reference PROPERTIES LABELS "documentation")
@@ -205,8 +208,10 @@ if(BUILD_CPP_GTESTS)
     endif()
 
     include(GoogleTest)
+    # The Linux build tree is transferred to a separate test runner. Discover
+    # tests here so CTest does not need the builder's CMake module installation.
     gtest_discover_tests(mla_tests
-        DISCOVERY_MODE PRE_TEST
+        DISCOVERY_MODE POST_BUILD
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         PROPERTIES
             LABELS "cpp"

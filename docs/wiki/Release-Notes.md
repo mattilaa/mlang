@@ -4,6 +4,9 @@
 
 Development version: 0.4.6.
 
+- Discover GoogleTest cases during the build so packaged build trees can run
+  CTest on a separate CI runner without the builder's CMake installation.
+
 - Resolve imported functions and module navigation using `module_paths` from
   workspace or build-directory `mlang_commands.json` databases, including
   nested firmware source trees and unopened imported modules.
