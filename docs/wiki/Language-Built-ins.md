@@ -17,7 +17,7 @@ The reference includes declaration and control-flow keywords, fixed-capacity
 `array`, `narrow_cast`, pack-fold `is_constructible`, literal `operator`
 declarations, and `free_objs`, in addition to the types and intrinsics below.
 
-### Primitive Casts
+### Primitive Casts and Integer Suffixes
 
 Primitive conversion expressions such as `u64(size)`, `u8(fw_byte())`, and
 `i32(size)` use the language's built-in types. They need no import and resolve
@@ -25,6 +25,12 @@ to the matching `@builtin` entry in [stdlib/types.mla](https://github.com/mattil
 including when multiple casts or nested calls share a line. Type annotations
 use the same reference. Native C typedef navigation remains available for C
 interop declarations.
+
+Typed integer literals such as `uart_put(13u32)` carry a type suffix, rather
+than performing a function-style cast. Hover and go to definition on [`u32`](Quick-Guide#types)
+resolve to the same builtin reference. This supports [`i8`](Quick-Guide#types), [`i16`](Quick-Guide#types), [`i32`](Quick-Guide#types), [`i64`](Quick-Guide#types),
+[`u8`](Quick-Guide#types), [`u16`](Quick-Guide#types), [`u32`](Quick-Guide#types), and [`u64`](Quick-Guide#types) suffixes on decimal, hexadecimal (`0xFFu32`), and
+binary (`0b101u8`) literals.
 
 See [Checked Narrow Integer Casts](Language-Syntax#checked-narrow-integer-casts)
 for conversion checks and diagnostics.

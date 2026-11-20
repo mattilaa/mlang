@@ -46,7 +46,12 @@ fn conversions() -> void {
 '''
         for kind in CASTS:
             text += f'    let value_{kind}: {kind} = {kind}(1);\n'
-        text += '}\n'
+        literals = [(digits + kind, kind) for kind in CASTS[:8]
+                    for digits in ('13', '0x2A', '0b101')]
+        for index, (literal, kind) in enumerate(literals):
+            text += f'    let literal_{index}: {kind} = {literal};\n'
+        text += '    let value_13u32: u32 = 13;\n    let hex_digits: u32 = 0xF32;\n'
+        text += '}\nfn uart_put(value: u32) -> void {}\nfn send_cr() -> void { uart_put(13u32); }\n'
         path.write_text(text)
         client = JsonRpcClient([str(args.mlangd.resolve()), '--stdio'], cwd=root)
         try:
@@ -56,8 +61,11 @@ fn conversions() -> void {
                 'uri': to_uri(path), 'languageId': 'mlang', 'version': 1, 'text': text}})
             queries = [('u64(size)', 'u64'), ('u8(fw_byte())', 'u8'), ('i32(size)', 'i32')]
             queries += [(kind + '(1)', kind) for kind in CASTS]
+            queries += literals + [('13u32);', 'u32')]
             for needle, kind in queries:
                 line, column = position_of(text, needle)
+                if needle[0].isdigit():
+                    column += needle.index(kind)
                 # Uvim retries token boundaries, and gd on '(' should also work.
                 for offset in range(len(kind) + 1):
                     params = {'textDocument': {'uri': to_uri(path)},
@@ -69,9 +77,16 @@ fn conversions() -> void {
                     reference = Path(unquote(urlparse(target['uri']).path))
                     target_line = target['range']['start']['line']
                     assert reference.read_text().splitlines()[target_line] == '// @builtin ' + kind
+                    hover = client.request('textDocument/hover', params)
+                    assert hover and 'builtin: ' + kind in hover['contents']['value'], (needle, hover)
+            for needle in ('13;', '0xF32;'):
+                line, column = position_of(text, needle)
+                params = {'textDocument': {'uri': to_uri(path)},
+                          'position': {'line': line, 'character': column + len(needle) - 2}}
                 hover = client.request('textDocument/hover', params)
-                assert hover and kind in hover['contents']['value'], (needle, hover)
-            for needle, name in [('fw_byte());', 'fw_byte'), ('fw_select(key);', 'fw_select')]:
+                assert not hover or 'builtin: ' not in hover['contents']['value'], (needle, hover)
+            for needle, name in [('fw_byte());', 'fw_byte'), ('fw_select(key);', 'fw_select'),
+                                 ('value_13u32:', 'value_13u32')]:
                 line, column = position_of(text, needle)
                 result = client.request('textDocument/definition', {
                     'textDocument': {'uri': to_uri(path)},
@@ -79,7 +94,7 @@ fn conversions() -> void {
                 assert result and result[0]['uri'] == to_uri(path), (name, result)
         finally:
             client.close()
-    print('PASS: 12 primitive casts, nested/same-line calls and token-boundary navigation')
+    print('PASS: primitive casts, 24 typed integer literals and token-boundary navigation')
 
 
 if __name__ == '__main__':

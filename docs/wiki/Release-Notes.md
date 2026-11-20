@@ -4,6 +4,9 @@
 
 Development version: 0.4.6.
 
+- Resolve typed integer literal suffixes (such as `13u32`, `0xFFu32`, and
+  `0b101u8`) to builtin type hover and definition documentation.
+
 - Resolve primitive casts and type annotations to the MLang builtin reference
   from external workspaces, before native C header navigation.
 

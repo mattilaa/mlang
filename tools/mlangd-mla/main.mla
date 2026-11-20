@@ -2735,7 +2735,11 @@ fn handle_definition(payload: str8) -> str8 {
             // The compiler API knows installed/command-database stdlib paths;
             // cwd-only heuristics can otherwise send external projects to C headers.
             let cursor_word: str8 = word_at_col(line_text, col);
-            if is_primitive_builtin(cursor_word) {
+            // Numeric words may carry a builtin suffix (13u32, 0xFFu8).
+            // The compiler API validates its spelling and cursor position.
+            var numeric_word: bool = false;
+            if len(cursor_word) > 0 { numeric_word = cursor_word[0] >= 48u8 && cursor_word[0] <= 57u8; }
+            if is_primitive_builtin(cursor_word) || numeric_word {
                 let reference: result<DefinitionLocation, str8> = semantic_session.definition(uri, line + 1, col + 1);
                 if reference.is_ok() {
                     let target: DefinitionLocation = reference.unwrap();

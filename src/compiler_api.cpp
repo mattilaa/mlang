@@ -279,7 +279,35 @@ static std::optional<TokenSpan> tokenSpanAtOffset(
 
     if(!isIdentStart(text[start]))
     {
-        return std::nullopt;
+        // Match the lexer's decimal, binary and hexadecimal typed integers.
+        // Keep the suffix span so identifiers/user-defined literals and the
+        // digits of an unsuffixed number cannot masquerade as builtin types.
+        size_t suffix = start;
+        int base = 10;
+        if(end > start + 1 && text[start] == '0')
+        {
+            if(text[start + 1] == 'x' || text[start + 1] == 'X') base = 16;
+            if(text[start + 1] == 'b' || text[start + 1] == 'B') base = 2;
+        }
+        if(base != 10) suffix += 2;
+        const size_t digits = suffix;
+        while(suffix <= end)
+        {
+            const unsigned char ch = static_cast<unsigned char>(text[suffix]);
+            const bool valid = base == 16 ? std::isxdigit(ch) != 0 :
+                               base == 2 ? ch == '0' || ch == '1' :
+                                           ch >= '0' && ch <= '9';
+            if(!valid) break;
+            ++suffix;
+        }
+        if(suffix == digits || suffix > end || pos < suffix) return std::nullopt;
+        const auto kind = text.substr(suffix, end - suffix + 1);
+        if(kind != "i8" && kind != "i16" && kind != "i32" && kind != "i64" &&
+           kind != "u8" && kind != "u16" && kind != "u32" && kind != "u64")
+        {
+            return std::nullopt;
+        }
+        start = suffix;
     }
     TokenSpan out;
     out.token = std::string(text.substr(start, end - start + 1));

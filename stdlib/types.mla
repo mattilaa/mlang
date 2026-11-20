@@ -20,6 +20,8 @@
 /// Primitive names also introduce explicit conversions, such as `u64(size)`,
 /// `u8(value)`, `i32(value)`, and `f64(value)`. Editor go-to-definition uses the
 /// same `@builtin` reference entry for a cast and a type annotation.
+/// Integer literal suffixes use the same reference: `13u32`, `0xFFu32`,
+/// and `0b101u8`. Hover or go to definition on the suffix shows its type.
 ///
 /// \section builtin_types_string String Types
 /// - `str8`: UTF-8 string type.
