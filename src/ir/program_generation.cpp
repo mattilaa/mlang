@@ -97,16 +97,27 @@ void CodeGenerator::generateCode(ProgramNode* program)
     // constexpr bodies available temporarily so suffix operators (and their
     // constexpr helpers) can run here without requiring generated code.
     auto savedGlobalConstexprOverloads = functionOverloads;
-    if(!program->cexprDecls.empty() && program->functionList)
+    if(program->functionList)
         for(auto* function : program->functionList->functions)
-            if(function && function->isCexpr && function->typeParams.empty())
+        {
+            if(function && function->isCeval &&
+               (!function->typePackParam.empty() ||
+                function->parameters->isVarArg))
+            {
+                reportError(
+                    function->line,
+                    "ceval functions do not support variadic parameters or "
+                    "argument packs");
+                return;
+            }
+            if(function && function->isCexpr)
                 registerFunctionOverload(function, nullptr);
+        }
     for(auto* cexprDecl : program->cexprDecls)
     {
         if(cexprDecl)
             generateCexprDeclaration(cexprDecl, false);
     }
-    functionOverloads = std::move(savedGlobalConstexprOverloads);
 
     enum class MainArgMode
     {
@@ -911,7 +922,10 @@ void CodeGenerator::generateCode(ProgramNode* program)
         {
             if(!gv)
                 continue;
+            const auto callerModule = currentModule;
+            currentModule = gv->sourceModule;
             generateGlobalVarDeclaration(gv, true);
+            currentModule = callerModule;
         }
     }
 
@@ -921,22 +935,36 @@ void CodeGenerator::generateCode(ProgramNode* program)
     {
         if(!global || !globalNamedValues.count(global->name))
             continue;
+        const auto callerModule = currentModule;
+        currentModule = global->sourceModule;
         auto* initializer = buildGlobalInitializer(
             global->initExpr,
             globalSemanticTypes[global->name],
             global->line);
+        currentModule = callerModule;
         if(initializer)
             llvm::cast<llvm::GlobalVariable>(globalNamedValues[global->name])
                 ->setInitializer(initializer);
+        else if(global->isCinit)
+            reportError(
+                global->line,
+                "cinit initializer must be statically initializable");
     }
     if(hasError)
         return;
+
+    functionOverloads = std::move(savedGlobalConstexprOverloads);
 
     // Generate forward declarations for all functions first
     if(program->functionList)
     {
         for(auto funcDef : program->functionList->functions)
         {
+            if(funcDef->isCeval && funcDef->name == "main")
+            {
+                reportError(funcDef->line, "main cannot be a ceval function");
+                return;
+            }
             if(funcDef->isTest && !includeTests)
                 continue;
             if(!funcDef->typePackParam.empty())

@@ -522,7 +522,8 @@ private:
         ConstexprValue& out,
         std::string* errorMessage,
         ConstexprEnv* env,
-        int depth);
+        int depth,
+        FunctionDefNode* selectedFunction = nullptr);
     bool evalConstexprStatementList(
         StatementListNode* body,
         ConstexprEnv& env,
@@ -1020,6 +1021,7 @@ private:
     llvm::Function* generateFunctionDeclaration(FunctionDefNode* node);
     llvm::Function* generateFunctionDefinition(FunctionDefNode* node);
     void generateStructDefinition(StructDefNode* node);
+    void generateCinitVarDeclaration(VarDeclNode* node);
     void generateGlobalVarDeclaration(
         VarDeclNode* node,
         bool declarationOnly = false);

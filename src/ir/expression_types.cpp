@@ -112,6 +112,12 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                         return new FixedArrayTypeNode(
                             cloneTypeNode(listIt->second),
                             capIt->second);
+                if(auto* global =
+                       llvm::dyn_cast_or_null<llvm::GlobalVariable>(storage))
+                    if(global->getValueType()->isArrayTy())
+                        return new FixedArrayTypeNode(
+                            cloneTypeNode(listIt->second),
+                            capIt->second);
                 return new ArrayTypeNode(
                     cloneTypeNode(listIt->second),
                     capIt->second);
@@ -242,7 +248,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                     continue;
                 if(info.node->typeParams.empty())
                     return cloneTypeNode(info.node->returnType);
-                if(info.node->isCexpr || !info.node->typePackParam.empty())
+                if((info.node->isCexpr && !info.node->isCeval) ||
+                   !info.node->typePackParam.empty())
                     continue;
 
                 std::map<std::string, TypeNode*> bindings;

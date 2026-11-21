@@ -2373,12 +2373,17 @@ void CodeGenerator::generateCexprDeclaration(
 
     ConstexprValue value;
     std::string errorMessage;
-    if(!evalConstexprExpression(
-           node->expression,
-           value,
-           &errorMessage,
-           nullptr,
-           0))
+    const std::string savedModule = currentModule;
+    if(!node->sourceModule.empty())
+        currentModule = node->sourceModule;
+    const bool evaluated = evalConstexprExpression(
+        node->expression,
+        value,
+        &errorMessage,
+        nullptr,
+        0);
+    currentModule = savedModule;
+    if(!evaluated)
     {
         reportError(
             node->line,
@@ -2420,6 +2425,11 @@ void CodeGenerator::generateCexprDeclaration(
 
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
+    if(node->isCinit)
+    {
+        generateCinitVarDeclaration(node);
+        return;
+    }
     TypeNode* declaredType = node->type;
     if(!declaredType)
         if(auto* call = dynamic_cast<FunctionCallNode*>(node->initExpr))

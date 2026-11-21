@@ -1,0 +1,38 @@
+/// \file cinit_demo.mla
+/// \brief Mutable globals and local statics with guaranteed static initialization.
+
+ceval fn initial_count() -> i32 {
+    return 40;
+}
+
+struct Settings {
+    var sample_count: i32;
+    var scale: f64;
+};
+
+// Values are stored directly in the executable, without startup calls.
+cinit var settings: Settings = Settings { sample_count: initial_count(), scale: 1.5 * 2.0 };
+cinit var samples: fixedarray<i32, 3> = [initial_count(), 2, 3];
+cinit var errors: u32 {};
+
+fn next_count() -> i32 {
+    // No first-call guard; later calls see the previous mutation.
+    cinit static var count: i32 = initial_count();
+    count += 1;
+    return count;
+}
+
+fn main() -> i32 {
+    settings.sample_count += 2;
+    samples[0] += 2;
+    errors += 1u32;
+    let first: i32 = next_count();
+    let second: i32 = next_count();
+    println!("cinit: samples={}, first={}, second={}, errors={}", samples[0], first, second, errors);
+
+    // Rejected: cinit requires global or static storage.
+    // cinit var automatic: i32 = 1;
+    // A call to an ordinary runtime fn is also rejected as an initializer.
+    return settings.sample_count == 42 && settings.scale == 3.0 &&
+        samples[0] == 42 && first == 41 && second == 42 && errors == 1u32 ? 0 : 1;
+}

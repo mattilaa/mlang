@@ -2074,7 +2074,7 @@ enum UpdatePosition
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
 %token PUB IMPL TRAIT DYN
 %token EXTERN
-%token STATIC CEXPR GENERIC CONCEPT REQ WHERE TYPENAME NOEXCEPT
+%token STATIC CEXPR CEVAL CINIT GENERIC CONCEPT REQ WHERE TYPENAME NOEXCEPT
 %token ASM VOLATILE SIZEOF
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
@@ -2147,6 +2147,7 @@ enum UpdatePosition
 %type <ast> type_param_list impl_block impl_method_list struct_literal struct_field_init_list trait_def trait_method_decl_list trait_method_decl
 %type <ast> match_expression match_arm_list match_arm match_pattern match_target match_atom match_binary_expression
 %type <ast> builder_arg_list builder_arg builder_clause builder_clause_value builder_clause_value_list
+%type <ival> compile_time_specifier
 %type <ival> enum_base_type_opt enum_backing_type enum_int_type
 %type <ival> arch_attr arch_attr_list
 %type <ival> property_options_opt property_option_list property_option
@@ -2693,6 +2694,11 @@ struct_method
         }
     ;
 
+compile_time_specifier
+    : CEXPR { $$ = 1; }
+    | CEVAL { $$ = 2; }
+    ;
+
 function_def
     : GENERIC LT type_param_list GT optional_constraint function_def
         {
@@ -2708,32 +2714,36 @@ function_def
         { auto* node = mla_ast_function_def($7, $2, $4, $9, 0, 0); node->line = @1.first_line; node->col = @1.first_column; $$ = node; }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
         { auto* node = mla_ast_function_def($8, $3, $5, $10, 1, 0); node->line = @2.first_line; node->col = @2.first_column; $$ = node; }
-    | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN CEXPR ARROW type LBRACE statement_list RBRACE
+    | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN compile_time_specifier ARROW type LBRACE statement_list RBRACE
         {
             auto* node = mla_ast_function_def($8, $2, $4, $10, 0, 0);
             node->line = yylineno;
             static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            static_cast<FunctionDefNode*>(node)->isCeval = $6 == 2;
             $$ = node;
         }
-    | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN CEXPR ARROW type LBRACE statement_list RBRACE
+    | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN compile_time_specifier ARROW type LBRACE statement_list RBRACE
         {
             auto* node = mla_ast_function_def($9, $3, $5, $11, 1, 0);
             node->line = yylineno;
             static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            static_cast<FunctionDefNode*>(node)->isCeval = $7 == 2;
             $$ = node;
         }
-    | CEXPR FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+    | compile_time_specifier FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
         {
             auto* node = mla_ast_function_def($8, $3, $5, $10, 0, 0);
             node->line = yylineno;
             static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            static_cast<FunctionDefNode*>(node)->isCeval = $1 == 2;
             $$ = node;
         }
-    | PUB CEXPR FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+    | PUB compile_time_specifier FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
         {
             auto* node = mla_ast_function_def($9, $4, $6, $11, 1, 0);
             node->line = yylineno;
             static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            static_cast<FunctionDefNode*>(node)->isCeval = $2 == 2;
             $$ = node;
         }
     | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
@@ -2756,7 +2766,7 @@ function_def
             node->col = @2.first_column;
             $$ = node;
         }
-    | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN CEXPR LBRACE statement_list RBRACE
+    | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN compile_time_specifier LBRACE statement_list RBRACE
         {
             TypeNode* inferred = nullptr;
             if(strcmp($2, "main") == 0)
@@ -2764,9 +2774,10 @@ function_def
             auto* node = mla_ast_function_def(inferred, $2, $4, $8, 0, 0);
             node->line = yylineno;
             static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            static_cast<FunctionDefNode*>(node)->isCeval = $6 == 2;
             $$ = node;
         }
-    | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN CEXPR LBRACE statement_list RBRACE
+    | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN compile_time_specifier LBRACE statement_list RBRACE
         {
             TypeNode* inferred = nullptr;
             if(strcmp($3, "main") == 0)
@@ -2774,9 +2785,10 @@ function_def
             auto* node = mla_ast_function_def(inferred, $3, $5, $9, 1, 0);
             node->line = yylineno;
             static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            static_cast<FunctionDefNode*>(node)->isCeval = $7 == 2;
             $$ = node;
         }
-    | CEXPR FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
+    | compile_time_specifier FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
         {
             TypeNode* inferred = nullptr;
             if(strcmp($3, "main") == 0)
@@ -2784,9 +2796,10 @@ function_def
             auto* node = mla_ast_function_def(inferred, $3, $5, $8, 0, 0);
             node->line = yylineno;
             static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            static_cast<FunctionDefNode*>(node)->isCeval = $1 == 2;
             $$ = node;
         }
-    | PUB CEXPR FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
+    | PUB compile_time_specifier FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
         {
             TypeNode* inferred = nullptr;
             if(strcmp($4, "main") == 0)
@@ -2794,6 +2807,7 @@ function_def
             auto* node = mla_ast_function_def(inferred, $4, $6, $9, 1, 0);
             node->line = yylineno;
             static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            static_cast<FunctionDefNode*>(node)->isCeval = $2 == 2;
             $$ = node;
         }
     | EXTERN FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
@@ -2900,8 +2914,8 @@ literal_function_def
         { $$ = make_literal_operator($2, $4, $7, $9, @1.first_line, @1.first_column); }
     | PUB literal_function_def
         { static_cast<FunctionDefNode*>($2)->isPublic = true; $$ = $2; }
-    | CEXPR literal_function_def
-        { static_cast<FunctionDefNode*>($2)->isCexpr = true; $$ = $2; }
+    | compile_time_specifier literal_function_def
+        { auto* fn = static_cast<FunctionDefNode*>($2); fn->isCexpr = true; fn->isCeval = $1 == 2; $$ = $2; }
     ;
 
 test_function_def
@@ -3204,7 +3218,9 @@ cexpr_declaration
     ;
 
 var_statement
-    : optional_branch_prediction VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
+    : CINIT var_statement
+        { auto* n = static_cast<VarDeclNode*>($2); n->isCinit = true; n->line = @1.first_line; n->col = @1.first_column; $$ = n; }
+    | optional_branch_prediction VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
         { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration($5, $3, $7), $1); $$->line = @2.first_line; $$->col = @2.first_column; }
     | optional_branch_prediction VAR IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
         {
@@ -3249,7 +3265,9 @@ optional_branch_prediction
     ;
 
 global_var_statement
-    : VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
+    : CINIT global_var_statement
+        { auto* n = static_cast<VarDeclNode*>($2); n->isCinit = true; n->line = @1.first_line; n->col = @1.first_column; $$ = n; }
+    | VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
         {
             $$ = mla_ast_var_declaration($4, $2, $6);
             if(auto* n = dynamic_cast<VarDeclNode*>($$))
@@ -3287,7 +3305,11 @@ global_var_statement
     ;
 
 static_var_statement
-    : STATIC VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
+    : CINIT static_var_statement
+        { auto* n = static_cast<VarDeclNode*>($2); n->isCinit = true; n->line = @1.first_line; n->col = @1.first_column; $$ = n; }
+    | STATIC CINIT var_statement
+        { auto* n = static_cast<VarDeclNode*>($3); n->isCinit = true; n->isStaticStorage = true; n->line = @1.first_line; n->col = @1.first_column; $$ = n; }
+    | STATIC VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
         {
             $$ = mla_ast_var_declaration($5, $3, $7);
             if(auto* n = dynamic_cast<VarDeclNode*>($$))

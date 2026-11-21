@@ -1882,6 +1882,8 @@ fn completion_kind_lsp(label: str8) -> i32 {
 
     if ends_with(label, "!") == 1 { return 14; }
     if eq(label, "fn") == 1 { return 14; }
+    if eq(label, "ceval") == 1 { return 14; }
+    if eq(label, "cinit") == 1 { return 14; }
     if eq(label, "generic") == 1 { return 14; }
     if eq(label, "concept") == 1 { return 14; }
     if eq(label, "where") == 1 { return 14; }
@@ -2026,6 +2028,8 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "hidden") == 1 { return "property option"; }
     if eq(label, "protected") == 1 { return "property option"; }
     if eq(label, "cexpr") == 1 { return "compile-time evaluation keyword"; }
+    if eq(label, "ceval") == 1 { return "immediate function specifier"; }
+    if eq(label, "cinit") == 1 { return "static initialization specifier"; }
     if eq(label, "is_ok") == 1 { return "builtin result method"; }
     if eq(label, "is_err") == 1 { return "builtin result method"; }
     if eq(label, "unwrap") == 1 { return "builtin result/option method"; }
@@ -2192,6 +2196,12 @@ fn completion_documentation(label: str8) -> str8 {
     }
     if eq(label, "protected") == 1 {
         return "Property option for @property(protected). Allows backing-field access from the declaring struct and its derive chain.";
+    }
+    if eq(label, "ceval") == 1 {
+        return "Every call must evaluate at compile time. Use ceval fn or postfix ceval. Runtime function values are rejected.";
+    }
+    if eq(label, "cinit") == 1 {
+        return "Require static initialization of a mutable global or local static variable, without a runtime initialization guard.";
     }
     if eq(label, "cexpr") == 1 {
         return "Compile-time evaluation keyword. Use cexpr(expr) to require compile-time folding, or mark functions callable from compile-time contexts.";

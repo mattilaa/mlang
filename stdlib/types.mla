@@ -243,6 +243,19 @@
 // compile-time evaluation contexts such as `static_assert!` and `cexpr(...)`.
 // Use `cexpr if` to select a branch during compilation.
 
+// @builtin ceval
+// Immediate function specifier: every call must evaluate at compile time.
+// Use `ceval fn name(...) -> T { ... }` or `fn name(...) ceval -> T { ... }`.
+// Calls need no `cexpr(...)` wrapper. Runtime arguments and runtime function
+// values are rejected. Bodies use the same scalar evaluator as `cexpr fn`.
+
+// @builtin cinit
+// Require static initialization without making the variable immutable.
+// Use `cinit var name: T = value;` at module scope, or
+// `cinit static var name: T = value;` inside a function.
+// Runtime initializers and automatic local storage are rejected. A local
+// static uses a constant initializer without a runtime initialization guard.
+
 // @builtin generic
 // Generic function parameter introducer for runtime and compile-time functions.
 // Use `generic<T, Y>` before a function declaration, with an optional

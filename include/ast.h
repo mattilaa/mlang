@@ -1079,6 +1079,8 @@ public:
 class CexprDeclNode : public LetDeclNode
 {
 public:
+    std::string sourceModule;
+
     CexprDeclNode(TypeNode* t, const std::string& n, ExpressionNode* e)
         : LetDeclNode(t, n, e)
     {
@@ -1094,6 +1096,8 @@ public:
     std::string name;
     ExpressionNode* initExpr;
     bool isExplicitZeroInit = false;
+    bool isCinit = false;
+    std::string sourceModule;
     bool isStaticStorage = false;
     bool isGlobalStorage = false;
     uint64_t storageAlignment = 0;
@@ -1755,6 +1759,7 @@ public:
     bool isExtern;
     bool isTest = false;
     bool isCexpr = false;
+    bool isCeval = false;
     bool isInline = false;
     bool isInlineAlways = false;
     bool isInlineNever = false;

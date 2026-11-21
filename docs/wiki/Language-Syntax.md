@@ -25,6 +25,8 @@ the compiler.
   - [Pointer offsets and string indexing](#pointer-offsets-and-string-indexing)
   - [Typed var declarations](#typed-var-declarations-without-initializers)
   - [cexpr compile-time evaluation](#cexpr-compile-time-evaluation)
+  - [ceval immediate functions](#ceval-immediate-functions)
+  - [cinit static initialization](#cinit-static-initialization)
 - [Control flow and errors](#control-flow-and-errors)
   - [if / else if](#if--else-if-syntax)
   - [Branch prediction hints](#branch-prediction-hints)
@@ -975,6 +977,87 @@ Current first-version constraints:
 - `cexpr if` currently supports block bodies, `else if` chains, and an
   optional [`else`](Language-Syntax) block.
 - Calling a non-`cexpr fn` from `cexpr(...)` is rejected.
+
+### `ceval` Immediate Functions
+
+`ceval fn` requires every call to evaluate during compilation, including calls
+in ordinary runtime expressions. Unlike `cexpr fn`, it never provides a runtime
+function body. `fn name(...) ceval -> T` is the equivalent postfix spelling;
+`pub`, generic type parameters, and numeric literal operators are supported.
+
+```rust
+ceval fn twice(value: i32) -> i32 {
+    return value * 2;
+}
+
+fn main() -> i32 {
+    cexpr Seed: i32 = 21;
+    let answer: i32 = twice(Seed); // Evaluated now; no cexpr(...) needed.
+    return answer == 42 ? 0 : 1;
+}
+```
+
+All arguments must be compile-time evaluable, even if the function ignores
+one of them. Calls can use literals, [`cexpr`](Language-Syntax) constants, and other compile-time
+calls. An ordinary [`let`](Language-Syntax) or [`var`](Language-Syntax) does not become a compile-time constant just
+because its initializer is a literal. Immediate functions cannot be stored as
+runtime callbacks; use a normal [`fn`](Language-Syntax) or `cexpr fn` for that purpose. `main`
+cannot be immediate.
+
+The evaluator has the same scalar-value and statement restrictions described
+for [`cexpr`](Language-Syntax): integer, floating-point and boolean results, local declarations,
+assignment, conditionals, and nested calls. Argument packs and C-style variadic
+parameters are not supported for immediate functions. Structure arguments
+(including the opaque type-dispatch arguments accepted by `cexpr fn`) and
+structure-valued results are not supported by `ceval` yet.
+
+See [ceval_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/ceval_demo.mla) for a runnable example and
+commented examples of rejected runtime arguments and callbacks.
+
+### `cinit` Static Initialization
+
+`cinit` requires a variable's initializer to be representable as static data.
+It does not make the variable immutable. At module scope, write `cinit var`;
+inside a function, write `cinit static var` (or `static cinit var`). Automatic
+local variables cannot use `cinit`.
+
+```rust
+ceval fn initial_count() -> i32 { return 40; }
+
+cinit var total: i32 = initial_count();
+
+fn next() -> i32 {
+    cinit static var counter: i32 = initial_count();
+    counter += 1;
+    return counter;
+}
+
+fn main() -> i32 {
+    total += 2;
+    return total == 42 && next() == 41 && next() == 42 ? 0 : 1;
+}
+```
+
+The initializer may use scalar constant expressions, [`cexpr`](Language-Syntax)/`ceval` calls,
+structure literals and field defaults, inline `fixedarray` literals, UTF-8
+string literals, and addresses of globals. All aggregate elements and fields
+must also be statically initializable. Explicit zero initialization (`{}`)
+and typed declarations without an initializer are supported. An ordinary
+runtime function call or a read of a runtime variable is rejected, even if an
+optimizer could fold it.
+
+A local `cinit` static is initialized directly in the executable: it has no
+first-call guard, initializer call, or runtime allocation. Later calls observe
+mutations to the same storage. This does not make concurrent mutation atomic
+or synchronized. Existing ordinary `static var` behavior is unchanged.
+
+Module globals already require constant initializers in MLang; `cinit` makes
+that requirement explicit and also provides guaranteed static initialization
+for local statics. Unlike a [`cexpr`](Language-Syntax) declaration, it provides mutable storage.
+
+See [cinit_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/cinit_demo.mla) for a runnable example with
+mutable structure and inline-array globals, zero initialization, and a local
+static counter.
 
 ### Variadic generic functions
 

@@ -58,6 +58,11 @@ if(Python3_Interpreter_FOUND)
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/lsp_mlangd-mla_module_paths_transcript.py
                 --mlangd ${MLANGD_MLA_OUTPUT})
         set_tests_properties(mlang_lsp_module_paths PROPERTIES LABELS "lsp;modules" TIMEOUT 60)
+        add_test(NAME mlang_lsp_const_specifiers
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/lsp_mlangd-mla_const_specifiers_transcript.py
+                --mlangd ${MLANGD_MLA_OUTPUT})
+        set_tests_properties(mlang_lsp_const_specifiers PROPERTIES LABELS "lsp;builtins" TIMEOUT 60)
+
         add_test(NAME mlang_lsp_cast_builtins
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/lsp_mlangd-mla_cast_builtins_transcript.py
                 --mlangd ${MLANGD_MLA_OUTPUT})

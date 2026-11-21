@@ -4855,6 +4855,8 @@ static bool isKeywordToken(std::string_view token)
     static constexpr std::string_view kKeywords[] = {
         "fn",
         "cexpr",
+        "ceval",
+        "cinit",
         "let",
         "var",
         "struct",
@@ -5015,6 +5017,8 @@ static std::vector<std::string> computeSemanticCompletions(
     static constexpr std::string_view kKeywords[] = {
         "fn",
         "cexpr",
+        "ceval",
+        "cinit",
         "let",
         "var",
         "struct",
@@ -5481,6 +5485,8 @@ static std::optional<std::vector<std::string>> fastLexicalCompletionsFromText(
     static constexpr std::string_view kLargeDocumentKeywords[] = {
         "fn",
         "cexpr",
+        "ceval",
+        "cinit",
         "let",
         "var",
         "struct",
