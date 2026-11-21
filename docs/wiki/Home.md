@@ -84,6 +84,9 @@ If you are new to MLang, read these pages in this order:
   [Static Initialization](Language-Syntax#cinit-static-initialization)
   The 0.4.6 development additions: [`ceval`](Language-Syntax) calls must evaluate at compile time;
   [`cinit`](Language-Syntax) initializes mutable globals and local statics as static data.
+- [Inline Fixed-Size Arrays (fixedarray)](Fixedarray)
+  Exactly sized inline storage, value semantics, the difference from
+  `array<T, N>`, and a standalone runnable example.
 - [Language Syntax](Language-Syntax)
   Language features such as [`switch`](Language-Syntax), exceptions, pipe syntax, inline asm,
   conditional regions, lambdas/folds, and [`bit`](Quick-Guide#types)/`size_of`.

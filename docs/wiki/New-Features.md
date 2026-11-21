@@ -44,7 +44,7 @@ and [unreleased changes](Release-Notes#unreleased).
 ## MLang 0.4.5
 
 - **Static aggregates and inline arrays:** structure-valued globals and
-  `fixedarray<T, N>` provide static, allocation-free storage. Imported functions
+  [`fixedarray<T, N>`](Fixedarray) provide static, allocation-free storage. Imported functions
   retain their globals, including shared storage across diamond imports.
   See [static data and inline arrays](Language-Syntax#static-structure-globals-and-inline-arrays),
   and the [freestanding data tests](https://github.com/mattilaa/mlang/blob/main/tests/freestanding_data_tests.mla).
@@ -104,6 +104,7 @@ and migration details.
 | [`list<T>`](Quick-Guide#types) / [`Vec<T>`](Stdlib-Vec) methods | Build and mutate growable lists with push/pop/search/sort helpers; see [`examples/std_vec_demo.mla`](https://github.com/mattilaa/mlang/blob/main/examples/std_vec_demo.mla). Reference: [Stdlib Module API](Stdlib-Vec). |
 | Container-to-container `.extend(...)` | Append compatible lists, arrays, maps, literals, and nested containers into mutable destinations; see [`examples/container_extend_demo.mla`](https://github.com/mattilaa/mlang/blob/main/examples/container_extend_demo.mla). Reference: [Language Syntax](Language-Syntax#lambda--fold-expressions). |
 | Fixed-capacity `array<T, N>` | Use fixed-capacity arrays with checked literal/fill initialization, indexing, `push`, `extend`, and `fill`; see [`examples/array_demo.mla`](https://github.com/mattilaa/mlang/blob/main/examples/array_demo.mla). Reference: [Stdlib Module API](Stdlib-Array). |
+| Inline fixed-size [`fixedarray<T, N>`](Fixedarray) | Store exactly `N` elements inline, with zero padding, value copies, returned arrays, fields, nesting, and static storage; see [fixedarray_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/fixedarray_demo.mla). Reference and comparison with `array`: [fixedarray guide](Fixedarray). |
 | Fixed-size `multiarray<T, D1, ..., DN>` | Initialize one or more compile-time dimensions with nested braces and access values through chained indexes; see [`examples/multiarray.mla`](https://github.com/mattilaa/mlang/blob/main/examples/multiarray.mla). Reference: [`std::multiarray`](Stdlib-Multiarray). |
 | Mutable `mutmultiarray<T, D1, ..., DN>` | Use a [`var`](Language-Syntax) binding for bounds-checked indexed and compound writes or recoverable `get(...)` access while preserving fixed dimensions; see [`examples/multiarray.mla`](https://github.com/mattilaa/mlang/blob/main/examples/multiarray.mla). Reference: [`std::mutmultiarray`](Stdlib-Mutmultiarray). |
 | Fixed-size matrix operations | Use [`std::matrix`](Stdlib-Matrix) for N-dimensional element-wise arithmetic and sums, scalar transforms, rectangular multiplication and transpose, square floating-point determinant/inverse, symmetric eigenvalues/eigenvectors, and mutable in-place transforms; see [`examples/matrix_operations.mla`](https://github.com/mattilaa/mlang/blob/main/examples/matrix_operations.mla). Reference: [`std::matrix`](Stdlib-Matrix). |

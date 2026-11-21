@@ -1,0 +1,97 @@
+# Inline Fixed-Size Arrays (fixedarray) {#fixedarray}
+
+`fixedarray<T, N>` is a compiler-provided value type containing exactly `N`
+elements stored inline. No import is required. It is useful for buffers,
+structure fields, lookup tables, and allocation-free local or static storage.
+
+## `array<T, N>` versus `fixedarray<T, N>`
+
+| Property | `array<T, N>` | `fixedarray<T, N>` |
+| --- | --- | --- |
+| Meaning of `N` | Maximum capacity | Exact element count |
+| `len()` | Current element count, from `0` to `N` | Always `N` |
+| Storage | List-style header and separate heap-backed elements | Elements directly inside the array value |
+| Partial initializer | Only supplied elements count toward length | Remaining elements are zero-initialized |
+| Length-changing methods | `push`, `pop`, `clear`, `extend`, and `fill` | None |
+| Copying and passing | List representation and ownership rules | Inline value storage; copyable when its elements are copyable |
+| List interoperability | List-compatible operations | No implicit conversion to the list ABI |
+
+Both types support checked indexing and iteration. Writes require a mutable
+binding or an exclusive `&mut` reference. `fixedarray` copies its elements
+according to their ownership rules; copying does not deep-clone resources
+referenced by an element.
+
+## Initialization and basic operations
+
+```mla
+fn main() -> i32 {
+    var bounded: array<i32, 4> = {10};
+    bounded.push(20); // len() is 2, capacity() is 4.
+
+    var values: fixedarray<i32, 4> = [10]; // [10, 0, 0, 0], len() is 4.
+    values[1] = 20;
+    let repeated: fixedarray<i32, 4> = [7; 4];
+    let zeros: fixedarray<i32, 4> = {};
+
+    var sum: i32 = 0;
+    for value in values { sum += value; }
+    return sum == 30 && repeated[3] == 7 && zeros[3] == 0 ? 0 : 1;
+}
+```
+
+Brace and bracket literals are supported. Supplying more than `N` elements
+is an error; fewer elements leave the rest zero-initialized. `[value; N]`
+provides fill initialization. `len()` and `capacity()` return `N`, and
+`is_empty()` is true only when `N == 0`.
+
+Constant out-of-bounds indexes fail at compile time. Dynamic indexes are checked
+at runtime. Resizing methods such as `push` are rejected.
+
+## Value storage, fields, and static initialization
+
+Local arrays have inline stack storage; global arrays have static storage.
+An array field occupies space inside its enclosing structure. Returning an
+array returns its value rather than a pointer into an expired stack frame.
+Nested arrays use `fixedarray<fixedarray<T, Columns>, Rows>`.
+
+```mla
+struct Samples { var values: fixedarray<i32, 3>; };
+cinit var calibration: fixedarray<i32, 3> = [10, 20, 30];
+
+fn make_samples() -> fixedarray<i32, 3> { return [1, 2, 3]; }
+```
+
+For `i32`, `size_of(fixedarray<i32, 3>)` and `size_of(Samples)` are both `12`.
+The compiler also reports `N * size_of(T)` for `size_of(array<T, N>)`, so that
+query alone does not distinguish the two storage representations.
+
+See [static initialization](language_syntax.md#cinit-static-initialization)
+for the `cinit` guarantee and [ownership notes](ownership_model.h) for element
+copy, move, and borrow rules.
+
+## Runnable example
+
+[fixedarray_demo.mla](../examples/fixedarray_demo.mla) compares the two array
+types and demonstrates zero padding, fill initialization, independent scalar
+copies, returned values, mutable borrowing, fields, nested arrays, iteration,
+static storage, and `size_of` checks. It exits with a nonzero status if any
+demonstrated result is incorrect.
+
+```sh
+build/mlang examples/fixedarray_demo.mla -o /tmp/fixedarray_demo
+/tmp/fixedarray_demo
+```
+
+```text
+array: len=2, limit=4
+fixedarray: len=4, capacity=4, padded=0
+copy: original[1]=2, copied[1]=42
+inline storage: sum=46, field=7, repeated=6, nested=9, global=20
+```
+
+The existing [freestanding data tests](../tests/freestanding_data_tests.mla)
+also exercise inline arrays:
+
+```sh
+build/mlang --tests tests/freestanding_data_tests.mla --filter inline
+```

@@ -140,6 +140,7 @@ PAGES: list[Page] = [
     Page(Path("docs/language_attributes.md"), "Language Attributes", "Language-Attributes", "Language"),
     Page(Path("docs/language_builtins.md"), "Language Built-ins", "Language-Built-ins", "Language"),
     Page(Path("docs/language_syntax.md"), "Language Syntax", "Language-Syntax", "Language"),
+    Page(Path("docs/fixedarray.md"), "Inline Fixed-Size Arrays (fixedarray)", "Fixedarray", "Language"),
     Page(Path("docs/concepts.md"), "Concepts and Structural Requirements", "Concepts", "Language"),
     Page(Path("docs/quick_guide.md"), "Quick Guide", "Quick-Guide", "Language"),
     Page(Path("docs/examples.md"), "Examples", "Examples", "Examples"),
@@ -361,6 +362,10 @@ def stdlib_module_link(token: str) -> str | None:
 
 
 def inline_code_link(token: str) -> str | None:
+    if token == "fixedarray" or (
+        token.startswith("fixedarray<") and token.endswith(">")
+    ):
+        return "Fixedarray"
     if token == "dsp" or token.startswith("dsp::"):
         if token.startswith("dsp::filter"):
             return "DSP-Filter"

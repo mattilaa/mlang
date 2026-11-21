@@ -51,7 +51,7 @@ argument-pack forwarding, structured JSON logging, and LLVM toolchain fixes.
 
 - Constant-initialized structure globals, including nested defaults, UTF-8
   strings, and forward/cyclic references to other globals.
-- `fixedarray<T, N>` provides inline, allocation-free value storage in locals,
+- [`fixedarray<T, N>`](Fixedarray) provides inline, allocation-free value storage in locals,
   globals, and structure fields, with checked indexing and value returns.
 - Typed raw pointer offsets, element distances, comparisons, and indexed access
   preserve borrow permissions and lifetime checks. Pointer arithmetic requires
@@ -75,7 +75,7 @@ argument-pack forwarding, structured JSON logging, and LLVM toolchain fixes.
 
 ## Migration notes
 
-- Use `fixedarray<T, N>` for inline storage without heap allocation. Existing
+- Use [`fixedarray<T, N>`](Fixedarray) for inline storage without heap allocation. Existing
   `array<T, N>` and list behavior is preserved.
 - Pointer arithmetic and hardware access require `unsafe`; known borrow and
   lifetime restrictions remain enforced.

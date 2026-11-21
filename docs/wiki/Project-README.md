@@ -28,6 +28,7 @@ VST3 plugins) is now developed in its own repository: <https://github.com/mattil
 - [`likely` And `unlikely` Branch Hints](#likely-and-unlikely-branch-hints)
 - [Checked Narrow Integer Casts](#checked-narrow-integer-casts)
 - [Fixed-Capacity Arrays](#fixed-capacity-arrays)
+- [Inline Fixed-Size Arrays (fixedarray)](#inline-fixed-size-arrays-fixedarray)
 - [Tools Shipped In This Repository](#tools-shipped-in-this-repository)
 - [Build From Scratch (Step By Step)](#build-from-scratch-step-by-step)
 - [Scripted Bootstrap And Build](#scripted-bootstrap-and-build)
@@ -520,7 +521,7 @@ static. Initialization needs no first-call guard, initializer call, or runtime
 allocation; concurrent mutation still needs synchronization.
 
 Initializers may contain scalar constant expressions, [`cexpr`](Language-Syntax)/[`ceval`](Language-Syntax) calls,
-structure literals and field defaults, inline `fixedarray` literals, UTF-8
+structure literals and field defaults, inline [`fixedarray`](Fixedarray) literals, UTF-8
 string literals, and addresses of globals. Typed declarations may also use
 implicit zero initialization or explicit `{}`. Runtime function calls, reads
 of runtime variables, and addresses of automatic local storage are rejected.
@@ -613,6 +614,10 @@ code must not rely on a release-mode failure being detected.
 fill initializers are checked at compile time, so the compiler rejects
 initializers with more than `N` elements.
 
+For exactly `N` elements stored inline, use
+[`fixedarray<T, N>`](#inline-fixed-size-arrays-fixedarray). `array` can change
+its length within a capacity limit; [`fixedarray`](Fixedarray) always has length `N`.
+
 ```rust
 let fixed: array<i32, 6> = {1, 3, 4, 5, 6, 7};
 var scratch: array<i32, 6> = {};
@@ -703,6 +708,48 @@ square size, for example `--usesquarefloats --size=4x4`, to use [`f64`](Quick-Gu
 and enable `I` inverse, `D` determinant, `E` eigenvectors, and `V` eigenvalues.
 Without `--size`, the float mode defaults to `2x2`; rectangular float sizes are
 rejected.
+
+## Inline Fixed-Size Arrays (fixedarray)
+
+[`fixedarray<T, N>`](Fixedarray) contains exactly `N` elements stored inline. Locals use
+stack storage, globals use static storage, and fields occupy space inside
+their enclosing structure. The array itself needs no heap buffer or import.
+
+```rust
+fn main() -> i32 {
+    var values: fixedarray<i32, 4> = [10]; // [10, 0, 0, 0]
+    values[1] = 20;
+    var copied: fixedarray<i32, 4> = values;
+    copied[1] = 42;
+    println!("len={}, original={}, copy={}", values.len(), values[1], copied[1]);
+    return values[1] == 20 && copied[1] == 42 ? 0 : 1;
+}
+```
+
+| Property | `array<T, N>` | [`fixedarray<T, N>`](Fixedarray) |
+| --- | --- | --- |
+| `N` means | Maximum capacity | Exact element count |
+| Length | Changes from `0` to `N` | Always `N` |
+| Storage | List-style header and separate heap-backed elements | Inline element storage |
+| Partial initialization | Only supplied elements count toward length | Remaining elements are zero-initialized |
+| Resizing | `push`, `pop`, `clear`, `extend`, `fill` | No resizing methods |
+| List interoperability | List-compatible operations | No implicit conversion to the list ABI |
+
+Inline arrays support checked indexing, iteration, `len()`, `capacity()`,
+`is_empty()`, fill literals (`[7; 4]`), nested arrays, and mutable borrowing.
+Copyable elements give value copies; other elements follow their normal
+ownership rules. `cinit var table: fixedarray<i32, 3> = [1, 2, 3];` provides
+mutable inline static storage.
+
+See [the full fixedarray guide](Fixedarray) for bounds rules, storage
+details, and the `size_of` distinction. The standalone
+[fixedarray_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/fixedarray_demo.mla) compares both array types
+and checks copies, fields, nested arrays, returned values, and static data:
+
+```sh
+build/mlang examples/fixedarray_demo.mla -o /tmp/fixedarray_demo
+/tmp/fixedarray_demo
+```
 
 ## Tools Shipped In This Repository
 
@@ -2280,6 +2327,8 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   [examples/ceval_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/ceval_demo.mla)
 - Guaranteed static initialization with mutable [`cinit`](Language-Syntax) globals and local statics:
   [examples/cinit_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/cinit_demo.mla)
+- Inline fixed-size [`fixedarray<T, N>`](Fixedarray) storage, value copies, fields, and nesting:
+  [examples/fixedarray_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/fixedarray_demo.mla)
 - Namespace blocks and aliases (`namespace geometry::units { ... }`, `alias gu = geometry::units;`) with qualified names:
   `examples/namespace_demo.mla`
 - Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):

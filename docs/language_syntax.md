@@ -19,6 +19,7 @@ the compiler.
 - [Compile-time information and declarations](#compile-time-information-and-declarations)
   - [Type name property](#type-name-property-name)
   - [Static structure globals and inline arrays](#static-structure-globals-and-inline-arrays)
+  - [Inline fixed-size arrays (fixedarray)](#inline-fixed-size-arrays-fixedarray)
   - [Pointer offsets and string indexing](#pointer-offsets-and-string-indexing)
   - [Typed var declarations](#typed-var-declarations-without-initializers)
   - [cexpr compile-time evaluation](#cexpr-compile-time-evaluation)
@@ -611,6 +612,11 @@ struct Calibration { var offset: i32{-7}; var scale: i32{1000}; };
 struct Climate { var label: str8; var calibration: Calibration; };
 var climate: Climate = Climate { label: "winter" };
 ```
+
+### Inline Fixed-Size Arrays (fixedarray)
+
+See the [dedicated fixedarray guide](fixedarray.md) for a comparison with
+`array<T, N>`, a runnable demo, and initialization and storage rules.
 
 `fixedarray<T, N>` stores exactly `N` elements inline. It is a value type: copying
 or returning it copies its storage, so returned arrays never point into a dead

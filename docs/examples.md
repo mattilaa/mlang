@@ -21,6 +21,7 @@ subdirectory-based showcases are indexed separately in
 - [Example pages](#example-pages)
 - [Example programs](#example-programs)
   - [Compile-time functions and static initialization](#compile-time-functions-and-static-initialization)
+  - [Inline fixed-size arrays (fixedarray)](#inline-fixed-size-arrays-fixedarray)
   - [Matrix operations](#matrix-operations)
   - [Bare metal and QEMU](#bare-metal-and-qemu)
   - [Route planning and genetic algorithms](#route-planning-and-genetic-algorithms)
@@ -37,6 +38,21 @@ subdirectory-based showcases are indexed separately in
 - @subpage uml_ui_generator — TOML-driven UML diagram/UI generator example.
 
 ## Example programs
+
+### Inline fixed-size arrays (fixedarray)
+
+[fixedarray_demo.mla](../examples/fixedarray_demo.mla) compares fixed-capacity
+`array<T, N>` with inline fixed-size `fixedarray<T, N>`. It demonstrates zero
+padding, fill initialization, independent scalar copies, value returns,
+mutable borrowing, structure fields, nested arrays, iteration, and static data.
+The demo checks its results and exits with a nonzero status on failure.
+
+```sh
+build/mlang examples/fixedarray_demo.mla -o /tmp/fixedarray_demo
+/tmp/fixedarray_demo
+```
+
+See the [fixedarray guide](fixedarray.md) for details and expected output.
 
 ### Compile-time functions and static initialization
 

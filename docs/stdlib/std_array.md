@@ -4,6 +4,10 @@ Module file: `stdlib/std/array.mla`
 
 Documentation/navigation module for the compiler-provided `array<T, N>` type.
 
+For exactly `N` elements in inline value storage, see
+[`fixedarray<T, N>`](../fixedarray.md). `array` has a variable length bounded
+by `N`; `fixedarray` always has length `N` and no resizing methods.
+
 - `array<T, N>` is a fixed-capacity, list-compatible sequence.
 - Literal and fill initializers are checked at compile time where known.
 - `push(value)` and `extend(values)` are rejected at compile time when the

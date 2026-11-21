@@ -1,0 +1,58 @@
+/// \file fixedarray_demo.mla
+/// @ingroup examples
+/// \brief Inline fixed-size arrays: zero padding, copies, fields, and borrowing.
+/// Build: build/mlang examples/fixedarray_demo.mla -o /tmp/fixedarray_demo
+/// Run: /tmp/fixedarray_demo
+
+struct Samples {
+    var values: fixedarray<i32, 3>;
+};
+
+// Inline global storage, initialized directly in the executable.
+cinit var calibration: fixedarray<i32, 3> = [10, 20, 30];
+
+fn make_samples() -> fixedarray<i32, 3> {
+    return [1, 2, 3];
+}
+
+fn set_middle(values: &mut fixedarray<i32, 3>, value: i32) -> void {
+    values[1] = value;
+}
+
+fn main() -> i32 {
+    // Capacity is a limit for array; fixedarray always has all N elements.
+    var bounded: array<i32, 4> = {10};
+    bounded.push(20);
+    let padded: fixedarray<i32, 4> = [10];
+    println!("array: len={}, limit=4", bounded.len());
+    println!("fixedarray: len={}, capacity={}, padded={}",
+        padded.len(), padded.capacity(), padded[1]);
+    if bounded.len() != 2 || padded.len() != 4 || padded[1] != 0 { return 1; }
+
+    // Returning and copying scalar arrays gives independent inline storage.
+    var original: fixedarray<i32, 3> = make_samples();
+    var copied: fixedarray<i32, 3> = original;
+    set_middle(&mut copied, 42);
+    println!("copy: original[1]={}, copied[1]={}", original[1], copied[1]);
+    if original[1] != 2 || copied[1] != 42 { return 2; }
+
+    var samples: Samples = Samples { values: [4, 5, 6] };
+    samples.values[2] = 7;
+    let repeated: fixedarray<i32, 3> = [6; 3];
+    var matrix: fixedarray<fixedarray<i32, 2>, 2> = [[1, 2], [3, 4]];
+    matrix[1][0] = 9;
+    var sum: i32 = 0;
+    for value in copied { sum += value; }
+    println!("inline storage: sum={}, field={}, repeated={}, nested={}, global={}",
+        sum, samples.values[2], repeated[2], matrix[1][0], calibration[1]);
+
+    static_assert!(size_of(fixedarray<i32, 3>) == 12);
+    static_assert!(size_of(Samples) == 12);
+    if sum != 46 || samples.values[2] != 7 || repeated[2] != 6 ||
+        matrix[1][0] != 9 || calibration[1] != 20 { return 3; }
+
+    // Rejected: the size cannot change and bounds are checked.
+    // copied.push(4);
+    // let invalid: i32 = copied[3];
+    return 0;
+}

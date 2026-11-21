@@ -22,6 +22,7 @@ the compiler.
 - [Compile-time information and declarations](#compile-time-information-and-declarations)
   - [Type name property](#type-name-property-name)
   - [Static structure globals and inline arrays](#static-structure-globals-and-inline-arrays)
+  - [Inline fixed-size arrays (fixedarray)](#inline-fixed-size-arrays-fixedarray)
   - [Pointer offsets and string indexing](#pointer-offsets-and-string-indexing)
   - [Typed var declarations](#typed-var-declarations-without-initializers)
   - [cexpr compile-time evaluation](#cexpr-compile-time-evaluation)
@@ -616,7 +617,12 @@ struct Climate { var label: str8; var calibration: Calibration; };
 var climate: Climate = Climate { label: "winter" };
 ```
 
-`fixedarray<T, N>` stores exactly `N` elements inline. It is a value type: copying
+### Inline Fixed-Size Arrays (fixedarray)
+
+See the [dedicated fixedarray guide](Fixedarray) for a comparison with
+`array<T, N>`, a runnable demo, and initialization and storage rules.
+
+[`fixedarray<T, N>`](Fixedarray) stores exactly `N` elements inline. It is a value type: copying
 or returning it copies its storage, so returned arrays never point into a dead
 stack frame. Local storage is on the stack, global storage is static, and fields
 are part of their enclosing structure. The array itself needs no heap buffer.
@@ -1039,7 +1045,7 @@ fn main() -> i32 {
 ```
 
 The initializer may use scalar constant expressions, [`cexpr`](Language-Syntax)/[`ceval`](Language-Syntax) calls,
-structure literals and field defaults, inline `fixedarray` literals, UTF-8
+structure literals and field defaults, inline [`fixedarray`](Fixedarray) literals, UTF-8
 string literals, and addresses of globals. All aggregate elements and fields
 must also be statically initializable. Explicit zero initialization (`{}`)
 and typed declarations without an initializer are supported. An ordinary

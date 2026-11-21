@@ -12,6 +12,7 @@
 - [[Language Attributes|Language-Attributes]]
 - [[Language Built-ins|Language-Built-ins]]
 - [[Language Syntax|Language-Syntax]]
+- [[Inline Fixed-Size Arrays (fixedarray)|Fixedarray]]
 - [[Concepts and Structural Requirements|Concepts]]
 - [[Quick Guide|Quick-Guide]]
 

@@ -2,7 +2,11 @@
 /// \brief Fixed-capacity array reference for MLang (std::array).
 ///
 /// `array<T, N>` is a compiler-provided fixed-capacity sequence type. It is
-/// list-compatible at the method level, so normal collection methods such as
+/// distinct from `fixedarray<T, N>`, which contains exactly N elements inline
+/// and has no resizing methods. See docs/fixedarray.md and
+/// examples/fixedarray_demo.mla for a comparison and runnable example.
+///
+/// `array<T, N>` is list-compatible at the method level, so methods such as
 /// `len`, `is_empty`, `push`, `pop`, and `clear` are available. Capacity is
 /// fixed at `N`: compile-time-sized initializers are checked by the compiler,
 /// and mutating methods check capacity before writing.
