@@ -47,6 +47,8 @@ Examples of supported language/runtime features include:
 - RAII-style scope cleanup
 - `switch` / `case`
 - `bit`, `size_of(Type)`, and `size_of(expr)`
+- compile-time evaluation with `cexpr`, immediate functions with `ceval`, and
+  guaranteed static initialization with `cinit`
 - inline assembly
 - `Vec`, `list<T>`, `span<T>`, `HashMap`, regex, JSON, IO, networking, threads
 - direct C interop through `extern fn`
@@ -76,6 +78,10 @@ If you are new to MLang, read these pages in this order:
 - [New Features Guide](new_features.md)
   Wiki-ready index of recently added language, safety, stdlib, package, and
   tooling features with links to examples and focused regression tests.
+- [Immediate Functions](language_syntax.md#ceval-immediate-functions) and
+  [Static Initialization](language_syntax.md#cinit-static-initialization)
+  The 0.4.6 development additions: `ceval` calls must evaluate at compile time;
+  `cinit` initializes mutable globals and local statics as static data.
 - [Language Syntax](language_syntax.md)
   Language features such as `switch`, exceptions, pipe syntax, inline asm,
   conditional regions, lambdas/folds, and `bit`/`size_of`.

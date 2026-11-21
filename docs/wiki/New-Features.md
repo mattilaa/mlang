@@ -10,6 +10,7 @@ focused `.mla` example was added under `examples/`.
 
 ## Table of Contents
 
+- [MLang 0.4.6 development](#mlang-046-development)
 - [MLang 0.4.5](#mlang-045)
 - [Core language](#core-language)
 - [Control flow and expressions](#control-flow-and-expressions)
@@ -19,6 +20,26 @@ focused `.mla` example was added under `examples/`.
 - [Standard library feature examples](#standard-library-feature-examples)
 - [Package and tooling examples](#package-and-tooling-examples)
 - [See also](#see-also)
+
+## MLang 0.4.6 Development
+
+- **Immediate functions with [`ceval`](Language-Syntax):** every call evaluates during compilation,
+  including calls in runtime code. Prefix and postfix declarations, generics,
+  and numeric literal operators are supported. Runtime arguments, callbacks,
+  and variadic immediate functions are rejected. See
+  [immediate functions](Language-Syntax#ceval-immediate-functions) and
+  [ceval_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/ceval_demo.mla).
+- **Static initialization with [`cinit`](Language-Syntax):** mutable globals and local statics
+  require initializers representable as static data. Local statics persist
+  across calls without a first-call initialization guard. Scalars, structures,
+  inline arrays, string literals, zero initialization, and global addresses
+  are supported. See [static initialization](Language-Syntax#cinit-static-initialization)
+  and [cinit_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/cinit_demo.mla).
+
+The existing [`cexpr`](Language-Syntax) forms remain available for compile-time values, explicit
+evaluation, functions that can also run at runtime, and compile-time branches.
+See [the comparison of guarantees](Language-Built-ins#compile-time-evaluation-and-static-initialization)
+and [unreleased changes](Release-Notes#unreleased).
 
 ## MLang 0.4.5
 

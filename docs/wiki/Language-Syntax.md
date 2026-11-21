@@ -978,7 +978,7 @@ Current first-version constraints:
   optional [`else`](Language-Syntax) block.
 - Calling a non-`cexpr fn` from `cexpr(...)` is rejected.
 
-### `ceval` Immediate Functions
+### [`ceval`](Language-Syntax) Immediate Functions
 
 `ceval fn` requires every call to evaluate during compilation, including calls
 in ordinary runtime expressions. Unlike `cexpr fn`, it never provides a runtime
@@ -1009,17 +1009,17 @@ for [`cexpr`](Language-Syntax): integer, floating-point and boolean results, loc
 assignment, conditionals, and nested calls. Argument packs and C-style variadic
 parameters are not supported for immediate functions. Structure arguments
 (including the opaque type-dispatch arguments accepted by `cexpr fn`) and
-structure-valued results are not supported by `ceval` yet.
+structure-valued results are not supported by [`ceval`](Language-Syntax) yet.
 
 See [ceval_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/ceval_demo.mla) for a runnable example and
 commented examples of rejected runtime arguments and callbacks.
 
-### `cinit` Static Initialization
+### [`cinit`](Language-Syntax) Static Initialization
 
-`cinit` requires a variable's initializer to be representable as static data.
+[`cinit`](Language-Syntax) requires a variable's initializer to be representable as static data.
 It does not make the variable immutable. At module scope, write `cinit var`;
 inside a function, write `cinit static var` (or `static cinit var`). Automatic
-local variables cannot use `cinit`.
+local variables cannot use [`cinit`](Language-Syntax).
 
 ```rust
 ceval fn initial_count() -> i32 { return 40; }
@@ -1038,7 +1038,7 @@ fn main() -> i32 {
 }
 ```
 
-The initializer may use scalar constant expressions, [`cexpr`](Language-Syntax)/`ceval` calls,
+The initializer may use scalar constant expressions, [`cexpr`](Language-Syntax)/[`ceval`](Language-Syntax) calls,
 structure literals and field defaults, inline `fixedarray` literals, UTF-8
 string literals, and addresses of globals. All aggregate elements and fields
 must also be statically initializable. Explicit zero initialization (`{}`)
@@ -1046,12 +1046,12 @@ and typed declarations without an initializer are supported. An ordinary
 runtime function call or a read of a runtime variable is rejected, even if an
 optimizer could fold it.
 
-A local `cinit` static is initialized directly in the executable: it has no
+A local [`cinit`](Language-Syntax) static is initialized directly in the executable: it has no
 first-call guard, initializer call, or runtime allocation. Later calls observe
 mutations to the same storage. This does not make concurrent mutation atomic
 or synchronized. Existing ordinary `static var` behavior is unchanged.
 
-Module globals already require constant initializers in MLang; `cinit` makes
+Module globals already require constant initializers in MLang; [`cinit`](Language-Syntax) makes
 that requirement explicit and also provides guaranteed static initialization
 for local statics. Unlike a [`cexpr`](Language-Syntax) declaration, it provides mutable storage.
 

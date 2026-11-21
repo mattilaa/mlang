@@ -4,9 +4,9 @@
 
 Development version: 0.4.6.
 
-- Add `ceval` immediate functions: calls automatically evaluate at compile time,
+- Add [`ceval`](Language-Syntax) immediate functions: calls automatically evaluate at compile time,
   and runtime arguments and runtime function values are rejected.
-- Add `cinit` mutable globals/local statics with required static initialization;
+- Add [`cinit`](Language-Syntax) mutable globals/local statics with required static initialization;
   local statics use constant data without a first-call initialization guard.
   Include compiler/editor documentation and runnable `ceval_demo.mla` and
   `cinit_demo.mla` examples.

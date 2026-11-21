@@ -11,6 +11,10 @@ For more documentation, visit the [MLang GitHub Wiki](https://github.com/mattila
 See [Concepts and Structural Requirements](Concepts) for named concepts,
 `where` constraints, and C++20-style structural `req` expressions.
 
+The 0.4.6 development version adds [`ceval` immediate functions](#immediate-functions-with-ceval)
+and [`cinit` static initialization](#static-initialization-with-cinit), alongside
+the existing [`cexpr`](Language-Syntax) compile-time evaluator.
+
 The terminal tracker [mlacker](https://github.com/mattilaa/mlacker) (AUHAL output, VST3 hosting and the Mla
 VST3 plugins) is now developed in its own repository: <https://github.com/mattilaa/mlacker>.
 
@@ -19,6 +23,8 @@ VST3 plugins) is now developed in its own repository: <https://github.com/mattil
 - [What Is Mlang](#what-is-mlang)
 - [Release Notes](Release-Notes)
 - [Compile-Time Evaluation With `cexpr`](#compile-time-evaluation-with-cexpr)
+- [Immediate Functions With `ceval`](#immediate-functions-with-ceval)
+- [Static Initialization With `cinit`](#static-initialization-with-cinit)
 - [`likely` And `unlikely` Branch Hints](#likely-and-unlikely-branch-hints)
 - [Checked Narrow Integer Casts](#checked-narrow-integer-casts)
 - [Fixed-Capacity Arrays](#fixed-capacity-arrays)
@@ -355,6 +361,15 @@ what is described and its limits.
 MLang supports explicit compile-time evaluation with `cexpr(expr)` and
 `cexpr fn`.
 
+Choose the guarantee you need:
+
+| Form | Guarantee |
+| --- | --- |
+| `cexpr fn` | A function can be evaluated at compile time and can also be called at runtime. |
+| `cexpr(expr)` / `cexpr Name: T = expr;` | The expression or constant initializer must evaluate at compile time. |
+| `ceval fn` | Every call must evaluate at compile time, including calls in runtime code. |
+| `cinit var` / `cinit static var` | Mutable global or local static storage must have a static initializer. |
+
 ```rust
 cexpr fn twice(x: i32) -> i32 {
     return x * 2;
@@ -443,6 +458,88 @@ Current first-version scope:
 - `cexpr name: Type = expr;` declares a compile-time value.
 - `cexpr if` selects a branch during compilation.
 - Calling a normal runtime [`fn`](Language-Syntax) from `cexpr(...)` is rejected.
+
+## Immediate Functions With [`ceval`](Language-Syntax)
+
+`ceval fn` requires every call to evaluate during compilation without a
+`cexpr(...)` wrapper. It provides no runtime function body:
+
+```rust
+ceval fn twice(value: i32) -> i32 {
+    return value * 2;
+}
+
+fn main() -> i32 {
+    cexpr Seed: i32 = 21;
+    let answer: i32 = twice(Seed);
+    return answer == 42 ? 0 : 1;
+}
+```
+
+The equivalent postfix spelling is `fn twice(value: i32) ceval -> i32`.
+Public functions, generics, and numeric literal operators can also use
+[`ceval`](Language-Syntax). Every argument must be compile-time evaluable, even if the function
+ignores it. A normal [`let`](Language-Syntax) or [`var`](Language-Syntax) initialized with a literal is still a
+runtime value and cannot be passed to an immediate function.
+
+The current evaluator supports integer, floating-point, and boolean values,
+local declarations, assignment, conditionals, and nested compile-time calls.
+Struct arguments/results, argument packs, C-style variadic parameters, runtime
+callbacks, and an immediate `main` are not supported.
+
+See [the immediate-function reference](Language-Syntax#ceval-immediate-functions)
+and [ceval_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/ceval_demo.mla), including rejected-call examples.
+
+## Static Initialization With [`cinit`](Language-Syntax)
+
+[`cinit`](Language-Syntax) requires a variable's initial value to be stored as static data in the
+executable. Use `cinit var` for globals and `cinit static var` (or
+`static cinit var`) for local statics:
+
+```rust
+ceval fn initial_count() -> i32 { return 40; }
+
+cinit var total: i32 = initial_count();
+
+fn next() -> i32 {
+    cinit static var counter: i32 = initial_count();
+    counter += 1;
+    return counter;
+}
+
+fn main() -> i32 {
+    total += 2;
+    let first: i32 = next();
+    let second: i32 = next();
+    return total == 42 && first == 41 && second == 42 ? 0 : 1;
+}
+```
+
+The storage remains mutable, and later calls observe changes to the same local
+static. Initialization needs no first-call guard, initializer call, or runtime
+allocation; concurrent mutation still needs synchronization.
+
+Initializers may contain scalar constant expressions, [`cexpr`](Language-Syntax)/[`ceval`](Language-Syntax) calls,
+structure literals and field defaults, inline `fixedarray` literals, UTF-8
+string literals, and addresses of globals. Typed declarations may also use
+implicit zero initialization or explicit `{}`. Runtime function calls, reads
+of runtime variables, and addresses of automatic local storage are rejected.
+Automatic local variables cannot use [`cinit`](Language-Syntax).
+
+Globals already require constant initialization in MLang; [`cinit`](Language-Syntax) makes that
+intent explicit and extends the guarantee to local statics. It does not
+declare a compile-time value as `cexpr Name: T = expr;` does.
+
+See [the static-initialization reference](Language-Syntax#cinit-static-initialization)
+and [cinit_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/cinit_demo.mla) for structure and inline-array storage.
+Run the two demos with:
+
+```sh
+build/mlang -O0 examples/ceval_demo.mla -o /tmp/mlang-ceval-demo
+/tmp/mlang-ceval-demo
+build/mlang -O0 examples/cinit_demo.mla -o /tmp/mlang-cinit-demo
+/tmp/mlang-cinit-demo
+```
 
 ## `likely` And `unlikely` Branch Hints
 
@@ -2179,6 +2276,10 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/cexpr_decl_demo.mla`
 - Compile-time `cexpr if` branch selection:
   `examples/cexpr_if_demo.mla`
+- Immediate [`ceval`](Language-Syntax) functions (including generic and postfix forms):
+  [examples/ceval_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/ceval_demo.mla)
+- Guaranteed static initialization with mutable [`cinit`](Language-Syntax) globals and local statics:
+  [examples/cinit_demo.mla](https://github.com/mattilaa/mlang/blob/main/examples/cinit_demo.mla)
 - Namespace blocks and aliases (`namespace geometry::units { ... }`, `alias gu = geometry::units;`) with qualified names:
   `examples/namespace_demo.mla`
 - Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):

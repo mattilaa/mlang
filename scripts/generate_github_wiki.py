@@ -209,6 +209,8 @@ LANGUAGE_TOKENS = {
     "use",
     "extern",
     "cexpr",
+    "ceval",
+    "cinit",
     "alias",
     "static_assert!",
     "sizeof",
