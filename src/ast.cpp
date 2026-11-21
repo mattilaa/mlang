@@ -1845,7 +1845,9 @@ std::string FunctionDefNode::toString() const
     }
     if(requiresClause)
         result += "where " + requiresClause->toString() + " ";
-    if(isCexpr)
+    if(isCeval)
+        result += "ceval ";
+    else if(isCexpr)
         result += "cexpr ";
     result += "fn ";
     result += name + "(" + parameters->toString() + ") -> ";
@@ -2379,6 +2381,8 @@ std::string VarDeclNode::toString() const
         result = "likely ";
     else if(branchPrediction == BranchPrediction::Unlikely)
         result = "unlikely ";
+    if(isCinit)
+        result += "cinit ";
     if(isStaticStorage)
         result += "static ";
     result += "var " + name;

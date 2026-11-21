@@ -328,6 +328,12 @@ bool ModuleLoader::loadModule(
                 fn->sourceModule = moduleName;
         }
     }
+    for(auto* global : moduleAst->globalVars)
+        if(global && global->sourceModule.empty())
+            global->sourceModule = moduleName;
+    for(auto* constant : moduleAst->cexprDecls)
+        if(constant && constant->sourceModule.empty())
+            constant->sourceModule = moduleName;
     if(moduleAst->structList)
     {
         for(auto* st : moduleAst->structList->structs)

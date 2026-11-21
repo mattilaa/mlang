@@ -20222,6 +20222,324 @@ TEST_F(MLATest, StaticAssertNonConstExpressionFails)
         std::string::npos);
 }
 
+TEST_F(MLATest, CevalCallsFoldWithoutExplicitCexpr)
+{
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
+        ceval fn twice(value: i32) -> i32 { return value * 2; }
+        pub fn plus_one(value: i32) ceval -> i32 { return twice(value) + 1; }
+        ceval fn inferred(value: i32) { return plus_one(value); }
+        fn main() -> i32 {
+            cexpr input: i32 = 20;
+            let result: i32 = inferred(input) + twice(1);
+            static_assert!(plus_one(20) == 41);
+            return result == 43 ? 0 : 1;
+        }
+    )"),
+        0);
+}
+
+TEST_F(MLATest, CevalSupportsGenericsAndSelectedOverloads)
+{
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
+        ceval fn choose(value: i32) -> i32 { return 11; }
+        ceval fn choose(value: f64) -> i32 { return 22; }
+        generic<T> ceval fn identity(value: T) -> T { return value; }
+        generic<T> ceval fn category(value: T) -> i32 {
+            cexpr if type_id(T) == i32 { return 11; } else { return 22; }
+        }
+        cinit var chosen: i32 = choose(1.0);
+        fn main() -> i32 {
+            return choose(1i32) == 11 && choose(1.0) == 22 && chosen == 22 && identity(42i32) == 42 && category(1i32) == 11 && category(1.5) == 22 ? 0 : 1;
+        }
+    )"),
+        0);
+}
+
+TEST_F(MLATest, CevalRejectsRuntimeArgumentsEvenWhenUnused)
+{
+    for(const std::string& body : {"return value * 2;", "return 42;"})
+    {
+        writeSource("ceval fn immediate(value: i32) -> i32 { " + body + R"( }
+            fn main() -> i32 { var runtime: i32 = 21; return immediate(runtime); }
+        )");
+        int rc = 0;
+        const std::string output = compileCapture(rc);
+        EXPECT_NE(rc, 0) << output;
+        EXPECT_NE(
+            output.find("requires compile-time evaluation"),
+            std::string::npos)
+            << output;
+    }
+}
+
+TEST_F(MLATest, CevalGenericSpecializationsRejectRuntimeArguments)
+{
+    writeSource(R"(
+        generic<T> ceval fn immediate(value: T) -> T { return value; }
+        fn main() -> i32 { var value: i32 = 42; return immediate(value); }
+    )");
+    int rc = 0;
+    const auto output = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(output.find("requires compile-time evaluation"), std::string::npos) << output;
+}
+
+TEST_F(MLATest, CevalRejectsOpaqueRuntimeStructArguments)
+{
+    writeSource(R"(
+        struct Marker { var value: i32; };
+        generic<T> ceval fn immediate(item: T) -> i32 { return 42; }
+        fn main() -> i32 {
+            var marker: Marker = Marker { value: 1 };
+            return immediate(marker);
+        }
+    )");
+    int rc = 0;
+    const auto output = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(output.find("ceval arguments require fully evaluated scalar values"), std::string::npos) << output;
+}
+
+TEST_F(MLATest, CevalRejectsRuntimeFunctionValues)
+{
+    for(const std::string& declaration :
+        {"let callback = immediate;",
+         "let callback: fn(i32) -> i32 = immediate;"})
+    {
+        writeSource(
+            R"(ceval fn immediate(value: i32) -> i32 { return value; }
+            fn main() -> i32 { )" +
+            declaration + " return callback(42); }");
+        int rc = 0;
+        const std::string output = compileCapture(rc);
+        EXPECT_NE(rc, 0) << output;
+        EXPECT_NE(
+            output.find("cannot be used as a runtime function value"),
+            std::string::npos)
+            << output;
+    }
+}
+
+TEST_F(MLATest, CevalGlobalInitializersAndLiteralOperators)
+{
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
+        ceval fn operator "" _twice(value: u64) -> u64 { return value * 2u64; }
+        ceval fn answer() -> i32 { return 42; }
+        cexpr Answer: i32 = answer();
+        cinit var result: i32 = answer();
+        cinit var count: u64 = 21_twice;
+        fn main() -> i32 {
+            result += 1;
+            return Answer == 42 && result == 43 && count == 42u64 && 2_twice == 4u64 ? 0 : 1;
+        }
+    )"),
+        0);
+}
+
+TEST_F(MLATest, CinitGlobalsSupportMutableStaticAggregates)
+{
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
+        struct Settings { var value: i32; var scale: f64; };
+        ceval fn answer() -> i32 { return 42; }
+        cinit var settings: Settings = Settings { value: answer(), scale: 1.5 * 2.0 };
+        cinit var numbers: fixedarray<i32, 3> = [answer(), 2, 3];
+        cinit var address: ptr<i32> = &mut target;
+        cinit var target: i32 = answer();
+        cinit var zero: i32 {};
+        fn main() -> i32 {
+            target += 1;
+            settings.value += 1;
+            numbers[0] += 1;
+            unsafe {
+                let pointed: i32 = *address;
+                return settings.value == 43 && settings.scale == 3.0 && numbers[0] == 43 &&
+                    pointed == 43 && zero == 0 ? 0 : 1;
+            }
+        }
+    )"),
+        0);
+}
+
+TEST_F(MLATest, CinitLocalStaticsPersistAndHaveNoRuntimeInitialization)
+{
+    writeSource(R"(
+        ceval fn initial() -> i32 { return 40; }
+        fn next() -> i32 {
+            cinit static var counter: i32 = initial();
+            counter += 1;
+            return counter;
+        }
+        fn other() -> i32 {
+            static cinit var counter: i32 = 10;
+            counter += 1;
+            return counter;
+        }
+        fn main() -> i32 { return next() == 41 && next() == 42 && other() == 11 ? 0 : 1; }
+    )");
+    ASSERT_TRUE(compile(true, "-O0"));
+    EXPECT_EQ(runExitCode(), 0);
+    const fs::path irFile = fs::path(testDir) / "cinit.ll";
+    ASSERT_EQ(
+        system((compilerPath + " -O0 -emit-llvm -o " + irFile.string() + " " +
+                sourceFile)
+                   .c_str()),
+        0);
+    std::ifstream input(irFile);
+    std::stringstream content;
+    content << input.rdbuf();
+    const auto ir = content.str();
+    EXPECT_EQ(ir.find("__inited"), std::string::npos);
+    EXPECT_EQ(ir.find("static.init"), std::string::npos);
+    EXPECT_EQ(ir.find("call i32 @initial"), std::string::npos);
+    EXPECT_NE(ir.find("global i32 40"), std::string::npos);
+}
+
+TEST_F(MLATest, CinitLocalStaticsSupportStringsAndFixedArrays)
+{
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
+        fn next() -> i32 {
+            cinit static var values: fixedarray<i32, 2> = [40, 1];
+            cinit static var label: str8 = "counter";
+            values[0] += values[1];
+            return label[0] == 99u8 ? values[0] : 0;
+        }
+        fn main() -> i32 { return next() == 41 && next() == 42 ? 0 : 1; }
+    )"),
+        0);
+}
+
+TEST_F(MLATest, CinitPointerShadowingPreservesBorrowScopes)
+{
+    EXPECT_EQ(compileAndRunExitCode(R"(
+        cinit var global_value: i32 = 40;
+        fn main() -> i32 {
+            var local_value: i32 = 1;
+            let pointer: ptr<i32> = &local_value;
+            {
+                cinit static var pointer: ptr<i32> = &mut global_value;
+                unsafe { *pointer = 42; }
+            }
+            unsafe {
+                let original: i32 = *pointer;
+                return original == 1 && global_value == 42 ? 0 : 1;
+            }
+        }
+    )"), 0);
+}
+
+TEST_F(MLATest, CinitRejectsAddressOfAutomaticStorageShadowingGlobal)
+{
+    writeSource(R"(
+        cinit var target: i32 = 1;
+        fn main() -> i32 {
+            var target: i32 = 2;
+            cinit static var pointer: ptr<i32> = &mut target;
+            return 0;
+        }
+    )");
+    int rc = 0;
+    const auto output = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(output.find("cinit initializer must be statically initializable"), std::string::npos) << output;
+}
+
+TEST_F(MLATest, CinitRejectsAutomaticStorage)
+{
+    writeSource(
+        "fn main() -> i32 { cinit var value: i32 = 42; return value; }");
+    int rc = 0;
+    const auto output = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(
+        output.find("cinit requires global or static storage"),
+        std::string::npos)
+        << output;
+}
+
+TEST_F(MLATest, CinitRejectsRuntimeInitialization)
+{
+    for(const std::string& code :
+        {"fn runtime() -> i32 { return 42; } cinit var value: i32 = runtime(); "
+         "fn main() -> i32 { return value; }",
+         "fn runtime() -> i32 { return 42; } fn main() -> i32 { cinit static "
+         "var value: i32 = runtime(); return value; }",
+         "fn main() -> i32 { var value: i32 = 42; cinit static var saved: i32 "
+         "= value; return saved; }"})
+    {
+        writeSource(code);
+        int rc = 0;
+        const auto output = compileCapture(rc);
+        EXPECT_NE(rc, 0);
+        EXPECT_NE(
+            output.find("cinit initializer must be statically initializable"),
+            std::string::npos)
+            << output;
+    }
+}
+
+TEST_F(MLATest, CevalRejectsVariadicFunctionsAndEntryPoint)
+{
+    for(const std::string& code :
+        {"ceval fn immediate(value: i32, ...) -> i32 { return value; } fn "
+         "main() -> i32 { return 0; }",
+         "generic<T...> ceval fn immediate(values: T...) -> i32 { return 1; } "
+         "fn main() -> i32 { return 0; }",
+         "ceval fn main() -> i32 { return 0; }"})
+    {
+        writeSource(code);
+        int rc = 0;
+        const auto output = compileCapture(rc);
+        EXPECT_NE(rc, 0) << output;
+        EXPECT_NE(output.find("ceval"), std::string::npos) << output;
+    }
+}
+
+TEST_F(MLATest, CinitInferenceAndGenericStaticStorage)
+{
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
+        ceval fn initial() -> u64 { return 4294967296u64; }
+        cinit var large = initial();
+        generic<T> fn next(value: T) -> T {
+            cinit static var counter: T = 40;
+            counter += value;
+            return counter;
+        }
+        fn main() -> i32 {
+            return large == 4294967296u64 && next(1i32) == 41 && next(2i32) == 43 &&
+                next(1i64) == 41 ? 0 : 1;
+        }
+    )"),
+        0);
+}
+
+TEST_F(MLATest, CevalAndCinitWorkAcrossModuleImports)
+{
+    fs::path modulePath = fs::path(testDir) / "settings.mla";
+    std::ofstream module(modulePath);
+    module << R"(
+        ceval fn private_seed() -> i32 { return 40; }
+        pub ceval fn initial() -> i32 { return private_seed(); }
+        cexpr Seed: i32 = private_seed();
+        cinit var counter: i32 = private_seed();
+        pub fn next() -> i32 { counter += 1; return counter; }
+    )";
+    module.close();
+    EXPECT_EQ(
+        compileAndRunExitCode(R"(
+        mod settings;
+        use settings::*;
+        cinit var starting: i32 = initial();
+        fn main() -> i32 { return starting == 40 && next() == 41 && next() == 42 ? 0 : 1; }
+    )"),
+        0);
+}
+
 TEST_F(MLATest, CexprExpressionInitializesRuntimeValue)
 {
     std::string code = R"(

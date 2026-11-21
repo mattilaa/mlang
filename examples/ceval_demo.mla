@@ -1,0 +1,32 @@
+/// \file ceval_demo.mla
+/// \brief Immediate functions evaluate every call during compilation.
+
+ceval fn twice(value: i32) -> i32 {
+    return value * 2;
+}
+
+// The postfix spelling has identical semantics.
+fn answer(seed: i32) ceval -> i32 {
+    return twice(seed) + 2;
+}
+
+generic<T>
+ceval fn identity(value: T) -> T {
+    return value;
+}
+
+fn main() -> i32 {
+    cexpr Seed: i32 = 20;
+    // No cexpr(...) wrapper is needed: each call must be evaluated now.
+    let result: i32 = answer(Seed);
+    let floating: f64 = identity(1.5);
+    static_assert!(answer(20) == 42);
+    println!("ceval: answer={}, floating={}", result, floating);
+
+    // Rejected: an ordinary local value is not a compile-time argument.
+    // var runtime: i32 = 20;
+    // let invalid: i32 = answer(runtime);
+    // Rejected: immediate functions cannot become runtime callbacks.
+    // let callback = answer;
+    return result == 42 && floating == 1.5 ? 0 : 1;
+}

@@ -346,7 +346,8 @@ bool CodeGenerator::evalConstexprCall(
     ConstexprValue& out,
     std::string* errorMessage,
     ConstexprEnv* env,
-    int depth)
+    int depth,
+    FunctionDefNode* selectedFunction)
 {
     if(!call)
     {
@@ -654,7 +655,8 @@ bool CodeGenerator::evalConstexprCall(
         [](const FunctionOverloadInfo& item)
         {
             return item.node &&
-                   !mlang::concepts::constraintKey(item.node).empty();
+                   (item.node->isCeval ||
+                    !mlang::concepts::constraintKey(item.node).empty());
         });
 
     struct ConstrainedCandidate
@@ -698,6 +700,8 @@ bool CodeGenerator::evalConstexprCall(
     for(const auto& overload : overloadIt->second)
     {
         FunctionDefNode* fn = overload.node;
+        if(selectedFunction && fn != selectedFunction)
+            continue;
         if((literalCall || constrainedSet) && !isOverloadVisible(overload))
             continue;
         if(!fn || !fn->isCexpr || !fn->body || !fn->parameters)
@@ -721,6 +725,9 @@ bool CodeGenerator::evalConstexprCall(
         std::set<std::string>
             typeParamSet(fn->typeParams.begin(), fn->typeParams.end());
         std::map<std::string, std::string> typeBindings;
+        for(const auto& binding : fn->concreteTypeBindings)
+            typeBindings[binding.first] =
+                canonicalConstexprTypeName(binding.second);
         std::vector<TypeNode*> concreteArgTypes;
         concreteArgTypes.reserve(call->arguments.size());
         for(size_t i = 0; i < call->arguments.size(); ++i)
@@ -818,10 +825,22 @@ bool CodeGenerator::evalConstexprCall(
 
             TypeNode::TypeKind paramKind =
                 literalCall && param ? param->type->kind
+                : (selectedFunction || fn->isCeval) && param &&
+                        fn->typeParams.empty()
+                    ? Helpers::normalizeInferredKind(param->type->kind)
                 : concreteArgTypes[i]
                     ? Helpers::normalizeInferredKind(concreteArgTypes[i]->kind)
                 : param ? Helpers::normalizeInferredKind(param->type->kind)
                         : TypeNode::TYPE_I64;
+            if(fn->isCeval &&
+               argValue.kind == ConstexprValue::Kind::OpaqueStruct)
+            {
+                if(errorMessage)
+                    *errorMessage =
+                        "ceval arguments require fully evaluated scalar "
+                        "values; struct evaluation is not supported";
+                return false;
+            }
             if(argValue.kind == ConstexprValue::Kind::OpaqueStruct &&
                paramKind == TypeNode::TYPE_STRUCT)
             {
@@ -894,8 +913,8 @@ bool CodeGenerator::evalConstexprCall(
             if(selected)
             {
                 if(errorMessage)
-                    *errorMessage = "ambiguous constrained cexpr call to '" +
-                                    call->name + "'";
+                    *errorMessage =
+                        "ambiguous compile-time call to '" + call->name + "'";
                 return false;
             }
             selected = &candidate;

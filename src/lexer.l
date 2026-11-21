@@ -343,6 +343,8 @@ static int mla_lex_peek_branch_declaration()
 "extern"        { return EXTERN; }
 "static"        { return STATIC; }
 "cexpr"         { return CEXPR; }
+"ceval"         { return CEVAL; }
+"cinit"         { return CINIT; }
 "generic"       { return GENERIC; }
 "fn"            { constraint_context = false; return FUNCTION; }
 "concept"       { constraint_context = true; return CONCEPT; }

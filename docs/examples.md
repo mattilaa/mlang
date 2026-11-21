@@ -20,6 +20,7 @@ subdirectory-based showcases are indexed separately in
 
 - [Example pages](#example-pages)
 - [Example programs](#example-programs)
+  - [Compile-time functions and static initialization](#compile-time-functions-and-static-initialization)
   - [Matrix operations](#matrix-operations)
   - [Bare metal and QEMU](#bare-metal-and-qemu)
   - [Route planning and genetic algorithms](#route-planning-and-genetic-algorithms)
@@ -36,6 +37,23 @@ subdirectory-based showcases are indexed separately in
 - @subpage uml_ui_generator — TOML-driven UML diagram/UI generator example.
 
 ## Example programs
+
+### Compile-time functions and static initialization
+
+- [ceval_demo.mla](../examples/ceval_demo.mla) — automatic compile-time calls,
+  nested immediate functions, generic scalar calls, and examples of rejected
+  runtime arguments and callbacks.
+- [cinit_demo.mla](../examples/cinit_demo.mla) — mutable structure/inline-array
+  globals, explicit zero initialization, and a persistent local static counter
+  without a first-call initialization guard.
+
+```sh
+./build/mlang examples/ceval_demo.mla -L build -lmlang_std -o /tmp/ceval_demo
+/tmp/ceval_demo
+./build/mlang examples/cinit_demo.mla -L build -lmlang_std -o /tmp/cinit_demo
+/tmp/cinit_demo
+```
+
 
 The feature-oriented index in [New Features Guide](new_features.md) covers
 language and standard-library examples that are not all repeated below. The

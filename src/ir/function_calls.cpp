@@ -1904,7 +1904,8 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
         FunctionDefNode* candidate = overload.node;
         if(candidate && !overload.function && !candidate->typeParams.empty() &&
            candidate->typePackParam.empty() &&
-           (!candidate->isCexpr || structuralRequirementProbe) &&
+           (!candidate->isCexpr || candidate->isCeval ||
+            structuralRequirementProbe) &&
            candidate->parameters &&
            candidate->parameters->parameters.size() == call->arguments.size() &&
            isOverloadVisible(overload))
@@ -1964,6 +1965,8 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
             functionTemplate->body,
             functionTemplate->isPublic,
             false);
+        specialized->isCexpr = functionTemplate->isCexpr;
+        specialized->isCeval = functionTemplate->isCeval;
         specialized->genericOrigin = functionTemplate;
         specialized->constraintTerms = std::move(constraintTerms);
         specialized->line = functionTemplate->line;
@@ -5789,6 +5792,24 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         structuralSelectedTypes[node] = cloneTypeNode(best->node->returnType);
     FunctionOverloadInfo selectedOverload = *best;
     best = &selectedOverload;
+    if(best->node && best->node->isCeval && !structuralRequirementProbe)
+    {
+        ConstexprValue value;
+        std::string error;
+        if(!evalConstexprCall(node, value, &error, nullptr, 0, best->node))
+        {
+            reportError(
+                node->line,
+                "ceval call to '" + node->name +
+                    "' requires compile-time evaluation" +
+                    (error.empty() ? "" : ": " + error));
+            return nullptr;
+        }
+        return buildLLVMConstantFromConstexprValue(
+            value,
+            best->node->returnType,
+            node->line);
+    }
     if(best->node && best->node->genericOrigin && best->function->empty())
         generateFunctionDefinition(best->node);
 

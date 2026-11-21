@@ -411,6 +411,14 @@ llvm::Value* CodeGenerator::generateFunctionItemValue(
 
     if(matches.size() == 1)
     {
+        if(matches.front()->node->isCeval)
+        {
+            reportError(
+                identifier->line,
+                "ceval function '" + identifier->name +
+                    "' cannot be used as a runtime function value");
+            return nullptr;
+        }
         llvm::Function* target = matches.front()->function;
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* erasedPointerType = llvm::PointerType::get(context, 0);

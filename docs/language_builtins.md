@@ -33,6 +33,19 @@ binary (`0b101u8`) literals.
 See [Checked Narrow Integer Casts](language_syntax.md#checked-narrow-integer-casts)
 for conversion checks and diagnostics.
 
+### Compile-Time Evaluation and Static Initialization
+
+| Form | Guarantee |
+| --- | --- |
+| `cexpr fn` | Enables calls from compile-time evaluation contexts. |
+| `cexpr(expr)` / `cexpr Name: T = expr;` | Requires an expression or constant initializer to evaluate during compilation. |
+| `ceval fn` / `fn name(...) ceval -> T` | Requires every call to evaluate during compilation; runtime callbacks are rejected. |
+| `cinit var` / `cinit static var` | Requires static initialization of mutable global or local static storage. |
+
+See [immediate functions](language_syntax.md#ceval-immediate-functions) and
+[static initialization](language_syntax.md#cinit-static-initialization) for
+syntax, evaluator restrictions, and runnable examples.
+
 ### Embedded Pointer and Memory Built-ins
 
 These functions are recognized by the compiler and require no module import.

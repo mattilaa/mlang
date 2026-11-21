@@ -299,12 +299,17 @@ llvm::Constant* CodeGenerator::buildGlobalInitializer(
         {
             if(auto* id = dynamic_cast<IdentifierNode*>(address->operand))
             {
+                llvm::Value* value = nullptr;
+                auto local = namedValues.find(id->name);
                 auto global = globalNamedValues.find(id->name);
-                if(global != globalNamedValues.end())
+                if(builder.GetInsertBlock() && local != namedValues.end())
+                    value = local->second;
+                else if(global != globalNamedValues.end())
+                    value = global->second;
+                if(value)
                 {
                     auto* pointer = dynamic_cast<PointerTypeNode*>(type);
-                    auto* storage =
-                        llvm::dyn_cast<llvm::GlobalVariable>(global->second);
+                    auto* storage = llvm::dyn_cast<llvm::GlobalVariable>(value);
                     if(pointer && storage &&
                        storage->getValueType() ==
                            getLLVMTypeFromNode(pointer->elementType))
@@ -315,6 +320,14 @@ llvm::Constant* CodeGenerator::buildGlobalInitializer(
             }
             return fail();
         }
+    }
+    if((target->isIntegerTy() || target->isFloatingPointTy()) &&
+       type->kind != TypeNode::TYPE_STRUCT)
+    {
+        ConstexprValue value;
+        std::string error;
+        if(evalConstexprExpression(expression, value, &error, nullptr, 0))
+            return buildLLVMConstantFromConstexprValue(value, type, line);
     }
     if(target->isFloatingPointTy())
     {
@@ -351,6 +364,89 @@ llvm::Constant* CodeGenerator::buildGlobalInitializer(
     return fail();
 }
 
+void CodeGenerator::generateCinitVarDeclaration(VarDeclNode* node)
+{
+    if(!node->isStaticStorage && !node->isGlobalStorage)
+    {
+        reportError(node->line, "cinit requires global or static storage");
+        return;
+    }
+    TypeNode* type = node->type;
+    if(!type && node->initExpr)
+        type = inferExpressionTypeNode(node->initExpr, node->line);
+    if(!type)
+    {
+        reportError(
+            node->line,
+            "cinit variable requires a type or an inferable initializer");
+        return;
+    }
+    if(dynamic_cast<ReferenceTypeNode*>(type))
+    {
+        reportError(
+            node->line,
+            "reference bindings require local initialized storage");
+        return;
+    }
+    if(!activeFunctionTypeBindings.empty())
+    {
+        std::vector<std::string> names;
+        std::vector<TypeNode*> arguments;
+        for(const auto& binding : activeFunctionTypeBindings)
+        {
+            names.push_back(binding.first);
+            arguments.push_back(binding.second);
+        }
+        type = substituteTypeParams(type, names, arguments);
+    }
+    llvm::Constant* initializer =
+        buildGlobalInitializer(node->initExpr, type, node->line);
+    if(!initializer)
+    {
+        reportError(
+            node->line,
+            "cinit initializer must be statically initializable");
+        return;
+    }
+    auto* function = builder.GetInsertBlock()->getParent();
+    auto* storage = new llvm::GlobalVariable(
+        *module,
+        initializer->getType(),
+        false,
+        llvm::GlobalValue::InternalLinkage,
+        initializer,
+        "__mlang_static_" + function->getName().str() + "_" + node->name);
+    if(node->storageAlignment)
+        storage->setAlignment(
+            llvm::Align(
+                std::max<uint64_t>(
+                    module->getDataLayout()
+                        .getABITypeAlign(initializer->getType())
+                        .value(),
+                    node->storageAlignment)));
+    recordScopedPointerVariable(node->name);
+    recordVariableScopeDepth(node->name);
+    clearPointerBorrow(node->name);
+    enumVariableTypes.erase(node->name);
+    namedValues[node->name] = storage;
+    variableTypes[node->name] = type->kind;
+    clearMovedVariable(node->name);
+    constantVariables.erase(node->name);
+    if(auto* pointer = dynamic_cast<PointerTypeNode*>(type))
+        pointerElementTypes[node->name] = pointer->elementType;
+    if(auto* fixed = dynamic_cast<FixedArrayTypeNode*>(type))
+    {
+        variableTypes[node->name] = TypeNode::TYPE_LIST;
+        listElementTypes[node->name] = fixed->elementType;
+        arrayCapacities[node->name] = fixed->capacity;
+        arrayKnownLengths[node->name] = fixed->capacity;
+    }
+    if(auto* structure =
+           llvm::dyn_cast<llvm::StructType>(initializer->getType()))
+        if(structure->hasName())
+            structVariableTypes[node->name] = structure->getName().str();
+}
+
 void CodeGenerator::generateGlobalVarDeclaration(
     VarDeclNode* node,
     bool declarationOnly)
@@ -365,6 +461,8 @@ void CodeGenerator::generateGlobalVarDeclaration(
         return;
     }
 
+    if(node->isCinit && !node->type && node->initExpr)
+        node->type = inferExpressionTypeNode(node->initExpr, node->line);
     TypeNode::TypeKind kind = TypeNode::TYPE_INT;
     if(node->type)
         kind = node->type->kind;
@@ -460,7 +558,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     }
 
     if((structuralRequirementProbe && node != structuralProbeFunction) ||
-       node->isExtern || !node->body)
+       node->isExtern || node->isCeval || !node->body)
     {
         return function;
     }
